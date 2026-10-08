@@ -47,7 +47,9 @@
         </MudAlert>
     }
 
-    <div class="d-flex ga-2 mb-1">
+    <EvolucaoMensalLineChart Dados="_evolucao" />
+
+    <div class="d-flex ga-2 mt-1">
         <MudSelect T="TipoTransacao?" @bind-Value="_filtroTipo" @bind-Value:after="CarregarAsync" Label="Tipo" Clearable="true"
                    Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined" Style="flex:1;">
             <MudSelectItem T="TipoTransacao?" Value="TipoTransacao.Receita">Receita</MudSelectItem>
@@ -61,8 +63,6 @@
             }
         </MudSelect>
     </div>
-
-    <EvolucaoMensalLineChart Dados="_evolucao" />
 </div>
 
 <div class="pro-fab-spacer">

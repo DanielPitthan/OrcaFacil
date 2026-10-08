@@ -3,10 +3,7 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
-<div class="d-flex justify-space-between align-center mb-4">
-    <MudText Typo="Typo.h5">Categorias</MudText>
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="AbrirNovaAsync">Nova</MudButton>
-</div>
+<MudText Typo="Typo.h5" Class="mb-4">Categorias</MudText>
 
 @if (_carregando)
 {
@@ -14,11 +11,11 @@
 }
 else if (_categorias.Count == 0)
 {
-    <EmptyState Icon="@Icons.Material.Filled.Category" Mensagem="Nenhuma categoria cadastrada" />
+    <EmptyState Icon="@Icons.Material.Filled.Category" Mensagem="Nenhuma categoria cadastrada" Subtitulo="Use o botão + para criar uma categoria" />
 }
 else
 {
-    <MudGrid>
+    <MudGrid Class="pro-fab-spacer">
         @foreach (var categoria in _categorias)
         {
             <MudItem xs="12" sm="6" md="4">
@@ -36,6 +33,10 @@ else
         }
     </MudGrid>
 }
+
+<div class="pro-fab-single">
+    <MudFab Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Add" OnClick="AbrirNovaAsync" aria-label="Nova categoria" />
+</div>
 
 @code {
     private bool _carregando = true;
