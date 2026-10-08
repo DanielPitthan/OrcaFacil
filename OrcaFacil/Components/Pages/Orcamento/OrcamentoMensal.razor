@@ -1,0 +1,174 @@
+@page "/orcamento"
+@inject IOrcamentoService OrcamentoService
+@inject ICategoriaService CategoriaService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
+    <MudText Typo="Typo.subtitle1"><b>Orçamento Mensal</b></MudText>
+    <div class="d-flex align-center ga-2">
+        <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" OnClick="@(() => MudarMes(-1))" />
+        <MudText Typo="Typo.subtitle1">@_mesReferencia.ToString("MMMM/yyyy")</MudText>
+        <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" OnClick="@(() => MudarMes(1))" />
+    </div>
+</div>
+
+<div class="pro-fab-spacer">
+    @if (_carregando)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else if (_itens.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Filled.PieChart" Mensagem="Nenhum orçamento definido para este mês"
+                    Subtitulo="Use o botão + para definir um limite" />
+    }
+    else
+    {
+        <MudGrid>
+            @foreach (var item in _itens)
+            {
+                <MudItem xs="12" sm="6">
+                    <MudPaper Class="pa-4" Elevation="2" Style="cursor:pointer;" @onclick="@(() => EditarAsync(item))">
+                        <MudText Typo="Typo.subtitle1" Class="mb-2">@item.CategoriaIcone @item.CategoriaNome</MudText>
+                        @if (item.ValorLimite > 0)
+                        {
+                            <BudgetProgressBar ValorGasto="item.ValorGasto" ValorLimite="item.ValorLimite" />
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Class="mb-2">Gasto: @item.ValorGasto.ToString("C") · Sem limite definido</MudText>
+                        }
+
+                        <MudText Typo="Typo.caption" Class="mt-2" Color="@CorComparativo(item)">
+                            @TextoComparativo(item)
+                        </MudText>
+
+                        @if (item.MetaReducaoPercentual is > 0)
+                        {
+                            <MudText Typo="Typo.caption" Class="mt-1"
+                                     Color="@(item.MetaReducaoAtingida == true ? Color.Success : Color.Warning)">
+                                Meta reduzir @item.MetaReducaoPercentual.Value.ToString("0")%
+                                @if (item.MetaReducaoValorAlvo is not null)
+                                {
+                                    <text> (teto @item.MetaReducaoValorAlvo.Value.ToString("C"))</text>
+                                }
+                                — @(item.MetaReducaoAtingida == true ? "no caminho" : "acima da meta")
+                            </MudText>
+                        }
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+</div>
+
+<FabMenu>
+    <FabMenuItem Text="Definir limite" Icon="@Icons.Material.Filled.Add" Color="Color.Primary" Click="NovoAsync" />
+    <FabMenuItem Text="Trazer mês anterior" Icon="@Icons.Material.Filled.ContentCopy" Disabled="!_temOrcamentosParaTrazer"
+                 Click="TrazerOrcamentosAsync" />
+</FabMenu>
+
+@code {
+    private bool _carregando = true;
+    private DateTime _mesReferencia = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private List<OrcamentoItemDto> _itens = new();
+    private List<Categoria> _categorias = new();
+    private bool _temOrcamentosParaTrazer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var todas = await CategoriaService.ListarAsync();
+        _categorias = todas.Where(c => c.TipoPadrao == TipoTransacao.Despesa).ToList();
+        await CarregarAsync();
+    }
+
+    private async Task CarregarAsync()
+    {
+        _carregando = true;
+        _itens = await OrcamentoService.ListarPorMesAsync(_mesReferencia.Month, _mesReferencia.Year);
+        _temOrcamentosParaTrazer = await OrcamentoService.ExistemOrcamentosParaTrazerAsync(_mesReferencia.Month, _mesReferencia.Year);
+        _carregando = false;
+    }
+
+    private async Task MudarMes(int delta)
+    {
+        _mesReferencia = _mesReferencia.AddMonths(delta);
+        await CarregarAsync();
+    }
+
+    private async Task TrazerOrcamentosAsync()
+    {
+        var quantidade = await OrcamentoService.TrazerDoMesAnteriorAsync(_mesReferencia.Month, _mesReferencia.Year);
+        Snackbar.Add(
+            quantidade == 0 ? "Nenhum orçamento novo para trazer" :
+            quantidade == 1 ? "1 orçamento trazido do mês anterior" :
+            $"{quantidade} orçamentos trazidos do mês anterior",
+            quantidade > 0 ? Severity.Success : Severity.Info);
+        await CarregarAsync();
+    }
+
+    private Task NovoAsync() => AbrirFormularioAsync(new OrcamentoFormModel(), editando: false);
+
+    private Task EditarAsync(OrcamentoItemDto item) => AbrirFormularioAsync(new OrcamentoFormModel
+    {
+        CategoriaId = item.CategoriaId,
+        ValorLimite = item.ValorLimite > 0 ? item.ValorLimite : item.ValorGasto,
+        MetaReducaoPercentual = item.MetaReducaoPercentual
+    }, editando: true);
+
+    private async Task AbrirFormularioAsync(OrcamentoFormModel modelo, bool editando)
+    {
+        modelo.Mes = _mesReferencia.Month;
+        modelo.Ano = _mesReferencia.Year;
+
+        var parametros = new DialogParameters<OrcamentoForm>
+        {
+            { x => x.Modelo, modelo },
+            { x => x.Categorias, _categorias },
+            { x => x.Itens, _itens },
+            { x => x.Editando, editando }
+        };
+        var dialog = await DialogService.ShowAsync<OrcamentoForm>(editando ? "Editar limite" : "Definir limite", parametros,
+            new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true });
+        var resultado = await dialog.Result;
+
+        if (resultado is not { Canceled: false, Data: OrcamentoFormModel salvo })
+            return;
+
+        await OrcamentoService.DefinirLimiteAsync(salvo);
+        Snackbar.Add(editando ? "Limite atualizado" : "Limite salvo", Severity.Success);
+        await CarregarAsync();
+    }
+
+    private static Color CorComparativo(OrcamentoItemDto item)
+    {
+        if (item.ValorGastoMesAnterior <= 0 && item.ValorGasto <= 0)
+            return Color.Secondary;
+        if (item.Economizando)
+            return Color.Success;
+        if (item.GastandoMais)
+            return Color.Error;
+        return Color.Secondary;
+    }
+
+    private static string TextoComparativo(OrcamentoItemDto item)
+    {
+        if (item.ValorGastoMesAnterior <= 0 && item.ValorGasto <= 0)
+            return "Sem gasto neste mês nem no anterior";
+
+        if (item.ValorGastoMesAnterior <= 0)
+            return $"Sem base no mês anterior · gasto atual {item.ValorGasto.ToString("C")}";
+
+        var absDiff = Math.Abs(item.DiferencaVsMesAnterior).ToString("C");
+        var pct = item.VariacaoPercentualVsMesAnterior?.ToString("0.#") ?? "0";
+
+        if (item.Economizando)
+            return $"Economizando {absDiff} ({pct}%) vs mês anterior ({item.ValorGastoMesAnterior.ToString("C")})";
+
+        if (item.GastandoMais)
+            return $"Gastando {absDiff} a mais ({pct}%) vs mês anterior ({item.ValorGastoMesAnterior.ToString("C")})";
+
+        return $"Mesmo patamar do mês anterior ({item.ValorGastoMesAnterior.ToString("C")})";
+    }
+}

@@ -1,0 +1,116 @@
+@page "/categorias"
+@inject ICategoriaService CategoriaService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<div class="d-flex justify-space-between align-center mb-4">
+    <MudText Typo="Typo.h5">Categorias</MudText>
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="AbrirNovaAsync">Nova</MudButton>
+</div>
+
+@if (_carregando)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_categorias.Count == 0)
+{
+    <EmptyState Icon="@Icons.Material.Filled.Category" Mensagem="Nenhuma categoria cadastrada" />
+}
+else
+{
+    <MudGrid>
+        @foreach (var categoria in _categorias)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudPaper Class="pa-4 d-flex justify-space-between align-center" Elevation="2" Style="@($"border-left: 6px solid {categoria.CorHex}")">
+                    <div>
+                        <MudText Typo="Typo.h6">@categoria.Icone @categoria.Nome</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">@categoria.TipoPadrao</MudText>
+                    </div>
+                    <div>
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => EditarAsync(categoria))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" OnClick="@(() => RemoverAsync(categoria.Id))" />
+                    </div>
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    private bool _carregando = true;
+    private List<Categoria> _categorias = new();
+
+    protected override async Task OnInitializedAsync() => await CarregarAsync();
+
+    private async Task CarregarAsync()
+    {
+        _carregando = true;
+        _categorias = await CategoriaService.ListarAsync();
+        _carregando = false;
+    }
+
+    private async Task AbrirNovaAsync()
+    {
+        var parametros = new DialogParameters<CategoriaForm> { { x => x.Modelo, new CategoriaFormModel() } };
+        var dialog = await DialogService.ShowAsync<CategoriaForm>("Nova categoria", parametros);
+        var resultado = await dialog.Result;
+
+        if (resultado is { Canceled: false, Data: CategoriaFormModel modelo })
+        {
+            try
+            {
+                await CategoriaService.CriarAsync(modelo);
+                Snackbar.Add("Categoria criada", Severity.Success);
+                await CarregarAsync();
+            }
+            catch (InvalidOperationException ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+
+    private async Task EditarAsync(Categoria categoria)
+    {
+        var modelo = new CategoriaFormModel
+        {
+            Id = categoria.Id,
+            Nome = categoria.Nome,
+            Icone = categoria.Icone,
+            CorHex = categoria.CorHex,
+            TipoPadrao = categoria.TipoPadrao
+        };
+
+        var parametros = new DialogParameters<CategoriaForm> { { x => x.Modelo, modelo } };
+        var dialog = await DialogService.ShowAsync<CategoriaForm>("Editar categoria", parametros);
+        var resultado = await dialog.Result;
+
+        if (resultado is { Canceled: false, Data: CategoriaFormModel modeloAtualizado })
+        {
+            try
+            {
+                await CategoriaService.AtualizarAsync(categoria.Id, modeloAtualizado);
+                Snackbar.Add("Categoria atualizada", Severity.Success);
+                await CarregarAsync();
+            }
+            catch (InvalidOperationException ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Error);
+            }
+        }
+    }
+
+    private async Task RemoverAsync(int id)
+    {
+        var confirmado = await DialogService.ShowMessageBoxAsync(
+            "Remover categoria", "Categorias em uso ou padrão do sistema serão apenas desativadas.", yesText: "Remover", cancelText: "Cancelar");
+
+        if (confirmado != true)
+            return;
+
+        await CategoriaService.RemoverAsync(id);
+        Snackbar.Add("Categoria removida/desativada", Severity.Success);
+        await CarregarAsync();
+    }
+}

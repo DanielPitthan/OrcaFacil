@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="OrcaFacil.Core/OrcaFacil.Core.csproj" />
+  <Project Path="OrcaFacil.Tests/OrcaFacil.Tests.csproj" />
+  <Project Path="OrcaFacil/OrcaFacil.csproj" />
+</Solution>

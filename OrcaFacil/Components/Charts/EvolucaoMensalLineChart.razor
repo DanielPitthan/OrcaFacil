@@ -1,0 +1,94 @@
+@* KPIs do mês + gráfico de linhas com a evolução acumulada de receitas, despesas, pagas e saldo. *@
+
+<div class="pro-kpi-row mb-1">
+    <div class="pro-kpi" style="--pro-kpi-cor:@CorReceitas">
+        <div class="pro-kpi-titulo">Receitas</div>
+        <div class="pro-kpi-valor">@Resumo.TotalReceitas.ToString("C")</div>
+    </div>
+    <div class="pro-kpi" style="--pro-kpi-cor:@CorDespesas">
+        <div class="pro-kpi-titulo">Despesas</div>
+        <div class="pro-kpi-valor">@Resumo.TotalDespesas.ToString("C")</div>
+    </div>
+    <div class="pro-kpi" style="--pro-kpi-cor:@CorPagas">
+        <div class="pro-kpi-titulo">Pagas</div>
+        <div class="pro-kpi-valor">@Resumo.TotalDespesasPagas.ToString("C")</div>
+    </div>
+    <div class="pro-kpi" style="--pro-kpi-cor:var(--mud-palette-warning)">
+        <div class="pro-kpi-titulo">A pagar</div>
+        <div class="pro-kpi-valor">@Resumo.TotalDespesasAPagar.ToString("C")</div>
+    </div>
+    <div class="pro-kpi" style="--pro-kpi-cor:@CorSaldo">
+        <div class="pro-kpi-titulo">@(Resumo.Saldo >= 0 ? "Sobra" : "Déficit")</div>
+        <div class="pro-kpi-valor" style="color:@CorSaldo">@Resumo.Saldo.ToString("C")</div>
+    </div>
+</div>
+
+<div class="d-flex justify-space-between align-center">
+    <MudText Typo="Typo.caption" Color="Color.Secondary">
+        @(Resumo.TotalReceitas > 0
+            ? $"{PercentualComprometido:0.#}% da receita comprometida · {PercentualPago:0.#}% das despesas pagas"
+            : "Sem receitas lançadas no mês")
+    </MudText>
+    <MudIconButton Size="Size.Small" Icon="@(_expandido ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ShowChart)"
+                   aria-label="@(_expandido ? "Recolher gráfico" : "Mostrar gráfico")" OnClick="@(() => _expandido = !_expandido)" />
+</div>
+
+@if (_expandido)
+{
+    @if (Dados.Dias.Count > 0 && (Resumo.TotalReceitas > 0 || Resumo.TotalDespesas > 0))
+    {
+        <MudChart T="double" ChartType="ChartType.Line" ChartSeries="@_series" ChartLabels="@_rotulos"
+                  ChartOptions="@_opcoes" Width="100%" Height="150px" />
+    }
+    else
+    {
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block my-2">Sem lançamentos para montar o gráfico.</MudText>
+    }
+}
+
+@code {
+    private const string CorReceitas = "#6DA538";
+    private const string CorDespesas = "#D9534F";
+    private const string CorPagas = "#28587B";
+    private const string CorSaldoLinha = "#7F7CAF";
+
+    [Parameter, EditorRequired] public EvolucaoMensalDto Dados { get; set; } = new();
+
+    private bool _expandido = true;
+    private List<ChartSeries<double>> _series = new();
+    private string[] _rotulos = Array.Empty<string>();
+
+    private readonly LineChartOptions _opcoes = new()
+    {
+        ShowLegend = true,
+        ShowDataMarkers = false,
+        LineStrokeWidth = 2,
+        MaxNumYAxisTicks = 4,
+        YAxisToStringFunc = valor => valor >= 1000 || valor <= -1000 ? $"{valor / 1000:0.#}k" : valor.ToString("0"),
+        ChartPalette = new[] { CorReceitas, CorDespesas, CorPagas, CorSaldoLinha }
+    };
+
+    private ResumoMensalDto Resumo => Dados.Resumo;
+
+    private string CorSaldo => Resumo.Saldo >= 0 ? "var(--mud-palette-success)" : "var(--mud-palette-error)";
+
+    private decimal PercentualComprometido => Resumo.TotalReceitas <= 0 ? 0 : Resumo.TotalDespesas / Resumo.TotalReceitas * 100m;
+
+    private decimal PercentualPago => Resumo.TotalDespesas <= 0 ? 0 : Resumo.TotalDespesasPagas / Resumo.TotalDespesas * 100m;
+
+    protected override void OnParametersSet()
+    {
+        // Rótulos esparsos (1, 5, 10...) para o eixo X não ficar ilegível no celular.
+        _rotulos = Dados.Dias
+            .Select(d => d.Dia == 1 || d.Dia % 5 == 0 ? d.Dia.ToString() : string.Empty)
+            .ToArray();
+
+        _series = new List<ChartSeries<double>>
+        {
+            new() { Name = "Receitas", Data = Dados.Dias.Select(d => (double)d.ReceitasAcumuladas).ToArray() },
+            new() { Name = "Despesas", Data = Dados.Dias.Select(d => (double)d.DespesasAcumuladas).ToArray() },
+            new() { Name = "Pagas", Data = Dados.Dias.Select(d => (double)d.DespesasPagasAcumuladas).ToArray() },
+            new() { Name = "Saldo", Data = Dados.Dias.Select(d => (double)d.Saldo).ToArray() }
+        };
+    }
+}

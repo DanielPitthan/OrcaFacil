@@ -1,0 +1,131 @@
+@page "/relatorios"
+@inject IRelatorioService RelatorioService
+@inject ICategoriaService CategoriaService
+@inject ICsvExportService CsvExportService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.h5" Class="mb-4">Relatórios</MudText>
+
+<MudPaper Class="pa-4 mb-4" Elevation="2">
+    <MudGrid>
+        <MudItem xs="6" sm="3">
+            <MudDatePicker Label="Início" @bind-Date="_inicio" />
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudDatePicker Label="Fim" @bind-Date="_fim" />
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudSelect T="TipoTransacao?" @bind-Value="_tipo" Label="Tipo" Clearable="true">
+                <MudSelectItem T="TipoTransacao?" Value="TipoTransacao.Receita">Receita</MudSelectItem>
+                <MudSelectItem T="TipoTransacao?" Value="TipoTransacao.Despesa">Despesa</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudSelect T="int?" @bind-Value="_categoriaId" Label="Categoria" Clearable="true">
+                @foreach (var categoria in _categorias)
+                {
+                    <MudSelectItem T="int?" Value="categoria.Id">@categoria.Icone @categoria.Nome</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+    </MudGrid>
+    <div class="d-flex ga-2 mt-3">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="GerarAsync">Gerar relatório</MudButton>
+        <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.FileDownload" OnClick="ExportarCsvAsync" Disabled="@(_resultado is null)">Exportar CSV</MudButton>
+    </div>
+</MudPaper>
+
+@if (_resultado is not null)
+{
+    <MudGrid Class="mb-4">
+        <MudItem xs="4">
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudText Typo="Typo.caption">Receitas</MudText>
+                <MudText Typo="Typo.h6" Class="of-currency-receita">@_resultado.TotalReceitas.ToString("C")</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="4">
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudText Typo="Typo.caption">Despesas</MudText>
+                <MudText Typo="Typo.h6" Class="of-currency-despesa">@_resultado.TotalDespesas.ToString("C")</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="4">
+            <MudPaper Class="pa-3" Elevation="1">
+                <MudText Typo="Typo.caption">Saldo</MudText>
+                <MudText Typo="Typo.h6">@_resultado.Saldo.ToString("C")</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    @if (_resultado.Transacoes.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Filled.Assessment" Mensagem="Nenhum lançamento no período selecionado" />
+    }
+    else
+    {
+        <MudSimpleTable Dense="true" Hover="true">
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Descrição</th>
+                    <th>Categoria</th>
+                    <th class="text-right">Valor</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var t in _resultado.Transacoes)
+                {
+                    <tr>
+                        <td>@t.Data.ToString("dd/MM/yyyy")</td>
+                        <td>@t.Descricao</td>
+                        <td>@t.Categoria?.Icone @t.Categoria?.Nome</td>
+                        <td class="text-right"><CurrencyDisplay Valor="t.Valor" Tipo="t.Tipo" /></td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+}
+
+@code {
+    private DateTime? _inicio = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime? _fim = DateTime.Today;
+    private TipoTransacao? _tipo;
+    private int? _categoriaId;
+    private List<Categoria> _categorias = new();
+    private RelatorioResultDto? _resultado;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _categorias = await CategoriaService.ListarAsync();
+    }
+
+    private async Task GerarAsync()
+    {
+        var filtro = new FiltroRelatorioDto
+        {
+            Inicio = _inicio ?? DateTime.Today.AddMonths(-1),
+            Fim = _fim ?? DateTime.Today,
+            Tipo = _tipo,
+            CategoriaId = _categoriaId
+        };
+        _resultado = await RelatorioService.GerarAsync(filtro);
+    }
+
+    private async Task ExportarCsvAsync()
+    {
+        if (_resultado is null)
+            return;
+
+        try
+        {
+            var caminho = await CsvExportService.GerarCsvAsync(_resultado.Transacoes);
+            await CsvExportService.CompartilharAsync(caminho);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Falha ao exportar: {ex.Message}", Severity.Error);
+        }
+    }
+}

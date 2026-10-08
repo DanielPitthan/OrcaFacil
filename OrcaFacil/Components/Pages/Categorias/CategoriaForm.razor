@@ -1,0 +1,32 @@
+<MudDialog>
+    <DialogContent>
+        <EditForm Model="Modelo" OnValidSubmit="Salvar">
+            <DataAnnotationsValidator />
+            <MudTextField T="string" Label="Nome" @bind-Value="Modelo.Nome" For="@(() => Modelo.Nome)" Class="mb-3" />
+
+            <MudText Typo="Typo.body2" Class="mb-1">Ícone</MudText>
+            <EmojiPicker @bind-Value="Modelo.Icone" />
+
+            <MudText Typo="Typo.body2" Class="mt-3 mb-1">Cor</MudText>
+            <ColorSwatchPicker @bind-Value="Modelo.CorHex" />
+
+            <MudSelect T="TipoTransacao" @bind-Value="Modelo.TipoPadrao" Label="Tipo padrão" Class="mt-3">
+                <MudSelectItem Value="TipoTransacao.Despesa">Despesa</MudSelectItem>
+                <MudSelectItem Value="TipoTransacao.Receita">Receita</MudSelectItem>
+            </MudSelect>
+
+            <div class="d-flex ga-2 mt-4">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit">Salvar</MudButton>
+                <MudButton Variant="Variant.Text" OnClick="Cancelar">Cancelar</MudButton>
+            </div>
+        </EditForm>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public CategoriaFormModel Modelo { get; set; } = new();
+
+    private void Cancelar() => MudDialog.Cancel();
+    private void Salvar() => MudDialog.Close(DialogResult.Ok(Modelo));
+}

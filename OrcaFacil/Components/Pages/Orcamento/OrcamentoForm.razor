@@ -1,0 +1,85 @@
+<MudDialog>
+    <DialogContent>
+        <MudSelect T="int" @bind-Value="Modelo.CategoriaId" @bind-Value:after="AtualizarGastoAnterior" Label="Categoria"
+                   Disabled="Editando" Class="mb-3">
+            @foreach (var categoria in Categorias)
+            {
+                <MudSelectItem T="int" Value="@categoria.Id">@categoria.Icone @categoria.Nome</MudSelectItem>
+            }
+        </MudSelect>
+
+        <MudNumericField T="decimal" @bind-Value="Modelo.ValorLimite" Label="Limite mensal"
+                         Adornment="Adornment.Start" AdornmentText="R$" Format="F2" Class="mb-3" />
+
+        <MudNumericField T="decimal?" @bind-Value="Modelo.MetaReducaoPercentual" Label="Meta redução %"
+                         Adornment="Adornment.End" AdornmentText="%" Format="F0" Min="0" Max="100"
+                         HelperText="Opcional, em relação ao gasto do mês anterior" Class="mb-3" />
+
+        @if (_gastoMesAnterior > 0 && Modelo.MetaReducaoPercentual is > 0)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true">
+                Sugerido com @Modelo.MetaReducaoPercentual.Value.ToString("0")% de redução:
+                <b>@LimiteSugerido.ToString("C")</b> (gasto anterior @_gastoMesAnterior.ToString("C"))
+                <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Primary" Class="ml-1"
+                           OnClick="@(() => Modelo.ValorLimite = LimiteSugerido)">
+                    Usar valor sugerido
+                </MudButton>
+            </MudAlert>
+        }
+        else if (_gastoMesAnterior > 0)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary">Gasto no mês anterior: @_gastoMesAnterior.ToString("C")</MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancelar</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Salvar">Salvar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public OrcamentoFormModel Modelo { get; set; } = new();
+    [Parameter] public List<Categoria> Categorias { get; set; } = new();
+    [Parameter] public List<OrcamentoItemDto> Itens { get; set; } = new();
+    [Parameter] public bool Editando { get; set; }
+    [Inject] private ISnackbar Snackbar { get; set; } = null!;
+
+    private decimal _gastoMesAnterior;
+
+    private decimal LimiteSugerido =>
+        Modelo.MetaReducaoPercentual is not > 0 || _gastoMesAnterior <= 0
+            ? 0m
+            : Math.Round(_gastoMesAnterior * (1m - Modelo.MetaReducaoPercentual.Value / 100m), 2);
+
+    protected override void OnInitialized()
+    {
+        if (Modelo.CategoriaId == 0 && Categorias.Count > 0)
+            Modelo.CategoriaId = Categorias[0].Id;
+        AtualizarGastoAnterior();
+    }
+
+    private void AtualizarGastoAnterior()
+        => _gastoMesAnterior = Itens.FirstOrDefault(i => i.CategoriaId == Modelo.CategoriaId)?.ValorGastoMesAnterior ?? 0m;
+
+    private void Salvar()
+    {
+        if (Modelo.CategoriaId == 0 || Modelo.ValorLimite <= 0)
+        {
+            Snackbar.Add("Selecione uma categoria e informe um valor válido", Severity.Warning);
+            return;
+        }
+
+        if (Modelo.MetaReducaoPercentual is < 0 or > 100)
+        {
+            Snackbar.Add("A meta de redução deve estar entre 0 e 100%", Severity.Warning);
+            return;
+        }
+
+        if (Modelo.MetaReducaoPercentual is not > 0)
+            Modelo.MetaReducaoPercentual = null;
+
+        MudDialog.Close(DialogResult.Ok(Modelo));
+    }
+}

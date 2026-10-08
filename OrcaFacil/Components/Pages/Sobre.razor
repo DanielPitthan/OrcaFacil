@@ -1,0 +1,134 @@
+@page "/sobre"
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.h5" Class="mb-4">Sobre o Pro Orçamento</MudText>
+
+<MudPaper Class="pa-4 mb-4" Elevation="2">
+    <div class="d-flex align-center ga-3">
+        <MudIcon Icon="@Icons.Material.Filled.AccountBalanceWallet" Color="Color.Primary" Size="Size.Large" />
+        <div>
+            <MudText Typo="Typo.h6">Pro Orçamento</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">Controle de orçamento familiar simples e privado</MudText>
+        </div>
+    </div>
+
+    <MudText Typo="Typo.body1" Class="mt-4">
+        Organize receitas, despesas, orçamentos e metas em um só lugar. O aplicativo funciona
+        offline e mantém seus dados financeiros no seu dispositivo.
+    </MudText>
+
+    <MudGrid Class="mt-2">
+        <MudItem xs="12" sm="6">
+            <div class="d-flex align-center ga-2">
+                <MudIcon Icon="@Icons.Material.Filled.CloudOff" Color="Color.Success" />
+                <MudText Typo="Typo.body2">Funciona 100% offline</MudText>
+            </div>
+        </MudItem>
+        <MudItem xs="12" sm="6">
+            <div class="d-flex align-center ga-2">
+                <MudIcon Icon="@Icons.Material.Filled.Shield" Color="Color.Success" />
+                <MudText Typo="Typo.body2">Dados armazenados localmente</MudText>
+            </div>
+        </MudItem>
+    </MudGrid>
+
+    <MudDivider Class="my-4" />
+    <MudText Typo="Typo.body2">Desenvolvido pela <b>AZ Sistemas</b></MudText>
+    <MudText Typo="Typo.caption" Color="Color.Secondary">Versão @AppInfo.Current.VersionString</MudText>
+</MudPaper>
+
+<MudPaper Class="pa-4 mb-4" Elevation="3" Style="border-left: 4px solid var(--mud-palette-secondary);">
+    <div class="d-flex align-center ga-2 mb-2">
+        <MudIcon Icon="@Icons.Material.Filled.Favorite" Color="Color.Error" />
+        <MudText Typo="Typo.h6">Ajude a manter o projeto vivo</MudText>
+    </div>
+
+    <MudText Typo="Typo.body1" Class="mb-2">
+        Se o Pro Orçamento ajuda na sua organização, considere contribuir com <b>R$ 5,00</b>
+        ou com qualquer outro valor.
+    </MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+        A doação é opcional, não libera recursos extras e ajuda na manutenção,
+        nas correções e nas próximas melhorias do aplicativo.
+    </MudText>
+
+    <div class="d-flex flex-wrap ga-2 mb-4">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Favorite"
+                   OnClick="@(() => CopiarChavePixAsync(true))">
+            Doar R$ 5,00
+        </MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.VolunteerActivism"
+                   OnClick="@(() => CopiarChavePixAsync(false))">
+            Doar outro valor
+        </MudButton>
+    </div>
+
+    <MudPaper Outlined="true" Class="pa-3">
+        <MudText Typo="Typo.caption" Color="Color.Secondary">Chave PIX (CNPJ)</MudText>
+        <div class="d-flex align-center justify-space-between ga-2">
+            <MudText Typo="Typo.body1"><b>@ChavePix</b></MudText>
+            <MudTooltip Text="Copiar chave PIX">
+                <MudIconButton Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Primary"
+                               OnClick="@(() => CopiarChavePixAsync(false))" />
+            </MudTooltip>
+        </div>
+    </MudPaper>
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+        Ao tocar em uma opção, a chave PIX será copiada. Depois, abra o aplicativo do seu banco
+        e informe o valor da contribuição.
+    </MudText>
+</MudPaper>
+
+<MudPaper Class="pa-4" Elevation="2">
+    <MudText Typo="Typo.h6" Class="mb-1">Acompanhe o projeto</MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+        Veja outros projetos, novidades e informações sobre o desenvolvedor.
+    </MudText>
+    <div class="d-flex flex-wrap ga-2">
+        <MudButton Variant="Variant.Text" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Code"
+                   OnClick="@(() => AbrirLinkAsync("https://github.com/DanielPitthan/OrcaFacil"))">
+            GitHub
+        </MudButton>
+        <MudButton Variant="Variant.Text" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Work"
+                   OnClick="@(() => AbrirLinkAsync("https://www.linkedin.com/in/pitthan/"))">
+            LinkedIn
+        </MudButton>
+    </div>
+</MudPaper>
+
+@code {
+    private const string ChavePix = "35.460.604/0001-03";
+
+    private async Task CopiarChavePixAsync(bool sugerirCincoReais)
+    {
+        try
+        {
+            await Clipboard.Default.SetTextAsync(ChavePix);
+            Snackbar.Add(
+                sugerirCincoReais
+                    ? "Chave PIX copiada. Abra seu banco e envie R$ 5,00."
+                    : "Chave PIX copiada. Abra seu banco e escolha o valor.",
+                Severity.Success);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Não foi possível copiar a chave PIX.", Severity.Error);
+        }
+    }
+
+    private async Task AbrirLinkAsync(string url)
+    {
+        try
+        {
+            await Launcher.Default.OpenAsync(new Uri(url));
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Não foi possível abrir o link.", Severity.Error);
+        }
+    }
+}

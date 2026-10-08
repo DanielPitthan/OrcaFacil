@@ -1,0 +1,25 @@
+<div class="pro-fab-item">
+    <span class="pro-fab-label" @onclick="OnClickAsync">@Text</span>
+    <MudFab Size="Size.Small" Color="Color" StartIcon="@Icon" Disabled="Disabled" OnClick="OnClickAsync" aria-label="@Text" />
+</div>
+
+@code {
+    [CascadingParameter] public FabMenu? Menu { get; set; }
+
+    [Parameter, EditorRequired] public string Text { get; set; } = string.Empty;
+    [Parameter, EditorRequired] public string Icon { get; set; } = string.Empty;
+    [Parameter] public Color Color { get; set; } = Color.Secondary;
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public EventCallback Click { get; set; }
+
+    private async Task OnClickAsync()
+    {
+        if (Disabled)
+            return;
+
+        if (Menu is not null)
+            await Menu.FecharAsync();
+
+        await Click.InvokeAsync();
+    }
+}

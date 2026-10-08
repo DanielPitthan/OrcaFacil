@@ -1,0 +1,25 @@
+@if (Dados is { Count: > 0 })
+{
+    <MudChart T="double" ChartType="ChartType.Bar" ChartSeries="@_series" ChartLabels="@_rotulos" Width="100%" Height="260px" />
+}
+else
+{
+    <EmptyState Icon="@Icons.Material.Filled.BarChart" Mensagem="Sem dados suficientes ainda" />
+}
+
+@code {
+    [Parameter] public List<TendenciaMensalDto> Dados { get; set; } = new();
+
+    private List<ChartSeries<double>> _series = new();
+    private string[] _rotulos = Array.Empty<string>();
+
+    protected override void OnParametersSet()
+    {
+        _rotulos = Dados.Select(d => d.Rotulo).ToArray();
+        _series = new List<ChartSeries<double>>
+        {
+            new() { Name = "Receitas", Data = Dados.Select(d => (double)d.TotalReceitas).ToArray() },
+            new() { Name = "Despesas", Data = Dados.Select(d => (double)d.TotalDespesas).ToArray() }
+        };
+    }
+}

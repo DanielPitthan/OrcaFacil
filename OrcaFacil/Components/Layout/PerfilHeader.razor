@@ -1,0 +1,45 @@
+@inject IPerfilContext PerfilContext
+@inject IFotoPerfilService FotoPerfilService
+@inject NavigationManager NavigationManager
+@implements IDisposable
+
+<MudPaper Class="pa-4 mb-2 d-flex align-center" Elevation="0" Style="cursor:pointer;"
+          @onclick="@(() => NavigationManager.NavigateTo("/perfil"))">
+    <MudAvatar Class="mr-3" Color="Color.Secondary">
+        @if (_fotoDataUrl is not null)
+        {
+            <MudImage Src="@_fotoDataUrl" Alt="Foto do perfil" ObjectFit="ObjectFit.Cover" />
+        }
+        else
+        {
+            @(PerfilContext.Atual?.Avatar ?? "👤")
+        }
+    </MudAvatar>
+    <div>
+        <MudText Typo="Typo.subtitle1">Olá, @NomeExibicao</MudText>
+        <MudText Typo="Typo.caption" Color="Color.Secondary">Ver meu perfil</MudText>
+    </div>
+</MudPaper>
+<MudDivider Style="flex:none" />
+
+@code {
+    private string? _fotoDataUrl;
+
+    private string NomeExibicao => PerfilContext.Atual?.Apelido ?? PerfilContext.Atual?.Nome ?? "usuário";
+
+    protected override void OnInitialized()
+    {
+        AtualizarFoto();
+        PerfilContext.OnMudou += HandleMudou;
+    }
+
+    private void AtualizarFoto() => _fotoDataUrl = FotoPerfilService.ObterDataUrl(PerfilContext.Atual?.FotoPath);
+
+    private void HandleMudou()
+    {
+        AtualizarFoto();
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose() => PerfilContext.OnMudou -= HandleMudou;
+}

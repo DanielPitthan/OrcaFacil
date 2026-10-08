@@ -1,0 +1,47 @@
+@* Menu de ação flutuante (FAB) fixo no canto inferior direito; os itens expandem para cima. *@
+
+<CascadingValue Value="this" IsFixed="true">
+    @if (_aberto)
+    {
+        <div class="pro-fab-backdrop" @onclick="FecharAsync"></div>
+    }
+
+    <div class="pro-fab-menu">
+        @if (_aberto)
+        {
+            <div class="pro-fab-items">
+                @ChildContent
+            </div>
+        }
+        <MudFab Color="Color" Size="Size.Medium" StartIcon="@(_aberto ? ToggleIcon : Icon)"
+                OnClick="AlternarAsync" Disabled="Disabled" aria-label="@AriaLabel" />
+    </div>
+</CascadingValue>
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string Icon { get; set; } = Icons.Material.Filled.Add;
+    [Parameter] public string ToggleIcon { get; set; } = Icons.Material.Filled.Close;
+    [Parameter] public Color Color { get; set; } = Color.Primary;
+    [Parameter] public bool Disabled { get; set; }
+    [Parameter] public string AriaLabel { get; set; } = "Abrir menu de ações";
+    [Parameter] public EventCallback<bool> IsOpenChanged { get; set; }
+
+    private bool _aberto;
+
+    public async Task AlternarAsync()
+    {
+        _aberto = !_aberto;
+        await IsOpenChanged.InvokeAsync(_aberto);
+    }
+
+    public async Task FecharAsync()
+    {
+        if (!_aberto)
+            return;
+
+        _aberto = false;
+        await IsOpenChanged.InvokeAsync(false);
+        StateHasChanged();
+    }
+}

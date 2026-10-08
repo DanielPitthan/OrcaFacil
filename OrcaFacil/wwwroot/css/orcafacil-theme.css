@@ -1,0 +1,62 @@
+:root {
+    --of-sage-green: #6DA538;
+    --of-scarlet-rush: #D64242;
+    --of-blue-grey: #659ECD;
+    --of-lime-moss: #A2B94F;
+    --of-burnt-peach: #EF7F5D;
+}
+
+html, body {
+    height: 100%;
+    overscroll-behavior: none;
+}
+
+.of-currency-receita {
+    color: var(--mud-palette-success);
+    font-weight: 600;
+}
+
+.of-currency-despesa {
+    color: var(--mud-palette-error);
+    font-weight: 600;
+}
+
+.of-empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    text-align: center;
+    opacity: 0.75;
+}
+
+.of-emoji-swatch {
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0.35rem;
+    border-radius: 8px;
+    transition: background-color 0.15s ease-in-out;
+}
+
+.of-emoji-swatch:hover {
+    background-color: rgba(162, 185, 79, 0.15);
+}
+
+.of-emoji-swatch.selected {
+    background-color: rgba(162, 185, 79, 0.3);
+    outline: 2px solid var(--of-blue-grey);
+}
+
+.of-color-swatch {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: inline-block;
+    border: 2px solid transparent;
+}
+
+.of-color-swatch.selected {
+    border-color: var(--of-blue-grey);
+}

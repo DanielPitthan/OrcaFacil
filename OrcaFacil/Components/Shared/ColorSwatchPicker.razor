@@ -1,0 +1,33 @@
+<div class="d-flex flex-wrap ga-2 align-center">
+    @foreach (var cor in Cores)
+    {
+        <div class="of-color-swatch @(string.Equals(cor, Value, StringComparison.OrdinalIgnoreCase) ? "selected" : "")"
+             style="background-color:@cor;"
+             @onclick="() => Selecionar(cor)">
+        </div>
+    }
+    <MudColorPicker Value="@(new MudColor(Value))" ValueChanged="OnColorPickerChanged" Label="Outras cores" Style="width:180px" ShowAlpha="false" />
+</div>
+
+@code {
+    [Parameter] public string Value { get; set; } = "#A2B94F";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    private static readonly string[] Cores =
+    {
+        "#6DA538", "#D64242", "#659ECD", "#A2B94F", "#EF7F5D",
+        "#c7a98f", "#a97ca0", "#8fa9c7"
+    };
+
+    private async Task Selecionar(string cor)
+    {
+        Value = cor;
+        await ValueChanged.InvokeAsync(cor);
+    }
+
+    private async Task OnColorPickerChanged(MudColor cor)
+    {
+        Value = cor.ToString(MudColorOutputFormats.Hex);
+        await ValueChanged.InvokeAsync(Value);
+    }
+}

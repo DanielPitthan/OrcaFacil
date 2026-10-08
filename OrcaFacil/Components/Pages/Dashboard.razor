@@ -1,0 +1,115 @@
+@page "/"
+@inject ITransacaoService TransacaoService
+@inject IOrcamentoService OrcamentoService
+@inject IMetaService MetaService
+
+<MudText Typo="Typo.h5" Class="mb-4">Dashboard</MudText>
+
+@if (_carregando)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    <MudGrid>
+        <MudItem xs="12" sm="4">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.caption">Saldo do mês</MudText>
+                <MudText Typo="Typo.h5" Color="@(_resumo!.Saldo >= 0 ? Color.Success : Color.Error)">@_resumo.Saldo.ToString("C")</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.caption">Receitas</MudText>
+                <MudText Typo="Typo.h5" Class="of-currency-receita">@_resumo!.TotalReceitas.ToString("C")</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.caption">Despesas lançadas</MudText>
+                <MudText Typo="Typo.h5" Class="of-currency-despesa">@_resumo!.TotalDespesas.ToString("C")</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.caption">Despesas pagas</MudText>
+                <MudText Typo="Typo.h5" Color="Color.Success">@_resumo!.TotalDespesasPagas.ToString("C")</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.caption">Despesas a pagar</MudText>
+                <MudText Typo="Typo.h5" Color="Color.Warning">@_resumo!.TotalDespesasAPagar.ToString("C")</MudText>
+            </MudPaper>
+        </MudItem>
+
+        @if (_alertas.Count > 0)
+        {
+            <MudItem xs="12">
+                <MudAlert Severity="Severity.Warning" Icon="@Icons.Material.Filled.WarningAmber">
+                    <MudText Typo="Typo.subtitle2" Class="mb-1">Orçamentos próximos do limite ou estourados</MudText>
+                    @foreach (var alerta in _alertas)
+                    {
+                        <div>@alerta.CategoriaIcone @alerta.CategoriaNome — @alerta.PercentualUsado.ToString("0.#")% (@alerta.ValorGasto.ToString("C") / @alerta.ValorLimite.ToString("C"))</div>
+                    }
+                </MudAlert>
+            </MudItem>
+        }
+
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.subtitle1" Class="mb-2">Despesas por categoria</MudText>
+                <CategoryDonutChart Dados="_gastosPorCategoria" />
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.subtitle1" Class="mb-2">Receitas x Despesas (últimos meses)</MudText>
+                <IncomeExpenseTrendChart Dados="_tendencia" />
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.subtitle1" Class="mb-2">Metas de economia</MudText>
+                @if (_metas.Count == 0)
+                {
+                    <EmptyState Icon="@Icons.Material.Filled.Flag" Mensagem="Nenhuma meta cadastrada" />
+                }
+                else
+                {
+                    @foreach (var meta in _metas)
+                    {
+                        <div class="mb-3">
+                            <div class="d-flex justify-space-between">
+                                <MudText Typo="Typo.body1">@meta.Icone @meta.Nome</MudText>
+                                <MudText Typo="Typo.body2">@meta.PercentualConcluido.ToString("0.#")%</MudText>
+                            </div>
+                            <MudProgressLinear Color="Color.Success" Value="@((double)meta.PercentualConcluido)" Rounded="true" />
+                        </div>
+                    }
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private bool _carregando = true;
+    private ResumoMensalDto? _resumo;
+    private List<GastoPorCategoriaDto> _gastosPorCategoria = new();
+    private List<TendenciaMensalDto> _tendencia = new();
+    private List<AlertaOrcamentoDto> _alertas = new();
+    private List<Meta> _metas = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var hoje = DateTime.Today;
+        _resumo = await TransacaoService.ObterResumoMensalAsync(hoje.Month, hoje.Year);
+        _gastosPorCategoria = await TransacaoService.ObterGastosPorCategoriaAsync(hoje.Month, hoje.Year);
+        _tendencia = await TransacaoService.ObterTendenciaMensalAsync(6);
+        _alertas = await OrcamentoService.ObterAlertasAsync(hoje.Month, hoje.Year);
+        _metas = await MetaService.ListarAsync();
+        _carregando = false;
+    }
+}

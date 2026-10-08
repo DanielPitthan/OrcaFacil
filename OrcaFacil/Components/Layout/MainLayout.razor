@@ -1,0 +1,58 @@
+@inherits LayoutComponentBase
+@implements IDisposable
+
+<MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@(() => _drawerOpen = !_drawerOpen)" />
+        <MudText Typo="Typo.h6" Class="ml-2">Pro Orçamento</MudText>
+        <MudSpacer />
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="1">
+        <PerfilHeader />
+        <NavMenu />
+    </MudDrawer>
+
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.Large" Class="pa-4">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    private bool _drawerOpen = true;
+    private bool _isDarkMode;
+    private MudTheme _theme = OrcaFacil.Theme.OrcaFacilThemes.Light;
+
+    protected override void OnInitialized()
+    {
+        AtualizarTema(Application.Current?.RequestedTheme ?? AppTheme.Light);
+
+        if (Application.Current is not null)
+            Application.Current.RequestedThemeChanged += OnRequestedThemeChanged;
+    }
+
+    private void OnRequestedThemeChanged(object? sender, AppThemeChangedEventArgs e)
+    {
+        AtualizarTema(e.RequestedTheme);
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void AtualizarTema(AppTheme appTheme)
+    {
+        _isDarkMode = appTheme == AppTheme.Dark;
+        _theme = _isDarkMode ? OrcaFacil.Theme.OrcaFacilThemes.Dark : OrcaFacil.Theme.OrcaFacilThemes.Light;
+    }
+
+    public void Dispose()
+    {
+        if (Application.Current is not null)
+            Application.Current.RequestedThemeChanged -= OnRequestedThemeChanged;
+    }
+}

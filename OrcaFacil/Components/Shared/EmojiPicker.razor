@@ -1,0 +1,28 @@
+<MudGrid Spacing="1">
+    @foreach (var emoji in Emojis)
+    {
+        <MudItem>
+            <div class="of-emoji-swatch @(emoji == Value ? "selected" : "")" @onclick="() => Selecionar(emoji)">
+                @emoji
+            </div>
+        </MudItem>
+    }
+</MudGrid>
+
+@code {
+    [Parameter] public string Value { get; set; } = "🏷️";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+
+    private static readonly string[] Emojis =
+    {
+        "🏠", "🚗", "💡", "📱", "🛒", "💳", "🏥", "🎓", "🎉", "💰",
+        "📈", "🧾", "🍔", "☕", "🚌", "✈️", "🎁", "🐾", "🧴", "📦",
+        "🏷️", "⚡", "🎯", "🛟", "🧑‍🍼", "📚", "🏋️", "🎮", "🚿", "🌐"
+    };
+
+    private async Task Selecionar(string emoji)
+    {
+        Value = emoji;
+        await ValueChanged.InvokeAsync(emoji);
+    }
+}

@@ -1,0 +1,139 @@
+@page "/metas"
+@inject IMetaService MetaService
+@inject IPerfilContext PerfilContext
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.h5" Class="mb-4">Metas de Economia</MudText>
+
+@if (_carregando)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (_metas.Count == 0)
+{
+    <EmptyState Icon="@Icons.Material.Filled.Flag" Mensagem="Nenhuma meta cadastrada" Subtitulo="Use o botão + para criar uma meta" />
+}
+else
+{
+    <MudGrid Class="pro-fab-spacer">
+        @foreach (var meta in _metas)
+        {
+            <MudItem xs="12" sm="6">
+                <MudPaper Class="pa-4" Elevation="2">
+                    <div class="d-flex justify-space-between align-center mb-2">
+                        <MudText Typo="Typo.h6">@meta.Icone @meta.Nome</MudText>
+                        @if (meta.Concluida)
+                        {
+                            <MudChip T="string" Color="Color.Success" Size="Size.Small">Concluída</MudChip>
+                        }
+                    </div>
+                    <MudText Typo="Typo.body2" Class="mb-1">@meta.ValorAtual.ToString("C") de @meta.ValorAlvo.ToString("C")</MudText>
+                    <MudProgressLinear Color="Color.Success" Value="@((double)meta.PercentualConcluido)" Rounded="true" Class="mb-2" />
+                    @if (meta.Prazo is not null)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Prazo: @meta.Prazo.Value.ToString("dd/MM/yyyy")</MudText>
+                    }
+                    @if (!meta.Concluida)
+                    {
+                        <div class="d-flex ga-2 mt-2">
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => ContribuirAsync(meta.Id))">Contribuir</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => EditarAsync(meta))">Editar</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" OnClick="@(() => ExcluirAsync(meta.Id))">Excluir</MudButton>
+                        </div>
+                    }
+                </MudPaper>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+<div class="pro-fab-single">
+    <MudFab Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Add" OnClick="AbrirNovaAsync" aria-label="Nova meta" />
+</div>
+
+@code {
+    private bool _carregando = true;
+    private List<Meta> _metas = new();
+
+    protected override async Task OnInitializedAsync() => await CarregarAsync();
+
+    private async Task CarregarAsync()
+    {
+        _carregando = true;
+        _metas = await MetaService.ListarAsync();
+        _carregando = false;
+    }
+
+    private async Task AbrirNovaAsync()
+    {
+        var parametros = new DialogParameters<MetaForm> { { x => x.Modelo, new MetaFormModel() } };
+        var dialog = await DialogService.ShowAsync<MetaForm>("Nova meta", parametros);
+        var resultado = await dialog.Result;
+
+        if (resultado is { Canceled: false, Data: MetaFormModel modelo } && PerfilContext.Atual is not null)
+        {
+            await MetaService.CriarAsync(modelo, PerfilContext.Atual.Id);
+            Snackbar.Add("Meta criada", Severity.Success);
+            await CarregarAsync();
+        }
+    }
+
+    private async Task EditarAsync(Meta meta)
+    {
+        var modelo = new MetaFormModel
+        {
+            Id = meta.Id,
+            Nome = meta.Nome,
+            ValorAlvo = meta.ValorAlvo,
+            ValorAtual = meta.ValorAtual,
+            Prazo = meta.Prazo,
+            Icone = meta.Icone
+        };
+
+        var parametros = new DialogParameters<MetaForm> { { x => x.Modelo, modelo } };
+        var dialog = await DialogService.ShowAsync<MetaForm>("Editar meta", parametros);
+        var resultado = await dialog.Result;
+
+        if (resultado is { Canceled: false, Data: MetaFormModel modeloAtualizado })
+        {
+            await MetaService.AtualizarAsync(meta.Id, modeloAtualizado);
+            Snackbar.Add("Meta atualizada", Severity.Success);
+            await CarregarAsync();
+        }
+    }
+
+    private async Task ContribuirAsync(int metaId)
+    {
+        var parametros = new DialogParameters<ContribuicaoDialog> { { x => x.Modelo, new ContribuicaoMetaModel() } };
+        var dialog = await DialogService.ShowAsync<ContribuicaoDialog>("Adicionar contribuição", parametros);
+        var resultado = await dialog.Result;
+
+        if (resultado is { Canceled: false, Data: ContribuicaoMetaModel modelo })
+        {
+            try
+            {
+                await MetaService.AdicionarContribuicaoAsync(metaId, modelo);
+                Snackbar.Add("Contribuição adicionada", Severity.Success);
+            }
+            catch (InvalidOperationException ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Warning);
+            }
+            await CarregarAsync();
+        }
+    }
+
+    private async Task ExcluirAsync(int id)
+    {
+        var confirmado = await DialogService.ShowMessageBoxAsync(
+            "Excluir meta", "Tem certeza que deseja excluir esta meta?", yesText: "Excluir", cancelText: "Cancelar");
+
+        if (confirmado != true)
+            return;
+
+        await MetaService.ExcluirAsync(id);
+        Snackbar.Add("Meta excluída", Severity.Success);
+        await CarregarAsync();
+    }
+}

@@ -1,0 +1,13 @@
+<span class="@CssClass">@Valor.ToString("C")</span>
+
+@code {
+    [Parameter] public decimal Valor { get; set; }
+    [Parameter] public TipoTransacao? Tipo { get; set; }
+
+    private string CssClass => Tipo switch
+    {
+        TipoTransacao.Receita => "of-currency-receita",
+        TipoTransacao.Despesa => "of-currency-despesa",
+        _ => ""
+    };
+}

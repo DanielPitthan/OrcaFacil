@@ -1,0 +1,47 @@
+<MudDialog>
+    <DialogContent>
+        <EditForm Model="Modelo" OnValidSubmit="Salvar">
+            <DataAnnotationsValidator />
+            <MudTextField T="string" Label="Nome" @bind-Value="Modelo.Nome" For="@(() => Modelo.Nome)" Class="mb-3" />
+
+            <MudText Typo="Typo.body2" Class="mb-1">Ícone</MudText>
+            <EmojiPicker @bind-Value="Modelo.Icone" />
+
+            <MudNumericField T="decimal" Label="Valor alvo" @bind-Value="Modelo.ValorAlvo" For="@(() => Modelo.ValorAlvo)"
+                              Adornment="Adornment.Start" AdornmentText="R$" Format="F2" Class="mt-3 mb-3" />
+
+            @if (Modelo.Id is null)
+            {
+                <MudNumericField T="decimal" Label="Valor inicial (opcional)" @bind-Value="Modelo.ValorAtual"
+                                  Adornment="Adornment.Start" AdornmentText="R$" Format="F2" Class="mb-3" />
+            }
+
+            <MudDatePicker Label="Prazo (opcional)" @bind-Date="_prazo" Class="mb-3" />
+
+            <div class="d-flex ga-2 mt-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit">Salvar</MudButton>
+                <MudButton Variant="Variant.Text" OnClick="Cancelar">Cancelar</MudButton>
+            </div>
+        </EditForm>
+    </DialogContent>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public MetaFormModel Modelo { get; set; } = new();
+
+    private DateTime? _prazo;
+
+    protected override void OnInitialized()
+    {
+        _prazo = Modelo.Prazo;
+    }
+
+    private void Cancelar() => MudDialog.Cancel();
+
+    private void Salvar()
+    {
+        Modelo.Prazo = _prazo;
+        MudDialog.Close(DialogResult.Ok(Modelo));
+    }
+}

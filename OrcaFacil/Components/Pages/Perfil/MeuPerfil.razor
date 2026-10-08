@@ -1,0 +1,114 @@
+@page "/perfil"
+@inject IPerfilContext PerfilContext
+@inject IFotoPerfilService FotoPerfilService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.h5" Class="mb-4">Meu Perfil</MudText>
+
+<MudPaper Class="pa-4" Elevation="2">
+    <div class="d-flex flex-column align-center mb-4">
+        <MudAvatar Style="width:112px;height:112px;font-size:3rem;" Color="Color.Secondary">
+            @if (_fotoDataUrl is not null)
+            {
+                <MudImage Src="@_fotoDataUrl" Alt="Foto do perfil" ObjectFit="ObjectFit.Cover" />
+            }
+            else
+            {
+                @Iniciais
+            }
+        </MudAvatar>
+
+        <div class="d-flex flex-wrap justify-center ga-2 mt-3">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.PhotoCamera" OnClick="TirarSelfieAsync" Disabled="_processandoFoto">
+                Tirar selfie
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.PhotoLibrary" OnClick="EscolherDaGaleriaAsync" Disabled="_processandoFoto">
+                Galeria
+            </MudButton>
+            @if (_fotoPath is not null)
+            {
+                <MudButton Variant="Variant.Text" Color="Color.Error" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.Delete" OnClick="RemoverFoto">
+                    Remover
+                </MudButton>
+            }
+        </div>
+    </div>
+
+    <MudTextField T="string" @bind-Value="_nome" Label="Nome" MaxLength="60" Class="mb-3" />
+    <MudTextField T="string" @bind-Value="_apelido" Label="Apelido (como prefere ser chamado)" MaxLength="40" Class="mb-3" />
+
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SalvarAsync">Salvar</MudButton>
+</MudPaper>
+
+@code {
+    private string _nome = string.Empty;
+    private string? _apelido;
+    private string? _fotoPath;
+    private string? _fotoDataUrl;
+    private bool _processandoFoto;
+
+    private string Iniciais => string.IsNullOrWhiteSpace(_nome) ? "👤" : _nome.Trim()[..1].ToUpperInvariant();
+
+    protected override void OnInitialized()
+    {
+        var atual = PerfilContext.Atual;
+        _nome = atual?.Nome ?? string.Empty;
+        _apelido = atual?.Apelido;
+        _fotoPath = atual?.FotoPath;
+        _fotoDataUrl = FotoPerfilService.ObterDataUrl(_fotoPath);
+    }
+
+    private Task TirarSelfieAsync() => ProcessarFotoAsync(FotoPerfilService.TirarSelfieAsync);
+
+    private Task EscolherDaGaleriaAsync() => ProcessarFotoAsync(FotoPerfilService.EscolherDaGaleriaAsync);
+
+    private async Task ProcessarFotoAsync(Func<Task<string?>> obterFoto)
+    {
+        _processandoFoto = true;
+        try
+        {
+            var caminho = await obterFoto();
+            if (caminho is null)
+                return;
+
+            _fotoPath = caminho;
+            _fotoDataUrl = FotoPerfilService.ObterDataUrl(caminho);
+            await PerfilContext.SalvarAsync(NomeValido(), _apelido, _fotoPath);
+            Snackbar.Add("Foto atualizada", Severity.Success);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or PermissionException or FeatureNotSupportedException)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        finally
+        {
+            _processandoFoto = false;
+        }
+    }
+
+    private async Task RemoverFoto()
+    {
+        FotoPerfilService.Remover();
+        _fotoPath = null;
+        _fotoDataUrl = null;
+        await PerfilContext.SalvarAsync(NomeValido(), _apelido, null);
+        Snackbar.Add("Foto removida", Severity.Info);
+    }
+
+    private async Task SalvarAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_nome))
+        {
+            Snackbar.Add("Informe seu nome", Severity.Warning);
+            return;
+        }
+
+        await PerfilContext.SalvarAsync(_nome, _apelido, _fotoPath);
+        Snackbar.Add("Perfil salvo", Severity.Success);
+    }
+
+    private string NomeValido() => string.IsNullOrWhiteSpace(_nome) ? PerfilContext.Atual?.Nome ?? "Usuário" : _nome;
+}

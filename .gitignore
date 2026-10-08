@@ -1,0 +1,29 @@
+## .NET / MAUI
+bin/
+obj/
+*.user
+*.userosscache
+*.suo
+.vs/
+
+## Rider / VS Code / assistentes
+.idea/
+.vscode/
+.claude/settings.local.json
+
+## Test results
+TestResults/
+
+## SQLite dev artifacts
+*.db
+*.db-shm
+*.db-wal
+design_time.db
+
+## Logs
+logs/
+*.log
+
+## OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,35 @@
+@if (Dados is { Count: > 0 })
+{
+    <MudChart T="double" ChartType="ChartType.Donut" ChartSeries="@_series" ChartLabels="@_rotulos" Width="100%" Height="260px" />
+    <MudSimpleTable Dense="true" Class="mt-2">
+        <tbody>
+            @foreach (var item in Dados)
+            {
+                <tr>
+                    <td>@item.CategoriaIcone @item.CategoriaNome</td>
+                    <td class="text-right">@item.Total.ToString("C")</td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+}
+else
+{
+    <EmptyState Icon="@Icons.Material.Filled.PieChart" Mensagem="Sem despesas neste período" />
+}
+
+@code {
+    [Parameter] public List<GastoPorCategoriaDto> Dados { get; set; } = new();
+
+    private List<ChartSeries<double>> _series = new();
+    private string[] _rotulos = Array.Empty<string>();
+
+    protected override void OnParametersSet()
+    {
+        _rotulos = Dados.Select(d => $"{d.CategoriaIcone} {d.CategoriaNome}").ToArray();
+        _series = new List<ChartSeries<double>>
+        {
+            new() { Name = "Despesas", Data = Dados.Select(d => (double)d.Total).ToArray() }
+        };
+    }
+}

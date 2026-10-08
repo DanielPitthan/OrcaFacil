@@ -1,0 +1,159 @@
+@page "/lancamentos/novo"
+@page "/lancamentos/editar/{Id:int}"
+@inject ITransacaoService TransacaoService
+@inject ICategoriaService CategoriaService
+@inject IFechamentoService FechamentoService
+@inject NavigationManager NavigationManager
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.h5" Class="mb-4">@(Id.HasValue ? "Editar Lançamento" : "Novo Lançamento")</MudText>
+
+@if (PeriodoBloqueado)
+{
+    <MudAlert Severity="Severity.Warning" Icon="@Icons.Material.Filled.Lock" Dense="true" Class="mb-3">
+        @(_periodoOriginalFechado
+            ? $"Este lançamento pertence a um mês fechado ({_dataOriginal:MM/yyyy}). Reabra o período na tela de Lançamentos para alterá-lo."
+            : $"O mês {_data:MM/yyyy} está fechado. Escolha outra data ou reabra o período.")
+    </MudAlert>
+}
+
+<EditForm Model="_modelo" OnValidSubmit="SalvarAsync">
+    <DataAnnotationsValidator />
+
+    <MudPaper Class="pa-4" Elevation="2">
+        <MudTextField T="string" Label="Descrição" @bind-Value="_modelo.Descricao" For="@(() => _modelo.Descricao)" Class="mb-3" />
+
+        <MudNumericField T="decimal" Label="Valor" @bind-Value="_modelo.Valor" For="@(() => _modelo.Valor)"
+                          Culture="_culturaPtBr" Format="F2" Adornment="Adornment.Start" AdornmentText="R$" Class="mb-3" />
+
+        <MudDatePicker Label="Data" @bind-Date="_data" @bind-Date:after="VerificarPeriodoAsync" Class="mb-3" />
+
+        <MudSelect T="TipoTransacao" Value="_modelo.Tipo" ValueChanged="OnTipoChanged" Label="Tipo" Class="mb-3">
+            <MudSelectItem Value="TipoTransacao.Despesa">Despesa</MudSelectItem>
+            <MudSelectItem Value="TipoTransacao.Receita">Receita</MudSelectItem>
+        </MudSelect>
+
+        @if (_modelo.Tipo == TipoTransacao.Despesa)
+        {
+            <MudCheckBox T="bool" @bind-Value="_modelo.Pago" Label="Pago" Class="mb-3" />
+        }
+
+        <MudSelect T="int" @bind-Value="_modelo.CategoriaId" Label="Categoria" For="@(() => _modelo.CategoriaId)" Class="mb-3">
+            @foreach (var categoria in CategoriasFiltradas)
+            {
+                <MudSelectItem T="int" Value="@categoria.Id">@categoria.Icone @categoria.Nome</MudSelectItem>
+            }
+        </MudSelect>
+
+        <MudSelect T="TipoRecorrencia" @bind-Value="_modelo.Recorrencia" Label="Recorrência" Class="mb-3">
+            <MudSelectItem Value="TipoRecorrencia.Unica">Única</MudSelectItem>
+            <MudSelectItem Value="TipoRecorrencia.Semanal">Semanal</MudSelectItem>
+            <MudSelectItem Value="TipoRecorrencia.Mensal">Mensal</MudSelectItem>
+            <MudSelectItem Value="TipoRecorrencia.Anual">Anual</MudSelectItem>
+        </MudSelect>
+
+        <MudTextField T="string" Label="Observação (opcional)" @bind-Value="_modelo.Observacao" Lines="2" Class="mb-3" />
+
+        <div class="d-flex ga-2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="PeriodoBloqueado">Salvar</MudButton>
+            <MudButton Variant="Variant.Text" OnClick="@(() => NavigationManager.NavigateTo("/lancamentos"))">Cancelar</MudButton>
+        </div>
+    </MudPaper>
+</EditForm>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private readonly TransacaoFormModel _modelo = new();
+    private List<Categoria> _categorias = new();
+    private readonly System.Globalization.CultureInfo _culturaPtBr = new("pt-BR");
+    private DateTime? _data = DateTime.Today;
+    private DateTime? _dataOriginal;
+    private bool _periodoOriginalFechado;
+    private bool _periodoDataFechado;
+
+    private bool PeriodoBloqueado => _periodoOriginalFechado || _periodoDataFechado;
+
+    private IEnumerable<Categoria> CategoriasFiltradas =>
+        _categorias.Where(c => c.TipoPadrao == _modelo.Tipo);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _categorias = await CategoriaService.ListarAsync();
+
+        if (Id.HasValue)
+        {
+            var transacao = await TransacaoService.ObterAsync(Id.Value);
+            if (transacao is not null)
+            {
+                _modelo.Id = transacao.Id;
+                _modelo.Descricao = transacao.Descricao;
+                _modelo.Valor = transacao.Valor;
+                _modelo.Data = transacao.Data;
+                _modelo.Tipo = transacao.Tipo;
+                _modelo.Recorrencia = transacao.Recorrencia;
+                _modelo.Pago = transacao.Pago;
+                _modelo.Observacao = transacao.Observacao;
+                _modelo.CategoriaId = transacao.CategoriaId;
+                _data = transacao.Data;
+                _dataOriginal = transacao.Data;
+                _periodoOriginalFechado = await FechamentoService.EstaFechadoAsync(transacao.Data.Month, transacao.Data.Year);
+            }
+        }
+        else
+        {
+            GarantirCategoriaValida();
+        }
+
+        await VerificarPeriodoAsync();
+    }
+
+    private async Task VerificarPeriodoAsync()
+    {
+        var data = _data ?? DateTime.Today;
+        _periodoDataFechado = await FechamentoService.EstaFechadoAsync(data.Month, data.Year);
+    }
+
+    private Task OnTipoChanged(TipoTransacao tipo)
+    {
+        _modelo.Tipo = tipo;
+        if (tipo != TipoTransacao.Despesa)
+            _modelo.Pago = true;
+        GarantirCategoriaValida();
+        return Task.CompletedTask;
+    }
+
+    private void GarantirCategoriaValida()
+    {
+        var filtradas = CategoriasFiltradas.ToList();
+        if (filtradas.Count == 0)
+            return;
+
+        if (filtradas.All(c => c.Id != _modelo.CategoriaId))
+            _modelo.CategoriaId = filtradas[0].Id;
+    }
+
+    private async Task SalvarAsync()
+    {
+        _modelo.Data = _data ?? DateTime.Today;
+
+        try
+        {
+            if (Id.HasValue)
+                await TransacaoService.AtualizarAsync(Id.Value, _modelo);
+            else
+                await TransacaoService.CriarAsync(_modelo);
+
+            Snackbar.Add("Lançamento salvo com sucesso", Severity.Success);
+            NavigationManager.NavigateTo("/lancamentos");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+}

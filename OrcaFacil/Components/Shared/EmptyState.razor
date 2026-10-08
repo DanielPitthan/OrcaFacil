@@ -1,0 +1,14 @@
+<div class="of-empty-state">
+    <MudIcon Icon="@Icon" Size="Size.Large" Color="Color.Secondary" />
+    <MudText Typo="Typo.subtitle1" Class="mt-2">@Mensagem</MudText>
+    @if (!string.IsNullOrWhiteSpace(Subtitulo))
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary">@Subtitulo</MudText>
+    }
+</div>
+
+@code {
+    [Parameter] public string Icon { get; set; } = MudBlazor.Icons.Material.Filled.Inbox;
+    [Parameter] public string Mensagem { get; set; } = "Nada por aqui ainda";
+    [Parameter] public string? Subtitulo { get; set; }
+}

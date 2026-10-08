@@ -1,0 +1,78 @@
+@page "/configuracoes"
+@inject IConfiguracaoService Configuracao
+@inject INotificationSchedulerService NotificationScheduler
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.h5" Class="mb-4">Configurações</MudText>
+
+<MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pt-4">
+    <MudTabPanel Text="Notificações" Icon="@Icons.Material.Filled.Notifications">
+        <MudPaper Class="pa-4" Elevation="2">
+            <MudSwitch T="bool" @bind-Value="_notificacoesAtivas" Color="Color.Primary" Label="Ativar notificações de despesas" />
+            <MudSwitch T="bool" @bind-Value="_somAtivo" Color="Color.Primary" Label="Emitir som na notificação"
+                       Disabled="!_notificacoesAtivas" />
+
+            <MudDivider Class="my-3" />
+
+            <MudText Typo="Typo.subtitle2" Class="mb-1">Quando avisar sobre despesas não pagas</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">Os avisos são disparados às 09:00.</MudText>
+
+            @foreach (var opcao in _opcoesPrazo)
+            {
+                <MudCheckBox T="bool" Value="_prazos.HasFlag(opcao.Prazo)" Disabled="!_notificacoesAtivas" Color="Color.Primary"
+                             ValueChanged="@(marcado => AlternarPrazo(opcao.Prazo, marcado))" Label="@opcao.Rotulo" Dense="true" />
+            }
+
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-3" OnClick="SalvarAsync" Disabled="_salvando">
+                Salvar
+            </MudButton>
+        </MudPaper>
+    </MudTabPanel>
+
+    <MudTabPanel Text="Armazenamento" Icon="@Icons.Material.Filled.Storage">
+        <ArmazenamentoPanel />
+    </MudTabPanel>
+</MudTabs>
+
+@code {
+    private static readonly (PrazoAviso Prazo, string Rotulo)[] _opcoesPrazo =
+    {
+        (PrazoAviso.TresDiasAntes, "3 dias antes do vencimento"),
+        (PrazoAviso.UmDiaAntes, "1 dia antes do vencimento"),
+        (PrazoAviso.NoDia, "No dia do vencimento"),
+        (PrazoAviso.UmDiaDepois, "1 dia depois do vencimento"),
+        (PrazoAviso.Vencidas, "Diariamente enquanto estiver vencida (até 7 dias)")
+    };
+
+    private bool _notificacoesAtivas;
+    private bool _somAtivo;
+    private PrazoAviso _prazos;
+    private bool _salvando;
+
+    protected override void OnInitialized()
+    {
+        _notificacoesAtivas = Configuracao.NotificacoesAtivas;
+        _somAtivo = Configuracao.SomAtivo;
+        _prazos = Configuracao.PrazosAviso;
+    }
+
+    private void AlternarPrazo(PrazoAviso prazo, bool marcado)
+        => _prazos = marcado ? _prazos | prazo : _prazos & ~prazo;
+
+    private async Task SalvarAsync()
+    {
+        _salvando = true;
+        try
+        {
+            Configuracao.NotificacoesAtivas = _notificacoesAtivas;
+            Configuracao.SomAtivo = _somAtivo;
+            Configuracao.PrazosAviso = _prazos;
+            await NotificationScheduler.ReagendarTodasAsync();
+            Snackbar.Add("Configurações salvas", Severity.Success);
+        }
+        finally
+        {
+            _salvando = false;
+        }
+    }
+}

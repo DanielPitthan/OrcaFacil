@@ -1,0 +1,111 @@
+@inject IArmazenamentoService ArmazenamentoService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudPaper Class="pa-4 mb-4" Elevation="2">
+    <div class="d-flex justify-space-between align-center mb-2">
+        <MudText Typo="Typo.subtitle1">Espaço ocupado</MudText>
+        <MudIconButton Icon="@Icons.Material.Filled.Refresh" Size="Size.Small" OnClick="CarregarAsync" aria-label="Atualizar" />
+    </div>
+
+    @if (_resumo is null)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else
+    {
+        <MudText Typo="Typo.h5" Class="mb-2">@FormatarTamanho(_resumo.TotalBytes)</MudText>
+
+        @foreach (var (rotulo, bytes, cor) in Segmentos)
+        {
+            <div class="d-flex justify-space-between">
+                <MudText Typo="Typo.body2">@rotulo</MudText>
+                <MudText Typo="Typo.body2">@FormatarTamanho(bytes)</MudText>
+            </div>
+            <MudProgressLinear Color="cor" Value="@Percentual(bytes)" Rounded="true" Size="Size.Small" Class="mb-2" />
+        }
+
+        <MudDivider Class="my-3" />
+        <MudText Typo="Typo.subtitle2" Class="mb-1">Registros</MudText>
+        <MudSimpleTable Dense="true" Elevation="0">
+            <tbody>
+                @foreach (var (tabela, quantidade) in _resumo.Registros)
+                {
+                    <tr>
+                        <td>@tabela</td>
+                        <td class="text-right">@quantidade</td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+</MudPaper>
+
+<MudPaper Class="pa-4" Elevation="2" Style="border-left: 4px solid var(--mud-palette-error);">
+    <MudText Typo="Typo.subtitle1" Class="mb-1">Limpar base de dados</MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+        Escolha quais dados apagar. A operação não pode ser desfeita.
+    </MudText>
+    <MudButton Variant="Variant.Filled" Color="Color.Error" StartIcon="@Icons.Material.Filled.DeleteForever"
+               OnClick="AbrirLimpezaAsync" Disabled="_limpando">
+        Limpar dados
+    </MudButton>
+</MudPaper>
+
+@code {
+    private ResumoArmazenamentoDto? _resumo;
+    private bool _limpando;
+
+    private IEnumerable<(string Rotulo, long Bytes, Color Cor)> Segmentos => _resumo is null
+        ? Enumerable.Empty<(string, long, Color)>()
+        : new[]
+        {
+            ("Banco de dados", _resumo.BancoBytes, Color.Primary),
+            ("Logs do sistema", _resumo.LogsBytes, Color.Warning),
+            ("Foto do perfil", _resumo.FotoBytes, Color.Secondary)
+        };
+
+    protected override async Task OnInitializedAsync() => await CarregarAsync();
+
+    private async Task CarregarAsync()
+    {
+        _resumo = null;
+        _resumo = await ArmazenamentoService.ObterResumoAsync();
+    }
+
+    private double Percentual(long bytes)
+        => _resumo is null || _resumo.TotalBytes == 0 ? 0 : bytes * 100.0 / _resumo.TotalBytes;
+
+    private static string FormatarTamanho(long bytes) => bytes switch
+    {
+        >= 1024 * 1024 => $"{bytes / 1024d / 1024d:0.##} MB",
+        >= 1024 => $"{bytes / 1024d:0.#} KB",
+        _ => $"{bytes} B"
+    };
+
+    private async Task AbrirLimpezaAsync()
+    {
+        var dialog = await DialogService.ShowAsync<LimpezaDadosDialog>("Limpar dados",
+            new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true });
+        var resultado = await dialog.Result;
+
+        if (resultado is not { Canceled: false, Data: TipoLimpezaDados tipo } || tipo == TipoLimpezaDados.Nenhum)
+            return;
+
+        _limpando = true;
+        try
+        {
+            await ArmazenamentoService.LimparAsync(tipo);
+            Snackbar.Add(tipo.HasFlag(TipoLimpezaDados.Tudo) ? "Aplicação zerada" : "Dados removidos", Severity.Success);
+            await CarregarAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Falha ao limpar dados: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _limpando = false;
+        }
+    }
+}

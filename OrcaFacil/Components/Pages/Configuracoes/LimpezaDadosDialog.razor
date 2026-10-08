@@ -1,0 +1,47 @@
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-2">Selecione o que deseja apagar:</MudText>
+
+        <MudCheckBox T="bool" @bind-Value="_lancamentos" Disabled="_tudo" Label="Lançamentos (inclui fechamentos de mês)" Dense="true" />
+        <MudCheckBox T="bool" @bind-Value="_orcamentos" Disabled="_tudo" Label="Orçamento mensal" Dense="true" />
+        <MudCheckBox T="bool" @bind-Value="_metas" Disabled="_tudo" Label="Metas de economia" Dense="true" />
+        <MudCheckBox T="bool" @bind-Value="_tudo" Color="Color.Error" Label="Tudo (zera a aplicação)" Dense="true" />
+
+        @if (_tudo)
+        {
+            <MudAlert Severity="Severity.Error" Dense="true" Class="mt-2">
+                Todos os dados, categorias personalizadas, perfil, foto, logs e configurações serão apagados.
+            </MudAlert>
+        }
+
+        <MudTextField T="string" @bind-Value="_confirmacao" Immediate="true" Class="mt-3"
+                      Label="Digite LIMPAR para confirmar" Variant="Variant.Outlined" Margin="Margin.Dense" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancelar</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled" Disabled="!PodeConfirmar" OnClick="Confirmar">Apagar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private bool _lancamentos;
+    private bool _orcamentos;
+    private bool _metas;
+    private bool _tudo;
+    private string? _confirmacao;
+
+    private TipoLimpezaDados Selecao =>
+        _tudo
+            ? TipoLimpezaDados.Tudo
+            : (_lancamentos ? TipoLimpezaDados.Lancamentos : 0)
+              | (_orcamentos ? TipoLimpezaDados.Orcamentos : 0)
+              | (_metas ? TipoLimpezaDados.Metas : 0);
+
+    private bool PodeConfirmar =>
+        Selecao != TipoLimpezaDados.Nenhum
+        && string.Equals(_confirmacao?.Trim(), "LIMPAR", StringComparison.OrdinalIgnoreCase);
+
+    private void Confirmar() => MudDialog.Close(DialogResult.Ok(Selecao));
+}
