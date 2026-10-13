@@ -35,12 +35,26 @@
             @foreach (var linha in _linhas)
             {
                 <div @key="linha" class="d-flex justify-space-between align-center">
-                    <MudText Typo="Typo.body2">@NomeProduto(linha.ProdutoId)</MudText>
-                    <div class="d-flex align-center">
-                        <MudText Typo="Typo.body2">@linha.Preco.ToString("C")</MudText>
-                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" aria-label="Remover item"
-                                       OnClick="@(() => _linhas.Remove(linha))" />
+                    <div style="cursor:pointer; flex:1;" @onclick="@(() => EditarLinha(linha))">
+                        <MudText Typo="Typo.body2">@NomeProduto(linha.ProdutoId)</MudText>
                     </div>
+                    @if (_linhaEditando == linha)
+                    {
+                        <div style="width:140px;">
+                            <CampoNumerico TNumber="decimal" @bind-Value="linha.Preco" Label="Preço"
+                                            Adornment="Adornment.Start" AdornmentText="R$" />
+                        </div>
+                        <MudIconButton Icon="@Icons.Material.Filled.Check" Color="Color.Success" Size="Size.Small"
+                                       aria-label="Confirmar valor" OnClick="@(() => ConfirmarEdicao(linha))" />
+                    }
+                    else
+                    {
+                        <div style="cursor:pointer;" @onclick="@(() => EditarLinha(linha))">
+                            <MudText Typo="Typo.body2">@linha.Preco.ToString("C")</MudText>
+                        </div>
+                    }
+                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" aria-label="Remover item"
+                                   OnClick="@(() => RemoverLinha(linha))" />
                 </div>
             }
             <MudDivider Class="my-2" />
@@ -146,6 +160,7 @@
     private decimal _dinheiroInformado;
     private TipoCartaoBeneficio _tipoBeneficio = TipoCartaoBeneficio.ValeAlimentacao;
     private ModoPagamentoSaldo _modo = ModoPagamentoSaldo.Dinheiro;
+    private LinhaItem? _linhaEditando;
     private string? _erro;
 
     private decimal Total => _linhas.Sum(l => l.Preco);
@@ -195,8 +210,34 @@
             existente.Preco = _precoItem;
 
         _precoItem = 0;
+        _linhaEditando = null;
         _erro = null;
         await _precoCampo.FocusAsync();
+    }
+
+    private void EditarLinha(LinhaItem linha)
+    {
+        _linhaEditando = linha;
+        _erro = null;
+    }
+
+    private void ConfirmarEdicao(LinhaItem linha)
+    {
+        if (linha.Preco <= 0)
+        {
+            _erro = "Informe o preço do item.";
+            return;
+        }
+
+        _linhaEditando = null;
+        _erro = null;
+    }
+
+    private void RemoverLinha(LinhaItem linha)
+    {
+        if (_linhaEditando == linha)
+            _linhaEditando = null;
+        _linhas.Remove(linha);
     }
 
     private void AlterarModo(ModoPagamentoSaldo modo)
