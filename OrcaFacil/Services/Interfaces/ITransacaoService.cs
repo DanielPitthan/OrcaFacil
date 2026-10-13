@@ -14,6 +14,7 @@ public interface ITransacaoService
     Task<int> TrazerDespesasDoMesAnteriorAsync(int mes, int ano);
     Task<bool> ExistemDespesasParaTrazerAsync(int mes, int ano);
     Task<ResumoMensalDto> ObterResumoMensalAsync(int mes, int ano);
+    Task<ResumoAcumuladoDto> ObterResumoAcumuladoAsync();
     Task<EvolucaoMensalDto> ObterEvolucaoDiariaAsync(int mes, int ano);
     Task<List<GastoPorCategoriaDto>> ObterGastosPorCategoriaAsync(int mes, int ano);
     Task<List<TendenciaMensalDto>> ObterTendenciaMensalAsync(int meses);

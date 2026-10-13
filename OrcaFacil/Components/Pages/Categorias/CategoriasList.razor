@@ -80,7 +80,8 @@ else
             Nome = categoria.Nome,
             Icone = categoria.Icone,
             CorHex = categoria.CorHex,
-            TipoPadrao = categoria.TipoPadrao
+            TipoPadrao = categoria.TipoPadrao,
+            PermiteItensFatura = categoria.PermiteItensFatura
         };
 
         var parametros = new DialogParameters<CategoriaForm> { { x => x.Modelo, modelo } };

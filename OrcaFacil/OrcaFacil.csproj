@@ -68,6 +68,7 @@
     <ItemGroup>
         <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
         <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="$(MauiVersion)" />
+        <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
         <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
         <PackageReference Include="MudBlazor" Version="9.9.0" />
         <PackageReference Include="Plugin.LocalNotification" Version="14.1.1" />
@@ -78,5 +79,10 @@
     <ItemGroup>
       <ProjectReference Include="..\OrcaFacil.Core\OrcaFacil.Core.csproj" />
     </ItemGroup>
+
+    <!-- WebView 83 do emulador Android não interpreta o blazor.webview.js original do .NET 10. -->
+    <Target Name="PatchBlazorWebViewForLegacyAndroid" BeforeTargets="Build">
+        <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)build\PatchBlazorWebView.ps1&quot;" />
+    </Target>
 
 </Project>

@@ -85,6 +85,10 @@
                         <div style="min-width:0;">
                             <MudText Typo="Typo.body1" Style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@t.Categoria?.Icone @t.Descricao</MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">@t.Data.ToString("dd/MM/yyyy") · @t.Categoria?.Nome</MudText>
+                            @if (t.Itens.Count > 0)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">@t.Itens.Count itens · @t.Itens.Sum(i => i.Valor).ToString("C") classificados</MudText>
+                            }
                         </div>
                         <div class="d-flex align-center ga-1" @onclick:stopPropagation="true">
                             <CurrencyDisplay Valor="t.Valor" Tipo="t.Tipo" />
@@ -96,6 +100,12 @@
                                                    Disabled="_fechado" OnClick="@(() => AlternarPagoAsync(t))" />
                                 </MudTooltip>
                             }
+                            @if (t.Itens.Count > 0)
+                            {
+                                <MudIconButton Icon="@(_expandidos.Contains(t.Id) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                                               Size="Size.Small" aria-label="Itens da fatura"
+                                               OnClick="@(() => AlternarItens(t.Id))" />
+                            }
                             @if (!_fechado)
                             {
                                 <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" aria-label="Excluir"
@@ -104,6 +114,21 @@
                         </div>
                     </div>
                 </MudListItem>
+                @if (t.Itens.Count > 0 && _expandidos.Contains(t.Id))
+                {
+                    @foreach (var item in t.Itens.OrderBy(i => i.Ordem))
+                    {
+                        <MudListItem T="Transacao" Dense="true" Class="pl-6">
+                            <div class="d-flex justify-space-between align-center" style="width:100%">
+                                <div style="min-width:0;">
+                                    <MudText Typo="Typo.body2">@item.Categoria?.Icone @item.Descricao</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@item.Categoria?.Nome · @RotuloNatureza(item)</MudText>
+                                </div>
+                                <CurrencyDisplay Valor="item.Valor" Tipo="TipoTransacao.Despesa" />
+                            </div>
+                        </MudListItem>
+                    }
+                }
             }
         </MudList>
     }
@@ -130,6 +155,7 @@
     private bool _fechado;
     private bool _mostrarAvisos;
     private EvolucaoMensalDto _evolucao = new();
+    private readonly HashSet<int> _expandidos = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -163,6 +189,19 @@
         _mesReferencia = _mesReferencia.AddMonths(delta);
         await CarregarAsync();
     }
+
+    private void AlternarItens(int id)
+    {
+        if (!_expandidos.Add(id))
+            _expandidos.Remove(id);
+    }
+
+    private static string RotuloNatureza(ItemLancamento item) => item.Natureza switch
+    {
+        NaturezaItemLancamento.Parcelada => $"Parcela {item.ParcelaAtual}/{item.TotalParcelas}",
+        NaturezaItemLancamento.Assinatura => "Assinatura",
+        _ => "Avulsa"
+    };
 
     private void AbrirEdicao(int id)
     {

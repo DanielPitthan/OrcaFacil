@@ -11,6 +11,46 @@ html, body {
     overscroll-behavior: none;
 }
 
+/* Só a home de notícias: o restante do app continua no tema do sistema. */
+.noticias-pagina {
+    --mud-palette-primary: #B2CFE6;
+    --mud-palette-secondary: #A2B94F;
+    --mud-palette-tertiary: #659ECD;
+    --mud-palette-success: #6DA538;
+    --mud-palette-warning: #EF7F5D;
+    --mud-palette-error: #E07171;
+    --mud-palette-background: #1A2029;
+    --mud-palette-surface: #232B36;
+    --mud-palette-text-primary: #EDEFF2;
+    --mud-palette-text-secondary: #B7C1CB;
+    --mud-palette-text-disabled: #8A939E;
+    --mud-palette-action-default: #EDEFF2;
+    --mud-palette-action-disabled: rgba(237, 239, 242, 0.38);
+    --mud-palette-action-disabled-background: rgba(237, 239, 242, 0.12);
+    --mud-palette-lines-default: rgba(255, 255, 255, 0.12);
+    --mud-palette-lines-inputs: rgba(255, 255, 255, 0.22);
+    --mud-palette-divider: rgba(255, 255, 255, 0.12);
+    --mud-palette-divider-light: rgba(255, 255, 255, 0.08);
+    --mud-palette-table-lines: rgba(255, 255, 255, 0.12);
+    --mud-palette-table-striped: rgba(255, 255, 255, 0.04);
+    --mud-palette-table-hover: rgba(255, 255, 255, 0.06);
+    --mud-palette-gray-lighter: #2C3542;
+    --mud-palette-gray-light: #3A4554;
+    --mud-palette-gray-default: #8A939E;
+    --mud-palette-gray-dark: #B7C1CB;
+    --mud-palette-gray-darker: #EDEFF2;
+    background-color: #1A2029;
+    color: #EDEFF2;
+    margin: -16px;
+    padding: 16px;
+    min-height: calc(100dvh - var(--mud-appbar-height, 64px));
+    box-sizing: border-box;
+}
+
+.noticias-kpi {
+    height: 100%;
+}
+
 .of-currency-receita {
     color: var(--mud-palette-success);
     font-weight: 600;
@@ -59,4 +99,8 @@ html, body {
 
 .of-color-swatch.selected {
     border-color: var(--of-blue-grey);
+}
+
+.of-mascara-numerica input {
+    text-align: right;
 }

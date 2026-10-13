@@ -29,6 +29,10 @@
             </MudButton>
             @if (_fotoPath is not null)
             {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.RotateRight" OnClick="GirarFotoAsync" Disabled="_processandoFoto">
+                    Girar
+                </MudButton>
                 <MudButton Variant="Variant.Text" Color="Color.Error" Size="Size.Small"
                            StartIcon="@Icons.Material.Filled.Delete" OnClick="RemoverFoto">
                     Remover
@@ -80,6 +84,30 @@
             Snackbar.Add("Foto atualizada", Severity.Success);
         }
         catch (Exception ex) when (ex is InvalidOperationException or PermissionException or FeatureNotSupportedException)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        finally
+        {
+            _processandoFoto = false;
+        }
+    }
+
+    private async Task GirarFotoAsync()
+    {
+        if (_fotoPath is null)
+            return;
+
+        _processandoFoto = true;
+        try
+        {
+            var caminho = await FotoPerfilService.GirarHorarioAsync(_fotoPath);
+            _fotoPath = caminho;
+            _fotoDataUrl = FotoPerfilService.ObterDataUrl(caminho);
+            await PerfilContext.SalvarAsync(NomeValido(), _apelido, _fotoPath);
+            Snackbar.Add("Foto girada", Severity.Success);
+        }
+        catch (Exception ex)
         {
             Snackbar.Add(ex.Message, Severity.Warning);
         }

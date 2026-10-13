@@ -1,0 +1,595 @@
+@page "/cesta"
+@inject ICestaService CestaService
+@inject ICategoriaService CategoriaService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<div class="pro-sticky-header">
+    <div class="d-flex justify-space-between align-center">
+        <MudText Typo="Typo.subtitle1"><b>Cesta Básica</b></MudText>
+        <div class="d-flex align-center">
+            <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Size="Size.Small" OnClick="@(() => MudarMes(-1))" aria-label="Mês anterior" />
+            <MudText Typo="Typo.body1" Style="min-width:120px;text-align:center;">@_referencia.ToString("MMMM/yyyy")</MudText>
+            <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" OnClick="@(() => MudarMes(1))" aria-label="Próximo mês" />
+        </div>
+    </div>
+</div>
+
+<MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true" Class="mb-2" @bind-ActivePanelIndex="_aba">
+    <MudTabPanel Text="Compras" Icon="@Icons.Material.Filled.Receipt">
+        <div class="pro-fab-spacer pa-2">
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mb-3" StartIcon="@Icons.Material.Filled.ContentCopy"
+                       OnClick="TrazerMesAnteriorAsync">Trazer cesta do mês anterior</MudButton>
+            @if (_carregando)
+            {
+                <MudProgressCircular Indeterminate="true" />
+            }
+            else if (_compras.Count == 0)
+            {
+                <EmptyState Icon="@Icons.Material.Filled.ShoppingCart" Mensagem="Nenhuma compra neste mês"
+                            Subtitulo="Registre os preços de um local ou traga a cesta do mês anterior" />
+            }
+            else
+            {
+                @foreach (var compra in _compras)
+                {
+                    var total = compra.Itens.Sum(i => i.Preco);
+                    var bolso = CestaDespesaRegras.CustoDeBolso(total, compra.ValorBeneficio);
+                    <MudPaper Outlined="true" Class="pa-3 mb-3">
+                        <div class="d-flex justify-space-between align-center">
+                            <div>
+                                <MudText Typo="Typo.subtitle1"><b>@(compra.LocalCompra?.Nome ?? "Local")</b></MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">@compra.Data.ToString("dd/MM/yyyy")</MudText>
+                            </div>
+                            <div class="d-flex">
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" aria-label="Editar compra"
+                                               OnClick="@(() => EditarCompraAsync(compra))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" aria-label="Excluir compra"
+                                               OnClick="@(() => ExcluirCompraAsync(compra))" />
+                            </div>
+                        </div>
+                        @foreach (var item in compra.Itens.OrderBy(i => i.Ordem))
+                        {
+                            <div class="d-flex justify-space-between">
+                                <MudText Typo="Typo.body2">@(item.Produto?.Nome ?? "Produto")</MudText>
+                                <MudText Typo="Typo.body2">@item.Preco.ToString("C")</MudText>
+                            </div>
+                        }
+                        <MudDivider Class="my-2" />
+                        <div class="d-flex justify-space-between">
+                            <MudText Typo="Typo.body2">Total</MudText>
+                            <MudText Typo="Typo.body2"><b>@total.ToString("C")</b></MudText>
+                        </div>
+                        @if (compra.ValorBeneficio > 0 && compra.TipoCartaoBeneficio is { } tipo)
+                        {
+                            <div class="d-flex justify-space-between">
+                                <MudText Typo="Typo.body2">@tipo.Rotulo()</MudText>
+                                <MudText Typo="Typo.body2">@compra.ValorBeneficio.ToString("C")</MudText>
+                            </div>
+                            <div class="d-flex justify-space-between">
+                                <MudText Typo="Typo.body2">Custo de bolso</MudText>
+                                <MudText Typo="Typo.body2">@bolso.ToString("C")</MudText>
+                            </div>
+                            <div class="d-flex justify-space-between">
+                                <MudText Typo="Typo.body2">Aproveitamento</MudText>
+                                <MudText Typo="Typo.body2">@CestaDespesaRegras.AproveitamentoPercentual(total, compra.ValorBeneficio).ToString("0.##")%</MudText>
+                            </div>
+                        }
+                        @if (compra.ValorDinheiro > 0)
+                        {
+                            <div class="d-flex justify-space-between">
+                                <MudText Typo="Typo.body2">Dinheiro</MudText>
+                                <MudText Typo="Typo.body2">@compra.ValorDinheiro.ToString("C")</MudText>
+                            </div>
+                        }
+                        @if (compra.ValorCartaoCredito > 0)
+                        {
+                            <div class="d-flex justify-space-between">
+                                <MudText Typo="Typo.body2">Cartão de crédito</MudText>
+                                <MudText Typo="Typo.body2">@compra.ValorCartaoCredito.ToString("C")</MudText>
+                            </div>
+                        }
+                    </MudPaper>
+                }
+            }
+        </div>
+    </MudTabPanel>
+
+    <MudTabPanel Text="Comparativo" Icon="@Icons.Material.Filled.CompareArrows">
+        <div class="pro-fab-spacer pa-2">
+            @if (_carregando)
+            {
+                <MudProgressCircular Indeterminate="true" />
+            }
+            else
+            {
+                <MudAlert Severity="@(_comparativo.Disponivel ? Severity.Success : Severity.Info)" Dense="true" Class="mb-3">
+                    @_comparativo.Mensagem
+                </MudAlert>
+
+                @if (_comparativo.Evolucao.Mensagem is not null)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">@_comparativo.Evolucao.Mensagem</MudAlert>
+                }
+
+                @if (_comparativo.Beneficios.Count > 0)
+                {
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Cartão de benefício</MudText>
+                    @foreach (var beneficio in _comparativo.Beneficios)
+                    {
+                        <MudPaper Outlined="true" Class="pa-3 mb-2">
+                            <div class="d-flex justify-space-between align-center">
+                                <MudText Typo="Typo.body1"><b>@beneficio.LocalNome</b></MudText>
+                                @if (beneficio.RendeMais)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Rende mais</MudChip>
+                                }
+                            </div>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @beneficio.Tipo.Rotulo() · @beneficio.ValorBeneficio.ToString("C") de @beneficio.TotalCesta.ToString("C")
+                            </MudText>
+                            <MudText Typo="Typo.body2">
+                                Aproveitamento @beneficio.AproveitamentoPercentual.ToString("0.##")% · custo de bolso @beneficio.CustoDeBolso.ToString("C")
+                            </MudText>
+                            <MudText Typo="Typo.body2">
+                                Cada R$ 1,00 do benefício compra @beneficio.Rendimento.ToString("C") de produtos
+                            </MudText>
+                        </MudPaper>
+                    }
+                    @if (_comparativo.Beneficios.Count >= 2 && _comparativo.Beneficios.FirstOrDefault(b => b.RendeMais) is { } melhor)
+                    {
+                        <MudAlert Severity="Severity.Success" Dense="true" Class="mb-3">
+                            O benefício rende mais no @melhor.LocalNome: cada R$ 1,00 compra @melhor.Rendimento.ToString("C") de produtos
+                            (aproveitamento de @melhor.AproveitamentoPercentual.ToString("0.##")%).
+                        </MudAlert>
+                    }
+                }
+
+                @if (_comparativo.Locais.Any(l => l.TotalComparavel is not null))
+                {
+                    <MudText Typo="Typo.subtitle2" Class="mt-2 mb-2">Cesta comparável por local</MudText>
+                    @foreach (var local in _comparativo.Locais.Where(l => l.TotalComparavel is not null).OrderBy(l => l.TotalComparavel))
+                    {
+                        <div class="d-flex justify-space-between align-center mb-1">
+                            <MudText Typo="Typo.body2">
+                                @local.Nome
+                                @if (local.MaisBarato)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success">Mais barato</MudChip>
+                                }
+                            </MudText>
+                            <MudText Typo="Typo.body2"><b>@local.TotalComparavel!.Value.ToString("C")</b></MudText>
+                        </div>
+                    }
+                }
+
+                @if (_comparativo.Produtos.Count > 0)
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-3 mb-1">Preço mais recente de cada produto em cada local.</MudText>
+                    <div style="overflow-x:auto;">
+                        <MudSimpleTable Dense="true" Hover="true" Bordered="true">
+                            <thead>
+                                <tr>
+                                    <th>Produto</th>
+                                    @foreach (var local in _comparativo.Locais)
+                                    {
+                                        <th>@local.Nome</th>
+                                    }
+                                    <th>Economia</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var linha in _comparativo.Produtos)
+                                {
+                                    <tr>
+                                        <td>@linha.Nome</td>
+                                        @foreach (var preco in linha.Precos)
+                                        {
+                                            <td>
+                                                @if (preco.Preco is null)
+                                                {
+                                                    <span>—</span>
+                                                }
+                                                else if (preco.MaisBarato)
+                                                {
+                                                    <b>@preco.Preco.Value.ToString("C")</b>
+                                                }
+                                                else
+                                                {
+                                                    @preco.Preco.Value.ToString("C")
+                                                }
+                                            </td>
+                                        }
+                                        <td>
+                                            @if (linha.EconomiaReais is decimal economia && economia > 0)
+                                            {
+                                                @($"{economia.ToString("C")} ({linha.EconomiaPercentual?.ToString("0.##")}%)")
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    </div>
+                }
+            }
+        </div>
+    </MudTabPanel>
+
+    <MudTabPanel Text="Produtos" Icon="@Icons.Material.Filled.ShoppingBasket">
+        <div class="pro-fab-spacer">
+            @if (_produtos.Count == 0)
+            {
+                <EmptyState Icon="@Icons.Material.Filled.ShoppingBasket" Mensagem="Nenhum produto cadastrado"
+                            Subtitulo="Ex.: Arroz, Feijão, Detergente" />
+            }
+            else
+            {
+                <MudList T="ProdutoCesta" Dense="true">
+                    @foreach (var produto in _produtos)
+                    {
+                        <MudListItem T="ProdutoCesta">
+                            <div class="d-flex justify-space-between align-center" style="width:100%">
+                                <div>
+                                    <MudText Typo="Typo.body1">
+                                        @produto.Nome
+                                        @if (!produto.Ativo)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Default">Inativo</MudChip>
+                                        }
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@produto.Categoria?.Icone @produto.Categoria?.Nome</MudText>
+                                </div>
+                                <div class="d-flex">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" aria-label="Editar produto"
+                                                   OnClick="@(() => EditarProdutoAsync(produto))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" aria-label="Excluir produto"
+                                                   OnClick="@(() => ExcluirProdutoAsync(produto))" />
+                                </div>
+                            </div>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+        </div>
+    </MudTabPanel>
+
+    <MudTabPanel Text="Locais" Icon="@Icons.Material.Filled.Store">
+        <div class="pro-fab-spacer">
+            @if (_locais.Count == 0)
+            {
+                <EmptyState Icon="@Icons.Material.Filled.Store" Mensagem="Nenhum local cadastrado"
+                            Subtitulo="Ex.: Boa Supermercado, Fort Atacadista" />
+            }
+            else
+            {
+                <MudList T="LocalCompra" Dense="true">
+                    @foreach (var local in _locais)
+                    {
+                        <MudListItem T="LocalCompra">
+                            <div class="d-flex justify-space-between align-center" style="width:100%">
+                                <MudText Typo="Typo.body1">
+                                    @local.Nome
+                                    @if (!local.Ativo)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Default">Inativo</MudChip>
+                                    }
+                                </MudText>
+                                <div class="d-flex">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" aria-label="Editar local"
+                                                   OnClick="@(() => EditarLocalAsync(local))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" aria-label="Excluir local"
+                                                   OnClick="@(() => ExcluirLocalAsync(local))" />
+                                </div>
+                            </div>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+        </div>
+    </MudTabPanel>
+</MudTabs>
+
+<FabMenu>
+    <FabMenuItem Text="Nova compra" Icon="@Icons.Material.Filled.AddShoppingCart" Color="Color.Primary" Click="NovaCompraAsync" />
+    <FabMenuItem Text="Novo produto" Icon="@Icons.Material.Filled.ShoppingBasket" Click="NovoProdutoAsync" />
+    <FabMenuItem Text="Novo local" Icon="@Icons.Material.Filled.Store" Click="NovoLocalAsync" />
+</FabMenu>
+
+@code {
+    private bool _carregando = true;
+    private int _aba;
+    private DateTime _referencia = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private List<CompraCesta> _compras = new();
+    private List<ProdutoCesta> _produtos = new();
+    private List<LocalCompra> _locais = new();
+    private List<Categoria> _categorias = new();
+    private ComparativoCesta _comparativo = new();
+
+    protected override async Task OnInitializedAsync() => await CarregarAsync();
+
+    private async Task CarregarAsync()
+    {
+        _carregando = true;
+        _categorias = (await CategoriaService.ListarAsync())
+            .Where(c => c.TipoPadrao == TipoTransacao.Despesa && c.Nome != CestaDespesaRegras.NomeCategoria)
+            .ToList();
+        _produtos = await CestaService.ListarProdutosAsync();
+        _locais = await CestaService.ListarLocaisAsync();
+        _compras = await CestaService.ListarComprasAsync(_referencia.Month, _referencia.Year);
+        _comparativo = await CestaService.CompararAsync(_referencia.Month, _referencia.Year);
+        _carregando = false;
+    }
+
+    private async Task MudarMes(int delta)
+    {
+        _referencia = _referencia.AddMonths(delta);
+        await CarregarAsync();
+    }
+
+    private async Task NovaCompraAsync()
+    {
+        if (!await GarantirCatalogoAsync())
+            return;
+
+        await SalvarCompraAsync("Nova compra", new CompraCestaFormModel
+        {
+            Data = DataNoMes(),
+            LocalCompraId = _locais.First(l => l.Ativo).Id
+        });
+    }
+
+    private Task EditarCompraAsync(CompraCesta compra) => SalvarCompraAsync("Editar compra", new CompraCestaFormModel
+    {
+        Id = compra.Id,
+        LocalCompraId = compra.LocalCompraId,
+        Data = compra.Data,
+        ValorBeneficio = compra.ValorBeneficio,
+        TipoCartaoBeneficio = compra.TipoCartaoBeneficio,
+        ValorDinheiro = compra.ValorDinheiro,
+        ValorCartaoCredito = compra.ValorCartaoCredito,
+        Itens = compra.Itens.OrderBy(i => i.Ordem).Select(i => new ItemCompraCestaFormModel
+        {
+            ProdutoCestaId = i.ProdutoCestaId,
+            Preco = i.Preco
+        }).ToList()
+    });
+
+    private async Task<bool> SalvarCompraAsync(string titulo, CompraCestaFormModel modelo)
+    {
+        var locais = _locais.Where(l => l.Ativo || l.Id == modelo.LocalCompraId).ToList();
+        var produtos = _produtos.Where(p => p.Ativo || modelo.Itens.Any(i => i.ProdutoCestaId == p.Id)).ToList();
+        var parametros = new DialogParameters<CompraCestaDialog>
+        {
+            { x => x.Modelo, modelo },
+            { x => x.Locais, locais },
+            { x => x.Produtos, produtos }
+        };
+        var dialog = await DialogService.ShowAsync<CompraCestaDialog>(titulo, parametros, Opcoes(MaxWidth.Small));
+        var resultado = await dialog.Result;
+        if (resultado is not { Canceled: false, Data: CompraCestaFormModel salvo })
+            return false;
+
+        try
+        {
+            await CestaService.SalvarCompraAsync(salvo);
+            Snackbar.Add(modelo.Id is null ? "Compra registrada" : "Compra atualizada", Severity.Success);
+            _aba = 0;
+            await CarregarAsync();
+            return true;
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+            return false;
+        }
+    }
+
+    private async Task ExcluirCompraAsync(CompraCesta compra)
+    {
+        var confirmado = await DialogService.ShowMessageBoxAsync(
+            "Excluir compra",
+            $"Excluir a compra em {compra.LocalCompra?.Nome}? A despesa gerada nos lançamentos também será apagada.",
+            yesText: "Excluir", cancelText: "Cancelar");
+        if (confirmado != true)
+            return;
+
+        try
+        {
+            await CestaService.ExcluirCompraAsync(compra.Id);
+            Snackbar.Add("Compra excluída", Severity.Success);
+            await CarregarAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+    }
+
+    private async Task TrazerMesAnteriorAsync()
+    {
+        if (!await GarantirCatalogoAsync())
+            return;
+
+        var rascunhos = await CestaService.ListarRascunhosAsync(_referencia.Month, _referencia.Year);
+        if (rascunhos.Count == 0)
+        {
+            Snackbar.Add("Não há cesta do mês anterior para trazer.", Severity.Info);
+            return;
+        }
+
+        foreach (var rascunho in rascunhos)
+        {
+            var local = _locais.FirstOrDefault(l => l.Id == rascunho.LocalCompraId)?.Nome ?? "local";
+            var salvou = await SalvarCompraAsync($"Atualizar cesta — {local}", rascunho);
+            if (!salvou)
+                break;
+        }
+    }
+
+    private async Task NovoProdutoAsync()
+    {
+        if (_categorias.Count == 0)
+        {
+            Snackbar.Add("Cadastre uma categoria de despesa antes do produto.", Severity.Info);
+            return;
+        }
+
+        if (await SalvarProdutoAsync("Novo produto", new ProdutoCestaFormModel { CategoriaId = _categorias[0].Id }))
+            _aba = 2;
+    }
+
+    private Task EditarProdutoAsync(ProdutoCesta produto) => SalvarProdutoAsync("Editar produto", new ProdutoCestaFormModel
+    {
+        Id = produto.Id,
+        Nome = produto.Nome,
+        CategoriaId = produto.CategoriaId,
+        Ativo = produto.Ativo
+    });
+
+    private async Task<bool> SalvarProdutoAsync(string titulo, ProdutoCestaFormModel modelo)
+    {
+        var parametros = new DialogParameters<ProdutoCestaDialog>
+        {
+            { x => x.Modelo, modelo },
+            { x => x.Categorias, _categorias }
+        };
+        var dialog = await DialogService.ShowAsync<ProdutoCestaDialog>(titulo, parametros, Opcoes(MaxWidth.ExtraSmall));
+        var resultado = await dialog.Result;
+        if (resultado is not { Canceled: false, Data: ProdutoCestaFormModel salvo })
+            return false;
+
+        try
+        {
+            await CestaService.SalvarProdutoAsync(salvo);
+            Snackbar.Add(modelo.Id is null ? "Produto cadastrado" : "Produto atualizado", Severity.Success);
+            await CarregarAsync();
+            return true;
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+            return false;
+        }
+    }
+
+    private async Task ExcluirProdutoAsync(ProdutoCesta produto)
+    {
+        var confirmado = await DialogService.ShowMessageBoxAsync(
+            "Excluir produto", $"Excluir {produto.Nome}? Só é possível se ele ainda não entrou numa compra.",
+            yesText: "Excluir", cancelText: "Cancelar");
+        if (confirmado != true)
+            return;
+
+        try
+        {
+            await CestaService.ExcluirProdutoAsync(produto.Id);
+            Snackbar.Add("Produto excluído", Severity.Success);
+            await CarregarAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            var inativar = await DialogService.ShowMessageBoxAsync(
+                "Produto com histórico", ex.Message, yesText: "Inativar", cancelText: "Manter");
+            if (inativar != true)
+                return;
+
+            await CestaService.InativarProdutoAsync(produto.Id);
+            Snackbar.Add($"{produto.Nome} inativado", Severity.Success);
+            await CarregarAsync();
+        }
+    }
+
+    private async Task NovoLocalAsync()
+    {
+        if (await SalvarLocalAsync("Novo local", new LocalCompraFormModel()))
+            _aba = 3;
+    }
+
+    private Task EditarLocalAsync(LocalCompra local) => SalvarLocalAsync("Editar local", new LocalCompraFormModel
+    {
+        Id = local.Id,
+        Nome = local.Nome,
+        Ativo = local.Ativo
+    });
+
+    private async Task<bool> SalvarLocalAsync(string titulo, LocalCompraFormModel modelo)
+    {
+        var parametros = new DialogParameters<LocalCompraDialog> { { x => x.Modelo, modelo } };
+        var dialog = await DialogService.ShowAsync<LocalCompraDialog>(titulo, parametros, Opcoes(MaxWidth.ExtraSmall));
+        var resultado = await dialog.Result;
+        if (resultado is not { Canceled: false, Data: LocalCompraFormModel salvo })
+            return false;
+
+        try
+        {
+            await CestaService.SalvarLocalAsync(salvo);
+            Snackbar.Add(modelo.Id is null ? "Local cadastrado" : "Local atualizado", Severity.Success);
+            await CarregarAsync();
+            return true;
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+            return false;
+        }
+    }
+
+    private async Task ExcluirLocalAsync(LocalCompra local)
+    {
+        var confirmado = await DialogService.ShowMessageBoxAsync(
+            "Excluir local", $"Excluir {local.Nome}? Só é possível se ainda não houver compras nele.",
+            yesText: "Excluir", cancelText: "Cancelar");
+        if (confirmado != true)
+            return;
+
+        try
+        {
+            await CestaService.ExcluirLocalAsync(local.Id);
+            Snackbar.Add("Local excluído", Severity.Success);
+            await CarregarAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            var inativar = await DialogService.ShowMessageBoxAsync(
+                "Local com histórico", ex.Message, yesText: "Inativar", cancelText: "Manter");
+            if (inativar != true)
+                return;
+
+            await CestaService.InativarLocalAsync(local.Id);
+            Snackbar.Add($"{local.Nome} inativado", Severity.Success);
+            await CarregarAsync();
+        }
+    }
+
+    private async Task<bool> GarantirCatalogoAsync()
+    {
+        if (!_locais.Any(l => l.Ativo))
+        {
+            Snackbar.Add("Cadastre um local de compra antes de registrar a cesta.", Severity.Info);
+            _aba = 3;
+            return false;
+        }
+
+        if (!_produtos.Any(p => p.Ativo))
+        {
+            Snackbar.Add("Cadastre os produtos da cesta antes de registrar a compra.", Severity.Info);
+            _aba = 2;
+            return false;
+        }
+
+        await Task.CompletedTask;
+        return true;
+    }
+
+    private DateTime DataNoMes()
+    {
+        var hoje = DateTime.Today;
+        if (hoje.Year == _referencia.Year && hoje.Month == _referencia.Month)
+            return hoje;
+
+        return new DateTime(_referencia.Year, _referencia.Month, 1);
+    }
+
+    private static DialogOptions Opcoes(MaxWidth largura) => new() { MaxWidth = largura, FullWidth = true };
+}

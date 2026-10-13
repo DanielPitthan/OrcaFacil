@@ -1,3 +1,4 @@
+using OrcaFacil.Core.Cesta;
 using OrcaFacil.Core.Data;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
@@ -97,7 +98,8 @@ public static class SeedData
         new Categoria { Nome = "Lazer", Icone = "🎉", CorHex = "#A2B94F", TipoPadrao = TipoTransacao.Despesa, EhPadraoDoSistema = true },
         new Categoria { Nome = "Educação", Icone = "🎓", CorHex = "#A2B94F", TipoPadrao = TipoTransacao.Despesa, EhPadraoDoSistema = true },
         new Categoria { Nome = "Outros", Icone = "📦", CorHex = "#A2B94F", TipoPadrao = TipoTransacao.Despesa, EhPadraoDoSistema = true },
-        new Categoria { Nome = "Cartão de Crédito", Icone = "💳", CorHex = "#B2CFE6", TipoPadrao = TipoTransacao.Despesa, EhPadraoDoSistema = true },
+        new Categoria { Nome = CestaDespesaRegras.NomeCategoria, Icone = "🧺", CorHex = "#6DA538", TipoPadrao = TipoTransacao.Despesa, EhPadraoDoSistema = true, PermiteItensFatura = true },
+        new Categoria { Nome = "Cartão de Crédito", Icone = "💳", CorHex = "#B2CFE6", TipoPadrao = TipoTransacao.Despesa, EhPadraoDoSistema = true, PermiteItensFatura = true },
         new Categoria { Nome = "Impostos e Taxas", Icone = "🧾", CorHex = "#659ECD", TipoPadrao = TipoTransacao.Despesa, EhPadraoDoSistema = true },
         new Categoria { Nome = "Investimentos e Previdência", Icone = "📈", CorHex = "#6DA538", TipoPadrao = TipoTransacao.Despesa, EhPadraoDoSistema = true },
         new Categoria { Nome = "Renda", Icone = "💰", CorHex = "#6DA538", TipoPadrao = TipoTransacao.Receita, EhPadraoDoSistema = true },

@@ -12,10 +12,17 @@ public class AppDbContext : DbContext
     public DbSet<MembroFamilia> MembrosFamilia => Set<MembroFamilia>();
     public DbSet<Categoria> Categorias => Set<Categoria>();
     public DbSet<Transacao> Transacoes => Set<Transacao>();
+    public DbSet<ItemLancamento> ItensLancamento => Set<ItemLancamento>();
     public DbSet<Orcamento> Orcamentos => Set<Orcamento>();
     public DbSet<Meta> Metas => Set<Meta>();
     public DbSet<FechamentoPeriodo> FechamentosPeriodo => Set<FechamentoPeriodo>();
     public DbSet<LogEvento> LogsEvento => Set<LogEvento>();
+    public DbSet<AtivoFinanceiro> AtivosFinanceiros => Set<AtivoFinanceiro>();
+    public DbSet<OperacaoAtivo> OperacoesAtivo => Set<OperacaoAtivo>();
+    public DbSet<ProdutoCesta> ProdutosCesta => Set<ProdutoCesta>();
+    public DbSet<LocalCompra> LocaisCompra => Set<LocalCompra>();
+    public DbSet<CompraCesta> ComprasCesta => Set<CompraCesta>();
+    public DbSet<CompraCestaItem> ItensCompraCesta => Set<CompraCestaItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -52,6 +59,19 @@ public class AppDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(t => t.TransacaoOrigemId)
                   .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasMany(t => t.Itens)
+                  .WithOne(i => i.Transacao)
+                  .HasForeignKey(i => i.TransacaoId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ItemLancamento>(entity =>
+        {
+            entity.HasOne(i => i.Categoria)
+                  .WithMany()
+                  .HasForeignKey(i => i.CategoriaId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Meta>(entity =>
@@ -72,6 +92,72 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<LogEvento>(entity =>
         {
             entity.HasIndex(l => l.CriadoEm);
+        });
+
+        modelBuilder.Entity<AtivoFinanceiro>(entity =>
+        {
+            entity.Property(a => a.Ticker).UseCollation("NOCASE");
+            entity.HasIndex(a => a.Ticker).IsUnique();
+        });
+
+        modelBuilder.Entity<OperacaoAtivo>(entity =>
+        {
+            entity.HasIndex(o => new { o.AtivoId, o.MembroFamiliaId, o.Data });
+
+            entity.HasOne(o => o.Ativo)
+                  .WithMany(a => a.Operacoes)
+                  .HasForeignKey(o => o.AtivoId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(o => o.MembroFamilia)
+                  .WithMany()
+                  .HasForeignKey(o => o.MembroFamiliaId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ProdutoCesta>(entity =>
+        {
+            entity.Property(p => p.Nome).UseCollation("NOCASE");
+            entity.HasIndex(p => p.Nome).IsUnique();
+            entity.HasOne(p => p.Categoria)
+                  .WithMany()
+                  .HasForeignKey(p => p.CategoriaId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<LocalCompra>(entity =>
+        {
+            entity.Property(l => l.Nome).UseCollation("NOCASE");
+            entity.HasIndex(l => l.Nome).IsUnique();
+        });
+
+        modelBuilder.Entity<CompraCesta>(entity =>
+        {
+            entity.HasIndex(c => new { c.Ano, c.Mes, c.LocalCompraId });
+
+            entity.HasOne(c => c.LocalCompra)
+                  .WithMany(l => l.Compras)
+                  .HasForeignKey(c => c.LocalCompraId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(c => c.Transacao)
+                  .WithMany()
+                  .HasForeignKey(c => c.TransacaoId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasMany(c => c.Itens)
+                  .WithOne(i => i.CompraCesta)
+                  .HasForeignKey(i => i.CompraCestaId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CompraCestaItem>(entity =>
+        {
+            entity.HasIndex(i => new { i.CompraCestaId, i.ProdutoCestaId }).IsUnique();
+            entity.HasOne(i => i.Produto)
+                  .WithMany(p => p.Itens)
+                  .HasForeignKey(i => i.ProdutoCestaId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

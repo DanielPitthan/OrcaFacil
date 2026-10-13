@@ -36,6 +36,8 @@ public class Transacao
     public int? TransacaoOrigemId { get; set; }
     public Transacao? TransacaoOrigem { get; set; }
 
+    public ICollection<ItemLancamento> Itens { get; set; } = new List<ItemLancamento>();
+
     public DateTime CriadoEm { get; set; } = DateTime.UtcNow;
     public DateTime? AtualizadoEm { get; set; }
 }

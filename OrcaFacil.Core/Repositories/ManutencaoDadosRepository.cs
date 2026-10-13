@@ -23,7 +23,12 @@ public class ManutencaoDadosRepository : IManutencaoDadosRepository
             ["Metas de economia"] = await context.Metas.CountAsync(),
             ["Categorias"] = await context.Categorias.CountAsync(),
             ["Fechamentos de mês"] = await context.FechamentosPeriodo.CountAsync(),
-            ["Logs"] = await context.LogsEvento.CountAsync()
+            ["Logs"] = await context.LogsEvento.CountAsync(),
+            ["Ativos"] = await context.AtivosFinanceiros.CountAsync(),
+            ["Operações de ativos"] = await context.OperacoesAtivo.CountAsync(),
+            ["Produtos da cesta"] = await context.ProdutosCesta.CountAsync(),
+            ["Locais de compra"] = await context.LocaisCompra.CountAsync(),
+            ["Compras da cesta"] = await context.ComprasCesta.CountAsync()
         };
     }
 
@@ -39,6 +44,8 @@ public class ManutencaoDadosRepository : IManutencaoDadosRepository
         {
             if (tudo || tipo.HasFlag(TipoLimpezaDados.Lancamentos))
             {
+                await context.ComprasCesta.ExecuteUpdateAsync(s => s.SetProperty(c => c.TransacaoId, (int?)null));
+                await context.ItensLancamento.ExecuteDeleteAsync();
                 await context.Transacoes.ExecuteDeleteAsync();
                 await context.FechamentosPeriodo.ExecuteDeleteAsync();
             }
@@ -51,6 +58,12 @@ public class ManutencaoDadosRepository : IManutencaoDadosRepository
 
             if (tudo)
             {
+                await context.ItensCompraCesta.ExecuteDeleteAsync();
+                await context.ComprasCesta.ExecuteDeleteAsync();
+                await context.ProdutosCesta.ExecuteDeleteAsync();
+                await context.LocaisCompra.ExecuteDeleteAsync();
+                await context.OperacoesAtivo.ExecuteDeleteAsync();
+                await context.AtivosFinanceiros.ExecuteDeleteAsync();
                 await context.LogsEvento.ExecuteDeleteAsync();
                 await context.Categorias.ExecuteDeleteAsync();
                 await context.MembrosFamilia.ExecuteDeleteAsync();

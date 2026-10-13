@@ -1,0 +1,51 @@
+@using OrcaFacil.Core.Ativos
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudTextField @ref="_ticker" T="string" @bind-Value="Modelo.Ticker" Label="Ticker" Immediate="true"
+                          Required="true" RequiredError="Informe o ticker" Class="mb-3"
+                          Validation="@(new Func<string, string?>(ValidarTicker))"
+                          HelperText="Ex.: PETR4, MXRF11 ou PETR4F" />
+            <MudTextField @ref="_nome" T="string" @bind-Value="Modelo.Nome" Label="Nome" Immediate="true"
+                          Required="true" RequiredError="Informe o nome" MaxLength="80" Class="mb-3" />
+            <MudSelect T="TipoAtivo" @bind-Value="Modelo.Tipo" Label="Tipo" Class="mb-1">
+                @foreach (var tipo in Enum.GetValues<TipoAtivo>())
+                {
+                    <MudSelectItem Value="tipo">@tipo.Rotulo()</MudSelectItem>
+                }
+            </MudSelect>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancelar</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SalvarAsync">Salvar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public AtivoFormModel Modelo { get; set; } = new();
+
+    private MudForm _form = null!;
+    private MudTextField<string> _ticker = null!;
+    private MudTextField<string> _nome = null!;
+
+    private static string? ValidarTicker(string ticker)
+        => TickerB3.EhValido(ticker) ? null : TickerB3.MensagemInvalido;
+
+    private async Task SalvarAsync()
+    {
+        Modelo.Ticker = TickerB3.Normalizar(Modelo.Ticker);
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            if (!TickerB3.EhValido(Modelo.Ticker))
+                await _ticker.FocusAsync();
+            else
+                await _nome.FocusAsync();
+            return;
+        }
+
+        MudDialog.Close(DialogResult.Ok(Modelo));
+    }
+}

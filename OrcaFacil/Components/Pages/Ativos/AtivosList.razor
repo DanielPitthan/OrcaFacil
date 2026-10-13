@@ -1,0 +1,219 @@
+@page "/ativos"
+@using OrcaFacil.Core.Ativos
+@inject IAtivoService AtivoService
+@inject IOperacaoAtivoService OperacaoService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.h5" Class="mb-4">Ativos</MudText>
+
+<MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true" Class="mb-2" @bind-ActivePanelIndex="_aba">
+    <MudTabPanel Text="Carteira" Icon="@Icons.Material.Filled.AccountBalanceWallet">
+        <div class="pro-fab-spacer">
+            @if (_carregando)
+            {
+                <MudProgressCircular Indeterminate="true" />
+            }
+            else if (_posicoes.Count == 0)
+            {
+                <EmptyState Icon="@Icons.Material.Filled.ShowChart" Mensagem="Nenhum ativo em carteira"
+                            Subtitulo="Cadastre o papel e registre uma compra pelo botão +" />
+            }
+            else
+            {
+                <MudList T="PosicaoAtivoDto" Dense="true">
+                    @foreach (var posicao in _posicoes)
+                    {
+                        <MudListItem T="PosicaoAtivoDto" OnClick="@(() => AbrirOperacoesAsync(posicao.AtivoId, posicao.Ticker, posicao.Nome))">
+                            <div class="d-flex justify-space-between align-center" style="width:100%">
+                                <div style="min-width:0;">
+                                    <MudText Typo="Typo.body1"><b>@posicao.Ticker</b> @posicao.Nome</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        @posicao.Tipo.Rotulo() · @posicao.Quantidade.ToString("0.########")
+                                        · médio @posicao.PrecoMedio.ToString("C4")
+                                    </MudText>
+                                </div>
+                                <MudText Typo="Typo.body2">@posicao.CustoTotal.ToString("C")</MudText>
+                            </div>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+        </div>
+    </MudTabPanel>
+
+    <MudTabPanel Text="Cadastrados" Icon="@Icons.Material.Filled.ListAlt">
+        <div class="pro-fab-spacer">
+            @if (_carregando)
+            {
+                <MudProgressCircular Indeterminate="true" />
+            }
+            else if (_ativos.Count == 0)
+            {
+                <EmptyState Icon="@Icons.Material.Filled.ListAlt" Mensagem="Nenhum ativo cadastrado"
+                            Subtitulo="Use o botão + para cadastrar o ticker" />
+            }
+            else
+            {
+                <MudList T="AtivoFinanceiro" Dense="true">
+                    @foreach (var ativo in _ativos)
+                    {
+                        <MudListItem T="AtivoFinanceiro" OnClick="@(() => AbrirOperacoesAsync(ativo.Id, ativo.Ticker, ativo.Nome))">
+                            <div class="d-flex justify-space-between align-center" style="width:100%">
+                                <div>
+                                    <MudText Typo="Typo.body1">
+                                        <b>@ativo.Ticker</b> @ativo.Nome
+                                        @if (!ativo.Ativo)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Default">Inativo</MudChip>
+                                        }
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@ativo.Tipo.Rotulo()</MudText>
+                                </div>
+                                <div class="d-flex" @onclick:stopPropagation="true">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" aria-label="Editar"
+                                                   OnClick="@(() => EditarAtivoAsync(ativo))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" aria-label="Excluir"
+                                                   OnClick="@(() => ExcluirAtivoAsync(ativo))" />
+                                </div>
+                            </div>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+        </div>
+    </MudTabPanel>
+</MudTabs>
+
+<FabMenu>
+    <FabMenuItem Text="Novo ativo" Icon="@Icons.Material.Filled.Add" Color="Color.Primary" Click="NovoAtivoAsync" />
+    <FabMenuItem Text="Nova operação" Icon="@Icons.Material.Filled.Receipt" Click="NovaOperacaoAsync" />
+</FabMenu>
+
+@code {
+    private bool _carregando = true;
+    private int _aba;
+    private List<PosicaoAtivoDto> _posicoes = new();
+    private List<AtivoFinanceiro> _ativos = new();
+
+    protected override async Task OnInitializedAsync() => await CarregarAsync();
+
+    private async Task CarregarAsync()
+    {
+        _carregando = true;
+        _ativos = await AtivoService.ListarAsync();
+        _posicoes = await OperacaoService.ListarPosicaoAsync();
+        _carregando = false;
+    }
+
+    private async Task NovoAtivoAsync()
+    {
+        if (await SalvarAtivoAsync("Novo ativo", new AtivoFormModel()))
+            _aba = 1;
+    }
+
+    private Task EditarAtivoAsync(AtivoFinanceiro ativo) => SalvarAtivoAsync("Editar ativo", new AtivoFormModel
+    {
+        Id = ativo.Id,
+        Ticker = ativo.Ticker,
+        Nome = ativo.Nome,
+        Tipo = ativo.Tipo
+    });
+
+    private async Task<bool> SalvarAtivoAsync(string titulo, AtivoFormModel modelo)
+    {
+        var parametros = new DialogParameters<AtivoForm> { { x => x.Modelo, modelo } };
+        var dialog = await DialogService.ShowAsync<AtivoForm>(titulo, parametros, Opcoes());
+        var resultado = await dialog.Result;
+        if (resultado is not { Canceled: false, Data: AtivoFormModel salvo })
+            return false;
+
+        try
+        {
+            await AtivoService.SalvarAsync(salvo);
+            Snackbar.Add(modelo.Id is null ? "Ativo cadastrado" : "Ativo atualizado", Severity.Success);
+            await CarregarAsync();
+            return true;
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+            return false;
+        }
+    }
+
+    private async Task ExcluirAtivoAsync(AtivoFinanceiro ativo)
+    {
+        var confirmado = await DialogService.ShowMessageBoxAsync(
+            "Excluir ativo", $"Excluir {ativo.Ticker}? Só é possível se não houver operações.",
+            yesText: "Excluir", cancelText: "Cancelar");
+        if (confirmado != true)
+            return;
+
+        try
+        {
+            await AtivoService.ExcluirAsync(ativo.Id);
+            Snackbar.Add("Ativo excluído", Severity.Success);
+            await CarregarAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            var inativar = await DialogService.ShowMessageBoxAsync(
+                "Ativo com histórico", ex.Message, yesText: "Inativar", cancelText: "Manter");
+            if (inativar != true)
+                return;
+
+            await AtivoService.InativarAsync(ativo.Id);
+            Snackbar.Add($"{ativo.Ticker} inativado", Severity.Success);
+            await CarregarAsync();
+        }
+    }
+
+    private async Task NovaOperacaoAsync()
+    {
+        var ativos = _ativos.Where(a => a.Ativo).ToList();
+        if (ativos.Count == 0)
+        {
+            Snackbar.Add("Cadastre um ativo antes de registrar uma operação.", Severity.Info);
+            return;
+        }
+
+        var modelo = new OperacaoAtivoFormModel { AtivoId = ativos[0].Id, Data = DateTime.Today };
+        var parametros = new DialogParameters<OperacaoForm>
+        {
+            { x => x.Modelo, modelo },
+            { x => x.Ativos, ativos }
+        };
+        var dialog = await DialogService.ShowAsync<OperacaoForm>("Nova operação", parametros, Opcoes());
+        var resultado = await dialog.Result;
+        if (resultado is not { Canceled: false, Data: OperacaoAtivoFormModel salvo })
+            return;
+
+        try
+        {
+            await OperacaoService.SalvarAsync(salvo);
+            Snackbar.Add("Operação registrada", Severity.Success);
+            _aba = 0;
+            await CarregarAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+    }
+
+    private async Task AbrirOperacoesAsync(int ativoId, string ticker, string nome)
+    {
+        var parametros = new DialogParameters<OperacoesAtivoDialog>
+        {
+            { x => x.AtivoId, ativoId },
+            { x => x.Ticker, ticker }
+        };
+        var dialog = await DialogService.ShowAsync<OperacoesAtivoDialog>($"{ticker} — {nome}", parametros, Opcoes());
+        var resultado = await dialog.Result;
+        if (resultado is { Canceled: false, Data: true })
+            await CarregarAsync();
+    }
+
+    private static DialogOptions Opcoes() => new() { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true };
+}

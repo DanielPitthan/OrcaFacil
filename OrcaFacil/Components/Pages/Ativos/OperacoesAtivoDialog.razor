@@ -1,0 +1,162 @@
+@using OrcaFacil.Core.Ativos
+<MudDialog>
+    <DialogContent>
+        @if (_carregando)
+        {
+            <MudProgressCircular Indeterminate="true" />
+        }
+        else if (_operacoes.Count == 0)
+        {
+            <EmptyState Icon="@Icons.Material.Filled.ReceiptLong" Mensagem="Nenhuma operação neste ativo" />
+        }
+        else
+        {
+            <MudList T="OperacaoAtivo" Dense="true">
+                @foreach (var operacao in _operacoes)
+                {
+                    <MudListItem T="OperacaoAtivo">
+                        <div class="d-flex justify-space-between align-center" style="width:100%">
+                            <div>
+                                <MudText Typo="Typo.body2">
+                                    @(operacao.Tipo == TipoOperacao.Compra ? "Compra" : "Venda")
+                                    · @operacao.Quantidade.ToString("0.########")
+                                    × @operacao.PrecoUnitario.ToString("C")
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @operacao.Data.ToString("dd/MM/yyyy")
+                                    @if (operacao.Custos > 0)
+                                    {
+                                        <text> · custos @operacao.Custos.ToString("C")</text>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(operacao.Corretora))
+                                    {
+                                        <text> · @operacao.Corretora</text>
+                                    }
+                                </MudText>
+                            </div>
+                            <div class="d-flex">
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" aria-label="Editar"
+                                               OnClick="@(() => EditarAsync(operacao))" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" aria-label="Excluir"
+                                               OnClick="@(() => ExcluirAsync(operacao))" />
+                            </div>
+                        </div>
+                    </MudListItem>
+                }
+            </MudList>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Close(DialogResult.Ok(_alterou)))">Fechar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public int AtivoId { get; set; }
+    [Parameter] public string Ticker { get; set; } = string.Empty;
+
+    [Inject] private IOperacaoAtivoService OperacaoService { get; set; } = null!;
+    [Inject] private IAtivoService AtivoService { get; set; } = null!;
+    [Inject] private IDialogService DialogService { get; set; } = null!;
+    [Inject] private ISnackbar Snackbar { get; set; } = null!;
+
+    private bool _carregando = true;
+    private bool _alterou;
+    private List<OperacaoAtivo> _operacoes = new();
+
+    protected override async Task OnInitializedAsync() => await CarregarAsync();
+
+    private async Task CarregarAsync()
+    {
+        _carregando = true;
+        _operacoes = await OperacaoService.ListarPorAtivoAsync(AtivoId);
+        _carregando = false;
+    }
+
+    private async Task EditarAsync(OperacaoAtivo operacao)
+    {
+        var ativos = await AtivosParaFormularioAsync(operacao.AtivoId);
+        var modelo = new OperacaoAtivoFormModel
+        {
+            Id = operacao.Id,
+            AtivoId = operacao.AtivoId,
+            Tipo = operacao.Tipo,
+            Data = operacao.Data,
+            Quantidade = operacao.Quantidade,
+            PrecoUnitario = operacao.PrecoUnitario,
+            Custos = operacao.Custos,
+            Corretora = operacao.Corretora
+        };
+
+        if (await AbrirFormularioAsync("Editar operação", modelo, ativos))
+        {
+            _alterou = true;
+            await CarregarAsync();
+        }
+    }
+
+    private async Task ExcluirAsync(OperacaoAtivo operacao)
+    {
+        var confirmado = await DialogService.ShowMessageBoxAsync(
+            "Excluir operação",
+            $"Excluir a {(operacao.Tipo == TipoOperacao.Compra ? "compra" : "venda")} de {operacao.Quantidade:0.########} {Ticker} em {operacao.Data:dd/MM/yyyy}?",
+            yesText: "Excluir", cancelText: "Cancelar");
+
+        if (confirmado != true)
+            return;
+
+        try
+        {
+            await OperacaoService.ExcluirAsync(operacao.Id);
+            Snackbar.Add("Operação excluída", Severity.Success);
+            _alterou = true;
+            await CarregarAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+    }
+
+    private async Task<List<AtivoFinanceiro>> AtivosParaFormularioAsync(int ativoAtualId)
+    {
+        var ativos = await AtivoService.ListarAsync(somenteAtivos: true);
+        if (ativos.All(a => a.Id != ativoAtualId))
+        {
+            var todos = await AtivoService.ListarAsync();
+            var atual = todos.FirstOrDefault(a => a.Id == ativoAtualId);
+            if (atual is not null)
+                ativos.Insert(0, atual);
+        }
+
+        return ativos;
+    }
+
+    private async Task<bool> AbrirFormularioAsync(string titulo, OperacaoAtivoFormModel modelo, List<AtivoFinanceiro> ativos)
+    {
+        var parametros = new DialogParameters<OperacaoForm>
+        {
+            { x => x.Modelo, modelo },
+            { x => x.Ativos, ativos }
+        };
+        var dialog = await DialogService.ShowAsync<OperacaoForm>(titulo, parametros, Opcoes());
+        var resultado = await dialog.Result;
+        if (resultado is not { Canceled: false, Data: OperacaoAtivoFormModel salvo })
+            return false;
+
+        try
+        {
+            await OperacaoService.SalvarAsync(salvo);
+            Snackbar.Add("Operação salva", Severity.Success);
+            return true;
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+            return false;
+        }
+    }
+
+    private static DialogOptions Opcoes() => new() { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true };
+}

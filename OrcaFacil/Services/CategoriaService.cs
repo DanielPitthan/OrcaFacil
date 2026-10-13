@@ -1,5 +1,6 @@
 using OrcaFacil.Core.Dtos;
 using OrcaFacil.Core.Entities;
+using OrcaFacil.Core.Enums;
 using OrcaFacil.Core.Repositories;
 using OrcaFacil.Services.Interfaces;
 
@@ -30,6 +31,7 @@ public class CategoriaService : ICategoriaService
             Icone = dto.Icone,
             CorHex = dto.CorHex,
             TipoPadrao = dto.TipoPadrao,
+            PermiteItensFatura = dto.TipoPadrao == TipoTransacao.Despesa && dto.PermiteItensFatura,
             Ativo = true
         };
 
@@ -49,6 +51,7 @@ public class CategoriaService : ICategoriaService
         categoria.Icone = dto.Icone;
         categoria.CorHex = dto.CorHex;
         categoria.TipoPadrao = dto.TipoPadrao;
+        categoria.PermiteItensFatura = dto.TipoPadrao == TipoTransacao.Despesa && dto.PermiteItensFatura;
 
         await _categoriaRepository.UpdateAsync(categoria);
     }

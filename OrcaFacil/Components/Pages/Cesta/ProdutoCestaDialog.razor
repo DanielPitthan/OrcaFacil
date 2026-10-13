@@ -1,0 +1,45 @@
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudTextField @ref="_nome" T="string" @bind-Value="Modelo.Nome" Label="Produto" Immediate="true"
+                          Required="true" RequiredError="Informe o nome" MaxLength="80" Class="mb-3" />
+            <MudSelect T="int" @bind-Value="Modelo.CategoriaId" Label="Categoria" Required="true"
+                       RequiredError="Selecione a categoria" Class="mb-3" AnchorOrigin="Origin.BottomCenter">
+                @foreach (var categoria in Categorias)
+                {
+                    <MudSelectItem T="int" Value="@categoria.Id">@categoria.Icone @categoria.Nome</MudSelectItem>
+                }
+            </MudSelect>
+            @if (Modelo.Id is not null)
+            {
+                <MudCheckBox T="bool" @bind-Value="Modelo.Ativo" Label="Ativo" />
+            }
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancelar</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SalvarAsync">Salvar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public ProdutoCestaFormModel Modelo { get; set; } = new();
+    [Parameter] public IReadOnlyList<Categoria> Categorias { get; set; } = Array.Empty<Categoria>();
+
+    private MudForm _form = null!;
+    private MudTextField<string> _nome = null!;
+
+    private async Task SalvarAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid || Modelo.CategoriaId <= 0)
+        {
+            await _nome.FocusAsync();
+            return;
+        }
+
+        Modelo.Nome = Modelo.Nome.Trim();
+        MudDialog.Close(DialogResult.Ok(Modelo));
+    }
+}

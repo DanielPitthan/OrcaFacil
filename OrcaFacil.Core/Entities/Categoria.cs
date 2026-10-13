@@ -20,6 +20,9 @@ public class Categoria
 
     public bool EhPadraoDoSistema { get; set; }
 
+    /// <summary>Quando verdadeiro, a despesa pode ser detalhada em itens que redistribuem o valor nas categorias.</summary>
+    public bool PermiteItensFatura { get; set; }
+
     public bool Ativo { get; set; } = true;
 
     public ICollection<Transacao> Transacoes { get; set; } = new List<Transacao>();

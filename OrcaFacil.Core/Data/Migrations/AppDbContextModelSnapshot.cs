@@ -17,6 +17,40 @@ namespace OrcaFacil.Core.Data.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.11");
 
+            modelBuilder.Entity("OrcaFacil.Core.Entities.AtivoFinanceiro", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Ativo")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CriadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Ticker")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("TEXT")
+                        .UseCollation("NOCASE");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Ticker")
+                        .IsUnique();
+
+                    b.ToTable("AtivosFinanceiros");
+                });
+
             modelBuilder.Entity("OrcaFacil.Core.Entities.Categoria", b =>
                 {
                     b.Property<int>("Id")
@@ -45,6 +79,9 @@ namespace OrcaFacil.Core.Data.Migrations
                         .HasColumnType("TEXT")
                         .UseCollation("NOCASE");
 
+                    b.Property<bool>("PermiteItensFatura")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("TipoPadrao")
                         .HasColumnType("INTEGER");
 
@@ -54,6 +91,81 @@ namespace OrcaFacil.Core.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("Categorias");
+                });
+
+            modelBuilder.Entity("OrcaFacil.Core.Entities.CompraCesta", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Ano")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CriadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("Data")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("LocalCompraId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Mes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("TipoCartaoBeneficio")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("TransacaoId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("ValorBeneficio")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("ValorCartaoCredito")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("ValorDinheiro")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LocalCompraId");
+
+                    b.HasIndex("TransacaoId");
+
+                    b.HasIndex("Ano", "Mes", "LocalCompraId");
+
+                    b.ToTable("ComprasCesta");
+                });
+
+            modelBuilder.Entity("OrcaFacil.Core.Entities.CompraCestaItem", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("CompraCestaId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Ordem")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("Preco")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ProdutoCestaId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProdutoCestaId");
+
+                    b.HasIndex("CompraCestaId", "ProdutoCestaId")
+                        .IsUnique();
+
+                    b.ToTable("ItensCompraCesta");
                 });
 
             modelBuilder.Entity("OrcaFacil.Core.Entities.FechamentoPeriodo", b =>
@@ -80,6 +192,73 @@ namespace OrcaFacil.Core.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("FechamentosPeriodo");
+                });
+
+            modelBuilder.Entity("OrcaFacil.Core.Entities.ItemLancamento", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("CategoriaId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Descricao")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Natureza")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Ordem")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ParcelaAtual")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("TotalParcelas")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TransacaoId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("Valor")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CategoriaId");
+
+                    b.HasIndex("TransacaoId");
+
+                    b.ToTable("ItensLancamento");
+                });
+
+            modelBuilder.Entity("OrcaFacil.Core.Entities.LocalCompra", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Ativo")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CriadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT")
+                        .UseCollation("NOCASE");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Nome")
+                        .IsUnique();
+
+                    b.ToTable("LocaisCompra");
                 });
 
             modelBuilder.Entity("OrcaFacil.Core.Entities.LogEvento", b =>
@@ -185,6 +364,52 @@ namespace OrcaFacil.Core.Data.Migrations
                     b.ToTable("Metas");
                 });
 
+            modelBuilder.Entity("OrcaFacil.Core.Entities.OperacaoAtivo", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("AtivoId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("AtualizadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Corretora")
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CriadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Custos")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("Data")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("MembroFamiliaId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("PrecoUnitario")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Quantidade")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MembroFamiliaId");
+
+                    b.HasIndex("AtivoId", "MembroFamiliaId", "Data");
+
+                    b.ToTable("OperacoesAtivo");
+                });
+
             modelBuilder.Entity("OrcaFacil.Core.Entities.Orcamento", b =>
                 {
                     b.Property<int>("Id")
@@ -215,6 +440,37 @@ namespace OrcaFacil.Core.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("Orcamentos");
+                });
+
+            modelBuilder.Entity("OrcaFacil.Core.Entities.ProdutoCesta", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Ativo")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("CategoriaId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CriadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("TEXT")
+                        .UseCollation("NOCASE");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CategoriaId");
+
+                    b.HasIndex("Nome")
+                        .IsUnique();
+
+                    b.ToTable("ProdutosCesta");
                 });
 
             modelBuilder.Entity("OrcaFacil.Core.Entities.Transacao", b =>
@@ -273,6 +529,62 @@ namespace OrcaFacil.Core.Data.Migrations
                     b.ToTable("Transacoes");
                 });
 
+            modelBuilder.Entity("OrcaFacil.Core.Entities.CompraCesta", b =>
+                {
+                    b.HasOne("OrcaFacil.Core.Entities.LocalCompra", "LocalCompra")
+                        .WithMany("Compras")
+                        .HasForeignKey("LocalCompraId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("OrcaFacil.Core.Entities.Transacao", "Transacao")
+                        .WithMany()
+                        .HasForeignKey("TransacaoId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("LocalCompra");
+
+                    b.Navigation("Transacao");
+                });
+
+            modelBuilder.Entity("OrcaFacil.Core.Entities.CompraCestaItem", b =>
+                {
+                    b.HasOne("OrcaFacil.Core.Entities.CompraCesta", "CompraCesta")
+                        .WithMany("Itens")
+                        .HasForeignKey("CompraCestaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("OrcaFacil.Core.Entities.ProdutoCesta", "Produto")
+                        .WithMany("Itens")
+                        .HasForeignKey("ProdutoCestaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("CompraCesta");
+
+                    b.Navigation("Produto");
+                });
+
+            modelBuilder.Entity("OrcaFacil.Core.Entities.ItemLancamento", b =>
+                {
+                    b.HasOne("OrcaFacil.Core.Entities.Categoria", "Categoria")
+                        .WithMany()
+                        .HasForeignKey("CategoriaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("OrcaFacil.Core.Entities.Transacao", "Transacao")
+                        .WithMany("Itens")
+                        .HasForeignKey("TransacaoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Categoria");
+
+                    b.Navigation("Transacao");
+                });
+
             modelBuilder.Entity("OrcaFacil.Core.Entities.Meta", b =>
                 {
                     b.HasOne("OrcaFacil.Core.Entities.MembroFamilia", "MembroFamilia")
@@ -284,10 +596,40 @@ namespace OrcaFacil.Core.Data.Migrations
                     b.Navigation("MembroFamilia");
                 });
 
+            modelBuilder.Entity("OrcaFacil.Core.Entities.OperacaoAtivo", b =>
+                {
+                    b.HasOne("OrcaFacil.Core.Entities.AtivoFinanceiro", "Ativo")
+                        .WithMany("Operacoes")
+                        .HasForeignKey("AtivoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("OrcaFacil.Core.Entities.MembroFamilia", "MembroFamilia")
+                        .WithMany()
+                        .HasForeignKey("MembroFamiliaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Ativo");
+
+                    b.Navigation("MembroFamilia");
+                });
+
             modelBuilder.Entity("OrcaFacil.Core.Entities.Orcamento", b =>
                 {
                     b.HasOne("OrcaFacil.Core.Entities.Categoria", "Categoria")
                         .WithMany("Orcamentos")
+                        .HasForeignKey("CategoriaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Categoria");
+                });
+
+            modelBuilder.Entity("OrcaFacil.Core.Entities.ProdutoCesta", b =>
+                {
+                    b.HasOne("OrcaFacil.Core.Entities.Categoria", "Categoria")
+                        .WithMany()
                         .HasForeignKey("CategoriaId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
@@ -321,6 +663,11 @@ namespace OrcaFacil.Core.Data.Migrations
                     b.Navigation("TransacaoOrigem");
                 });
 
+            modelBuilder.Entity("OrcaFacil.Core.Entities.AtivoFinanceiro", b =>
+                {
+                    b.Navigation("Operacoes");
+                });
+
             modelBuilder.Entity("OrcaFacil.Core.Entities.Categoria", b =>
                 {
                     b.Navigation("Orcamentos");
@@ -328,11 +675,31 @@ namespace OrcaFacil.Core.Data.Migrations
                     b.Navigation("Transacoes");
                 });
 
+            modelBuilder.Entity("OrcaFacil.Core.Entities.CompraCesta", b =>
+                {
+                    b.Navigation("Itens");
+                });
+
+            modelBuilder.Entity("OrcaFacil.Core.Entities.LocalCompra", b =>
+                {
+                    b.Navigation("Compras");
+                });
+
             modelBuilder.Entity("OrcaFacil.Core.Entities.MembroFamilia", b =>
                 {
                     b.Navigation("Metas");
 
                     b.Navigation("Transacoes");
+                });
+
+            modelBuilder.Entity("OrcaFacil.Core.Entities.ProdutoCesta", b =>
+                {
+                    b.Navigation("Itens");
+                });
+
+            modelBuilder.Entity("OrcaFacil.Core.Entities.Transacao", b =>
+                {
+                    b.Navigation("Itens");
                 });
 #pragma warning restore 612, 618
         }

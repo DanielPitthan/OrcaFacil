@@ -1,7 +1,9 @@
 using OrcaFacil.Core.Dtos;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
+using OrcaFacil.Core.Lancamentos;
 using OrcaFacil.Core.Repositories;
+using OrcaFacil.Core.Services;
 using OrcaFacil.Services.Interfaces;
 
 namespace OrcaFacil.Services;
@@ -13,19 +15,22 @@ public class TransacaoService : ITransacaoService
     private readonly IPerfilContext _perfilContext;
     private readonly INotificationSchedulerService _notificationScheduler;
     private readonly IFechamentoService _fechamentoService;
+    private readonly CopiaDespesasMesService _copiaDespesas;
 
     public TransacaoService(
         ITransacaoRepository transacaoRepository,
         ICategoriaRepository categoriaRepository,
         IPerfilContext perfilContext,
         INotificationSchedulerService notificationScheduler,
-        IFechamentoService fechamentoService)
+        IFechamentoService fechamentoService,
+        CopiaDespesasMesService copiaDespesas)
     {
         _transacaoRepository = transacaoRepository;
         _categoriaRepository = categoriaRepository;
         _perfilContext = perfilContext;
         _notificationScheduler = notificationScheduler;
         _fechamentoService = fechamentoService;
+        _copiaDespesas = copiaDespesas;
     }
 
     public Task<List<Transacao>> ListarAsync(FiltroLancamentoDto filtro)
@@ -41,8 +46,10 @@ public class TransacaoService : ITransacaoService
     {
         await _fechamentoService.GarantirPeriodoAbertoAsync(dto.Data);
 
-        if (await _categoriaRepository.GetByIdAsync(dto.CategoriaId) is null)
-            throw new InvalidOperationException("Categoria inválida.");
+        var categoria = await _categoriaRepository.GetByIdAsync(dto.CategoriaId)
+            ?? throw new InvalidOperationException("Categoria inválida.");
+
+        var itens = await MapearItensAsync(dto, categoria);
 
         var membroId = _perfilContext.Atual?.Id
             ?? throw new InvalidOperationException("Nenhum perfil ativo.");
@@ -57,7 +64,8 @@ public class TransacaoService : ITransacaoService
             Pago = dto.Tipo == TipoTransacao.Despesa ? dto.Pago : true,
             Observacao = dto.Observacao,
             CategoriaId = dto.CategoriaId,
-            MembroFamiliaId = membroId
+            MembroFamiliaId = membroId,
+            Itens = itens
         };
 
         await _transacaoRepository.AddAsync(transacao);
@@ -68,14 +76,16 @@ public class TransacaoService : ITransacaoService
 
     public async Task AtualizarAsync(int id, TransacaoFormModel dto)
     {
-        if (await _categoriaRepository.GetByIdAsync(dto.CategoriaId) is null)
-            throw new InvalidOperationException("Categoria inválida.");
+        var categoria = await _categoriaRepository.GetByIdAsync(dto.CategoriaId)
+            ?? throw new InvalidOperationException("Categoria inválida.");
 
         var transacao = await _transacaoRepository.GetByIdAsync(id)
             ?? throw new InvalidOperationException("Lançamento não encontrado.");
 
         await _fechamentoService.GarantirPeriodoAbertoAsync(transacao.Data);
         await _fechamentoService.GarantirPeriodoAbertoAsync(dto.Data);
+
+        var itens = await MapearItensAsync(dto, categoria);
 
         transacao.Descricao = dto.Descricao;
         transacao.Valor = dto.Valor;
@@ -88,6 +98,7 @@ public class TransacaoService : ITransacaoService
         transacao.AtualizadoEm = DateTime.UtcNow;
 
         await _transacaoRepository.UpdateAsync(transacao);
+        await _transacaoRepository.SubstituirItensAsync(id, itens);
 
         await _notificationScheduler.CancelarLembreteAsync(id);
         await _notificationScheduler.AgendarLembreteAsync(transacao);
@@ -124,52 +135,38 @@ public class TransacaoService : ITransacaoService
     {
         await _fechamentoService.GarantirPeriodoAbertoAsync(new DateTime(ano, mes, 1));
 
-        var elegiveis = await ObterDespesasElegiveisAsync(mes, ano);
-        var diasNoMesAlvo = DateTime.DaysInMonth(ano, mes);
-
-        foreach (var origem in elegiveis)
-        {
-            var dia = Math.Min(origem.Data.Day, diasNoMesAlvo);
-            var copia = new Transacao
-            {
-                Descricao = origem.Descricao,
-                Valor = origem.Valor,
-                Data = new DateTime(ano, mes, dia),
-                Tipo = TipoTransacao.Despesa,
-                Recorrencia = origem.Recorrencia,
-                Pago = false,
-                Observacao = origem.Observacao,
-                CategoriaId = origem.CategoriaId,
-                MembroFamiliaId = origem.MembroFamiliaId,
-                TransacaoOrigemId = origem.Id
-            };
-
-            await _transacaoRepository.AddAsync(copia);
+        var copias = await _copiaDespesas.CopiarAsync(mes, ano);
+        foreach (var copia in copias)
             await _notificationScheduler.AgendarLembreteAsync(copia);
+
+        return copias.Count;
+    }
+
+    public Task<bool> ExistemDespesasParaTrazerAsync(int mes, int ano)
+        => _copiaDespesas.ExistemAsync(mes, ano);
+
+    private async Task<List<ItemLancamento>> MapearItensAsync(TransacaoFormModel dto, Categoria categoria)
+    {
+        var itens = dto.Itens.Select((item, indice) => new ItemLancamento
+        {
+            Descricao = item.Descricao?.Trim() ?? string.Empty,
+            Valor = item.Valor,
+            Natureza = item.Natureza,
+            ParcelaAtual = item.Natureza == NaturezaItemLancamento.Parcelada ? item.ParcelaAtual : null,
+            TotalParcelas = item.Natureza == NaturezaItemLancamento.Parcelada ? item.TotalParcelas : null,
+            CategoriaId = item.CategoriaId,
+            Ordem = indice
+        }).ToList();
+
+        ItensFaturaRegras.Validar(dto.Valor, dto.CategoriaId, categoria.PermiteItensFatura, dto.Tipo, itens);
+
+        foreach (var item in itens)
+        {
+            if (await _categoriaRepository.GetByIdAsync(item.CategoriaId) is null)
+                throw new InvalidOperationException("Categoria do item inválida.");
         }
 
-        return elegiveis.Count;
-    }
-
-    public async Task<bool> ExistemDespesasParaTrazerAsync(int mes, int ano)
-    {
-        var elegiveis = await ObterDespesasElegiveisAsync(mes, ano);
-        return elegiveis.Count > 0;
-    }
-
-    private async Task<List<Transacao>> ObterDespesasElegiveisAsync(int mes, int ano)
-    {
-        var mesAnterior = new DateTime(ano, mes, 1).AddMonths(-1);
-        var inicioAnterior = mesAnterior;
-        var fimAnterior = mesAnterior.AddMonths(1).AddTicks(-1);
-
-        var inicioAlvo = new DateTime(ano, mes, 1);
-        var fimAlvo = inicioAlvo.AddMonths(1).AddTicks(-1);
-
-        var recorrentes = await _transacaoRepository.GetDespesasRecorrentesPorPeriodoAsync(inicioAnterior, fimAnterior);
-        var jaCopiadas = await _transacaoRepository.GetOrigemIdsComCopiaNoPeriodoAsync(inicioAlvo, fimAlvo);
-
-        return recorrentes.Where(t => !jaCopiadas.Contains(t.Id)).ToList();
+        return itens;
     }
 
     public async Task<ResumoMensalDto> ObterResumoMensalAsync(int mes, int ano)
@@ -188,6 +185,18 @@ public class TransacaoService : ITransacaoService
             TotalReceitas = receitas,
             TotalDespesas = despesas,
             TotalDespesasPagas = despesasPagas
+        };
+    }
+
+    public async Task<ResumoAcumuladoDto> ObterResumoAcumuladoAsync()
+    {
+        var receitas = await _transacaoRepository.SomaTotalPorTipoAsync(TipoTransacao.Receita);
+        var despesas = await _transacaoRepository.SomaTotalPorTipoAsync(TipoTransacao.Despesa);
+
+        return new ResumoAcumuladoDto
+        {
+            TotalReceitas = receitas,
+            TotalDespesas = despesas
         };
     }
 

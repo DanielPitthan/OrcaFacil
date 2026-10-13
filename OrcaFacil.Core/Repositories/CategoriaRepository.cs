@@ -31,6 +31,7 @@ public class CategoriaRepository : GenericRepository<Categoria>, ICategoriaRepos
     public async Task<bool> PossuiTransacoesAsync(int categoriaId)
     {
         await using var context = await ContextFactory.CreateDbContextAsync();
-        return await context.Transacoes.AnyAsync(t => t.CategoriaId == categoriaId);
+        return await context.Transacoes.AnyAsync(t => t.CategoriaId == categoriaId)
+            || await context.ItensLancamento.AnyAsync(i => i.CategoriaId == categoriaId);
     }
 }

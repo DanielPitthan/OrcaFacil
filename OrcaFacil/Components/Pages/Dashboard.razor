@@ -1,4 +1,4 @@
-@page "/"
+@page "/dashboard"
 @inject ITransacaoService TransacaoService
 @inject IOrcamentoService OrcamentoService
 @inject IMetaService MetaService
@@ -40,6 +40,28 @@ else
             <MudPaper Class="pa-4" Elevation="2">
                 <MudText Typo="Typo.caption">Despesas a pagar</MudText>
                 <MudText Typo="Typo.h5" Color="Color.Warning">@_resumo!.TotalDespesasAPagar.ToString("C")</MudText>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12">
+            <MudText Typo="Typo.subtitle2" Class="mt-2">Desde o início</MudText>
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.caption">Receitas acumuladas</MudText>
+                <MudText Typo="Typo.h5" Class="of-currency-receita">@_acumulado!.TotalReceitas.ToString("C")</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.caption">Despesas acumuladas</MudText>
+                <MudText Typo="Typo.h5" Class="of-currency-despesa">@_acumulado!.TotalDespesas.ToString("C")</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="4">
+            <MudPaper Class="pa-4" Elevation="2">
+                <MudText Typo="Typo.caption">Saldo acumulado</MudText>
+                <MudText Typo="Typo.h5" Color="@(_acumulado!.Saldo >= 0 ? Color.Success : Color.Error)">@_acumulado.Saldo.ToString("C")</MudText>
             </MudPaper>
         </MudItem>
 
@@ -97,6 +119,7 @@ else
 @code {
     private bool _carregando = true;
     private ResumoMensalDto? _resumo;
+    private ResumoAcumuladoDto? _acumulado;
     private List<GastoPorCategoriaDto> _gastosPorCategoria = new();
     private List<TendenciaMensalDto> _tendencia = new();
     private List<AlertaOrcamentoDto> _alertas = new();
@@ -106,6 +129,7 @@ else
     {
         var hoje = DateTime.Today;
         _resumo = await TransacaoService.ObterResumoMensalAsync(hoje.Month, hoje.Year);
+        _acumulado = await TransacaoService.ObterResumoAcumuladoAsync();
         _gastosPorCategoria = await TransacaoService.ObterGastosPorCategoriaAsync(hoje.Month, hoje.Year);
         _tendencia = await TransacaoService.ObterTendenciaMensalAsync(6);
         _alertas = await OrcamentoService.ObterAlertasAsync(hoje.Month, hoje.Year);

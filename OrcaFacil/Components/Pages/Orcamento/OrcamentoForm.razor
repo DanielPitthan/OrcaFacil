@@ -8,12 +8,12 @@
             }
         </MudSelect>
 
-        <MudNumericField T="decimal" @bind-Value="Modelo.ValorLimite" Label="Limite mensal"
-                         Adornment="Adornment.Start" AdornmentText="R$" Format="F2" Class="mb-3" />
+        <CampoNumerico TNumber="decimal" @bind-Value="Modelo.ValorLimite" Label="Limite mensal"
+                        Adornment="Adornment.Start" AdornmentText="R$" Class="mb-3" />
 
-        <MudNumericField T="decimal?" @bind-Value="Modelo.MetaReducaoPercentual" Label="Meta redução %"
-                         Adornment="Adornment.End" AdornmentText="%" Format="F0" Min="0" Max="100"
-                         HelperText="Opcional, em relação ao gasto do mês anterior" Class="mb-3" />
+        <CampoNumerico TNumber="decimal?" @bind-Value="Modelo.MetaReducaoPercentual" Label="Meta redução %"
+                        CasasDecimais="0" ValorMaximo="100" Adornment="Adornment.End" AdornmentText="%"
+                        HelperText="Opcional, em relação ao gasto do mês anterior" Class="mb-3" />
 
         @if (_gastoMesAnterior > 0 && Modelo.MetaReducaoPercentual is > 0)
         {

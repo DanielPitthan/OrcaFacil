@@ -18,4 +18,6 @@ public class CategoriaFormModel
     public string CorHex { get; set; } = "#7f7caf";
 
     public TipoTransacao TipoPadrao { get; set; } = TipoTransacao.Despesa;
+
+    public bool PermiteItensFatura { get; set; }
 }

@@ -11,6 +11,9 @@ public interface IFotoPerfilService
 
     string? ObterDataUrl(string? caminho);
 
+    /// <summary>Gira a foto salva 90° no sentido horário e devolve o novo caminho.</summary>
+    Task<string> GirarHorarioAsync(string caminho);
+
     void Remover();
 
     string PastaFotos { get; }

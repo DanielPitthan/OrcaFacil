@@ -17,6 +17,8 @@ public class TransacaoRepository : GenericRepository<Transacao>, ITransacaoRepos
         return await context.Transacoes
             .Include(t => t.Categoria)
             .Include(t => t.MembroFamilia)
+            .Include(t => t.Itens)
+            .ThenInclude(i => i.Categoria)
             .FirstOrDefaultAsync(t => t.Id == id);
     }
 
@@ -26,10 +28,12 @@ public class TransacaoRepository : GenericRepository<Transacao>, ITransacaoRepos
         var query = context.Transacoes
             .Include(t => t.Categoria)
             .Include(t => t.MembroFamilia)
+            .Include(t => t.Itens)
+            .ThenInclude(i => i.Categoria)
             .Where(t => t.Data >= inicio && t.Data <= fim);
 
         if (categoriaId.HasValue)
-            query = query.Where(t => t.CategoriaId == categoriaId.Value);
+            query = query.Where(t => t.CategoriaId == categoriaId.Value || t.Itens.Any(i => i.CategoriaId == categoriaId.Value));
         if (tipo.HasValue)
             query = query.Where(t => t.Tipo == tipo.Value);
         if (membroFamiliaId.HasValue)
@@ -45,13 +49,11 @@ public class TransacaoRepository : GenericRepository<Transacao>, ITransacaoRepos
     public override async Task UpdateAsync(Transacao entity)
     {
         await using var context = await ContextFactory.CreateDbContextAsync();
+        var tracked = await context.Transacoes.FirstOrDefaultAsync(t => t.Id == entity.Id)
+            ?? throw new InvalidOperationException("Lançamento não encontrado.");
 
-        // Evita que navegações carregadas (Categoria/Membro) sobrescrevam FKs no Update detached.
-        entity.Categoria = null;
-        entity.MembroFamilia = null;
-        entity.TransacaoOrigem = null;
-
-        context.Transacoes.Update(entity);
+        // Só os campos escalares: navegações carregadas não podem regravar FKs nem apagar os itens.
+        context.Entry(tracked).CurrentValues.SetValues(entity);
         await context.SaveChangesAsync();
     }
 
@@ -85,6 +87,41 @@ public class TransacaoRepository : GenericRepository<Transacao>, ITransacaoRepos
             .ToListAsync();
     }
 
+    public async Task<List<Transacao>> GetDespesasParaCopiaAsync(DateTime inicio, DateTime fim)
+    {
+        await using var context = await ContextFactory.CreateDbContextAsync();
+        return await context.Transacoes
+            .Include(t => t.Itens)
+            .Where(t => t.Tipo == TipoTransacao.Despesa && t.Data >= inicio && t.Data <= fim)
+            .Where(t => t.Recorrencia != TipoRecorrencia.Unica
+                || t.Itens.Any(i => i.Natureza == NaturezaItemLancamento.Assinatura
+                    || (i.Natureza == NaturezaItemLancamento.Parcelada
+                        && i.ParcelaAtual != null
+                        && i.TotalParcelas != null
+                        && i.ParcelaAtual < i.TotalParcelas)))
+            .OrderBy(t => t.Data)
+            .ThenBy(t => t.Id)
+            .ToListAsync();
+    }
+
+    public async Task SubstituirItensAsync(int transacaoId, IReadOnlyList<ItemLancamento> itens)
+    {
+        await using var context = await ContextFactory.CreateDbContextAsync();
+        var existentes = await context.ItensLancamento.Where(i => i.TransacaoId == transacaoId).ToListAsync();
+        context.ItensLancamento.RemoveRange(existentes);
+
+        foreach (var item in itens)
+        {
+            item.Id = 0;
+            item.TransacaoId = transacaoId;
+            item.Transacao = null;
+            item.Categoria = null;
+            context.ItensLancamento.Add(item);
+        }
+
+        await context.SaveChangesAsync();
+    }
+
     public async Task<HashSet<int>> GetOrigemIdsComCopiaNoPeriodoAsync(DateTime inicio, DateTime fim)
     {
         await using var context = await ContextFactory.CreateDbContextAsync();
@@ -109,16 +146,54 @@ public class TransacaoRepository : GenericRepository<Transacao>, ITransacaoRepos
         return await query.SumAsync(t => (decimal?)t.Valor) ?? 0m;
     }
 
+    public async Task<decimal> SomaTotalPorTipoAsync(TipoTransacao tipo)
+    {
+        await using var context = await ContextFactory.CreateDbContextAsync();
+        return await context.Transacoes
+            .Where(t => t.Tipo == tipo)
+            .SumAsync(t => (decimal?)t.Valor) ?? 0m;
+    }
+
     public async Task<Dictionary<int, decimal>> SomaPorCategoriaAsync(DateTime inicio, DateTime fim, TipoTransacao tipo, int? membroFamiliaId = null)
     {
         await using var context = await ContextFactory.CreateDbContextAsync();
-        var query = context.Transacoes.Where(t => t.Tipo == tipo && t.Data >= inicio && t.Data <= fim);
+        var query = context.Transacoes
+            .Where(t => t.Tipo == tipo && t.Data >= inicio && t.Data <= fim);
         if (membroFamiliaId.HasValue)
             query = query.Where(t => t.MembroFamiliaId == membroFamiliaId.Value);
 
-        return await query
-            .GroupBy(t => t.CategoriaId)
-            .Select(g => new { CategoriaId = g.Key, Total = g.Sum(t => t.Valor) })
-            .ToDictionaryAsync(x => x.CategoriaId, x => x.Total);
+        var transacoes = await query
+            .Select(t => new
+            {
+                t.CategoriaId,
+                t.Valor,
+                Itens = t.Itens.Select(i => new { i.CategoriaId, i.Valor }).ToList()
+            })
+            .ToListAsync();
+
+        var somas = new Dictionary<int, decimal>();
+        foreach (var transacao in transacoes)
+        {
+            if (transacao.Itens.Count == 0)
+            {
+                Somar(somas, transacao.CategoriaId, transacao.Valor);
+                continue;
+            }
+
+            foreach (var item in transacao.Itens)
+                Somar(somas, item.CategoriaId, item.Valor);
+
+            var restante = transacao.Valor - transacao.Itens.Sum(i => i.Valor);
+            if (restante > 0)
+                Somar(somas, transacao.CategoriaId, restante);
+        }
+
+        return somas;
+    }
+
+    private static void Somar(Dictionary<int, decimal> somas, int categoriaId, decimal valor)
+    {
+        somas.TryGetValue(categoriaId, out var atual);
+        somas[categoriaId] = atual + valor;
     }
 }

@@ -23,7 +23,17 @@ public class ManutencaoDadosRepositoryTests : IDisposable
         ctx.AddRange(categoria, membro);
         await ctx.SaveChangesAsync();
 
-        var origem = new Transacao { Descricao = "Aluguel", Valor = 1000m, Data = new DateTime(2026, 9, 5), Tipo = TipoTransacao.Despesa, Recorrencia = TipoRecorrencia.Mensal, CategoriaId = categoria.Id, MembroFamiliaId = membro.Id };
+        var origem = new Transacao
+        {
+            Descricao = "Aluguel",
+            Valor = 1000m,
+            Data = new DateTime(2026, 9, 5),
+            Tipo = TipoTransacao.Despesa,
+            Recorrencia = TipoRecorrencia.Mensal,
+            CategoriaId = categoria.Id,
+            MembroFamiliaId = membro.Id,
+            Itens = [new ItemLancamento { Descricao = "Condomínio", Valor = 200m, CategoriaId = categoria.Id }]
+        };
         ctx.Transacoes.Add(origem);
         await ctx.SaveChangesAsync();
 
@@ -75,6 +85,67 @@ public class ManutencaoDadosRepositoryTests : IDisposable
 
         await using var ctx = _factory.CreateDbContext();
         Assert.Empty(ctx.MembrosFamilia);
+        Assert.Empty(ctx.AtivosFinanceiros);
+        Assert.Empty(ctx.OperacoesAtivo);
+    }
+
+    [Fact]
+    public async Task LimparAsync_Tudo_RemoveAtivosEOperacoes()
+    {
+        await PopularAsync();
+        await using (var ctx = _factory.CreateDbContext())
+        {
+            var membro = ctx.MembrosFamilia.Single();
+            var ativo = new AtivoFinanceiro { Ticker = "PETR4", Nome = "Petrobras", Tipo = TipoAtivo.Acao };
+            ctx.AtivosFinanceiros.Add(ativo);
+            await ctx.SaveChangesAsync();
+            ctx.OperacoesAtivo.Add(new OperacaoAtivo
+            {
+                AtivoId = ativo.Id,
+                MembroFamiliaId = membro.Id,
+                Tipo = TipoOperacao.Compra,
+                Data = new DateTime(2026, 10, 1),
+                Quantidade = 10,
+                PrecoUnitario = 30
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        await _repository.LimparAsync(TipoLimpezaDados.Tudo);
+
+        var registros = await _repository.ContarRegistrosAsync();
+        Assert.Equal(0, registros["Ativos"]);
+        Assert.Equal(0, registros["Operações de ativos"]);
+    }
+
+    [Fact]
+    public async Task LimparAsync_Tudo_RemoveCestaBasica()
+    {
+        await PopularAsync();
+        await using (var ctx = _factory.CreateDbContext())
+        {
+            var categoria = ctx.Categorias.Single();
+            var local = new LocalCompra { Nome = "Fort Atacadista" };
+            var produto = new ProdutoCesta { Nome = "Arroz", CategoriaId = categoria.Id };
+            ctx.AddRange(local, produto);
+            await ctx.SaveChangesAsync();
+            ctx.ComprasCesta.Add(new CompraCesta
+            {
+                Mes = 10,
+                Ano = 2026,
+                Data = new DateTime(2026, 10, 2),
+                LocalCompraId = local.Id,
+                Itens = [new CompraCestaItem { ProdutoCestaId = produto.Id, Preco = 10m }]
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        await _repository.LimparAsync(TipoLimpezaDados.Tudo);
+
+        var registros = await _repository.ContarRegistrosAsync();
+        Assert.Equal(0, registros["Compras da cesta"]);
+        Assert.Equal(0, registros["Produtos da cesta"]);
+        Assert.Equal(0, registros["Locais de compra"]);
     }
 
     public void Dispose() => _factory.Dispose();

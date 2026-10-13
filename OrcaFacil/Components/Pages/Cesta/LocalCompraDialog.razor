@@ -1,0 +1,38 @@
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudTextField @ref="_nome" T="string" @bind-Value="Modelo.Nome" Label="Local de compra" Immediate="true"
+                          Required="true" RequiredError="Informe o nome" MaxLength="80" Class="mb-3"
+                          Placeholder="Ex.: Boa Supermercado" />
+            @if (Modelo.Id is not null)
+            {
+                <MudCheckBox T="bool" @bind-Value="Modelo.Ativo" Label="Ativo" />
+            }
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancelar</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SalvarAsync">Salvar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public LocalCompraFormModel Modelo { get; set; } = new();
+
+    private MudForm _form = null!;
+    private MudTextField<string> _nome = null!;
+
+    private async Task SalvarAsync()
+    {
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            await _nome.FocusAsync();
+            return;
+        }
+
+        Modelo.Nome = Modelo.Nome.Trim();
+        MudDialog.Close(DialogResult.Ok(Modelo));
+    }
+}

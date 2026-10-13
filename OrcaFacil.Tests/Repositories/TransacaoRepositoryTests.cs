@@ -45,6 +45,109 @@ public class TransacaoRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task SomaPorCategoriaAsync_ComItensParciais_DistribuiRestanteSemDobrarTotal()
+    {
+        var (alimentacaoId, membroId) = await CriarDependenciasAsync();
+        var cartao = new Categoria { Nome = "Cartão de Crédito", Icone = "💳", CorHex = "#B2CFE6", PermiteItensFatura = true };
+        var transporte = new Categoria { Nome = "Transporte", Icone = "🚗", CorHex = "#A2B94F" };
+        await _categoriaRepository.AddAsync(cartao);
+        await _categoriaRepository.AddAsync(transporte);
+
+        var mes = new DateTime(2026, 3, 1);
+        await _repository.AddAsync(new Transacao
+        {
+            Descricao = "Fatura",
+            Valor = 5000m,
+            Data = mes.AddDays(18),
+            Tipo = TipoTransacao.Despesa,
+            CategoriaId = cartao.Id,
+            MembroFamiliaId = membroId,
+            Itens =
+            [
+                new ItemLancamento { Descricao = "Almoço", Valor = 500m, CategoriaId = alimentacaoId, Natureza = NaturezaItemLancamento.Avulsa },
+                new ItemLancamento { Descricao = "Gasolina", Valor = 500m, CategoriaId = transporte.Id, Natureza = NaturezaItemLancamento.Avulsa }
+            ]
+        });
+        await _repository.AddAsync(new Transacao
+        {
+            Descricao = "Feira",
+            Valor = 80m,
+            Data = mes.AddDays(2),
+            Tipo = TipoTransacao.Despesa,
+            CategoriaId = alimentacaoId,
+            MembroFamiliaId = membroId
+        });
+
+        var inicio = mes;
+        var fim = mes.AddMonths(1).AddTicks(-1);
+        var somas = await _repository.SomaPorCategoriaAsync(inicio, fim, TipoTransacao.Despesa);
+        var totalDespesas = await _repository.SomaPorTipoAsync(TipoTransacao.Despesa, inicio, fim);
+
+        Assert.Equal(580m, somas[alimentacaoId]);
+        Assert.Equal(500m, somas[transporte.Id]);
+        Assert.Equal(4000m, somas[cartao.Id]);
+        Assert.Equal(5080m, totalDespesas);
+        Assert.Equal(totalDespesas, somas.Values.Sum());
+    }
+
+    [Fact]
+    public async Task GetByPeriodoAsync_FiltraPelaCategoriaDoItem()
+    {
+        var (alimentacaoId, membroId) = await CriarDependenciasAsync();
+        var cartao = new Categoria { Nome = "Cartão de Crédito", Icone = "💳", CorHex = "#B2CFE6", PermiteItensFatura = true };
+        await _categoriaRepository.AddAsync(cartao);
+        var mes = new DateTime(2026, 3, 1);
+
+        await _repository.AddAsync(new Transacao
+        {
+            Descricao = "Fatura",
+            Valor = 200m,
+            Data = mes.AddDays(5),
+            Tipo = TipoTransacao.Despesa,
+            CategoriaId = cartao.Id,
+            MembroFamiliaId = membroId,
+            Itens = [new ItemLancamento { Descricao = "Almoço", Valor = 50m, CategoriaId = alimentacaoId }]
+        });
+
+        var lista = await _repository.GetByPeriodoAsync(mes, mes.AddMonths(1).AddTicks(-1), alimentacaoId);
+
+        var fatura = Assert.Single(lista);
+        Assert.Equal("Fatura", fatura.Descricao);
+        Assert.Equal("Almoço", Assert.Single(fatura.Itens).Descricao);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_NaoApagaItensDaFatura()
+    {
+        var (alimentacaoId, membroId) = await CriarDependenciasAsync();
+        var cartao = new Categoria { Nome = "Cartão de Crédito", Icone = "💳", CorHex = "#B2CFE6", PermiteItensFatura = true };
+        await _categoriaRepository.AddAsync(cartao);
+
+        var transacao = new Transacao
+        {
+            Descricao = "Fatura",
+            Valor = 200m,
+            Data = DateTime.Today,
+            Tipo = TipoTransacao.Despesa,
+            CategoriaId = cartao.Id,
+            MembroFamiliaId = membroId,
+            Itens = [new ItemLancamento { Descricao = "Almoço", Valor = 50m, CategoriaId = alimentacaoId }]
+        };
+        await _repository.AddAsync(transacao);
+
+        var carregada = await _repository.GetByIdAsync(transacao.Id);
+        carregada!.Pago = true;
+        await _repository.UpdateAsync(carregada);
+
+        var atualizada = await _repository.GetByIdAsync(transacao.Id);
+        Assert.True(atualizada!.Pago);
+        Assert.Equal("Almoço", Assert.Single(atualizada.Itens).Descricao);
+
+        await _repository.DeleteAsync(atualizada);
+        Assert.Null(await _repository.GetByIdAsync(transacao.Id));
+    }
+
+    [Fact]
     public async Task SomaPorTipoAsync_DeveFiltrarPorPeriodo()
     {
         var (categoriaId, membroId) = await CriarDependenciasAsync();

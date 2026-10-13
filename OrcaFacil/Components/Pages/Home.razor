@@ -1,0 +1,160 @@
+@page "/"
+@inject INoticiaService Noticias
+@inject ITransacaoService TransacaoService
+@inject ISnackbar Snackbar
+
+<div class="noticias-pagina">
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+    <MudText Typo="Typo.h6">Notícias</MudText>
+    <MudSpacer />
+    <MudIconButton Icon="@Icons.Material.Filled.Refresh"
+                   Color="Color.Inherit"
+                   Disabled="_carregando"
+                   OnClick="AtualizarAsync"
+                   aria-label="Atualizar notícias" />
+</MudStack>
+
+<MudGrid Class="mb-4" Spacing="2">
+    <MudItem xs="6">
+        <MudPaper Class="pa-3 noticias-kpi" Elevation="2">
+            <MudText Typo="Typo.caption">Receitas do mês</MudText>
+            @if (_resumo is null)
+            {
+                <MudSkeleton Width="90%" Height="28px" Class="mt-1" />
+            }
+            else
+            {
+                <MudText Typo="Typo.h6" Class="of-currency-receita">@_resumo.TotalReceitas.ToString("C")</MudText>
+            }
+        </MudPaper>
+    </MudItem>
+    <MudItem xs="6">
+        <MudPaper Class="pa-3 noticias-kpi" Elevation="2">
+            <MudText Typo="Typo.caption">Despesas lançadas do mês</MudText>
+            @if (_resumo is null)
+            {
+                <MudSkeleton Width="90%" Height="28px" Class="mt-1" />
+            }
+            else
+            {
+                <MudText Typo="Typo.h6" Class="of-currency-despesa">@_resumo.TotalDespesas.ToString("C")</MudText>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@if (_carregando && _brasil.Count == 0 && _mundo.Count == 0)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else
+{
+    @if (_carregando)
+    {
+        <MudProgressLinear Indeterminate="true" Class="mb-2" />
+    }
+
+    <MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true" Class="pt-2">
+        <MudTabPanel Text="Brasil" Icon="@Icons.Material.Filled.Flag">
+            <NoticiasPainel Noticias="_brasil" Erro="@_erroBrasil" Aviso="@_avisoBrasil" AoAbrir="AbrirAsync" />
+        </MudTabPanel>
+        <MudTabPanel Text="Mundo" Icon="@Icons.Material.Filled.Public">
+            <NoticiasPainel Noticias="_mundo" Erro="@_erroMundo" Aviso="@_avisoMundo" AoAbrir="AbrirAsync" />
+        </MudTabPanel>
+    </MudTabs>
+}
+</div>
+
+@code {
+    private const string MensagemFalha = "Não foi possível carregar as notícias. Verifique a conexão.";
+
+    private bool _carregando = true;
+    private ResumoMensalDto? _resumo;
+    private List<Noticia> _brasil = new();
+    private List<Noticia> _mundo = new();
+    private string? _erroBrasil;
+    private string? _erroMundo;
+    private string? _avisoBrasil;
+    private string? _avisoMundo;
+
+    protected override async Task OnInitializedAsync() => await CarregarAsync(forcar: false);
+
+    private Task AtualizarAsync() => CarregarAsync(forcar: true);
+
+    private async Task CarregarAsync(bool forcar)
+    {
+        _carregando = true;
+        try
+        {
+            await Task.WhenAll(
+                CarregarEscopoAsync(EscopoNoticia.Brasil, forcar),
+                CarregarEscopoAsync(EscopoNoticia.Mundo, forcar),
+                CarregarResumoAsync());
+        }
+        finally
+        {
+            _carregando = false;
+        }
+    }
+
+    private async Task CarregarResumoAsync()
+    {
+        try
+        {
+            var hoje = DateTime.Today;
+            _resumo = await TransacaoService.ObterResumoMensalAsync(hoje.Month, hoje.Year);
+        }
+        catch (Exception)
+        {
+            _resumo ??= new ResumoMensalDto();
+        }
+    }
+
+    private async Task CarregarEscopoAsync(EscopoNoticia escopo, bool forcar)
+    {
+        var lista = Lista(escopo);
+        try
+        {
+            var resultado = await Noticias.ListarAsync(escopo, forcar);
+            Definir(escopo, resultado.Itens.ToList(), erro: null, resultado.Aviso);
+        }
+        catch (Exception)
+        {
+            if (lista.Count == 0)
+                Definir(escopo, lista, MensagemFalha, aviso: null);
+            else
+                Definir(escopo, lista, erro: null, NoticiaService.AvisoListaAnterior);
+        }
+    }
+
+    private List<Noticia> Lista(EscopoNoticia escopo) =>
+        escopo == EscopoNoticia.Brasil ? _brasil : _mundo;
+
+    private void Definir(EscopoNoticia escopo, List<Noticia> itens, string? erro, string? aviso)
+    {
+        if (escopo == EscopoNoticia.Brasil)
+        {
+            _brasil = itens;
+            _erroBrasil = erro;
+            _avisoBrasil = aviso;
+        }
+        else
+        {
+            _mundo = itens;
+            _erroMundo = erro;
+            _avisoMundo = aviso;
+        }
+    }
+
+    private async Task AbrirAsync(string link)
+    {
+        try
+        {
+            await Browser.Default.OpenAsync(link, BrowserLaunchMode.SystemPreferred);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Não foi possível abrir a notícia.", Severity.Error);
+        }
+    }
+}

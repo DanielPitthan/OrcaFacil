@@ -62,6 +62,15 @@ public static class MauiProgram
 
         builder.Services.AddMauiBlazorWebView();
         builder.Services.AddMudServices();
+        builder.Services.AddHttpClient(NoticiaService.HttpClientName, client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(15);
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36");
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/rss+xml");
+            client.DefaultRequestHeaders.Accept.ParseAdd("application/xml");
+            client.DefaultRequestHeaders.Accept.ParseAdd("text/xml");
+        });
 
 #if DEBUG
         builder.Services.AddBlazorWebViewDeveloperTools();
@@ -94,8 +103,12 @@ public static class MauiProgram
         builder.Services.AddSingleton<IFechamentoRepository, FechamentoRepository>();
         builder.Services.AddSingleton<ILogEventoRepository, LogEventoRepository>();
         builder.Services.AddSingleton<IManutencaoDadosRepository, ManutencaoDadosRepository>();
+        builder.Services.AddSingleton<IAtivoFinanceiroRepository, AtivoFinanceiroRepository>();
+        builder.Services.AddSingleton<IOperacaoAtivoRepository, OperacaoAtivoRepository>();
+        builder.Services.AddSingleton<ICestaRepository, CestaRepository>();
 
         // Serviços de negócio
+        builder.Services.AddSingleton<CopiaDespesasMesService>();
         builder.Services.AddScoped<IFechamentoService, FechamentoService>();
         builder.Services.AddScoped<ITransacaoService, TransacaoService>();
         builder.Services.AddScoped<ICategoriaService, CategoriaService>();
@@ -104,11 +117,15 @@ public static class MauiProgram
         builder.Services.AddScoped<IRelatorioService, RelatorioService>();
         builder.Services.AddScoped<ICsvExportService, CsvExportService>();
         builder.Services.AddScoped<IArmazenamentoService, ArmazenamentoService>();
+        builder.Services.AddScoped<IAtivoService, AtivoService>();
+        builder.Services.AddScoped<IOperacaoAtivoService, OperacaoAtivoService>();
+        builder.Services.AddScoped<ICestaService, CestaService>();
         builder.Services.AddSingleton<INotificationSchedulerService, NotificationSchedulerService>();
         builder.Services.AddSingleton<ISyncService, MockSyncService>();
         builder.Services.AddSingleton<IPerfilContext, PerfilContext>();
         builder.Services.AddSingleton<IFotoPerfilService, FotoPerfilService>();
         builder.Services.AddSingleton<IConfiguracaoService, ConfiguracaoService>();
+        builder.Services.AddSingleton<INoticiaService, NoticiaService>();
 
         var app = builder.Build();
 

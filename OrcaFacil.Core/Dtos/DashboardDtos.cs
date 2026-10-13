@@ -16,6 +16,14 @@ public class ResumoMensalDto
     public decimal Saldo => TotalReceitas - TotalDespesas;
 }
 
+/// <summary>Totais de todas as transações desde o primeiro lançamento.</summary>
+public class ResumoAcumuladoDto
+{
+    public decimal TotalReceitas { get; set; }
+    public decimal TotalDespesas { get; set; }
+    public decimal Saldo => TotalReceitas - TotalDespesas;
+}
+
 public class GastoPorCategoriaDto
 {
     public int CategoriaId { get; set; }

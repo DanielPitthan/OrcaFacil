@@ -7,13 +7,13 @@
             <MudText Typo="Typo.body2" Class="mb-1">Ícone</MudText>
             <EmojiPicker @bind-Value="Modelo.Icone" />
 
-            <MudNumericField T="decimal" Label="Valor alvo" @bind-Value="Modelo.ValorAlvo" For="@(() => Modelo.ValorAlvo)"
-                              Adornment="Adornment.Start" AdornmentText="R$" Format="F2" Class="mt-3 mb-3" />
+            <CampoNumerico TNumber="decimal" Label="Valor alvo" @bind-Value="Modelo.ValorAlvo" For="@(() => Modelo.ValorAlvo)"
+                            Adornment="Adornment.Start" AdornmentText="R$" Class="mt-3 mb-3" />
 
             @if (Modelo.Id is null)
             {
-                <MudNumericField T="decimal" Label="Valor inicial (opcional)" @bind-Value="Modelo.ValorAtual"
-                                  Adornment="Adornment.Start" AdornmentText="R$" Format="F2" Class="mb-3" />
+                <CampoNumerico TNumber="decimal" Label="Valor inicial (opcional)" @bind-Value="Modelo.ValorAtual"
+                                Adornment="Adornment.Start" AdornmentText="R$" Class="mb-3" />
             }
 
             <MudDatePicker Label="Prazo (opcional)" @bind-Date="_prazo" Class="mb-3" />

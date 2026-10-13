@@ -1,0 +1,223 @@
+@typeparam TNumber
+@implements IAsyncDisposable
+@using System.Globalization
+@using System.Linq.Expressions
+@using OrcaFacil.Core.Numerico
+@inject IJSRuntime Js
+
+<div @ref="_raiz" class="of-mascara-numerica">
+    <MudTextField @ref="_campo" T="string" Value="@_texto" Label="@Label" Placeholder="@Placeholder"
+                  HelperText="@HelperText" Class="@Class" Immediate="true"
+                  Adornment="@Adornment" AdornmentText="@AdornmentText" AdornmentIcon="@AdornmentIcon"
+                  AdornmentColor="@AdornmentColor" UserAttributes="@_atributos"
+                  Error="@_erroVisivel" ErrorText="@_erro"
+                  Validation="@(Validation is null ? null : new Func<string, string?>(ValidarTexto))" />
+</div>
+
+@code {
+    private const decimal LimitePadrao = 1_000_000_000m;
+
+    private readonly Dictionary<string, object> _atributos = new()
+    {
+        ["inputmode"] = "decimal",
+        ["autocomplete"] = "off",
+        ["autocorrect"] = "off",
+        ["autocapitalize"] = "off",
+        ["spellcheck"] = "false"
+    };
+
+    private ElementReference _raiz;
+    private MudTextField<string> _campo = null!;
+    private DotNetObjectReference<CampoNumerico<TNumber>>? _self;
+    private FieldIdentifier? _campoValidacao;
+    private bool _ligado;
+    private bool _inicializado;
+    private bool _cursorPendente;
+    private bool _nulo;
+    private string _digitos = "";
+    private string _texto = "";
+    private string? _erro;
+    private decimal? _ultimoEmitido;
+
+    [CascadingParameter] private EditContext? EditContext { get; set; }
+
+    [Parameter] public TNumber Value { get; set; } = default!;
+    [Parameter] public EventCallback<TNumber> ValueChanged { get; set; }
+    [Parameter] public Expression<Func<TNumber>>? For { get; set; }
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public string? Placeholder { get; set; }
+    [Parameter] public string? HelperText { get; set; }
+    [Parameter] public string? Class { get; set; }
+    [Parameter] public int CasasDecimais { get; set; } = 2;
+    [Parameter] public decimal? ValorMaximo { get; set; } = LimitePadrao;
+    [Parameter] public Adornment Adornment { get; set; } = Adornment.None;
+    [Parameter] public string? AdornmentText { get; set; }
+    [Parameter] public string? AdornmentIcon { get; set; }
+    [Parameter] public Color AdornmentColor { get; set; } = Color.Default;
+    [Parameter] public Func<decimal, string?>? Validation { get; set; }
+
+    private bool PermiteVazio => typeof(TNumber) == typeof(decimal?);
+    private int Casas => Math.Clamp(CasasDecimais, 0, 8);
+    private bool _erroVisivel => !string.IsNullOrEmpty(_erro) && For is not null;
+
+    protected override void OnInitialized()
+    {
+        _self = DotNetObjectReference.Create(this);
+        if (EditContext is not null && For is not null)
+        {
+            _campoValidacao = FieldIdentifier.Create(For);
+            EditContext.OnValidationStateChanged += AoValidar;
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        var atual = LerValor();
+        if (_inicializado && Nullable.Equals(atual, _ultimoEmitido))
+            return;
+
+        _inicializado = true;
+        _ultimoEmitido = atual;
+        _nulo = atual is null;
+        _digitos = atual is null ? "" : MascaraDireitaEsquerda.DigitosDe(atual.Value, Casas);
+        _texto = TextoDe(_digitos, _nulo);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_ligado)
+        {
+            try
+            {
+                _ligado = await Js.InvokeAsync<bool>("OrcaFacilMascara.ligar", _raiz, _self);
+            }
+            catch (JSException)
+            {
+                _ligado = false;
+            }
+        }
+
+        if (_cursorPendente && _ligado)
+        {
+            _cursorPendente = false;
+            try
+            {
+                await Js.InvokeVoidAsync("OrcaFacilMascara.cursorNoFim", _raiz);
+            }
+            catch (JSException)
+            {
+                /* o cursor volta ao fim no próximo ciclo */
+            }
+        }
+    }
+
+    public async Task FocusAsync()
+    {
+        if (_campo is not null)
+            await _campo.FocusAsync();
+        _cursorPendente = true;
+    }
+
+    [JSInvokable]
+    public Task<string> IncluirTexto(string? texto)
+    {
+        var digitos = MascaraDireitaEsquerda.AplicarEntrada(_digitos, texto, Casas, ValorMaximo, substituir: false);
+        return AplicarAsync(digitos, nulo: false);
+    }
+
+    [JSInvokable]
+    public Task<string> DefinirTexto(string? texto)
+    {
+        var digitos = MascaraDireitaEsquerda.AplicarEntrada(_digitos, texto, Casas, ValorMaximo, substituir: true);
+        var semDigitos = string.IsNullOrEmpty(MascaraDireitaEsquerda.SomenteDigitos(texto));
+        return AplicarAsync(digitos, nulo: PermiteVazio && semDigitos);
+    }
+
+    [JSInvokable]
+    public Task<string> Apagar()
+    {
+        var digitos = MascaraDireitaEsquerda.Apagar(_digitos);
+        return AplicarAsync(digitos, nulo: PermiteVazio && digitos.Length == 0);
+    }
+
+    [JSInvokable]
+    public Task<string> Limpar()
+        => AplicarAsync("", nulo: PermiteVazio);
+
+    private async Task<string> AplicarAsync(string digitos, bool nulo)
+    {
+        _cursorPendente = true;
+        if (digitos == _digitos && nulo == _nulo)
+            return _texto;
+
+        _digitos = digitos;
+        _nulo = nulo;
+        _texto = TextoDe(digitos, nulo);
+        decimal? valor = nulo ? null : MascaraDireitaEsquerda.ValorDe(digitos, Casas);
+        _ultimoEmitido = valor;
+        await ValueChanged.InvokeAsync(MascaraDireitaEsquerda.Para<TNumber>(valor));
+
+        if (_campoValidacao is not null && EditContext is not null)
+        {
+            EditContext.NotifyFieldChanged(_campoValidacao.Value);
+            AtualizarErro();
+        }
+
+        if (Validation is not null && _campo is not null)
+            await _campo.ValidateAsync();
+
+        await InvokeAsync(StateHasChanged);
+        return _texto;
+    }
+
+    private string? ValidarTexto(string _)
+        => Validation?.Invoke(_nulo ? 0m : MascaraDireitaEsquerda.ValorDe(_digitos, Casas));
+
+    private decimal? LerValor()
+    {
+        if (Value is null)
+            return null;
+
+        return Convert.ToDecimal(Value, CultureInfo.InvariantCulture);
+    }
+
+    private string TextoDe(string digitos, bool nulo)
+        => nulo ? "" : MascaraDireitaEsquerda.Formatar(MascaraDireitaEsquerda.ValorDe(digitos, Casas), Casas);
+
+    private void AoValidar(object? sender, ValidationStateChangedEventArgs e)
+    {
+        AtualizarErro();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void AtualizarErro()
+    {
+        if (EditContext is null || _campoValidacao is null)
+        {
+            _erro = null;
+            return;
+        }
+
+        _erro = string.Join(" ", EditContext.GetValidationMessages(_campoValidacao.Value));
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (EditContext is not null)
+            EditContext.OnValidationStateChanged -= AoValidar;
+
+        if (_ligado)
+        {
+            try
+            {
+                await Js.InvokeVoidAsync("OrcaFacilMascara.desligar", _raiz);
+            }
+            catch (JSException)
+            {
+                /* a página já foi descarregada */
+            }
+        }
+
+        _self?.Dispose();
+    }
+}

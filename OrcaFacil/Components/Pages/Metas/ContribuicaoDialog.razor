@@ -2,8 +2,8 @@
     <DialogContent>
         <EditForm Model="Modelo" OnValidSubmit="Salvar">
             <DataAnnotationsValidator />
-            <MudNumericField T="decimal" Label="Valor da contribuição" @bind-Value="Modelo.Valor" For="@(() => Modelo.Valor)"
-                              Adornment="Adornment.Start" AdornmentText="R$" Format="F2" Class="mb-3" />
+            <CampoNumerico TNumber="decimal" Label="Valor da contribuição" @bind-Value="Modelo.Valor" For="@(() => Modelo.Valor)"
+                            Adornment="Adornment.Start" AdornmentText="R$" Class="mb-3" />
 
             <MudCheckBox T="bool" @bind-Value="Modelo.RegistrarComoLancamento" Label="Registrar também como lançamento (despesa)" />
 

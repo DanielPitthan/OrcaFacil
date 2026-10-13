@@ -1,0 +1,275 @@
+<MudDialog>
+    <DialogContent>
+        <MudSelect T="int" @bind-Value="_localId" Label="Local de compra" Class="mb-3" AnchorOrigin="Origin.BottomCenter">
+            @foreach (var local in Locais)
+            {
+                <MudSelectItem T="int" Value="@local.Id">@local.Nome</MudSelectItem>
+            }
+        </MudSelect>
+
+        <MudDatePicker Label="Data" @bind-Date="_data" Class="mb-3" />
+
+        <MudText Typo="Typo.subtitle2" Class="mb-2">Passar item</MudText>
+        <MudSelect T="int" @bind-Value="_produtoId" Label="Produto" Class="mb-2" AnchorOrigin="Origin.BottomCenter">
+            @foreach (var produto in Produtos)
+            {
+                <MudSelectItem T="int" Value="@produto.Id">@produto.Nome</MudSelectItem>
+            }
+        </MudSelect>
+        <div class="d-flex align-end ga-2 mb-3">
+            <div style="flex:1;">
+                <CampoNumerico @ref="_precoCampo" TNumber="decimal" @bind-Value="_precoItem" Label="Preço"
+                                Adornment="Adornment.Start" AdornmentText="R$" />
+            </div>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="IncluirItemAsync">Incluir</MudButton>
+        </div>
+
+        @if (_linhas.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">Nenhum item ainda. Inclua um por vez, como no caixa.</MudText>
+        }
+        else
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">@_linhas.Count @(_linhas.Count == 1 ? "item" : "itens")</MudText>
+            @foreach (var linha in _linhas)
+            {
+                <div @key="linha" class="d-flex justify-space-between align-center">
+                    <MudText Typo="Typo.body2">@NomeProduto(linha.ProdutoId)</MudText>
+                    <div class="d-flex align-center">
+                        <MudText Typo="Typo.body2">@linha.Preco.ToString("C")</MudText>
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" aria-label="Remover item"
+                                       OnClick="@(() => _linhas.Remove(linha))" />
+                    </div>
+                </div>
+            }
+            <MudDivider Class="my-2" />
+        }
+
+        <MudText Typo="Typo.subtitle2" Class="mb-2">Pagamento</MudText>
+        <MudCheckBox T="bool" @bind-Value="_usarBeneficio" Label="Usar cartão de benefício" Class="mb-2" />
+        @if (_usarBeneficio)
+        {
+            <MudSelect T="TipoCartaoBeneficio" @bind-Value="_tipoBeneficio" Label="Tipo do cartão" Class="mb-3">
+                @foreach (var tipo in Enum.GetValues<TipoCartaoBeneficio>())
+                {
+                    <MudSelectItem Value="tipo">@tipo.Rotulo()</MudSelectItem>
+                }
+            </MudSelect>
+            <CampoNumerico TNumber="decimal" @bind-Value="_beneficio" Label="Valor usado do benefício"
+                            Adornment="Adornment.Start" AdornmentText="R$" Class="mb-3" />
+        }
+
+        @if (Saldo <= 0 && Total > 0 && BeneficioInformado >= Total)
+        {
+            <MudAlert Severity="Severity.Success" Dense="true" Class="mb-3">O benefício cobre a compra. Nada a pagar do bolso.</MudAlert>
+        }
+        else if (Saldo > 0)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary">Saldo de @Saldo.ToString("C")</MudText>
+            <MudChipSet T="ModoPagamentoSaldo" SelectedValue="_modo" SelectedValueChanged="AlterarModo"
+                        SelectionMode="SelectionMode.SingleSelection" CheckMark="false" Class="mb-3">
+                <MudChip T="ModoPagamentoSaldo" Value="ModoPagamentoSaldo.Dinheiro" Text="Dinheiro" Color="Color.Primary" Variant="Variant.Outlined" />
+                <MudChip T="ModoPagamentoSaldo" Value="ModoPagamentoSaldo.Cartao" Text="Cartão de crédito" Color="Color.Primary" Variant="Variant.Outlined" />
+                <MudChip T="ModoPagamentoSaldo" Value="ModoPagamentoSaldo.Dividido" Text="Dividir" Color="Color.Primary" Variant="Variant.Outlined" />
+            </MudChipSet>
+            @if (_modo == ModoPagamentoSaldo.Dividido)
+            {
+                <CampoNumerico TNumber="decimal" @bind-Value="_dinheiroInformado" Label="Quanto em dinheiro"
+                                Adornment="Adornment.Start" AdornmentText="R$" Class="mb-2" />
+                <MudText Typo="Typo.body2" Color="@(CartaoEfetivo < 0 ? Color.Error : Color.Default)" Class="mb-3">
+                    Restante no cartão de crédito: @Math.Max(0, CartaoEfetivo).ToString("C")
+                </MudText>
+            }
+        }
+
+        <MudPaper Outlined="true" Class="pa-3">
+            <div class="d-flex justify-space-between">
+                <MudText Typo="Typo.body2">Total da cesta</MudText>
+                <MudText Typo="Typo.body2"><b>@Total.ToString("C")</b></MudText>
+            </div>
+            @if (BeneficioInformado > 0)
+            {
+                <div class="d-flex justify-space-between">
+                    <MudText Typo="Typo.body2">@_tipoBeneficio.Rotulo()</MudText>
+                    <MudText Typo="Typo.body2">@BeneficioInformado.ToString("C")</MudText>
+                </div>
+            }
+            @if (DinheiroEfetivo > 0)
+            {
+                <div class="d-flex justify-space-between">
+                    <MudText Typo="Typo.body2">Dinheiro</MudText>
+                    <MudText Typo="Typo.body2">@DinheiroEfetivo.ToString("C")</MudText>
+                </div>
+            }
+            @if (CartaoEfetivo > 0)
+            {
+                <div class="d-flex justify-space-between">
+                    <MudText Typo="Typo.body2">Cartão de crédito</MudText>
+                    <MudText Typo="Typo.body2">@CartaoEfetivo.ToString("C")</MudText>
+                </div>
+            }
+            @if (BeneficioInformado > 0 && Total > 0)
+            {
+                <div class="d-flex justify-space-between">
+                    <MudText Typo="Typo.body2">Aproveitamento</MudText>
+                    <MudText Typo="Typo.body2">@Aproveitamento.ToString("0.##")%</MudText>
+                </div>
+            }
+        </MudPaper>
+
+        @if (_erro is not null)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Error" Class="mt-2">@_erro</MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancelar</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Salvar">Salvar compra</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public CompraCestaFormModel Modelo { get; set; } = new();
+    [Parameter] public IReadOnlyList<LocalCompra> Locais { get; set; } = Array.Empty<LocalCompra>();
+    [Parameter] public IReadOnlyList<ProdutoCesta> Produtos { get; set; } = Array.Empty<ProdutoCesta>();
+
+    private readonly List<LinhaItem> _linhas = new();
+    private CampoNumerico<decimal> _precoCampo = null!;
+    private int _localId;
+    private int _produtoId;
+    private decimal _precoItem;
+    private DateTime? _data;
+    private bool _usarBeneficio;
+    private decimal _beneficio;
+    private decimal _dinheiroInformado;
+    private TipoCartaoBeneficio _tipoBeneficio = TipoCartaoBeneficio.ValeAlimentacao;
+    private ModoPagamentoSaldo _modo = ModoPagamentoSaldo.Dinheiro;
+    private string? _erro;
+
+    private decimal Total => _linhas.Sum(l => l.Preco);
+    private decimal BeneficioInformado => _usarBeneficio ? _beneficio : 0;
+    private decimal Saldo => Math.Max(0, CestaDespesaRegras.Dinheiro(Total) - CestaDespesaRegras.Dinheiro(BeneficioInformado));
+    private decimal DinheiroEfetivo => _modo switch
+    {
+        ModoPagamentoSaldo.Cartao => 0,
+        ModoPagamentoSaldo.Dividido => CestaDespesaRegras.Dinheiro(_dinheiroInformado),
+        _ => Saldo
+    };
+    private decimal CartaoEfetivo => Saldo - DinheiroEfetivo;
+    private decimal Aproveitamento => Total <= 0 ? 0 : BeneficioInformado / Total * 100m;
+
+    protected override void OnInitialized()
+    {
+        _localId = Modelo.LocalCompraId > 0 ? Modelo.LocalCompraId : Locais.FirstOrDefault()?.Id ?? 0;
+        _produtoId = Produtos.FirstOrDefault()?.Id ?? 0;
+        _data = Modelo.Data == default ? DateTime.Today : Modelo.Data;
+        _usarBeneficio = Modelo.ValorBeneficio > 0;
+        _beneficio = Modelo.ValorBeneficio;
+        _tipoBeneficio = Modelo.TipoCartaoBeneficio ?? TipoCartaoBeneficio.ValeAlimentacao;
+        _linhas.AddRange(Modelo.Itens.Select(item => new LinhaItem { ProdutoId = item.ProdutoCestaId, Preco = item.Preco }));
+        _modo = DefinirModo(Modelo.ValorDinheiro, Modelo.ValorCartaoCredito);
+        _dinheiroInformado = Modelo.ValorDinheiro;
+    }
+
+    private async Task IncluirItemAsync()
+    {
+        if (_produtoId <= 0)
+        {
+            _erro = "Selecione o produto.";
+            return;
+        }
+
+        if (_precoItem <= 0)
+        {
+            _erro = "Informe o preço do item.";
+            await _precoCampo.FocusAsync();
+            return;
+        }
+
+        var existente = _linhas.FirstOrDefault(l => l.ProdutoId == _produtoId);
+        if (existente is null)
+            _linhas.Add(new LinhaItem { ProdutoId = _produtoId, Preco = _precoItem });
+        else
+            existente.Preco = _precoItem;
+
+        _precoItem = 0;
+        _erro = null;
+        await _precoCampo.FocusAsync();
+    }
+
+    private void AlterarModo(ModoPagamentoSaldo modo)
+    {
+        _modo = modo;
+        if (modo == ModoPagamentoSaldo.Dividido && _dinheiroInformado <= 0)
+            _dinheiroInformado = 0;
+        _erro = null;
+    }
+
+    private void Salvar()
+    {
+        _erro = Validar();
+        if (_erro is not null)
+            return;
+
+        Modelo.LocalCompraId = _localId;
+        Modelo.Data = _data!.Value.Date;
+        Modelo.ValorBeneficio = _usarBeneficio ? _beneficio : 0;
+        Modelo.TipoCartaoBeneficio = _usarBeneficio ? _tipoBeneficio : null;
+        Modelo.ValorDinheiro = DinheiroEfetivo;
+        Modelo.ValorCartaoCredito = CartaoEfetivo;
+        Modelo.Itens = _linhas.Select(linha => new ItemCompraCestaFormModel
+        {
+            ProdutoCestaId = linha.ProdutoId,
+            Preco = linha.Preco
+        }).ToList();
+        MudDialog.Close(DialogResult.Ok(Modelo));
+    }
+
+    private string? Validar()
+    {
+        if (_localId <= 0)
+            return "Selecione o local da compra.";
+        if (_data is null)
+            return "Informe a data da compra.";
+        if (_linhas.Count == 0)
+            return "Inclua ao menos um produto.";
+        if (_linhas.Any(l => l.Preco <= 0))
+            return "Todo item precisa de um preço maior que zero.";
+        if (_usarBeneficio && _beneficio <= 0)
+            return "Informe o valor usado do cartão de benefício.";
+        if (_usarBeneficio && CestaDespesaRegras.Dinheiro(_beneficio) > CestaDespesaRegras.Dinheiro(Total))
+            return "O benefício não pode ser maior que o total da cesta.";
+        if (DinheiroEfetivo < 0 || CartaoEfetivo < 0)
+            return "O dinheiro não pode passar do saldo.";
+        if (DinheiroEfetivo + CartaoEfetivo != Saldo)
+            return "Dinheiro e cartão de crédito precisam somar o saldo da compra.";
+        return null;
+    }
+
+    private string NomeProduto(int produtoId)
+        => Produtos.FirstOrDefault(p => p.Id == produtoId)?.Nome ?? "Produto";
+
+    private static ModoPagamentoSaldo DefinirModo(decimal dinheiro, decimal cartao)
+    {
+        if (dinheiro > 0 && cartao > 0)
+            return ModoPagamentoSaldo.Dividido;
+        if (cartao > 0)
+            return ModoPagamentoSaldo.Cartao;
+        return ModoPagamentoSaldo.Dinheiro;
+    }
+
+    private sealed class LinhaItem
+    {
+        public int ProdutoId { get; set; }
+        public decimal Preco { get; set; }
+    }
+
+    private enum ModoPagamentoSaldo
+    {
+        Dinheiro,
+        Cartao,
+        Dividido
+    }
+}

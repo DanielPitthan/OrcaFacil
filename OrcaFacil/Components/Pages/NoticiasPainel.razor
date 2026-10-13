@@ -1,0 +1,69 @@
+@if (Erro is not null)
+{
+    <MudAlert Severity="Severity.Error">@Erro</MudAlert>
+}
+else
+{
+    @if (Aviso is not null)
+    {
+        <MudAlert Severity="Severity.Warning" Class="mb-3">@Aviso</MudAlert>
+    }
+
+    @if (Noticias.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Filled.Newspaper" Mensagem="Nenhuma notícia no momento" />
+    }
+    else
+    {
+        @foreach (var noticia in Noticias)
+        {
+            <MudPaper Class="pa-3 mb-2 cursor-pointer" Elevation="2" @onclick="() => AoAbrir.InvokeAsync(noticia.Link)">
+                <MudText Typo="Typo.body1">@noticia.Titulo</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">@Legenda(noticia)</MudText>
+            </MudPaper>
+        }
+    }
+}
+
+@code {
+    [Parameter] public IReadOnlyList<Noticia> Noticias { get; set; } = [];
+    [Parameter] public string? Erro { get; set; }
+    [Parameter] public string? Aviso { get; set; }
+    [Parameter] public EventCallback<string> AoAbrir { get; set; }
+
+    private static string Legenda(Noticia noticia)
+    {
+        var tempo = TempoRelativo(noticia.PublicadaEm);
+        if (string.IsNullOrWhiteSpace(noticia.Veiculo))
+            return tempo;
+
+        return string.IsNullOrWhiteSpace(tempo) ? noticia.Veiculo : $"{noticia.Veiculo} · {tempo}";
+    }
+
+    private static string TempoRelativo(DateTimeOffset? publicada)
+    {
+        if (publicada is null)
+            return string.Empty;
+
+        var delta = DateTimeOffset.Now - publicada.Value;
+        if (delta < TimeSpan.FromMinutes(1))
+            return "agora";
+        if (delta < TimeSpan.FromHours(1))
+        {
+            var minutos = Math.Max(1, (int)delta.TotalMinutes);
+            return minutos == 1 ? "há 1 min" : $"há {minutos} min";
+        }
+        if (delta < TimeSpan.FromDays(1))
+        {
+            var horas = Math.Max(1, (int)delta.TotalHours);
+            return horas == 1 ? "há 1 hora" : $"há {horas} horas";
+        }
+        if (delta < TimeSpan.FromDays(7))
+        {
+            var dias = Math.Max(1, (int)delta.TotalDays);
+            return dias == 1 ? "há 1 dia" : $"há {dias} dias";
+        }
+
+        return publicada.Value.ToLocalTime().ToString("dd/MM HH:mm");
+    }
+}
