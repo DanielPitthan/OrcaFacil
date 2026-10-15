@@ -1,0 +1,221 @@
+@page "/cartoes"
+@inject ICartaoService CartaoService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<div class="pro-sticky-header">
+    <div class="d-flex justify-space-between align-center">
+        <MudText Typo="Typo.subtitle1"><b>Cartões</b></MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                   StartIcon="@Icons.Material.Filled.Add" OnClick="NovoCartaoAsync">
+            Novo cartão
+        </MudButton>
+    </div>
+</div>
+
+<div class="pro-fab-spacer pa-2">
+    @if (_carregando)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else if (_cartoes.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Filled.CreditCard" Mensagem="Nenhum cartão cadastrado"
+                    Subtitulo="Cadastre cartões de crédito e de benefício para usar nos lançamentos e na cesta básica" />
+    }
+    else
+    {
+        @foreach (var cartao in _cartoes)
+        {
+            <MudPaper Outlined="true" Class="pa-3 mb-3">
+                <div class="d-flex justify-space-between align-center">
+                    <div>
+                        <div class="d-flex align-center ga-2">
+                            <MudText Typo="Typo.subtitle1"><b>@cartao.Nome</b></MudText>
+                            @if (!cartao.Ativo)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default">Inativo</MudChip>
+                            }
+                        </div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            @cartao.Bandeira · Final @cartao.UltimosDigitos · @(cartao.Tipo == TipoCartao.Credito ? "Crédito" : cartao.TipoBeneficio?.Rotulo() ?? "Benefício")
+                        </MudText>
+                    </div>
+                    <div class="d-flex align-center">
+                        @if (cartao.Tipo == TipoCartao.Beneficio && cartao.Ativo)
+                        {
+                            <MudButton Variant="Variant.Outlined" Color="Color.Success" Size="Size.Small" Class="mr-1"
+                                       StartIcon="@Icons.Material.Filled.AddCard"
+                                       OnClick="@(() => RecarregarAsync(cartao))">
+                                Recarregar
+                            </MudButton>
+                        }
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" aria-label="Editar cartão"
+                                       OnClick="@(() => EditarCartaoAsync(cartao))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" aria-label="Excluir cartão"
+                                       OnClick="@(() => ExcluirOuInativarCartaoAsync(cartao))" />
+                    </div>
+                </div>
+
+                @if (cartao.Tipo == TipoCartao.Beneficio)
+                {
+                    var saldo = _saldos.GetValueOrDefault(cartao.Id);
+                    var recargas = _recargas.GetValueOrDefault(cartao.Id) ?? new List<RecargaCartao>();
+                    <MudDivider Class="my-2" />
+                    <div class="d-flex justify-space-between align-center">
+                        <MudText Typo="Typo.body2">Saldo disponível</MudText>
+                        <MudText Typo="Typo.subtitle2" Color="@(saldo > 0 ? Color.Success : Color.Secondary)">
+                            <b>@saldo.ToString("C")</b>
+                        </MudText>
+                    </div>
+
+                    @if (recargas.Count > 0)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2 d-block">Recargas</MudText>
+                        @foreach (var recarga in recargas)
+                        {
+                            <div class="d-flex justify-space-between align-center">
+                                <MudText Typo="Typo.body2">@recarga.Data.ToString("dd/MM/yyyy")</MudText>
+                                <div class="d-flex align-center">
+                                    <MudText Typo="Typo.body2">@recarga.Valor.ToString("C")</MudText>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                                   aria-label="Excluir recarga"
+                                                   OnClick="@(() => ExcluirRecargaAsync(recarga))" />
+                                </div>
+                            </div>
+                        }
+                    }
+                }
+            </MudPaper>
+        }
+    }
+</div>
+
+@code {
+    private bool _carregando = true;
+    private List<Cartao> _cartoes = new();
+    private readonly Dictionary<int, decimal> _saldos = new();
+    private readonly Dictionary<int, List<RecargaCartao>> _recargas = new();
+
+    protected override async Task OnInitializedAsync() => await CarregarAsync();
+
+    private async Task CarregarAsync()
+    {
+        _carregando = true;
+        _cartoes = await CartaoService.ListarAsync();
+        _saldos.Clear();
+        _recargas.Clear();
+
+        foreach (var cartao in _cartoes.Where(c => c.Tipo == TipoCartao.Beneficio))
+        {
+            _saldos[cartao.Id] = await CartaoService.ObterSaldoBeneficioAsync(cartao.Id);
+            _recargas[cartao.Id] = await CartaoService.ListarRecargasAsync(cartao.Id);
+        }
+
+        _carregando = false;
+    }
+
+    private Task NovoCartaoAsync() => SalvarCartaoAsync("Novo cartão", new CartaoFormModel());
+
+    private Task EditarCartaoAsync(Cartao cartao) => SalvarCartaoAsync("Editar cartão", new CartaoFormModel
+    {
+        Id = cartao.Id,
+        Nome = cartao.Nome,
+        Bandeira = cartao.Bandeira,
+        UltimosDigitos = cartao.UltimosDigitos,
+        Tipo = cartao.Tipo,
+        TipoBeneficio = cartao.TipoBeneficio ?? TipoCartaoBeneficio.ValeAlimentacao,
+        Ativo = cartao.Ativo
+    });
+
+    private async Task SalvarCartaoAsync(string titulo, CartaoFormModel modelo)
+    {
+        var parametros = new DialogParameters<CartaoDialog> { { x => x.Modelo, modelo } };
+        var opcoes = new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<CartaoDialog>(titulo, parametros, opcoes);
+        var resultado = await dialog.Result;
+        if (resultado is not { Canceled: false, Data: CartaoFormModel salvo })
+            return;
+
+        try
+        {
+            await CartaoService.SalvarAsync(salvo);
+            Snackbar.Add(modelo.Id is null ? "Cartão cadastrado" : "Cartão atualizado", Severity.Success);
+            await CarregarAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+    }
+
+    private async Task ExcluirOuInativarCartaoAsync(Cartao cartao)
+    {
+        try
+        {
+            await CartaoService.ExcluirAsync(cartao.Id);
+            Snackbar.Add("Cartão excluído", Severity.Success);
+            await CarregarAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            if (cartao.Ativo)
+            {
+                var inativar = await DialogService.ShowMessageBoxAsync(
+                    "Inativar cartão",
+                    $"{ex.Message} Deseja inativar {cartao.Nome}?",
+                    yesText: "Inativar", cancelText: "Cancelar");
+                if (inativar == true)
+                {
+                    await CartaoService.InativarAsync(cartao.Id);
+                    Snackbar.Add("Cartão inativado", Severity.Info);
+                    await CarregarAsync();
+                }
+            }
+            else
+            {
+                Snackbar.Add(ex.Message, Severity.Warning);
+            }
+        }
+    }
+
+    private async Task RecarregarAsync(Cartao cartao)
+    {
+        var modelo = new RecargaCartaoFormModel { CartaoId = cartao.Id, Data = DateTime.Today };
+        var parametros = new DialogParameters<RecargaCartaoDialog>
+        {
+            { x => x.Modelo, modelo },
+            { x => x.NomeCartao, cartao.Rotulo }
+        };
+        var opcoes = new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<RecargaCartaoDialog>("Recarregar benefício", parametros, opcoes);
+        var resultado = await dialog.Result;
+        if (resultado is not { Canceled: false, Data: RecargaCartaoFormModel salvo })
+            return;
+
+        try
+        {
+            await CartaoService.RecarregarAsync(salvo);
+            Snackbar.Add("Recarga registrada", Severity.Success);
+            await CarregarAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+    }
+
+    private async Task ExcluirRecargaAsync(RecargaCartao recarga)
+    {
+        try
+        {
+            await CartaoService.ExcluirRecargaAsync(recarga.Id);
+            Snackbar.Add("Recarga excluída", Severity.Success);
+            await CarregarAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+    }
+}

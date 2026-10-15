@@ -1,0 +1,35 @@
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-3">
+            Alguns produtos do arquivo não têm categoria. Eles entram na categoria escolhida abaixo.
+        </MudText>
+        <MudSelect T="int" @bind-Value="_categoriaId" Label="Categoria" AnchorOrigin="Origin.BottomCenter">
+            @foreach (var categoria in Categorias)
+            {
+                <MudSelectItem T="int" Value="@categoria.Id">@categoria.Icone @categoria.Nome</MudSelectItem>
+            }
+        </MudSelect>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancelar</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Confirmar">Importar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public IReadOnlyList<Categoria> Categorias { get; set; } = Array.Empty<Categoria>();
+
+    private int _categoriaId;
+
+    protected override void OnInitialized()
+        => _categoriaId = Categorias.FirstOrDefault()?.Id ?? 0;
+
+    private void Confirmar()
+    {
+        if (_categoriaId <= 0)
+            return;
+
+        MudDialog.Close(DialogResult.Ok(_categoriaId));
+    }
+}

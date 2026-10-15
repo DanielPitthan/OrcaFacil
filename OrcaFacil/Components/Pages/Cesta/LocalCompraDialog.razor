@@ -1,7 +1,7 @@
 <MudDialog>
     <DialogContent>
         <MudForm @ref="_form">
-            <MudTextField @ref="_nome" T="string" @bind-Value="Modelo.Nome" Label="Local de compra" Immediate="true"
+            <MudTextField @ref="_nome" T="string" @bind-Value="Modelo.Nome" Label="Local de compra"
                           Required="true" RequiredError="Informe o nome" MaxLength="80" Class="mb-3"
                           Placeholder="Ex.: Boa Supermercado" />
             @if (Modelo.Id is not null)

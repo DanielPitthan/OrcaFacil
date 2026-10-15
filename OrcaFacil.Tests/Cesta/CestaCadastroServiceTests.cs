@@ -104,7 +104,7 @@ public class CestaCadastroServiceTests : IDisposable
         Assert.Equal(50m, compra.ValorCartaoCredito);
         await using var contexto = _factory.CreateDbContext();
         var despesa = await contexto.Transacoes.SingleAsync();
-        Assert.Equal(80m, despesa.Valor);
+        Assert.Equal(30m, despesa.Valor);
         Assert.Contains("Dinheiro", despesa.Observacao);
         Assert.Contains("Cartão de crédito", despesa.Observacao);
     }

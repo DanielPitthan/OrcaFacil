@@ -39,6 +39,14 @@
     {
         <MudChart T="double" ChartType="ChartType.Line" ChartSeries="@_series" ChartLabels="@_rotulos"
                   ChartOptions="@_opcoes" Width="100%" Height="150px" />
+        <div class="of-legenda">
+            @for (var i = 0; i < _series.Count; i++)
+            {
+                <span class="of-legenda-item">
+                    <span class="of-legenda-marca" style="background:@_opcoes.ChartPalette[i]"></span>@_series[i].Name
+                </span>
+            }
+        </div>
     }
     else
     {
@@ -60,7 +68,7 @@
 
     private readonly LineChartOptions _opcoes = new()
     {
-        ShowLegend = true,
+        ShowLegend = false,
         ShowDataMarkers = false,
         LineStrokeWidth = 2,
         MaxNumYAxisTicks = 4,

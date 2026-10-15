@@ -10,10 +10,12 @@ namespace OrcaFacil.Core.Services;
 public class CestaCadastroService
 {
     private readonly ICestaRepository _cestas;
+    private readonly ICartaoRepository? _cartoes;
 
-    public CestaCadastroService(ICestaRepository cestas)
+    public CestaCadastroService(ICestaRepository cestas, ICartaoRepository? cartoes = null)
     {
         _cestas = cestas;
+        _cartoes = cartoes;
     }
 
     public Task<List<ProdutoCesta>> ListarProdutosAsync(bool somenteAtivos) => _cestas.ListarProdutosAsync(somenteAtivos);
@@ -53,6 +55,54 @@ public class CestaCadastroService
             throw new InvalidOperationException("Este produto já entrou em compras e não pode ser excluído. Inative-o para ocultá-lo das próximas cestas.");
 
         await _cestas.ExcluirProdutoAsync(produto);
+    }
+
+    public async Task<ResultadoImportacaoProdutos> ImportarProdutosAsync(
+        IReadOnlyList<ProdutoCestaCsv.Linha> linhas,
+        IReadOnlyList<Categoria> categorias,
+        int? categoriaPadraoId)
+    {
+        var mapa = categorias
+            .Where(c => !string.IsNullOrWhiteSpace(c.Nome))
+            .GroupBy(c => c.Nome.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().Id, StringComparer.OrdinalIgnoreCase);
+
+        var erros = new List<string>();
+        var importados = 0;
+        var ignorados = 0;
+        var vistos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var linha in linhas)
+        {
+            var categoriaId = categoriaPadraoId;
+            if (!string.IsNullOrWhiteSpace(linha.Categoria))
+            {
+                if (!mapa.TryGetValue(linha.Categoria.Trim(), out var encontrada))
+                {
+                    erros.Add($"Linha {linha.Numero}: a categoria \"{linha.Categoria}\" não existe.");
+                    continue;
+                }
+
+                categoriaId = encontrada;
+            }
+
+            if (categoriaId is null or <= 0)
+            {
+                erros.Add($"Linha {linha.Numero}: informe a categoria de {linha.Nome}.");
+                continue;
+            }
+
+            if (!vistos.Add(linha.Nome) || await _cestas.ExisteNomeProdutoAsync(linha.Nome))
+            {
+                ignorados++;
+                continue;
+            }
+
+            await _cestas.AdicionarProdutoAsync(new ProdutoCesta { Nome = linha.Nome, CategoriaId = categoriaId.Value });
+            importados++;
+        }
+
+        return new ResultadoImportacaoProdutos(importados, ignorados, erros);
     }
 
     public async Task InativarProdutoAsync(int id)
@@ -148,9 +198,60 @@ public class CestaCadastroService
 
         var beneficio = CestaDespesaRegras.Dinheiro(modelo.ValorBeneficio);
         var tipo = beneficio > 0 ? modelo.TipoCartaoBeneficio : null;
+        int? cartaoBeneficioId = null;
+
+        if (beneficio > 0)
+        {
+            if (modelo.CartaoBeneficioId is int cbId && cbId > 0)
+            {
+                if (_cartoes is null)
+                    throw new InvalidOperationException("Repositório de cartões não configurado.");
+
+                var cartaoBeneficio = await _cartoes.ObterAsync(cbId)
+                    ?? throw new InvalidOperationException("Selecione o cartão de benefício.");
+                if (cartaoBeneficio.Tipo != TipoCartao.Beneficio)
+                    throw new InvalidOperationException("O cartão selecionado não é um cartão de benefício.");
+
+                var totalRecargas = await _cartoes.ObterTotalRecargasAsync(cbId);
+                var totalUsado = await _cartoes.ObterTotalUsadoBeneficioAsync(cbId, modelo.Id);
+                var saldoDisponivel = CestaDespesaRegras.Dinheiro(totalRecargas - totalUsado);
+
+                if (beneficio > saldoDisponivel)
+                    throw new InvalidOperationException($"Saldo insuficiente no cartão {cartaoBeneficio.Nome} (disponível: {saldoDisponivel:C}). Recarregue o cartão antes de usar esse valor.");
+
+                cartaoBeneficioId = cbId;
+                tipo = cartaoBeneficio.TipoBeneficio ?? tipo ?? TipoCartaoBeneficio.ValeAlimentacao;
+            }
+            else if (_cartoes is not null)
+            {
+                throw new InvalidOperationException("Selecione o cartão de benefício.");
+            }
+        }
+
         var categoriaCestaId = await _cestas.ObterOuCriarCategoriaCestaAsync();
         var montada = CestaDespesaRegras.Montar(
             local.Nome, precos, beneficio, tipo, categoriaCestaId, modelo.ValorDinheiro, modelo.ValorCartaoCredito);
+
+        int? cartaoCreditoId = null;
+        if (montada.Cartao > 0)
+        {
+            if (modelo.CartaoCreditoId is int ccId && ccId > 0)
+            {
+                if (_cartoes is null)
+                    throw new InvalidOperationException("Repositório de cartões não configurado.");
+
+                var cartaoCredito = await _cartoes.ObterAsync(ccId)
+                    ?? throw new InvalidOperationException("Selecione o cartão de crédito.");
+                if (cartaoCredito.Tipo != TipoCartao.Credito)
+                    throw new InvalidOperationException("O cartão selecionado não é um cartão de crédito.");
+
+                cartaoCreditoId = ccId;
+            }
+            else if (_cartoes is not null)
+            {
+                throw new InvalidOperationException("Selecione o cartão de crédito.");
+            }
+        }
 
         var itensDespesa = montada.Itens.Select((item, indice) => new ItemLancamento
         {
@@ -161,7 +262,7 @@ public class CestaCadastroService
             Ordem = indice
         }).ToList();
 
-        if (itensDespesa.Count > 0)
+        if (montada.Gerar && itensDespesa.Count > 0)
             ItensFaturaRegras.Validar(montada.Valor, categoriaCestaId, permiteItens: true, TipoTransacao.Despesa, itensDespesa);
 
         var data = modelo.Data.Date;
@@ -174,8 +275,10 @@ public class CestaCadastroService
             Ano = data.Year,
             ValorBeneficio = beneficio,
             TipoCartaoBeneficio = tipo,
+            CartaoBeneficioId = cartaoBeneficioId,
             ValorDinheiro = montada.Dinheiro,
             ValorCartaoCredito = montada.Cartao,
+            CartaoCreditoId = cartaoCreditoId,
             Itens = modelo.Itens.Select((item, indice) => new CompraCestaItem
             {
                 ProdutoCestaId = item.ProdutoCestaId,
@@ -202,7 +305,20 @@ public class CestaCadastroService
             };
         }
 
-        return await _cestas.SalvarCompraAsync(compra, despesa);
+        FaturaCreditoCesta? faturaCredito = null;
+        if (montada.Cartao > 0 && cartaoCreditoId is int idCartaoCredito)
+        {
+            faturaCredito = new FaturaCreditoCesta(
+                idCartaoCredito,
+                modelo.FaturaTransacaoId,
+                montada.Cartao,
+                montada.Descricao,
+                categoriaCestaId,
+                data,
+                membroFamiliaId);
+        }
+
+        return await _cestas.SalvarCompraAsync(compra, despesa, faturaCredito);
     }
 
     public Task ExcluirCompraAsync(int id) => _cestas.ExcluirCompraAsync(id);

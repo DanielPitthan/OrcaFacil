@@ -14,10 +14,10 @@ public class CestaService : ICestaService
     private readonly IPerfilContext _perfil;
     private readonly IFechamentoService _fechamento;
 
-    public CestaService(ICestaRepository cestas, IPerfilContext perfil, IFechamentoService fechamento)
+    public CestaService(ICestaRepository cestas, ICartaoRepository cartoes, IPerfilContext perfil, IFechamentoService fechamento)
     {
         _cestas = cestas;
-        _cadastro = new CestaCadastroService(cestas);
+        _cadastro = new CestaCadastroService(cestas, cartoes);
         _perfil = perfil;
         _fechamento = fechamento;
     }
@@ -25,6 +25,9 @@ public class CestaService : ICestaService
     public Task<List<ProdutoCesta>> ListarProdutosAsync(bool somenteAtivos = false) => _cadastro.ListarProdutosAsync(somenteAtivos);
 
     public Task<ProdutoCesta> SalvarProdutoAsync(ProdutoCestaFormModel modelo) => _cadastro.SalvarProdutoAsync(modelo);
+
+    public Task<ResultadoImportacaoProdutos> ImportarProdutosAsync(IReadOnlyList<ProdutoCestaCsv.Linha> linhas, IReadOnlyList<Categoria> categorias, int? categoriaPadraoId)
+        => _cadastro.ImportarProdutosAsync(linhas, categorias, categoriaPadraoId);
 
     public Task ExcluirProdutoAsync(int id) => _cadastro.ExcluirProdutoAsync(id);
 

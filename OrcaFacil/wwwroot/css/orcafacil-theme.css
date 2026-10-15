@@ -104,3 +104,162 @@ html, body {
 .of-mascara-numerica input {
     text-align: right;
 }
+
+/*
+ * O WebView do Android 11 (Chrome 83) descarta qualquer regra que contenha :has().
+ * No MudBlazor 9 o encolhimento do rótulo está nessa regra, então o texto do campo
+ * fica por cima do rótulo. As regras abaixo repetem o encolhimento sem :has().
+ */
+.mud-shrink ~ label.mud-input-label.mud-input-label-inputcontrol,
+.mud-input:focus-within ~ label.mud-input-label.mud-input-label-inputcontrol {
+    transform: translate(0, 1.5px) scale(0.75);
+    transform-origin: top left;
+    max-width: 133.3333333333%;
+}
+
+.mud-shrink ~ label.mud-input-label.mud-input-label-inputcontrol {
+    color: var(--mud-palette-text-primary);
+}
+
+.mud-input:focus-within ~ label.mud-input-label.mud-input-label-inputcontrol {
+    color: var(--mud-palette-primary);
+}
+
+.mud-shrink ~ label.mud-input-label.mud-input-label-inputcontrol.mud-input-label-outlined,
+.mud-input:focus-within ~ label.mud-input-label.mud-input-label-inputcontrol.mud-input-label-outlined {
+    transform: translate(14px, -6px) scale(0.75);
+    max-width: calc((100% - 14px) / 0.75);
+}
+
+.mud-input.mud-input-outlined.mud-shrink > .mud-input-outlined-border legend,
+.mud-input.mud-input-outlined:focus-within > .mud-input-outlined-border legend {
+    width: auto;
+    padding: 0 5px;
+}
+
+/* height: 1lh só existe a partir do Chrome 109. Sem fallback o campo fica baixo demais. */
+.mud-input > input.mud-input-root,
+div.mud-input-slot.mud-input-root {
+    height: 1.1876em;
+}
+
+@supports (height: 1lh) {
+    .mud-input > input.mud-input-root,
+    div.mud-input-slot.mud-input-root {
+        height: 1lh;
+    }
+}
+
+/* O diálogo cresce com os itens e o min-height automático do flex empurra Salvar para baixo da barra do sistema. */
+.mud-dialog-container .mud-dialog {
+    min-height: 0;
+    max-height: calc(100% - 24px);
+    max-height: calc(100% - 24px - env(safe-area-inset-bottom, 0px));
+    overflow: hidden;
+}
+
+/* Quando o WebView não encolhe com o teclado, a área útil termina acima dele. */
+html.of-teclado-aberto .mud-dialog-container {
+    height: calc(100% - var(--of-teclado, 0px));
+}
+
+.mud-dialog .mud-dialog-content {
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-padding-bottom: 24px;
+}
+
+.mud-main-content {
+    scroll-padding-bottom: calc(88px + var(--of-teclado, 0px));
+}
+
+.of-form-acoes {
+    position: sticky;
+    bottom: var(--of-teclado, 0px);
+    z-index: 2;
+    display: flex;
+    margin: 8px -16px -16px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+    background: var(--mud-palette-surface);
+    border-top: 1px solid var(--mud-palette-lines-default);
+}
+
+.of-form-acoes .mud-button-root + .mud-button-root {
+    margin-left: 8px;
+}
+
+.of-lancamento-topo {
+    display: flex;
+    align-items: flex-start;
+}
+
+.of-lancamento-descricao {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-right: 12px;
+}
+
+.of-lancamento-data {
+    flex: 0 0 148px;
+    width: 148px;
+}
+
+.of-linha-valor {
+    display: flex;
+    align-items: flex-end;
+}
+
+.of-linha-valor-campo {
+    flex: 1;
+    min-width: 0;
+}
+
+.of-linha-valor .mud-icon-button {
+    margin-bottom: 8px;
+    margin-left: 16px;
+    flex: 0 0 auto;
+}
+
+/* A legenda do gráfico em flex encolhe os itens no WebView antigo e os textos se sobrepõem. */
+.mud-chart .mud-chart-legend {
+    display: block;
+    text-align: center;
+}
+
+.mud-chart .mud-chart-legend .mud-chart-legend-item {
+    display: inline-block;
+    white-space: nowrap;
+    vertical-align: middle;
+    margin: 2px 8px;
+}
+
+.mud-chart .mud-chart-legend .mud-chart-legend-marker {
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 6px;
+}
+
+.of-legenda {
+    display: block;
+    text-align: center;
+    padding: 2px 0 8px;
+}
+
+.of-legenda-item {
+    display: inline-block;
+    margin: 2px 10px;
+    white-space: nowrap;
+    font-size: 0.8125rem;
+    line-height: 1.2;
+    color: var(--mud-palette-text-primary);
+}
+
+.of-legenda-marca {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+}

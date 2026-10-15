@@ -64,6 +64,7 @@ public class TransacaoService : ITransacaoService
             Pago = dto.Tipo == TipoTransacao.Despesa ? dto.Pago : true,
             Observacao = dto.Observacao,
             CategoriaId = dto.CategoriaId,
+            CartaoId = dto.CartaoId,
             MembroFamiliaId = membroId,
             Itens = itens
         };
@@ -95,6 +96,7 @@ public class TransacaoService : ITransacaoService
         transacao.Pago = dto.Tipo == TipoTransacao.Despesa ? dto.Pago : true;
         transacao.Observacao = dto.Observacao;
         transacao.CategoriaId = dto.CategoriaId;
+        transacao.CartaoId = dto.CartaoId;
         transacao.AtualizadoEm = DateTime.UtcNow;
 
         await _transacaoRepository.UpdateAsync(transacao);

@@ -63,7 +63,7 @@
                         @if (compra.ValorBeneficio > 0 && compra.TipoCartaoBeneficio is { } tipo)
                         {
                             <div class="d-flex justify-space-between">
-                                <MudText Typo="Typo.body2">@tipo.Rotulo()</MudText>
+                                <MudText Typo="Typo.body2">@(compra.CartaoBeneficio?.Rotulo ?? tipo.Rotulo())</MudText>
                                 <MudText Typo="Typo.body2">@compra.ValorBeneficio.ToString("C")</MudText>
                             </div>
                             <div class="d-flex justify-space-between">
@@ -85,7 +85,7 @@
                         @if (compra.ValorCartaoCredito > 0)
                         {
                             <div class="d-flex justify-space-between">
-                                <MudText Typo="Typo.body2">Cartão de crédito</MudText>
+                                <MudText Typo="Typo.body2">@(compra.CartaoCredito?.Rotulo ?? "Cartão de crédito")</MudText>
                                 <MudText Typo="Typo.body2">@compra.ValorCartaoCredito.ToString("C")</MudText>
                             </div>
                         }
@@ -218,6 +218,13 @@
 
     <MudTabPanel Text="Produtos" Icon="@Icons.Material.Filled.ShoppingBasket">
         <div class="pro-fab-spacer">
+            <div class="pa-2">
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Upload"
+                           Disabled="@_importando" OnClick="ImportarProdutosAsync">Importar CSV</MudButton>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-1">
+                    Colunas Produto e Categoria, separadas por ponto e vírgula. Se vier só o nome, a categoria é escolhida na hora.
+                </MudText>
+            </div>
             @if (_produtos.Count == 0)
             {
                 <EmptyState Icon="@Icons.Material.Filled.ShoppingBasket" Mensagem="Nenhum produto cadastrado"
@@ -298,6 +305,7 @@
 
 @code {
     private bool _carregando = true;
+    private bool _importando;
     private int _aba;
     private DateTime _referencia = new(DateTime.Today.Year, DateTime.Today.Month, 1);
     private List<CompraCesta> _compras = new();
@@ -346,8 +354,11 @@
         Data = compra.Data,
         ValorBeneficio = compra.ValorBeneficio,
         TipoCartaoBeneficio = compra.TipoCartaoBeneficio,
+        CartaoBeneficioId = compra.CartaoBeneficioId,
         ValorDinheiro = compra.ValorDinheiro,
         ValorCartaoCredito = compra.ValorCartaoCredito,
+        CartaoCreditoId = compra.CartaoCreditoId,
+        FaturaTransacaoId = compra.ItemFatura?.TransacaoId,
         Itens = compra.Itens.OrderBy(i => i.Ordem).Select(i => new ItemCompraCestaFormModel
         {
             ProdutoCestaId = i.ProdutoCestaId,
@@ -446,6 +457,85 @@
         CategoriaId = produto.CategoriaId,
         Ativo = produto.Ativo
     });
+
+    private async Task ImportarProdutosAsync()
+    {
+        if (_categorias.Count == 0)
+        {
+            Snackbar.Add("Cadastre uma categoria de despesa antes de importar.", Severity.Warning);
+            return;
+        }
+
+        FileResult? arquivo;
+        try
+        {
+            arquivo = await FilePicker.Default.PickAsync(new PickOptions
+            {
+                PickerTitle = "Importar produtos da cesta",
+                FileTypes = new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>>
+                {
+                    { DevicePlatform.Android, new[] { "text/csv", "text/comma-separated-values", "text/plain", "application/vnd.ms-excel", "application/octet-stream" } },
+                    { DevicePlatform.WinUI, new[] { ".csv", ".txt" } }
+                })
+            });
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Não foi possível abrir o seletor de arquivos.", Severity.Error);
+            return;
+        }
+
+        if (arquivo is null)
+            return;
+
+        _importando = true;
+        try
+        {
+            await using var stream = await arquivo.OpenReadAsync();
+            using var memoria = new MemoryStream();
+            await stream.CopyToAsync(memoria);
+            var leitura = ProdutoCestaCsv.Ler(ProdutoCestaCsv.Decodificar(memoria.ToArray()));
+            if (leitura.Linhas.Count == 0)
+            {
+                Snackbar.Add(leitura.Erros.FirstOrDefault() ?? "O arquivo não tem produtos.", Severity.Warning);
+                return;
+            }
+
+            int? categoriaPadrao = null;
+            if (leitura.Linhas.Any(l => string.IsNullOrWhiteSpace(l.Categoria)))
+            {
+                var parametros = new DialogParameters<CategoriaImportacaoDialog>
+                {
+                    { x => x.Categorias, _categorias }
+                };
+                var dialog = await DialogService.ShowAsync<CategoriaImportacaoDialog>("Categoria dos produtos", parametros, Opcoes(MaxWidth.ExtraSmall));
+                var resultado = await dialog.Result;
+                if (resultado is not { Canceled: false, Data: int categoriaId })
+                    return;
+
+                categoriaPadrao = categoriaId;
+            }
+
+            var importacao = await CestaService.ImportarProdutosAsync(leitura.Linhas, _categorias, categoriaPadrao);
+            var erros = leitura.Erros.Concat(importacao.Erros).ToList();
+            var texto = $"{importacao.Importados} importado(s)";
+            if (importacao.Ignorados > 0)
+                texto += $", {importacao.Ignorados} já existente(s)";
+            if (erros.Count > 0)
+                texto += ". " + string.Join(" ", erros.Take(3));
+
+            Snackbar.Add(texto, erros.Count > 0 ? Severity.Warning : Severity.Success);
+            await CarregarAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+        finally
+        {
+            _importando = false;
+        }
+    }
 
     private async Task<bool> SalvarProdutoAsync(string titulo, ProdutoCestaFormModel modelo)
     {

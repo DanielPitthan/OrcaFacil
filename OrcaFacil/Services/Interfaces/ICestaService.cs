@@ -8,6 +8,7 @@ public interface ICestaService
 {
     Task<List<ProdutoCesta>> ListarProdutosAsync(bool somenteAtivos = false);
     Task<ProdutoCesta> SalvarProdutoAsync(ProdutoCestaFormModel modelo);
+    Task<ResultadoImportacaoProdutos> ImportarProdutosAsync(IReadOnlyList<ProdutoCestaCsv.Linha> linhas, IReadOnlyList<Categoria> categorias, int? categoriaPadraoId);
     Task ExcluirProdutoAsync(int id);
     Task InativarProdutoAsync(int id);
 

@@ -106,6 +106,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IAtivoFinanceiroRepository, AtivoFinanceiroRepository>();
         builder.Services.AddSingleton<IOperacaoAtivoRepository, OperacaoAtivoRepository>();
         builder.Services.AddSingleton<ICestaRepository, CestaRepository>();
+        builder.Services.AddSingleton<ICartaoRepository, CartaoRepository>();
 
         // Serviços de negócio
         builder.Services.AddSingleton<CopiaDespesasMesService>();
@@ -120,6 +121,7 @@ public static class MauiProgram
         builder.Services.AddScoped<IAtivoService, AtivoService>();
         builder.Services.AddScoped<IOperacaoAtivoService, OperacaoAtivoService>();
         builder.Services.AddScoped<ICestaService, CestaService>();
+        builder.Services.AddScoped<ICartaoService, CartaoService>();
         builder.Services.AddSingleton<INotificationSchedulerService, NotificationSchedulerService>();
         builder.Services.AddSingleton<ISyncService, MockSyncService>();
         builder.Services.AddSingleton<IPerfilContext, PerfilContext>();

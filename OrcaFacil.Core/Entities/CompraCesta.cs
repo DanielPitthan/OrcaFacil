@@ -23,11 +23,21 @@ public class CompraCesta
 
     public TipoCartaoBeneficio? TipoCartaoBeneficio { get; set; }
 
+    public int? CartaoBeneficioId { get; set; }
+    public Cartao? CartaoBeneficio { get; set; }
+
     /// <summary>Parte do saldo (total menos benefício) paga em dinheiro.</summary>
     public decimal ValorDinheiro { get; set; }
 
     /// <summary>Parte do saldo paga no cartão de crédito.</summary>
     public decimal ValorCartaoCredito { get; set; }
+
+    public int? CartaoCreditoId { get; set; }
+    public Cartao? CartaoCredito { get; set; }
+
+    /// <summary>Item de fatura gerado nos lançamentos de Cartão de Crédito para esta compra.</summary>
+    public int? ItemFaturaId { get; set; }
+    public ItemLancamento? ItemFatura { get; set; }
 
     /// <summary>Despesa gerada nos lançamentos. Nula quando o benefício cobre a cesta inteira.</summary>
     public int? TransacaoId { get; set; }

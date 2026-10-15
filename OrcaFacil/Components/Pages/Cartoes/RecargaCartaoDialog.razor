@@ -1,0 +1,52 @@
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-3">
+            Cartão: <b>@NomeCartao</b>
+        </MudText>
+        <MudDatePicker Label="Data da recarga" @bind-Date="_data" Class="mb-3" />
+        <CampoNumerico @ref="_valorCampo" TNumber="decimal" @bind-Value="Modelo.Valor" Label="Valor da recarga"
+                       Adornment="Adornment.Start" AdornmentText="R$" Class="mb-2" />
+        @if (_erro is not null)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Error" Class="mt-2">@_erro</MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancelar</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="SalvarAsync">Recarregar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public RecargaCartaoFormModel Modelo { get; set; } = new();
+    [Parameter] public string NomeCartao { get; set; } = string.Empty;
+
+    private CampoNumerico<decimal> _valorCampo = null!;
+    private DateTime? _data;
+    private string? _erro;
+
+    protected override void OnInitialized()
+    {
+        _data = Modelo.Data == default ? DateTime.Today : Modelo.Data;
+    }
+
+    private async Task SalvarAsync()
+    {
+        if (_data is null)
+        {
+            _erro = "Informe a data da recarga.";
+            return;
+        }
+
+        if (Modelo.Valor <= 0)
+        {
+            _erro = "Informe um valor maior que zero.";
+            await _valorCampo.FocusAsync();
+            return;
+        }
+
+        Modelo.Data = _data.Value.Date;
+        MudDialog.Close(DialogResult.Ok(Modelo));
+    }
+}

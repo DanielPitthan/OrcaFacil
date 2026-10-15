@@ -1,3 +1,5 @@
+@inject ICartaoService CartaoService
+
 <MudDialog>
     <DialogContent>
         <MudSelect T="int" @bind-Value="_localId" Label="Local de compra" Class="mb-3" AnchorOrigin="Origin.BottomCenter">
@@ -16,8 +18,8 @@
                 <MudSelectItem T="int" Value="@produto.Id">@produto.Nome</MudSelectItem>
             }
         </MudSelect>
-        <div class="d-flex align-end ga-2 mb-3">
-            <div style="flex:1;">
+        <div class="of-linha-valor mb-3">
+            <div class="of-linha-valor-campo">
                 <CampoNumerico @ref="_precoCampo" TNumber="decimal" @bind-Value="_precoItem" Label="Preço"
                                 Adornment="Adornment.Start" AdornmentText="R$" />
             </div>
@@ -64,12 +66,25 @@
         <MudCheckBox T="bool" @bind-Value="_usarBeneficio" Label="Usar cartão de benefício" Class="mb-2" />
         @if (_usarBeneficio)
         {
-            <MudSelect T="TipoCartaoBeneficio" @bind-Value="_tipoBeneficio" Label="Tipo do cartão" Class="mb-3">
-                @foreach (var tipo in Enum.GetValues<TipoCartaoBeneficio>())
-                {
-                    <MudSelectItem Value="tipo">@tipo.Rotulo()</MudSelectItem>
-                }
-            </MudSelect>
+            @if (_cartoesBeneficio.Count == 0)
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+                    Cadastre um cartão de benefício em Cartões antes de usar este desconto.
+                </MudAlert>
+            }
+            else
+            {
+                <MudSelect T="int" Value="_cartaoBeneficioId" ValueChanged="OnCartaoBeneficioChangedAsync"
+                           Label="Cartão de benefício" Class="mb-1" AnchorOrigin="Origin.BottomCenter">
+                    @foreach (var cartao in _cartoesBeneficio)
+                    {
+                        <MudSelectItem T="int" Value="@cartao.Id">@cartao.Rotulo (@(cartao.TipoBeneficio?.Rotulo() ?? "Benefício"))</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudText Typo="Typo.caption" Color="@(SaldoBeneficioSelecionado < BeneficioInformado ? Color.Error : Color.Secondary)" Class="mb-2 d-block">
+                    Saldo disponível: <b>@SaldoBeneficioSelecionado.ToString("C")</b>
+                </MudText>
+            }
             <CampoNumerico TNumber="decimal" @bind-Value="_beneficio" Label="Valor usado do benefício"
                             Adornment="Adornment.Start" AdornmentText="R$" Class="mb-3" />
         }
@@ -95,6 +110,45 @@
                     Restante no cartão de crédito: @Math.Max(0, CartaoEfetivo).ToString("C")
                 </MudText>
             }
+
+            @if (CartaoEfetivo > 0)
+            {
+                @if (_cartoesCredito.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+                        Cadastre um cartão de crédito em Cartões para registrar o pagamento no crédito.
+                    </MudAlert>
+                }
+                else
+                {
+                    <MudSelect T="int" Value="_cartaoCreditoId" ValueChanged="OnCartaoCreditoChangedAsync"
+                               Label="Cartão de crédito" Class="mb-2" AnchorOrigin="Origin.BottomCenter">
+                        @foreach (var cartao in _cartoesCredito)
+                        {
+                            <MudSelectItem T="int" Value="@cartao.Id">@cartao.Rotulo</MudSelectItem>
+                        }
+                    </MudSelect>
+
+                    @if (_faturasAbertas.Count == 0)
+                    {
+                        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                            Nenhuma fatura em aberto para este cartão. Uma nova fatura será criada nos lançamentos.
+                        </MudAlert>
+                    }
+                    else
+                    {
+                        <MudSelect T="int?" @bind-Value="_faturaTransacaoId" Label="Lançamento da fatura" Class="mb-3" AnchorOrigin="Origin.BottomCenter">
+                            <MudSelectItem T="int?" Value="@((int?)null)">Criar nova fatura</MudSelectItem>
+                            @foreach (var fatura in _faturasAbertas)
+                            {
+                                <MudSelectItem T="int?" Value="@((int?)fatura.Id)">
+                                    @fatura.Descricao — @fatura.Data.ToString("dd/MM/yyyy") (@fatura.Valor.ToString("C"))
+                                </MudSelectItem>
+                            }
+                        </MudSelect>
+                    }
+                }
+            }
         }
 
         <MudPaper Outlined="true" Class="pa-3">
@@ -105,7 +159,7 @@
             @if (BeneficioInformado > 0)
             {
                 <div class="d-flex justify-space-between">
-                    <MudText Typo="Typo.body2">@_tipoBeneficio.Rotulo()</MudText>
+                    <MudText Typo="Typo.body2">@RotuloBeneficioSelecionado</MudText>
                     <MudText Typo="Typo.body2">@BeneficioInformado.ToString("C")</MudText>
                 </div>
             }
@@ -119,7 +173,7 @@
             @if (CartaoEfetivo > 0)
             {
                 <div class="d-flex justify-space-between">
-                    <MudText Typo="Typo.body2">Cartão de crédito</MudText>
+                    <MudText Typo="Typo.body2">@RotuloCreditoSelecionado</MudText>
                     <MudText Typo="Typo.body2">@CartaoEfetivo.ToString("C")</MudText>
                 </div>
             }
@@ -150,6 +204,11 @@
     [Parameter] public IReadOnlyList<ProdutoCesta> Produtos { get; set; } = Array.Empty<ProdutoCesta>();
 
     private readonly List<LinhaItem> _linhas = new();
+    private List<Cartao> _cartoesBeneficio = new();
+    private List<Cartao> _cartoesCredito = new();
+    private List<Transacao> _faturasAbertas = new();
+    private readonly Dictionary<int, decimal> _saldosBeneficio = new();
+
     private CampoNumerico<decimal> _precoCampo = null!;
     private int _localId;
     private int _produtoId;
@@ -157,8 +216,10 @@
     private DateTime? _data;
     private bool _usarBeneficio;
     private decimal _beneficio;
+    private int _cartaoBeneficioId;
     private decimal _dinheiroInformado;
-    private TipoCartaoBeneficio _tipoBeneficio = TipoCartaoBeneficio.ValeAlimentacao;
+    private int _cartaoCreditoId;
+    private int? _faturaTransacaoId;
     private ModoPagamentoSaldo _modo = ModoPagamentoSaldo.Dinheiro;
     private LinhaItem? _linhaEditando;
     private string? _erro;
@@ -174,18 +235,76 @@
     };
     private decimal CartaoEfetivo => Saldo - DinheiroEfetivo;
     private decimal Aproveitamento => Total <= 0 ? 0 : BeneficioInformado / Total * 100m;
+    private decimal SaldoBeneficioSelecionado => _saldosBeneficio.GetValueOrDefault(_cartaoBeneficioId);
 
-    protected override void OnInitialized()
+    private Cartao? CartaoBeneficioAtual => _cartoesBeneficio.FirstOrDefault(c => c.Id == _cartaoBeneficioId);
+    private Cartao? CartaoCreditoAtual => _cartoesCredito.FirstOrDefault(c => c.Id == _cartaoCreditoId);
+
+    private string RotuloBeneficioSelecionado => CartaoBeneficioAtual?.Rotulo
+        ?? (Modelo.TipoCartaoBeneficio ?? TipoCartaoBeneficio.ValeAlimentacao).Rotulo();
+
+    private string RotuloCreditoSelecionado => CartaoCreditoAtual?.Rotulo ?? "Cartão de crédito";
+
+    protected override async Task OnInitializedAsync()
     {
         _localId = Modelo.LocalCompraId > 0 ? Modelo.LocalCompraId : Locais.FirstOrDefault()?.Id ?? 0;
         _produtoId = Produtos.FirstOrDefault()?.Id ?? 0;
         _data = Modelo.Data == default ? DateTime.Today : Modelo.Data;
         _usarBeneficio = Modelo.ValorBeneficio > 0;
         _beneficio = Modelo.ValorBeneficio;
-        _tipoBeneficio = Modelo.TipoCartaoBeneficio ?? TipoCartaoBeneficio.ValeAlimentacao;
         _linhas.AddRange(Modelo.Itens.Select(item => new LinhaItem { ProdutoId = item.ProdutoCestaId, Preco = item.Preco }));
         _modo = DefinirModo(Modelo.ValorDinheiro, Modelo.ValorCartaoCredito);
         _dinheiroInformado = Modelo.ValorDinheiro;
+
+        var todosCartoes = await CartaoService.ListarAsync();
+        _cartoesBeneficio = todosCartoes
+            .Where(c => c.Tipo == TipoCartao.Beneficio && (c.Ativo || c.Id == Modelo.CartaoBeneficioId))
+            .ToList();
+        _cartoesCredito = todosCartoes
+            .Where(c => c.Tipo == TipoCartao.Credito && (c.Ativo || c.Id == Modelo.CartaoCreditoId))
+            .ToList();
+
+        foreach (var cartao in _cartoesBeneficio)
+            _saldosBeneficio[cartao.Id] = await CartaoService.ObterSaldoBeneficioAsync(cartao.Id, Modelo.Id);
+
+        _cartaoBeneficioId = Modelo.CartaoBeneficioId is int cbId && _cartoesBeneficio.Any(c => c.Id == cbId)
+            ? cbId
+            : _cartoesBeneficio.FirstOrDefault()?.Id ?? 0;
+
+        _cartaoCreditoId = Modelo.CartaoCreditoId is int ccId && _cartoesCredito.Any(c => c.Id == ccId)
+            ? ccId
+            : _cartoesCredito.FirstOrDefault()?.Id ?? 0;
+
+        _faturaTransacaoId = Modelo.FaturaTransacaoId;
+        if (_cartaoCreditoId > 0)
+            await CarregarFaturasAsync(_cartaoCreditoId, preservarSelecionada: true);
+    }
+
+    private Task OnCartaoBeneficioChangedAsync(int cartaoId)
+    {
+        _cartaoBeneficioId = cartaoId;
+        _erro = null;
+        return Task.CompletedTask;
+    }
+
+    private async Task OnCartaoCreditoChangedAsync(int cartaoId)
+    {
+        _cartaoCreditoId = cartaoId;
+        _erro = null;
+        await CarregarFaturasAsync(cartaoId, preservarSelecionada: false);
+    }
+
+    private async Task CarregarFaturasAsync(int cartaoId, bool preservarSelecionada)
+    {
+        _faturasAbertas = cartaoId > 0
+            ? await CartaoService.ListarFaturasAbertasAsync(cartaoId)
+            : new List<Transacao>();
+
+        if (preservarSelecionada && _faturaTransacaoId is int idAtual && _faturasAbertas.Any(f => f.Id == idAtual))
+            return;
+
+        _faturaTransacaoId = _faturasAbertas.FirstOrDefault(f => f.CartaoId == cartaoId)?.Id
+            ?? _faturasAbertas.FirstOrDefault()?.Id;
     }
 
     private async Task IncluirItemAsync()
@@ -257,9 +376,14 @@
         Modelo.LocalCompraId = _localId;
         Modelo.Data = _data!.Value.Date;
         Modelo.ValorBeneficio = _usarBeneficio ? _beneficio : 0;
-        Modelo.TipoCartaoBeneficio = _usarBeneficio ? _tipoBeneficio : null;
+        Modelo.CartaoBeneficioId = _usarBeneficio ? _cartaoBeneficioId : null;
+        Modelo.TipoCartaoBeneficio = _usarBeneficio
+            ? CartaoBeneficioAtual?.TipoBeneficio ?? Modelo.TipoCartaoBeneficio ?? TipoCartaoBeneficio.ValeAlimentacao
+            : null;
         Modelo.ValorDinheiro = DinheiroEfetivo;
         Modelo.ValorCartaoCredito = CartaoEfetivo;
+        Modelo.CartaoCreditoId = CartaoEfetivo > 0 ? _cartaoCreditoId : null;
+        Modelo.FaturaTransacaoId = CartaoEfetivo > 0 ? _faturaTransacaoId : null;
         Modelo.Itens = _linhas.Select(linha => new ItemCompraCestaFormModel
         {
             ProdutoCestaId = linha.ProdutoId,
@@ -278,14 +402,20 @@
             return "Inclua ao menos um produto.";
         if (_linhas.Any(l => l.Preco <= 0))
             return "Todo item precisa de um preço maior que zero.";
+        if (_usarBeneficio && _cartaoBeneficioId <= 0)
+            return "Selecione o cartão de benefício.";
         if (_usarBeneficio && _beneficio <= 0)
             return "Informe o valor usado do cartão de benefício.";
         if (_usarBeneficio && CestaDespesaRegras.Dinheiro(_beneficio) > CestaDespesaRegras.Dinheiro(Total))
             return "O benefício não pode ser maior que o total da cesta.";
+        if (_usarBeneficio && CestaDespesaRegras.Dinheiro(_beneficio) > SaldoBeneficioSelecionado)
+            return $"Saldo insuficiente no cartão de benefício (disponível: {SaldoBeneficioSelecionado:C}). Recarregue antes de usar.";
         if (DinheiroEfetivo < 0 || CartaoEfetivo < 0)
             return "O dinheiro não pode passar do saldo.";
         if (DinheiroEfetivo + CartaoEfetivo != Saldo)
             return "Dinheiro e cartão de crédito precisam somar o saldo da compra.";
+        if (CartaoEfetivo > 0 && _cartaoCreditoId <= 0)
+            return "Selecione o cartão de crédito.";
         return null;
     }
 

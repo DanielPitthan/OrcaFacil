@@ -29,5 +29,7 @@ public class TransacaoFormModel
     [Range(1, int.MaxValue, ErrorMessage = "Selecione uma categoria")]
     public int CategoriaId { get; set; }
 
+    public int? CartaoId { get; set; }
+
     public List<ItemLancamentoFormModel> Itens { get; set; } = new();
 }

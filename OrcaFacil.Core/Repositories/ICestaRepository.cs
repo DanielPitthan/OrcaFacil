@@ -22,8 +22,9 @@ public interface ICestaRepository
 
     Task<List<CompraCesta>> ListarComprasAsync(int? mes, int? ano);
     Task<CompraCesta?> ObterCompraAsync(int id);
-    Task<CompraCesta> SalvarCompraAsync(CompraCesta compra, Transacao? despesa);
+    Task<CompraCesta> SalvarCompraAsync(CompraCesta compra, Transacao? despesa, Core.Cesta.FaturaCreditoCesta? faturaCredito = null);
     Task ExcluirCompraAsync(int id);
 
     Task<int> ObterOuCriarCategoriaCestaAsync();
+    Task<int> ObterOuCriarCategoriaCartaoCreditoAsync();
 }

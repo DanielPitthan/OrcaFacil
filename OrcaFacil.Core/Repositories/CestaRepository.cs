@@ -119,6 +119,9 @@ public class CestaRepository : ICestaRepository
         await using var context = await _contextFactory.CreateDbContextAsync();
         var query = context.ComprasCesta
             .Include(c => c.LocalCompra)
+            .Include(c => c.CartaoBeneficio)
+            .Include(c => c.CartaoCredito)
+            .Include(c => c.ItemFatura)
             .Include(c => c.Itens)
             .ThenInclude(i => i.Produto)
             .AsQueryable();
@@ -137,16 +140,22 @@ public class CestaRepository : ICestaRepository
         await using var context = await _contextFactory.CreateDbContextAsync();
         return await context.ComprasCesta
             .Include(c => c.LocalCompra)
+            .Include(c => c.CartaoBeneficio)
+            .Include(c => c.CartaoCredito)
+            .Include(c => c.ItemFatura)
             .Include(c => c.Itens)
             .ThenInclude(i => i.Produto)
             .FirstOrDefaultAsync(c => c.Id == id);
     }
 
-    public async Task<CompraCesta> SalvarCompraAsync(CompraCesta compra, Transacao? despesa)
+    public async Task<CompraCesta> SalvarCompraAsync(CompraCesta compra, Transacao? despesa, FaturaCreditoCesta? faturaCredito = null)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
         if (compra.Id == 0)
         {
+            if (faturaCredito is not null)
+                compra.ItemFaturaId = await ProcessarFaturaCreditoAsync(context, null, faturaCredito);
+
             compra.Transacao = despesa;
             context.ComprasCesta.Add(compra);
             await context.SaveChangesAsync();
@@ -166,8 +175,12 @@ public class CestaRepository : ICestaRepository
         atual.LocalCompraId = compra.LocalCompraId;
         atual.ValorBeneficio = compra.ValorBeneficio;
         atual.TipoCartaoBeneficio = compra.TipoCartaoBeneficio;
+        atual.CartaoBeneficioId = compra.CartaoBeneficioId;
         atual.ValorDinheiro = compra.ValorDinheiro;
         atual.ValorCartaoCredito = compra.ValorCartaoCredito;
+        atual.CartaoCreditoId = compra.CartaoCreditoId;
+
+        atual.ItemFaturaId = await ProcessarFaturaCreditoAsync(context, atual.ItemFaturaId, faturaCredito);
 
         context.ItensCompraCesta.RemoveRange(atual.Itens.ToList());
         atual.Itens.Clear();
@@ -223,26 +236,43 @@ public class CestaRepository : ICestaRepository
             ?? throw new InvalidOperationException("Compra não encontrada.");
 
         var despesaId = compra.TransacaoId;
+        var itemFaturaId = compra.ItemFaturaId;
         compra.Transacao = null;
         compra.TransacaoId = null;
+        compra.ItemFatura = null;
+        compra.ItemFaturaId = null;
         context.ComprasCesta.Remove(compra);
         await context.SaveChangesAsync();
 
         if (despesaId is int transacaoId)
             await RemoverTransacaoAsync(context, transacaoId);
+
+        if (itemFaturaId is int itemId)
+            await RemoverItemFaturaAsync(context, itemId);
     }
 
     public async Task<int> ObterOuCriarCategoriaCestaAsync()
+        => await ObterOuCriarCategoriaPadraoAsync(CestaDespesaRegras.NomeCategoria, "🧺", "#6DA538");
+
+    public async Task<int> ObterOuCriarCategoriaCartaoCreditoAsync()
+        => await ObterOuCriarCategoriaPadraoAsync(CartaoRepository.NomeCategoriaCartaoCredito, "💳", "#B2CFE6");
+
+    private async Task<int> ObterOuCriarCategoriaPadraoAsync(string nome, string icone, string corHex)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
-        var categoria = await context.Categorias.FirstOrDefaultAsync(c => c.Nome == CestaDespesaRegras.NomeCategoria);
+        return await GarantirCategoriaNoContextoAsync(context, nome, icone, corHex);
+    }
+
+    private static async Task<int> GarantirCategoriaNoContextoAsync(AppDbContext context, string nome, string icone, string corHex)
+    {
+        var categoria = await context.Categorias.FirstOrDefaultAsync(c => c.Nome == nome);
         if (categoria is null)
         {
             categoria = new Categoria
             {
-                Nome = CestaDespesaRegras.NomeCategoria,
-                Icone = "🧺",
-                CorHex = "#6DA538",
+                Nome = nome,
+                Icone = icone,
+                CorHex = corHex,
                 TipoPadrao = TipoTransacao.Despesa,
                 EhPadraoDoSistema = true,
                 PermiteItensFatura = true,
@@ -270,6 +300,146 @@ public class CestaRepository : ICestaRepository
             await context.SaveChangesAsync();
 
         return categoria.Id;
+    }
+
+    private static async Task<int?> ProcessarFaturaCreditoAsync(
+        AppDbContext context,
+        int? itemFaturaAnteriorId,
+        FaturaCreditoCesta? faturaCredito)
+    {
+        if (faturaCredito is null || faturaCredito.Valor <= 0)
+        {
+            if (itemFaturaAnteriorId is int itemId)
+                await RemoverItemFaturaAsync(context, itemId);
+            return null;
+        }
+
+        var cartao = await context.Cartoes.FirstOrDefaultAsync(c => c.Id == faturaCredito.CartaoCreditoId)
+            ?? throw new InvalidOperationException("Selecione o cartão de crédito.");
+
+        if (itemFaturaAnteriorId is int itemAnteriorId)
+        {
+            var itemAnterior = await context.ItensLancamento
+                .Include(i => i.Transacao!)
+                .ThenInclude(t => t.Itens)
+                .FirstOrDefaultAsync(i => i.Id == itemAnteriorId);
+
+            if (itemAnterior?.Transacao is not null)
+            {
+                var transacaoAnterior = itemAnterior.Transacao;
+                var mesmaFatura = faturaCredito.FaturaTransacaoId is null
+                    ? transacaoAnterior.CartaoId == cartao.Id
+                    : transacaoAnterior.Id == faturaCredito.FaturaTransacaoId.Value;
+
+                if (mesmaFatura)
+                {
+                    var diferenca = CestaDespesaRegras.Dinheiro(faturaCredito.Valor - itemAnterior.Valor);
+                    itemAnterior.Descricao = faturaCredito.DescricaoItem;
+                    itemAnterior.Valor = faturaCredito.Valor;
+                    itemAnterior.CategoriaId = faturaCredito.CategoriaCestaId;
+                    transacaoAnterior.CartaoId = cartao.Id;
+                    transacaoAnterior.Valor = CestaDespesaRegras.Dinheiro(Math.Max(0.01m, transacaoAnterior.Valor + diferenca));
+                    transacaoAnterior.AtualizadoEm = DateTime.UtcNow;
+                    await context.SaveChangesAsync();
+                    return itemAnterior.Id;
+                }
+            }
+
+            await RemoverItemFaturaAsync(context, itemAnteriorId);
+        }
+
+        if (faturaCredito.FaturaTransacaoId is int faturaId)
+        {
+            var fatura = await context.Transacoes
+                .Include(t => t.Itens)
+                .FirstOrDefaultAsync(t => t.Id == faturaId)
+                ?? throw new InvalidOperationException("A fatura escolhida não foi encontrada.");
+
+            if (fatura.CartaoId is not null && fatura.CartaoId != cartao.Id)
+                throw new InvalidOperationException("A fatura escolhida pertence a outro cartão.");
+
+            fatura.CartaoId = cartao.Id;
+            fatura.Valor = CestaDespesaRegras.Dinheiro(fatura.Valor + faturaCredito.Valor);
+            fatura.AtualizadoEm = DateTime.UtcNow;
+
+            var ordem = fatura.Itens.Count == 0 ? 0 : fatura.Itens.Max(i => i.Ordem) + 1;
+            var novoItem = new ItemLancamento
+            {
+                TransacaoId = fatura.Id,
+                Descricao = faturaCredito.DescricaoItem,
+                Valor = faturaCredito.Valor,
+                Natureza = NaturezaItemLancamento.Avulsa,
+                CategoriaId = faturaCredito.CategoriaCestaId,
+                Ordem = ordem
+            };
+            context.ItensLancamento.Add(novoItem);
+            await context.SaveChangesAsync();
+            return novoItem.Id;
+        }
+
+        var categoriaCartaoId = await GarantirCategoriaNoContextoAsync(
+            context, CartaoRepository.NomeCategoriaCartaoCredito, "💳", "#B2CFE6");
+
+        var descricaoFatura = $"Fatura {cartao.Nome}";
+        if (descricaoFatura.Length > 120)
+            descricaoFatura = descricaoFatura[..120];
+
+        var novaFatura = new Transacao
+        {
+            Descricao = descricaoFatura,
+            Valor = faturaCredito.Valor,
+            Data = faturaCredito.DataCompra,
+            Tipo = TipoTransacao.Despesa,
+            Recorrencia = TipoRecorrencia.Unica,
+            Pago = false,
+            CategoriaId = categoriaCartaoId,
+            CartaoId = cartao.Id,
+            MembroFamiliaId = faturaCredito.MembroFamiliaId
+        };
+        var itemNovaFatura = new ItemLancamento
+        {
+            Descricao = faturaCredito.DescricaoItem,
+            Valor = faturaCredito.Valor,
+            Natureza = NaturezaItemLancamento.Avulsa,
+            CategoriaId = faturaCredito.CategoriaCestaId,
+            Ordem = 0
+        };
+        novaFatura.Itens.Add(itemNovaFatura);
+        context.Transacoes.Add(novaFatura);
+        await context.SaveChangesAsync();
+        return itemNovaFatura.Id;
+    }
+
+    private static async Task RemoverItemFaturaAsync(AppDbContext context, int itemFaturaId)
+    {
+        var item = await context.ItensLancamento.FirstOrDefaultAsync(i => i.Id == itemFaturaId);
+        if (item is null)
+            return;
+
+        var transacaoId = item.TransacaoId;
+        var valorItem = item.Valor;
+        context.ItensLancamento.Remove(item);
+        await context.SaveChangesAsync();
+
+        var fatura = await context.Transacoes
+            .Include(t => t.Itens)
+            .FirstOrDefaultAsync(t => t.Id == transacaoId);
+        if (fatura is null)
+            return;
+
+        var novoTotal = CestaDespesaRegras.Dinheiro(fatura.Valor - valorItem);
+        var somaItensRestantes = CestaDespesaRegras.Dinheiro(fatura.Itens.Sum(i => i.Valor));
+
+        if (fatura.Itens.Count == 0 && novoTotal <= 0)
+        {
+            context.Transacoes.Remove(fatura);
+            await context.SaveChangesAsync();
+            return;
+        }
+
+        fatura.Valor = Math.Max(somaItensRestantes, Math.Max(0.01m, novoTotal));
+        fatura.AtualizadoEm = DateTime.UtcNow;
+        await context.SaveChangesAsync();
     }
 
     private static async Task RemoverDespesaAsync(AppDbContext context, CompraCesta compra)

@@ -57,9 +57,12 @@ public static class CestaDespesaRegras
     }
 
     public static List<ParcelaRateio> Ratear(IReadOnlyList<ItemPrecoCategoria> itens, decimal beneficio)
+        => RatearValor(itens, Dinheiro(itens.Sum(i => i.Preco) - beneficio));
+
+    public static List<ParcelaRateio> RatearValor(IReadOnlyList<ItemPrecoCategoria> itens, decimal valorAlvo)
     {
         var total = itens.Sum(i => i.Preco);
-        var liquido = Dinheiro(total - beneficio);
+        var liquido = Dinheiro(valorAlvo);
         if (itens.Count == 0 || liquido <= 0 || total <= 0)
             return new List<ParcelaRateio>();
 
@@ -108,7 +111,8 @@ public static class CestaDespesaRegras
         ValidarBeneficio(total, beneficio, tipo);
         var pagamento = NormalizarPagamento(CustoDeBolso(total, beneficio), dinheiro, cartao);
 
-        var rateio = Ratear(itens, beneficio);
+        var valorDespesaDinheiro = pagamento.Dinheiro;
+        var rateio = RatearValor(itens, valorDespesaDinheiro);
         var valor = Dinheiro(rateio.Sum(p => p.Valor));
         var linhas = rateio
             .Where(p => p.CategoriaId != categoriaCestaId && p.Valor >= 0.01m)

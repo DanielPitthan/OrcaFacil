@@ -16,6 +16,7 @@ public class TransacaoRepository : GenericRepository<Transacao>, ITransacaoRepos
         await using var context = await ContextFactory.CreateDbContextAsync();
         return await context.Transacoes
             .Include(t => t.Categoria)
+            .Include(t => t.Cartao)
             .Include(t => t.MembroFamilia)
             .Include(t => t.Itens)
             .ThenInclude(i => i.Categoria)
@@ -27,6 +28,7 @@ public class TransacaoRepository : GenericRepository<Transacao>, ITransacaoRepos
         await using var context = await ContextFactory.CreateDbContextAsync();
         var query = context.Transacoes
             .Include(t => t.Categoria)
+            .Include(t => t.Cartao)
             .Include(t => t.MembroFamilia)
             .Include(t => t.Itens)
             .ThenInclude(i => i.Categoria)

@@ -113,3 +113,12 @@ public sealed class DespesaMontada
     public decimal Dinheiro { get; init; }
     public decimal Cartao { get; init; }
 }
+
+public sealed record FaturaCreditoCesta(
+    int CartaoCreditoId,
+    int? FaturaTransacaoId,
+    decimal Valor,
+    string DescricaoItem,
+    int CategoriaCestaId,
+    DateTime DataCompra,
+    int MembroFamiliaId);

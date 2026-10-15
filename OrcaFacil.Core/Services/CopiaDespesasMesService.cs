@@ -34,6 +34,7 @@ public class CopiaDespesasMesService
                 Pago = false,
                 Observacao = origem.Observacao,
                 CategoriaId = origem.CategoriaId,
+                CartaoId = origem.CartaoId,
                 MembroFamiliaId = origem.MembroFamiliaId,
                 TransacaoOrigemId = origem.Id,
                 Itens = itens

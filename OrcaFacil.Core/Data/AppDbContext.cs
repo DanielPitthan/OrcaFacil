@@ -23,6 +23,8 @@ public class AppDbContext : DbContext
     public DbSet<LocalCompra> LocaisCompra => Set<LocalCompra>();
     public DbSet<CompraCesta> ComprasCesta => Set<CompraCesta>();
     public DbSet<CompraCestaItem> ItensCompraCesta => Set<CompraCestaItem>();
+    public DbSet<Cartao> Cartoes => Set<Cartao>();
+    public DbSet<RecargaCartao> RecargasCartao => Set<RecargaCartao>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -59,6 +61,11 @@ public class AppDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(t => t.TransacaoOrigemId)
                   .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(t => t.Cartao)
+                  .WithMany(c => c.Transacoes)
+                  .HasForeignKey(t => t.CartaoId)
+                  .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasMany(t => t.Itens)
                   .WithOne(i => i.Transacao)
@@ -131,6 +138,21 @@ public class AppDbContext : DbContext
             entity.HasIndex(l => l.Nome).IsUnique();
         });
 
+        modelBuilder.Entity<Cartao>(entity =>
+        {
+            entity.Property(c => c.Nome).UseCollation("NOCASE");
+            entity.HasIndex(c => c.Nome).IsUnique();
+        });
+
+        modelBuilder.Entity<RecargaCartao>(entity =>
+        {
+            entity.HasIndex(r => new { r.CartaoId, r.Data });
+            entity.HasOne(r => r.Cartao)
+                  .WithMany(c => c.Recargas)
+                  .HasForeignKey(r => r.CartaoId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<CompraCesta>(entity =>
         {
             entity.HasIndex(c => new { c.Ano, c.Mes, c.LocalCompraId });
@@ -139,6 +161,21 @@ public class AppDbContext : DbContext
                   .WithMany(l => l.Compras)
                   .HasForeignKey(c => c.LocalCompraId)
                   .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(c => c.CartaoBeneficio)
+                  .WithMany()
+                  .HasForeignKey(c => c.CartaoBeneficioId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(c => c.CartaoCredito)
+                  .WithMany()
+                  .HasForeignKey(c => c.CartaoCreditoId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(c => c.ItemFatura)
+                  .WithMany()
+                  .HasForeignKey(c => c.ItemFaturaId)
+                  .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasOne(c => c.Transacao)
                   .WithMany()

@@ -1,0 +1,86 @@
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form">
+            <MudTextField @ref="_nome" T="string" @bind-Value="Modelo.Nome" Label="Nome do cartão"
+                          Required="true" RequiredError="Informe o nome" MaxLength="80" Class="mb-3"
+                          Placeholder="Ex.: Nubank, Alelo Alimentação" />
+
+            <MudTextField T="string" @bind-Value="Modelo.Bandeira" Label="Bandeira"
+                          Required="true" RequiredError="Informe a bandeira" MaxLength="40" Class="mb-3"
+                          Placeholder="Ex.: Mastercard, Visa, Elo, Alelo" />
+
+            <MudTextField T="string" @bind-Value="Modelo.UltimosDigitos" Label="4 últimos números"
+                          Required="true" RequiredError="Informe os 4 últimos números" MaxLength="4" Class="mb-3"
+                          Placeholder="Ex.: 1234" />
+
+            <MudSelect T="TipoCartao" @bind-Value="Modelo.Tipo" Label="Finalidade" Class="mb-3">
+                <MudSelectItem Value="TipoCartao.Credito">Cartão de Crédito</MudSelectItem>
+                <MudSelectItem Value="TipoCartao.Beneficio">Cartão de Benefício</MudSelectItem>
+            </MudSelect>
+
+            @if (Modelo.Tipo == TipoCartao.Beneficio)
+            {
+                <MudSelect T="TipoCartaoBeneficio?" @bind-Value="Modelo.TipoBeneficio" Label="Tipo do benefício" Class="mb-3">
+                    @foreach (var tipo in Enum.GetValues<TipoCartaoBeneficio>())
+                    {
+                        <MudSelectItem T="TipoCartaoBeneficio?" Value="@tipo">@tipo.Rotulo()</MudSelectItem>
+                    }
+                </MudSelect>
+            }
+
+            @if (Modelo.Id is not null)
+            {
+                <MudCheckBox T="bool" @bind-Value="Modelo.Ativo" Label="Ativo" />
+            }
+
+            @if (_erro is not null)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Error" Class="mt-2">@_erro</MudText>
+            }
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancelar</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SalvarAsync">Salvar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public CartaoFormModel Modelo { get; set; } = new();
+
+    private MudForm _form = null!;
+    private MudTextField<string> _nome = null!;
+    private string? _erro;
+
+    protected override void OnInitialized()
+    {
+        Modelo.TipoBeneficio ??= TipoCartaoBeneficio.ValeAlimentacao;
+    }
+
+    private async Task SalvarAsync()
+    {
+        _erro = null;
+        await _form.ValidateAsync();
+        if (!_form.IsValid)
+        {
+            await _nome.FocusAsync();
+            return;
+        }
+
+        var digitos = Modelo.UltimosDigitos?.Trim() ?? string.Empty;
+        if (digitos.Length != 4 || !digitos.All(char.IsAsciiDigit))
+        {
+            _erro = "Informe exatamente os 4 últimos números do cartão.";
+            return;
+        }
+
+        Modelo.Nome = Modelo.Nome.Trim();
+        Modelo.Bandeira = Modelo.Bandeira.Trim();
+        Modelo.UltimosDigitos = digitos;
+        if (Modelo.Tipo != TipoCartao.Beneficio)
+            Modelo.TipoBeneficio = null;
+
+        MudDialog.Close(DialogResult.Ok(Modelo));
+    }
+}
