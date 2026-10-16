@@ -47,7 +47,14 @@
 
 /* A classe fica em html e body, não no MudLayout. Diálogo, popover e snackbar
    são irmãos do layout e só herdam estes tokens se o ancestral comum tiver a classe.
-   color-scheme segue a classe que o MAUI aplica. Não usar prefers-color-scheme. */
+   color-scheme segue a classe. Sem classe, light dark acompanha o sistema até o
+   script do index.html ou o Blazor aplicar of-tema-claro / of-tema-escuro.
+   Não usar prefers-color-scheme nas regras do app. */
+html:not(.of-tema-claro):not(.of-tema-escuro),
+html:not(.of-tema-claro):not(.of-tema-escuro) body {
+    color-scheme: light dark;
+}
+
 .of-tema-claro {
     /* #B69CFF sobre o fundo claro fica abaixo de 4,5:1. Este roxo só vale no tema claro. */
     --of-saldo: #5C3DB8;
@@ -57,12 +64,14 @@
 }
 
 html.of-tema-claro,
+html.of-tema-claro body,
 body.of-tema-claro {
     color-scheme: light;
     background-color: #EFF3F7;
 }
 
 html.of-tema-escuro,
+html.of-tema-escuro body,
 body.of-tema-escuro {
     color-scheme: dark;
     background-color: #12151B;

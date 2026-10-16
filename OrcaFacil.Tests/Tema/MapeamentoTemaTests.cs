@@ -27,6 +27,33 @@ public class MapeamentoTemaTests
         Assert.Equal(isDarkMode, MapeamentoTema.IsDarkMode(preferencia, sistemaEscuro));
     }
 
+    [Fact]
+    public void DefaultDoEnum_EAutomatico_ENaoClaro()
+    {
+        Assert.Equal(TemaPreferido.Automatico, default(TemaPreferido));
+        Assert.Equal(0, (int)TemaPreferido.Automatico);
+        Assert.Equal(1, (int)TemaPreferido.Claro);
+        Assert.Equal(2, (int)TemaPreferido.Escuro);
+        Assert.NotEqual(default, TemaPreferido.Claro);
+        Assert.NotEqual(default, TemaPreferido.Escuro);
+    }
+
+    [Theory]
+    [InlineData("Claro", TemaPreferido.Claro)]
+    [InlineData("Escuro", TemaPreferido.Escuro)]
+    [InlineData("Automatico", TemaPreferido.Automatico)]
+    [InlineData("1", TemaPreferido.Claro)]
+    [InlineData("2", TemaPreferido.Escuro)]
+    [InlineData("0", TemaPreferido.Automatico)]
+    [InlineData(null, TemaPreferido.Automatico)]
+    [InlineData("", TemaPreferido.Automatico)]
+    [InlineData("claro", TemaPreferido.Automatico)]
+    [InlineData("3", TemaPreferido.Automatico)]
+    public void Interpretar_LeNomeOuInteiroJaGravado(string? valor, TemaPreferido tema)
+    {
+        Assert.Equal(tema, MapeamentoTema.Interpretar(valor));
+    }
+
     [Theory]
     [InlineData(TemaUsuarioApp.Dark, true)]
     [InlineData(TemaUsuarioApp.Light, false)]

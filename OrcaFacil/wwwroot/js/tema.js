@@ -11,5 +11,10 @@ window.OrcaFacilTema = {
             if (classe)
                 el.classList.add(classe);
         }
+        try {
+            if (classe === "of-tema-claro" || classe === "of-tema-escuro")
+                localStorage.setItem("orcafacil.tema.classe", classe);
+        } catch (e) {
+        }
     }
 };
