@@ -222,6 +222,26 @@ html.of-teclado-aberto .mud-dialog-container {
     flex: 0 0 auto;
 }
 
+.of-item-fatura {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+}
+
+.of-item-fatura-texto {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.of-item-descritivo {
+    font-weight: 600;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* A legenda do gráfico em flex encolhe os itens no WebView antigo e os textos se sobrepõem. */
 .mud-chart .mud-chart-legend {
     display: block;

@@ -152,6 +152,7 @@ public class TransacaoService : ITransacaoService
         var itens = dto.Itens.Select((item, indice) => new ItemLancamento
         {
             Descricao = item.Descricao?.Trim() ?? string.Empty,
+            Descritivo = ItensFaturaInclusao.NormalizarDescritivo(item.Descritivo),
             Valor = item.Valor,
             Natureza = item.Natureza,
             ParcelaAtual = item.Natureza == NaturezaItemLancamento.Parcelada ? item.ParcelaAtual : null,

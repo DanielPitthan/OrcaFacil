@@ -11,6 +11,9 @@ public class ItemLancamentoFormModel
     [MaxLength(120, ErrorMessage = "Máximo de 120 caracteres")]
     public string Descricao { get; set; } = string.Empty;
 
+    [MaxLength(120, ErrorMessage = "O descritivo pode ter no máximo 120 caracteres")]
+    public string? Descritivo { get; set; }
+
     [Range(0.01, 1_000_000_000, ErrorMessage = "Informe um valor maior que zero")]
     public decimal Valor { get; set; }
 
