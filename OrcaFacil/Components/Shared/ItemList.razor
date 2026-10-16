@@ -21,7 +21,7 @@
                         <span class="of-lista-titulo">@Titulo(item)</span>
                         <span class="of-lista-sub">@Subtitulo(item)</span>
                     </span>
-                    <span class="of-lista-valor of-moeda">@Valor(item)</span>
+                    <span class="of-lista-valor of-moeda @(EhCredito?.Invoke(item) == true ? "of-lista-valor-credito" : null)">@Valor(item)</span>
                     <MudMenu Icon="@Icons.Material.Filled.MoreVert" AriaLabel="@AriaMenu(item)" Size="Size.Medium"
                              AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopRight">
                         <MudMenuItem OnClick="@(() => OnEditar.InvokeAsync(item))">Editar</MudMenuItem>
@@ -32,10 +32,27 @@
         </ul>
     }
 
-    <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
-               Class="of-lista-adicionar" OnClick="OnAdicionar">
-        @TextoAdicionar
-    </MudButton>
+    @if (OnEstorno.HasDelegate)
+    {
+        <div class="of-lista-acoes">
+            <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                       Class="of-lista-acao" OnClick="OnAdicionar">
+                @TextoAdicionar
+            </MudButton>
+            <MudButton Variant="Variant.Text" Color="Color.Success" StartIcon="@Icons.Material.Filled.Undo"
+                       Class="of-lista-acao" Disabled="@EstornoDesabilitado" OnClick="OnEstorno"
+                       aria-label="@TextoEstorno">
+                @TextoEstorno
+            </MudButton>
+        </div>
+    }
+    else
+    {
+        <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+                   Class="of-lista-adicionar" OnClick="OnAdicionar">
+            @TextoAdicionar
+        </MudButton>
+    }
 </div>
 
 @code {
@@ -50,9 +67,13 @@
     [Parameter, EditorRequired] public Func<TItem, string> Icone { get; set; } = null!;
     [Parameter] public Func<TItem, string?>? Cor { get; set; }
     [Parameter] public Func<TItem, object>? ChaveItem { get; set; }
+    [Parameter] public Func<TItem, bool>? EhCredito { get; set; }
     [Parameter] public EventCallback<TItem> OnEditar { get; set; }
     [Parameter] public EventCallback<TItem> OnRemover { get; set; }
     [Parameter] public EventCallback OnAdicionar { get; set; }
+    [Parameter] public EventCallback OnEstorno { get; set; }
+    [Parameter] public bool EstornoDesabilitado { get; set; }
+    [Parameter] public string TextoEstorno { get; set; } = "Estorno";
 
     private object Chave(TItem item) => ChaveItem?.Invoke(item) ?? (object)item!;
 

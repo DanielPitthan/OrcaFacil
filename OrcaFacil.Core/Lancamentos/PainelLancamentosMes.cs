@@ -121,9 +121,7 @@ public sealed class PainelLancamentosMes
             : indiceHoje is null ? null : 0m;
 
         var nomeMes = cultura.TextInfo.ToTitleCase(inicio.ToString("MMMM yyyy", cultura));
-        var textoSobra = sobra < 0
-            ? "− " + Math.Abs(sobra).ToString("C", cultura)
-            : sobra.ToString("C", cultura);
+        var textoSobra = FormatadorMoeda.FormatarSaldo(sobra, cultura);
         var textoTotais =
             $"Receitas {receitas.ToString("C", cultura)} · despesas {despesas.ToString("C", cultura)} · sobra {textoSobra}";
 
@@ -304,11 +302,7 @@ public sealed class PainelLancamentosMes
         var dia = cultura.DateTimeFormat.GetAbbreviatedDayName(grupo.Key.DayOfWeek).TrimEnd('.');
         var mes = cultura.DateTimeFormat.GetAbbreviatedMonthName(grupo.Key.Month).TrimEnd('.');
         var cabecalho = $"{dia}, {grupo.Key.Day} {mes}".ToUpper(cultura);
-        var texto = liquido < 0
-            ? "− " + Math.Abs(liquido).ToString("C", cultura)
-            : liquido > 0
-                ? "+ " + liquido.ToString("C", cultura)
-                : liquido.ToString("C", cultura);
+        var texto = FormatadorMoeda.FormatarLiquido(liquido, cultura);
 
         return new GrupoDiaLancamentos(grupo.Key, cabecalho, liquido, texto, linhas);
     }
@@ -322,13 +316,14 @@ public sealed class PainelLancamentosMes
         var itens = quantidade == 1 ? "1 item" : $"{quantidade} itens";
         var subtitulo = ehCartao ? $"Cartão de crédito · {itens}" : categoria;
         string? classificados = ehCartao && soma < lancamento.Valor
-            ? soma.ToString("C", cultura) + " classificados"
+            ? FormatadorMoeda.FormatarSaldo(soma, cultura) + " classificados"
             : null;
 
         var pago = lancamento.Tipo == TipoTransacao.Receita || lancamento.Pago;
-        var textoValor = lancamento.Tipo == TipoTransacao.Receita
-            ? "+ " + lancamento.Valor.ToString("C", cultura)
-            : "− " + lancamento.Valor.ToString("C", cultura);
+        var textoValor = FormatadorMoeda.FormatarLancamento(
+            lancamento.Valor,
+            lancamento.Tipo == TipoTransacao.Receita,
+            cultura);
 
         return new LinhaLancamentoMes(
             lancamento.Id,

@@ -29,6 +29,23 @@ public static class ItensFaturaInclusao
     public static string Titulo(string? descritivo, string fallback)
         => TemDescritivo(descritivo) ? descritivo!.Trim() : fallback;
 
+    public static int ProximaOrdem(IEnumerable<ItemLancamentoFormModel> itens)
+    {
+        var maximo = 0;
+        var algum = false;
+        foreach (var item in itens)
+        {
+            algum = true;
+            if (item.Ordem > maximo)
+                maximo = item.Ordem;
+        }
+
+        if (!algum)
+            return 0;
+
+        return maximo == int.MaxValue ? maximo : maximo + 1;
+    }
+
     public static ItemLancamentoFormModel Acrescentar(
         ICollection<ItemLancamentoFormModel> itens,
         int categoriaId,
@@ -51,7 +68,8 @@ public static class ItensFaturaInclusao
             Natureza = natureza,
             ParcelaAtual = natureza == NaturezaItemLancamento.Parcelada ? parcelaAtual : null,
             TotalParcelas = natureza == NaturezaItemLancamento.Parcelada ? totalParcelas : null,
-            CategoriaId = categoriaId
+            CategoriaId = categoriaId,
+            Ordem = ProximaOrdem(itens)
         };
 
         itens.Add(item);
