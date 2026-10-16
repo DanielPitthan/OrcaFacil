@@ -1,0 +1,31 @@
+@if (Itens.Count == 0)
+{
+    <p class="of-orcamento-vazio">Nenhum orçamento no limite</p>
+}
+else
+{
+    <ul class="of-orcamentos">
+        @foreach (var item in Itens)
+        {
+            <li class="of-orcamento">
+                <div class="of-orcamento-topo">
+                    <span class="of-orcamento-nome">@item.Nome</span>
+                    <span class="of-chip-pct @(item.Estourou ? "of-chip-estouro" : "of-chip-atencao")">@item.TextoChip</span>
+                </div>
+                <div class="of-trilho" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+                     aria-valuenow="@item.Progresso.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+                     aria-label="@($"{item.Nome}: {item.TextoChip}")">
+                    <span class="@(item.Estourou ? "of-trilho-perigo" : "of-trilho-atencao")" style="width:@Largura(item.Progresso)"></span>
+                </div>
+                <p class="of-orcamento-detalhe of-moeda">@item.TextoDetalhe</p>
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<LinhaOrcamentoResumo> Itens { get; set; } = [];
+
+    private static string Largura(double progresso)
+        => Math.Clamp(progresso, 0, 100).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "%";
+}

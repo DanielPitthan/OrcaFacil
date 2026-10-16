@@ -23,6 +23,16 @@
     --of-error: var(--mud-palette-error);
     /* A paleta do MudBlazor não tem um slot de saldo. O roxo claro é o token do tema escuro. */
     --of-saldo: #B69CFF;
+    /*
+      Danger é o estouro de orçamento. Error da paleta (#E07171) já colore alertas do app;
+      trocá-lo mudaria telas que esta rodada não cobre. O texto do chip fica em --of-danger-text
+      sobre o fundo do chip: #F59A9A sobre #E5677D fica em 1,5:1.
+    */
+    --of-danger: #E5677D;
+    --of-danger-text: #F59A9A;
+    --of-cat-2: #7BD3C7;
+    --of-cat-4: #F08A5D;
+    --of-cat-outras: #5F6878;
 
     --of-radius-card: 16px;
     --of-radius-control: 12px;
@@ -38,6 +48,9 @@
 .of-tema-claro {
     /* #B69CFF sobre o fundo claro fica abaixo de 4,5:1. Este roxo só vale no tema claro. */
     --of-saldo: #5C3DB8;
+    /* #F59A9A sobre o fundo claro fica em 1,9:1. O texto do chip estourado escurece só aqui. */
+    --of-danger: #B4233A;
+    --of-danger-text: #9B2C3A;
 }
 
 .of-moeda {

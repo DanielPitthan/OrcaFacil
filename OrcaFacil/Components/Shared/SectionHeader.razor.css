@@ -1,0 +1,36 @@
+.of-secao {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    min-height: var(--of-touch);
+    margin: 8px 0 8px;
+}
+
+.of-secao-titulo {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    color: var(--of-text-muted);
+}
+
+.of-secao-valor {
+    flex: 0 1 auto;
+    margin-left: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--of-text-secondary);
+    overflow-wrap: anywhere;
+    text-align: right;
+}
+
+.of-secao-acao {
+    flex: 0 0 auto;
+    margin-left: 8px;
+}

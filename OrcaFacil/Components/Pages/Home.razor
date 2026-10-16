@@ -1,112 +1,125 @@
 @page "/"
+@using System.Globalization
+@implements IDisposable
 @inject INoticiaService Noticias
 @inject ITransacaoService TransacaoService
+@inject IOrcamentoService OrcamentoService
+@inject IMetaService MetaService
+@inject NavigationManager Navigation
 @inject ISnackbar Snackbar
+@inject CascoNavegacao Casco
 
-<div class="noticias-pagina">
-<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
-    <MudText Typo="Typo.h6">Notícias</MudText>
-    <MudSpacer />
-    <MudIconButton Icon="@Icons.Material.Filled.Refresh"
-                   Color="Color.Inherit"
-                   Disabled="_carregando"
-                   OnClick="AtualizarAsync"
-                   aria-label="Atualizar notícias" />
-</MudStack>
-
-<MudGrid Class="mb-4" Spacing="2">
-    <MudItem xs="6">
-        <MudPaper Class="pa-3 noticias-kpi" Elevation="2">
-            <MudText Typo="Typo.caption">Receitas do mês</MudText>
-            @if (_resumo is null)
-            {
-                <MudSkeleton Width="90%" Height="28px" Class="mt-1" />
-            }
-            else
-            {
-                <MudText Typo="Typo.h6" Class="of-currency-receita">@_resumo.TotalReceitas.ToString("C")</MudText>
-            }
-        </MudPaper>
-    </MudItem>
-    <MudItem xs="6">
-        <MudPaper Class="pa-3 noticias-kpi" Elevation="2">
-            <MudText Typo="Typo.caption">Despesas lançadas do mês</MudText>
-            @if (_resumo is null)
-            {
-                <MudSkeleton Width="90%" Height="28px" Class="mt-1" />
-            }
-            else
-            {
-                <MudText Typo="Typo.h6" Class="of-currency-despesa">@_resumo.TotalDespesas.ToString("C")</MudText>
-            }
-        </MudPaper>
-    </MudItem>
-</MudGrid>
-
-@if (_carregando && _brasil.Count == 0 && _mundo.Count == 0)
-{
-    <MudProgressCircular Indeterminate="true" />
-}
-else
-{
-    @if (_carregando)
+<div class="of-inicio">
+    @if (_painel is null)
     {
-        <MudProgressLinear Indeterminate="true" Class="mb-2" />
+        <MudSkeleton Height="180px" Class="of-inicio-esqueleto" />
+        <MudSkeleton Height="72px" Class="of-inicio-esqueleto" />
+    }
+    else
+    {
+        <MonthSummaryCard Compact="true" Sobra="@_painel.Saldo" TextoSobra="@_painel.TextoSaldo"
+                          RotuloSaldo="@_painel.RotuloSaldo" RotuloAcessivel="@_painel.RotuloAcessivelResumo"
+                          TextoReceitas="@_painel.TextoReceitas" TextoDespesas="@_painel.TextoDespesas"
+                          TextoAPagar="@_painel.TextoAPagar"
+                          TextoReceitaComprometida="@_painel.TextoReceitaComprometida"
+                          ProgressoReceita="@_painel.ProgressoReceita" ReceitaCritica="@_painel.ReceitaCritica" />
+
+        <BudgetAlertBanner Visivel="@_painel.ExibirAlertaOrcamento"
+                           Titulo="@_painel.TextoResumoOrcamentos" Resumo="@_painel.ResumoAlerta" />
+
+        @if (_painel.MetaDestaque is { } meta)
+        {
+            <GoalProgress Compact="true" Nome="@meta.Nome" TextoPercentual="@meta.TextoPercentual"
+                          Progresso="@meta.Progresso" />
+        }
     }
 
-    <MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true" Class="pt-2">
-        <MudTabPanel Text="Brasil" Icon="@Icons.Material.Filled.Flag">
-            <NoticiasPainel Noticias="_brasil" Erro="@_erroBrasil" Aviso="@_avisoBrasil" AoAbrir="AbrirAsync" />
-        </MudTabPanel>
-        <MudTabPanel Text="Mundo" Icon="@Icons.Material.Filled.Public">
-            <NoticiasPainel Noticias="_mundo" Erro="@_erroMundo" Aviso="@_avisoMundo" AoAbrir="AbrirAsync" />
-        </MudTabPanel>
-    </MudTabs>
-}
+    <NewsFeed Escopo="_escopo" EscopoChanged="AlterarEscopo" Itens="_noticias" Carregando="_carregandoNoticias"
+              Erro="@_erro" Aviso="@_aviso" Atualizar="AtualizarAsync" AoAbrir="AbrirAsync" />
+</div>
+
+<div class="of-inicio-fab">
+    <MudFab Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" Label="Novo lançamento"
+            aria-label="Novo lançamento" OnClick="NovoLancamento" />
 </div>
 
 @code {
     private const string MensagemFalha = "Não foi possível carregar as notícias. Verifique a conexão.";
 
-    private bool _carregando = true;
-    private ResumoMensalDto? _resumo;
-    private List<Noticia> _brasil = new();
-    private List<Noticia> _mundo = new();
+    private bool _carregandoNoticias = true;
+    private bool _cascoLigado;
+    private EscopoNoticia _escopo = EscopoNoticia.Brasil;
+    private PainelInicio? _painel;
+    private List<Noticia> _brasil = [];
+    private List<Noticia> _mundo = [];
     private string? _erroBrasil;
     private string? _erroMundo;
     private string? _avisoBrasil;
     private string? _avisoMundo;
+    private IReadOnlyList<LinhaNoticia> _noticias = [];
+    private string? _erro;
+    private string? _aviso;
 
-    protected override async Task OnInitializedAsync() => await CarregarAsync(forcar: false);
+    private RenderFragment Barra => @<text>
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
+                       aria-label="Abrir menu" OnClick="AbrirMenu" />
+        <span class="of-appbar-titulos">
+            <span class="of-appbar-titulo">Início</span>
+            <span class="of-appbar-sub">@_painel?.NomeMes</span>
+        </span>
+    </text>;
 
-    private Task AtualizarAsync() => CarregarAsync(forcar: true);
-
-    private async Task CarregarAsync(bool forcar)
+    protected override async Task OnInitializedAsync()
     {
-        _carregando = true;
-        try
-        {
-            await Task.WhenAll(
-                CarregarEscopoAsync(EscopoNoticia.Brasil, forcar),
-                CarregarEscopoAsync(EscopoNoticia.Mundo, forcar),
-                CarregarResumoAsync());
-        }
-        finally
-        {
-            _carregando = false;
-        }
+        Casco.Definir(Barra);
+        _cascoLigado = true;
+        await Task.WhenAll(CarregarResumoAsync(), CarregarNoticiasAsync(forcar: false));
     }
 
     private async Task CarregarResumoAsync()
     {
+        var hoje = DateTime.Today;
+        var mes = new ResumoMensalDto();
+        var alertas = new List<AlertaOrcamentoDto>();
+        var metas = new List<Meta>();
         try
         {
-            var hoje = DateTime.Today;
-            _resumo = await TransacaoService.ObterResumoMensalAsync(hoje.Month, hoje.Year);
+            mes = await TransacaoService.ObterResumoMensalAsync(hoje.Month, hoje.Year);
+            alertas = await OrcamentoService.ObterAlertasAsync(hoje.Month, hoje.Year);
+            metas = await MetaService.ListarAsync();
         }
         catch (Exception)
         {
-            _resumo ??= new ResumoMensalDto();
+            Snackbar.Add("Não foi possível carregar o resumo.", Severity.Error);
+        }
+
+        _painel = PainelInicio.Montar(new EntradaPainelInicio(
+            PeriodoResumo.EsteMes,
+            mes,
+            new ResumoAcumuladoDto(),
+            [],
+            [],
+            alertas,
+            metas,
+            hoje), CultureInfo.CurrentCulture);
+        Casco.Atualizar();
+    }
+
+    private Task AtualizarAsync() => CarregarNoticiasAsync(forcar: true);
+
+    private async Task CarregarNoticiasAsync(bool forcar)
+    {
+        _carregandoNoticias = true;
+        try
+        {
+            await Task.WhenAll(
+                CarregarEscopoAsync(EscopoNoticia.Brasil, forcar),
+                CarregarEscopoAsync(EscopoNoticia.Mundo, forcar));
+        }
+        finally
+        {
+            _carregandoNoticias = false;
+            PublicarNoticias();
         }
     }
 
@@ -125,6 +138,22 @@ else
             else
                 Definir(escopo, lista, erro: null, NoticiaService.AvisoListaAnterior);
         }
+    }
+
+    private void AlterarEscopo(EscopoNoticia escopo)
+    {
+        if (escopo == _escopo)
+            return;
+        _escopo = escopo;
+        PublicarNoticias();
+    }
+
+    private void PublicarNoticias()
+    {
+        var lista = Lista(_escopo);
+        _erro = _escopo == EscopoNoticia.Brasil ? _erroBrasil : _erroMundo;
+        _aviso = _escopo == EscopoNoticia.Brasil ? _avisoBrasil : _avisoMundo;
+        _noticias = PainelInicio.FormatarNoticias(lista, DateTimeOffset.Now);
     }
 
     private List<Noticia> Lista(EscopoNoticia escopo) =>
@@ -156,5 +185,15 @@ else
         {
             Snackbar.Add("Não foi possível abrir a notícia.", Severity.Error);
         }
+    }
+
+    private void NovoLancamento() => Navigation.NavigateTo("/lancamentos/novo");
+
+    private void AbrirMenu() => Casco.SolicitarMenu();
+
+    public void Dispose()
+    {
+        if (_cascoLigado)
+            Casco.Definir(null);
     }
 }

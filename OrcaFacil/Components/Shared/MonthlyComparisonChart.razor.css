@@ -1,0 +1,69 @@
+.of-comparacao {
+    min-width: 0;
+    margin-bottom: 8px;
+    padding: 8px 8px 12px;
+    background: var(--of-surface);
+    border: 1px solid var(--of-border);
+    border-radius: var(--of-radius-card);
+    overflow: hidden;
+}
+
+.of-comparacao-plot {
+    min-width: 0;
+    height: 220px;
+}
+
+.of-legenda {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.of-legenda-item {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--of-touch);
+    margin-right: 16px;
+    font-size: 13px;
+    color: var(--of-text-secondary);
+}
+
+.of-legenda-ponto {
+    width: 8px;
+    height: 8px;
+    margin-right: 6px;
+    border-radius: 50%;
+}
+
+.of-ponto-receita {
+    background: var(--of-success);
+}
+
+.of-ponto-despesa {
+    background: var(--of-primary);
+}
+
+.of-comparacao-nota {
+    margin: 0 8px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--of-text-muted);
+}
+
+.of-comparacao ::deep .mud-charts-gridlines-yaxis path,
+.of-comparacao ::deep .mud-charts-gridlines-xaxis-lines path {
+    stroke: var(--of-border);
+}
+
+.of-comparacao ::deep .mud-charts-xaxis text {
+    fill: var(--of-text-muted);
+}
+
+.of-comparacao-atual ::deep .mud-charts-xaxis text:last-of-type {
+    font-weight: 700;
+    fill: var(--of-text);
+}
+
+.of-comparacao ::deep .mud-charts-yaxis text {
+    fill: var(--of-text-muted);
+}

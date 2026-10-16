@@ -1,139 +1,160 @@
 @page "/dashboard"
+@using System.Globalization
+@implements IDisposable
 @inject ITransacaoService TransacaoService
 @inject IOrcamentoService OrcamentoService
 @inject IMetaService MetaService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject CascoNavegacao Casco
 
-<MudText Typo="Typo.h5" Class="mb-4">Dashboard</MudText>
+<div class="of-dashboard">
+    @if (_erro is not null && _painel is null)
+    {
+        <p class="of-dashboard-erro">@_erro</p>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="CarregarAsync">Tentar de novo</MudButton>
+    }
+    else if (_painel is null)
+    {
+        <MudSkeleton Height="220px" Class="of-dashboard-esqueleto" />
+        <MudSkeleton Height="120px" Class="of-dashboard-esqueleto" />
+        <MudSkeleton Height="180px" Class="of-dashboard-esqueleto" />
+    }
+    else
+    {
+        <MonthSummaryCard Sobra="@_painel.Saldo" TextoSobra="@_painel.TextoSaldo"
+                          RotuloSaldo="@_painel.RotuloSaldo" RotuloAcessivel="@_painel.RotuloAcessivelResumo"
+                          TextoReceitas="@_painel.TextoReceitas" TextoDespesas="@_painel.TextoDespesas"
+                          TextoPagas="@_painel.TextoPagas" TextoAPagar="@_painel.TextoAPagar"
+                          TextoReceitaComprometida="@_painel.TextoReceitaComprometida"
+                          TextoDespesasPagas="@_painel.TextoDespesasPagas"
+                          ProgressoReceita="@_painel.ProgressoReceita" ReceitaCritica="@_painel.ReceitaCritica"
+                          ProgressoPagas="@_painel.ProgressoPagas" ExibirPagamento="@_painel.ExibirPagamento">
+            <ConteudoTopo>
+                <PeriodSelector Valor="_periodo" ValorChanged="AlterarPeriodo" />
+            </ConteudoTopo>
+        </MonthSummaryCard>
 
-@if (_carregando)
-{
-    <MudProgressCircular Indeterminate="true" />
-}
-else
-{
-    <MudGrid>
-        <MudItem xs="12" sm="4">
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudText Typo="Typo.caption">Saldo do mês</MudText>
-                <MudText Typo="Typo.h5" Color="@(_resumo!.Saldo >= 0 ? Color.Success : Color.Error)">@_resumo.Saldo.ToString("C")</MudText>
-            </MudPaper>
-        </MudItem>
-        <MudItem xs="12" sm="4">
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudText Typo="Typo.caption">Receitas</MudText>
-                <MudText Typo="Typo.h5" Class="of-currency-receita">@_resumo!.TotalReceitas.ToString("C")</MudText>
-            </MudPaper>
-        </MudItem>
-        <MudItem xs="12" sm="4">
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudText Typo="Typo.caption">Despesas lançadas</MudText>
-                <MudText Typo="Typo.h5" Class="of-currency-despesa">@_resumo!.TotalDespesas.ToString("C")</MudText>
-            </MudPaper>
-        </MudItem>
-        <MudItem xs="12" sm="4">
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudText Typo="Typo.caption">Despesas pagas</MudText>
-                <MudText Typo="Typo.h5" Color="Color.Success">@_resumo!.TotalDespesasPagas.ToString("C")</MudText>
-            </MudPaper>
-        </MudItem>
-        <MudItem xs="12" sm="4">
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudText Typo="Typo.caption">Despesas a pagar</MudText>
-                <MudText Typo="Typo.h5" Color="Color.Warning">@_resumo!.TotalDespesasAPagar.ToString("C")</MudText>
-            </MudPaper>
-        </MudItem>
+        <SectionHeader Titulo="Orçamentos" Valor="@_painel.TextoContagemOrcamentos" />
+        <BudgetProgressList Itens="@_painel.Orcamentos" />
 
-        <MudItem xs="12">
-            <MudText Typo="Typo.subtitle2" Class="mt-2">Desde o início</MudText>
-        </MudItem>
-        <MudItem xs="12" sm="4">
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudText Typo="Typo.caption">Receitas acumuladas</MudText>
-                <MudText Typo="Typo.h5" Class="of-currency-receita">@_acumulado!.TotalReceitas.ToString("C")</MudText>
-            </MudPaper>
-        </MudItem>
-        <MudItem xs="12" sm="4">
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudText Typo="Typo.caption">Despesas acumuladas</MudText>
-                <MudText Typo="Typo.h5" Class="of-currency-despesa">@_acumulado!.TotalDespesas.ToString("C")</MudText>
-            </MudPaper>
-        </MudItem>
-        <MudItem xs="12" sm="4">
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudText Typo="Typo.caption">Saldo acumulado</MudText>
-                <MudText Typo="Typo.h5" Color="@(_acumulado!.Saldo >= 0 ? Color.Success : Color.Error)">@_acumulado.Saldo.ToString("C")</MudText>
-            </MudPaper>
-        </MudItem>
+        <SectionHeader Titulo="Despesas por categoria" Valor="@_painel.TextoTotalCategorias" />
+        <CategoryBreakdown Visiveis="@_painel.CategoriasVisiveis" Ocultas="@_painel.CategoriasOcultas"
+                           Barra="@_painel.FatiasBarra" Outras="@_painel.Outras"
+                           RotuloAcessivel="@_painel.RotuloAcessivelCategorias" />
 
-        @if (_alertas.Count > 0)
+        <SectionHeader Titulo="Receitas × despesas" />
+        <MonthlyComparisonChart Meses="@_painel.Meses" DestacarUltimo="@_painel.DestacarUltimoRotulo"
+                                NotaLacuna="@_painel.NotaLacuna" PassoEixoY="@_painel.PassoEixoY"
+                                RotuloAcessivel="@_painel.RotuloAcessivelGrafico" />
+
+        <SectionHeader Titulo="Metas de economia" />
+        @if (_painel.Metas.Count == 0)
         {
-            <MudItem xs="12">
-                <MudAlert Severity="Severity.Warning" Icon="@Icons.Material.Filled.WarningAmber">
-                    <MudText Typo="Typo.subtitle2" Class="mb-1">Orçamentos próximos do limite ou estourados</MudText>
-                    @foreach (var alerta in _alertas)
-                    {
-                        <div>@alerta.CategoriaIcone @alerta.CategoriaNome — @alerta.PercentualUsado.ToString("0.#")% (@alerta.ValorGasto.ToString("C") / @alerta.ValorLimite.ToString("C"))</div>
-                    }
-                </MudAlert>
-            </MudItem>
+            <EmptyState Icon="@Icons.Material.Outlined.Flag" Mensagem="Nenhuma meta cadastrada" />
         }
-
-        <MudItem xs="12" md="6">
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudText Typo="Typo.subtitle1" Class="mb-2">Despesas por categoria</MudText>
-                <CategoryDonutChart Dados="_gastosPorCategoria" />
-            </MudPaper>
-        </MudItem>
-        <MudItem xs="12" md="6">
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudText Typo="Typo.subtitle1" Class="mb-2">Receitas x Despesas (últimos meses)</MudText>
-                <IncomeExpenseTrendChart Dados="_tendencia" />
-            </MudPaper>
-        </MudItem>
-
-        <MudItem xs="12">
-            <MudPaper Class="pa-4" Elevation="2">
-                <MudText Typo="Typo.subtitle1" Class="mb-2">Metas de economia</MudText>
-                @if (_metas.Count == 0)
-                {
-                    <EmptyState Icon="@Icons.Material.Filled.Flag" Mensagem="Nenhuma meta cadastrada" />
-                }
-                else
-                {
-                    @foreach (var meta in _metas)
-                    {
-                        <div class="mb-3">
-                            <div class="d-flex justify-space-between">
-                                <MudText Typo="Typo.body1">@meta.Icone @meta.Nome</MudText>
-                                <MudText Typo="Typo.body2">@meta.PercentualConcluido.ToString("0.#")%</MudText>
-                            </div>
-                            <MudProgressLinear Color="Color.Success" Value="@((double)meta.PercentualConcluido)" Rounded="true" />
-                        </div>
-                    }
-                }
-            </MudPaper>
-        </MudItem>
-    </MudGrid>
-}
+        else
+        {
+            @foreach (var meta in _painel.Metas)
+            {
+                <GoalProgress Nome="@meta.Nome" TextoPercentual="@meta.TextoPercentual" Progresso="@meta.Progresso" />
+            }
+        }
+    }
+</div>
 
 @code {
-    private bool _carregando = true;
-    private ResumoMensalDto? _resumo;
-    private ResumoAcumuladoDto? _acumulado;
-    private List<GastoPorCategoriaDto> _gastosPorCategoria = new();
-    private List<TendenciaMensalDto> _tendencia = new();
-    private List<AlertaOrcamentoDto> _alertas = new();
-    private List<Meta> _metas = new();
+    private bool _cascoLigado;
+    private string? _erro;
+    private PeriodoResumo _periodo = PeriodoResumo.EsteMes;
+    private PainelInicio? _painel;
+    private ResumoMensalDto _mes = new();
+    private ResumoAcumuladoDto _acumulado = new();
+    private List<Transacao> _despesas = [];
+    private List<TendenciaMensalDto> _tendencia = [];
+    private List<AlertaOrcamentoDto> _alertas = [];
+    private List<Meta> _metas = [];
+
+    private RenderFragment Barra => @<text>
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Inherit" Edge="Edge.Start"
+                       aria-label="Voltar" OnClick="Voltar" />
+        <span class="of-appbar-titulos">
+            <span class="of-appbar-titulo">Dashboard</span>
+            <span class="of-appbar-sub">@_painel?.NomeMes</span>
+        </span>
+    </text>;
 
     protected override async Task OnInitializedAsync()
     {
-        var hoje = DateTime.Today;
-        _resumo = await TransacaoService.ObterResumoMensalAsync(hoje.Month, hoje.Year);
-        _acumulado = await TransacaoService.ObterResumoAcumuladoAsync();
-        _gastosPorCategoria = await TransacaoService.ObterGastosPorCategoriaAsync(hoje.Month, hoje.Year);
-        _tendencia = await TransacaoService.ObterTendenciaMensalAsync(6);
-        _alertas = await OrcamentoService.ObterAlertasAsync(hoje.Month, hoje.Year);
-        _metas = await MetaService.ListarAsync();
-        _carregando = false;
+        Casco.Definir(Barra);
+        _cascoLigado = true;
+        await CarregarAsync();
+    }
+
+    private async Task CarregarAsync()
+    {
+        _erro = null;
+        _painel = null;
+        try
+        {
+            var hoje = DateTime.Today;
+            _mes = await TransacaoService.ObterResumoMensalAsync(hoje.Month, hoje.Year);
+            _acumulado = await TransacaoService.ObterResumoAcumuladoAsync();
+            _despesas = await TransacaoService.ListarAsync(new FiltroLancamentoDto { Tipo = TipoTransacao.Despesa });
+            _tendencia = await TransacaoService.ObterTendenciaMensalAsync(PainelInicio.MaximoMesesGrafico);
+            _alertas = await OrcamentoService.ObterAlertasAsync(hoje.Month, hoje.Year);
+            _metas = await MetaService.ListarAsync();
+            Remontar();
+        }
+        catch (Exception)
+        {
+            _erro = "Não foi possível carregar o dashboard.";
+        }
+    }
+
+    private void AlterarPeriodo(PeriodoResumo periodo)
+    {
+        if (periodo == _periodo)
+            return;
+        _periodo = periodo;
+        Remontar();
+    }
+
+    private void Remontar()
+    {
+        _painel = PainelInicio.Montar(new EntradaPainelInicio(
+            _periodo,
+            _mes,
+            _acumulado,
+            CategoriasDoPeriodo(),
+            _tendencia,
+            _alertas,
+            _metas,
+            DateTime.Today), CultureInfo.CurrentCulture);
+        Casco.Atualizar();
+    }
+
+    private IReadOnlyList<EntradaCategoria> CategoriasDoPeriodo()
+    {
+        IEnumerable<Transacao> fonte = _despesas;
+        if (_periodo == PeriodoResumo.EsteMes)
+        {
+            var inicio = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+            var fim = inicio.AddMonths(1).AddTicks(-1);
+            fonte = _despesas.Where(t => t.Data >= inicio && t.Data <= fim);
+        }
+
+        return PainelInicio.Classificar(fonte.Select(t => new LancamentoCategoria(
+            t.Categoria?.Nome ?? "Sem categoria",
+            t.Valor,
+            t.Itens?.Select(i => new EntradaCategoria(i.Categoria?.Nome ?? "Sem categoria", i.Valor)).ToList())));
+    }
+
+    private void Voltar() => Navigation.NavigateTo("/");
+
+    public void Dispose()
+    {
+        if (_cascoLigado)
+            Casco.Definir(null);
     }
 }

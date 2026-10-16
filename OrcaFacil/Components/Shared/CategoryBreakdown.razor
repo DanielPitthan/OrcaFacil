@@ -1,0 +1,82 @@
+@if (Barra.Count == 0)
+{
+    <EmptyState Icon="@Icons.Material.Outlined.PieChart" Mensagem="Sem despesas neste período" />
+}
+else
+{
+    <div class="of-categorias">
+        <div class="of-pilha" role="img" aria-label="@RotuloAcessivel">
+            @foreach (var fatia in Barra)
+            {
+                <span class="of-pilha-fatia @Classe(fatia)" style="width:@Largura(fatia.LarguraPilha)"></span>
+            }
+        </div>
+
+        <ul class="of-ranking">
+            @foreach (var fatia in Visiveis)
+            {
+                <li class="of-ranking-item">
+                    <div class="of-ranking-topo">
+                        <span class="of-bolinha @Classe(fatia)" aria-hidden="true"></span>
+                        <span class="of-ranking-nome">@fatia.Nome</span>
+                        <span class="of-ranking-valor of-moeda">@fatia.TextoTotal</span>
+                    </div>
+                    <div class="of-ranking-base">
+                        <span class="of-mini" aria-hidden="true">
+                            <span class="of-mini-valor @Classe(fatia)" style="width:@Largura(fatia.LarguraRelativa)"></span>
+                        </span>
+                        <span class="of-ranking-pct of-moeda">@fatia.TextoPercentual</span>
+                    </div>
+                </li>
+            }
+        </ul>
+
+        @if (Outras is not null)
+        {
+            <button type="button" class="of-outras" aria-expanded="@_abertas" @onclick="Alternar">
+                <span class="of-bolinha of-cat-outras" aria-hidden="true"></span>
+                <span class="of-outras-texto">@Outras.Nome · @Outras.TextoTotal</span>
+                <MudIcon Icon="@(_abertas ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)" aria-hidden="true" />
+            </button>
+            @if (_abertas)
+            {
+                <ul class="of-ranking of-ranking-ocultas">
+                    @foreach (var fatia in Ocultas)
+                    {
+                        <li class="of-ranking-item">
+                            <div class="of-ranking-topo">
+                                <span class="of-bolinha of-cat-outras" aria-hidden="true"></span>
+                                <span class="of-ranking-nome">@fatia.Nome</span>
+                                <span class="of-ranking-valor of-moeda">@fatia.TextoTotal</span>
+                            </div>
+                            <div class="of-ranking-base">
+                                <span class="of-mini" aria-hidden="true">
+                                    <span class="of-mini-valor of-cat-outras" style="width:@Largura(fatia.LarguraRelativa)"></span>
+                                </span>
+                                <span class="of-ranking-pct of-moeda">@fatia.TextoPercentual</span>
+                            </div>
+                        </li>
+                    }
+                </ul>
+            }
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<FatiaCategoria> Visiveis { get; set; } = [];
+    [Parameter] public IReadOnlyList<FatiaCategoria> Ocultas { get; set; } = [];
+    [Parameter] public IReadOnlyList<FatiaCategoria> Barra { get; set; } = [];
+    [Parameter] public FatiaCategoria? Outras { get; set; }
+    [Parameter] public string RotuloAcessivel { get; set; } = "Despesas por categoria";
+
+    private bool _abertas;
+
+    private void Alternar() => _abertas = !_abertas;
+
+    private static string Classe(FatiaCategoria fatia)
+        => fatia.EhAgrupamento ? "of-cat-outras" : $"of-cat-{fatia.IndicePaleta}";
+
+    private static string Largura(double valor)
+        => Math.Clamp(valor, 0, 100).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "%";
+}

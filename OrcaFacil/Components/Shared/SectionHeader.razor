@@ -1,0 +1,17 @@
+<div class="of-secao">
+    <h2 class="of-secao-titulo">@Titulo</h2>
+    @if (!string.IsNullOrEmpty(Valor))
+    {
+        <span class="of-secao-valor of-moeda">@Valor</span>
+    }
+    @if (Acao is not null)
+    {
+        <div class="of-secao-acao">@Acao</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Titulo { get; set; } = "";
+    [Parameter] public string? Valor { get; set; }
+    [Parameter] public RenderFragment? Acao { get; set; }
+}

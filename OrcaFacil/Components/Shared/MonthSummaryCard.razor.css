@@ -32,9 +32,54 @@
     color: var(--of-warning);
 }
 
+.of-resumo-compacto {
+    display: block;
+    position: relative;
+    color: inherit;
+    text-decoration: none;
+}
+
+.of-resumo-compacto .of-resumo-kicker {
+    padding-right: 112px;
+}
+
+.of-resumo-atalho {
+    position: absolute;
+    top: 14px;
+    right: 16px;
+    color: var(--of-primary);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.of-resumo-seletor {
+    margin-bottom: 14px;
+}
+
 .of-resumo-grade {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.of-resumo-grade-3 {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.of-resumo-empilhada {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.of-resumo-grade-3 .of-resumo-celula + .of-resumo-celula {
+    margin-left: 8px;
+}
+
+.of-resumo-empilhada .of-resumo-numero {
+    display: block;
+    max-width: 100%;
+    margin-top: 2px;
+    overflow-wrap: anywhere;
+    font-size: 13px;
 }
 
 .of-resumo-celula {
