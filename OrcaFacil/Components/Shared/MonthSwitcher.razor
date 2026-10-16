@@ -1,0 +1,77 @@
+<section class="of-mes" aria-label="Mês de referência">
+    <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" aria-label="Mês anterior"
+                   OnClick="@(() => MesAlterado.InvokeAsync(-1))" />
+    <div class="of-mes-miolo"
+         @onpointerdown="Iniciar"
+         @onpointermove="Mover"
+         @onpointerup="Soltar"
+         @onpointercancel="Cancelar">
+        <span class="of-mes-nome">@Nome</span>
+        @if (Aberto)
+        {
+            <span class="of-mes-status of-mes-aberto">
+                <MudIcon Icon="@Icons.Material.Filled.LockOpen" Size="Size.Small" aria-hidden="true" />
+                Aberto
+            </span>
+        }
+        else
+        {
+            <span class="of-mes-status of-mes-fechado">
+                <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Small" aria-hidden="true" />
+                Fechado
+            </span>
+        }
+    </div>
+    <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" aria-label="Próximo mês"
+                   OnClick="@(() => MesAlterado.InvokeAsync(1))" />
+    @if (Acoes is not null)
+    {
+        <div class="of-mes-acoes">@Acoes</div>
+    }
+</section>
+
+@code {
+    private const double Limiar = 48;
+
+    [Parameter] public string Nome { get; set; } = "";
+    [Parameter] public bool Aberto { get; set; }
+    [Parameter] public EventCallback<int> MesAlterado { get; set; }
+    [Parameter] public RenderFragment? Acoes { get; set; }
+
+    private bool _arrastando;
+    private double _origem;
+    private double _delta;
+
+    private void Iniciar(PointerEventArgs e)
+    {
+        _arrastando = true;
+        _origem = e.ClientX;
+        _delta = 0;
+    }
+
+    private void Mover(PointerEventArgs e)
+    {
+        if (_arrastando)
+            _delta = e.ClientX - _origem;
+    }
+
+    private async Task Soltar(PointerEventArgs _)
+    {
+        if (!_arrastando)
+            return;
+
+        _arrastando = false;
+        var delta = _delta;
+        _delta = 0;
+        if (delta <= -Limiar)
+            await MesAlterado.InvokeAsync(1);
+        else if (delta >= Limiar)
+            await MesAlterado.InvokeAsync(-1);
+    }
+
+    private void Cancelar(PointerEventArgs _)
+    {
+        _arrastando = false;
+        _delta = 0;
+    }
+}

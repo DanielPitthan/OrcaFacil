@@ -1,0 +1,53 @@
+<section class="of-comparacao @(DestacarUltimo ? "of-comparacao-atual" : null)" aria-label="@RotuloAcessivel">
+    @if (Meses.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Outlined.BarChart" Mensagem="Sem lançamentos nestes meses" />
+    }
+    else
+    {
+        <div class="of-comparacao-plot" aria-hidden="true">
+            <MudChart T="double" ChartType="ChartType.Bar" ChartSeries="@_series" ChartLabels="@_rotulos"
+                      ChartOptions="@_opcoes" Width="100%" Height="220px" MatchBoundsToSize="true" />
+        </div>
+        <div class="of-legenda">
+            <span class="of-legenda-item"><span class="of-legenda-ponto of-ponto-receita" aria-hidden="true"></span>Receitas</span>
+            <span class="of-legenda-item"><span class="of-legenda-ponto of-ponto-despesa" aria-hidden="true"></span>Despesas</span>
+        </div>
+    }
+    @if (!string.IsNullOrEmpty(NotaLacuna))
+    {
+        <p class="of-comparacao-nota">@NotaLacuna</p>
+    }
+</section>
+
+@code {
+    [Parameter] public IReadOnlyList<MesComparacao> Meses { get; set; } = [];
+    [Parameter] public bool DestacarUltimo { get; set; }
+    [Parameter] public string? NotaLacuna { get; set; }
+    [Parameter] public int PassoEixoY { get; set; } = 1;
+    [Parameter] public string RotuloAcessivel { get; set; } = "Receitas e despesas";
+
+    private List<ChartSeries<double>> _series = [];
+    private string[] _rotulos = [];
+    private BarChartOptions _opcoes = new();
+
+    protected override void OnParametersSet()
+    {
+        _rotulos = Meses.Select(m => m.Rotulo).ToArray();
+        _series =
+        [
+            new() { Name = "Receitas", Data = Meses.Select(m => (double)m.Receitas).ToArray() },
+            new() { Name = "Despesas", Data = Meses.Select(m => (double)m.Despesas).ToArray() }
+        ];
+        _opcoes = new BarChartOptions
+        {
+            ShowLegend = false,
+            YAxisLines = true,
+            XAxisLines = false,
+            MaxNumYAxisTicks = 5,
+            YAxisTicks = Math.Max(1, PassoEixoY),
+            YAxisToStringFunc = valor => PainelInicio.FormatarMarca((decimal)valor, System.Globalization.CultureInfo.CurrentCulture),
+            ChartPalette = ["var(--of-success)", "var(--of-primary)"]
+        };
+    }
+}

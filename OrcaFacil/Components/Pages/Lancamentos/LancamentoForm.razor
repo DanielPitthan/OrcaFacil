@@ -1,13 +1,42 @@
 @page "/lancamentos/novo"
 @page "/lancamentos/editar/{Id:int}"
+@implements IDisposable
 @inject ITransacaoService TransacaoService
 @inject ICategoriaService CategoriaService
 @inject ICartaoService CartaoService
 @inject IFechamentoService FechamentoService
 @inject NavigationManager NavigationManager
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject CascoNavegacao Casco
+@inject RascunhoLancamento Rascunho
 
-    <MudText Typo="Typo.h5" Class="mb-4">@(Id.HasValue ? "Editar Lançamento" : "Novo Lançamento")</MudText>
+@if (_carregando)
+{
+    <MudProgressCircular Indeterminate="true" />
+}
+else if (UsarLayoutFatura)
+{
+    <EditForm Model="_modelo" OnSubmit="SalvarSePermitidoAsync">
+        <DataAnnotationsValidator />
+        <FaturaCartaoPainel @ref="_painel" Modelo="_modelo" Data="_data" DataChanged="AlterarDataFaturaAsync"
+                            PeriodoBloqueado="PeriodoBloqueado" MensagemPeriodo="@MensagemPeriodo"
+                            Categorias="_categorias" Cartoes="CartoesCreditoDisponiveis"
+                            OnCancelar="Voltar" OnAlterouCartao="AtualizarCasco" />
+    </EditForm>
+}
+else
+{
+    <div class="d-flex justify-space-between align-center mb-4">
+        <MudText Typo="Typo.h5">@(Id.HasValue ? "Editar Lançamento" : "Novo Lançamento")</MudText>
+        @if (Id.HasValue)
+        {
+            <MudMenu Icon="@Icons.Material.Filled.MoreVert" Color="Color.Inherit" AriaLabel="Ações do lançamento"
+                     AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                <MudMenuItem Disabled="@(!PodeExcluir)" OnClick="ExcluirAsync">Excluir</MudMenuItem>
+            </MudMenu>
+        }
+    </div>
 
 @if (PeriodoBloqueado)
 {
@@ -219,7 +248,7 @@
                 <MudCheckBox T="bool" @bind-Value="_modelo.Pago" Label="Pago" Class="mb-3" />
             }
 
-            <MudSelect T="int" @bind-Value="_modelo.CategoriaId" Label="Categoria" For="@(() => _modelo.CategoriaId)" Class="mb-3">
+            <MudSelect T="int" @bind-Value="_modelo.CategoriaId" @bind-Value:after="LigarCasco" Label="Categoria" For="@(() => _modelo.CategoriaId)" Class="mb-3">
                 @foreach (var categoria in CategoriasFiltradas)
                 {
                     <MudSelectItem T="int" Value="@categoria.Id">@categoria.Icone @categoria.Nome</MudSelectItem>
@@ -242,6 +271,7 @@
         </MudPaper>
     }
 </EditForm>
+}
 
 @code {
     [Parameter] public int? Id { get; set; }
@@ -255,6 +285,10 @@
     private bool _periodoDataFechado;
 
     private CampoNumerico<decimal> _valorCampo = null!;
+    private FaturaCartaoPainel? _painel;
+    private RenderFragment? _barraCache;
+    private bool _cascoLigado;
+    private bool _carregando = true;
     private int _itemCategoriaId;
     private string? _itemDescritivo;
     private decimal _itemValor;
@@ -278,6 +312,25 @@
         _cartoesCredito.Where(c => c.Ativo || c.Id == _modelo.CartaoId).ToList();
 
     private bool MostrarItens => _modelo.Tipo == TipoTransacao.Despesa && _categoriaSelecionada?.PermiteItensFatura == true;
+
+    private bool UsarLayoutFatura => EhCartaoCredito && MostrarItens;
+
+    private bool PodeExcluir => Id.HasValue && !PeriodoBloqueado;
+
+    private bool PodeDuplicar => Id.HasValue;
+
+    private string SubtituloCartao =>
+        CartoesCreditoDisponiveis.FirstOrDefault(c => c.Id == _modelo.CartaoId)?.Rotulo ?? "Sem cartão vinculado";
+
+    private string? MensagemPeriodo => !PeriodoBloqueado
+        ? null
+        : _periodoOriginalFechado
+            ? $"Este lançamento pertence a um mês fechado ({_dataOriginal:MM/yyyy}). Reabra o período na tela de Lançamentos para alterá-lo."
+            : $"O mês {_data:MM/yyyy} está fechado. Escolha outra data ou reabra o período.";
+
+    private RenderFragment BarraFatura => @<BarraFaturaCartao Subtitulo="@SubtituloCartao" PodeExcluir="@PodeExcluir"
+                                                              PodeDuplicar="@PodeDuplicar" OnVoltar="Voltar"
+                                                              OnExcluir="ExcluirAsync" OnDuplicar="DuplicarAsync" />;
 
     private IEnumerable<Categoria> CategoriasDosItens =>
         CategoriasFiltradas.Where(c => c.Id != _modelo.CategoriaId);
@@ -329,18 +382,128 @@
         }
         else
         {
-            GarantirCategoriaValida();
+            var copia = Rascunho.Consumir();
+            if (copia is not null)
+            {
+                AplicarModelo(copia);
+                Snackbar.Add("Cópia da fatura pronta. Revise e salve.", Severity.Info);
+            }
+            else
+            {
+                GarantirCategoriaValida();
+            }
         }
 
         GarantirItemCategoriaValida();
         GarantirCartaoValido();
         await VerificarPeriodoAsync();
+        _carregando = false;
+        LigarCasco();
+    }
+
+    private void AplicarModelo(TransacaoFormModel origem)
+    {
+        _modelo.Descricao = origem.Descricao;
+        _modelo.Valor = origem.Valor;
+        _modelo.Data = origem.Data;
+        _modelo.Tipo = origem.Tipo;
+        _modelo.Recorrencia = origem.Recorrencia;
+        _modelo.Pago = origem.Pago;
+        _modelo.Observacao = origem.Observacao;
+        _modelo.CategoriaId = origem.CategoriaId;
+        _modelo.CartaoId = origem.CartaoId;
+        _modelo.Itens = origem.Itens;
+        _data = origem.Data;
+    }
+
+    private Task AlterarDataFaturaAsync(DateTime? data)
+    {
+        _data = data;
+        return VerificarPeriodoAsync();
+    }
+
+    private void Voltar() => NavigationManager.NavigateTo("/lancamentos");
+
+    private async Task SalvarSePermitidoAsync(EditContext context)
+    {
+        if (_painel?.SheetAberto == true)
+            return;
+
+        if (!context.Validate())
+            return;
+
+        await SalvarAsync();
+    }
+
+    private async Task ExcluirAsync()
+    {
+        if (!Id.HasValue)
+            return;
+
+        var confirmado = await DialogService.ShowMessageBoxAsync(
+            "Excluir lançamento", "Tem certeza que deseja excluir este lançamento?", yesText: "Excluir", cancelText: "Cancelar");
+        if (confirmado != true)
+            return;
+
+        try
+        {
+            await TransacaoService.ExcluirAsync(Id.Value);
+            Snackbar.Add("Lançamento excluído", Severity.Success);
+            NavigationManager.NavigateTo("/lancamentos");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+    }
+
+    private void DuplicarAsync()
+    {
+        if (!Id.HasValue)
+            return;
+
+        _modelo.Data = _data ?? DateTime.Today;
+        Rascunho.GuardarCopia(_modelo);
+        NavigationManager.NavigateTo("/lancamentos/novo");
+    }
+
+    private void LigarCasco()
+    {
+        if (!UsarLayoutFatura)
+        {
+            if (_cascoLigado)
+            {
+                Casco.Definir(null);
+                _cascoLigado = false;
+            }
+
+            return;
+        }
+
+        _barraCache ??= BarraFatura;
+        if (!_cascoLigado)
+        {
+            Casco.Definir(_barraCache);
+            _cascoLigado = true;
+            return;
+        }
+
+        Casco.Atualizar();
+    }
+
+    private void AtualizarCasco() => LigarCasco();
+
+    public void Dispose()
+    {
+        if (_cascoLigado)
+            Casco.Definir(null);
     }
 
     private async Task VerificarPeriodoAsync()
     {
         var data = _data ?? DateTime.Today;
         _periodoDataFechado = await FechamentoService.EstaFechadoAsync(data.Month, data.Year);
+        LigarCasco();
     }
 
     private Task OnTipoChanged(TipoTransacao tipo)
@@ -351,6 +514,7 @@
         GarantirCategoriaValida();
         GarantirItemCategoriaValida();
         GarantirCartaoValido();
+        LigarCasco();
         return Task.CompletedTask;
     }
 
@@ -359,6 +523,7 @@
         _modelo.CategoriaId = categoriaId;
         GarantirItemCategoriaValida();
         GarantirCartaoValido();
+        LigarCasco();
     }
 
     private void GarantirCartaoValido()

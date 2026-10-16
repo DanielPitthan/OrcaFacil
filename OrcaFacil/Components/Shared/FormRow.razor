@@ -1,0 +1,50 @@
+@if (Chevron && !Embutido)
+{
+    <button type="button" class="of-form-row of-form-row-botao" @onclick="OnClick" aria-label="@Aria">
+        @Conteudo
+        <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Class="of-form-row-chevron" aria-hidden="true" />
+    </button>
+}
+else
+{
+    <div class="of-form-row" role="@(Chevron ? "group" : null)" aria-label="@Aria">
+        @Conteudo
+        @if (Chevron)
+        {
+            <MudIcon Icon="@Icons.Material.Filled.ChevronRight" Class="of-form-row-chevron" aria-hidden="true" />
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public string? Icone { get; set; }
+    [Parameter] public string Rotulo { get; set; } = "";
+    [Parameter] public string? Valor { get; set; }
+    [Parameter] public bool Chevron { get; set; }
+    [Parameter] public bool Embutido { get; set; }
+    [Parameter] public EventCallback OnClick { get; set; }
+    [Parameter] public string? AriaLabel { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private string Aria => string.IsNullOrWhiteSpace(AriaLabel)
+        ? (string.IsNullOrWhiteSpace(Valor) ? Rotulo : $"{Rotulo}: {Valor}")
+        : AriaLabel;
+
+    private RenderFragment Conteudo => @<text>
+        @if (!string.IsNullOrWhiteSpace(Icone))
+        {
+            <MudIcon Icon="@Icone" Class="of-form-row-icone" aria-hidden="true" />
+        }
+        <span class="of-form-row-texto">
+            <span class="of-form-row-rotulo">@Rotulo</span>
+            @if (ChildContent is not null)
+            {
+                <span class="of-form-row-campo">@ChildContent</span>
+            }
+            else
+            {
+                <span class="of-form-row-valor">@(string.IsNullOrWhiteSpace(Valor) ? "—" : Valor)</span>
+            }
+        </span>
+    </text>;
+}

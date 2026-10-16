@@ -1,0 +1,176 @@
+@using System.Globalization
+@using MudBlazor.Charts
+@inject IConfiguracaoService Configuracao
+
+<section class="of-evolucao @(Dados.ExibirMarcadorHoje ? "of-evolucao-hoje" : null)"
+         style="@EstiloHoje">
+    <button type="button" class="of-evolucao-topo" aria-expanded="@_expandido" aria-controls="evolucao-mes"
+            @onclick="Alternar">
+        <span>Evolução do mês</span>
+        <MudIcon Icon="@(_expandido ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                 aria-hidden="true" />
+    </button>
+
+    @if (_expandido)
+    {
+        <div id="evolucao-mes" class="of-evolucao-corpo">
+            <div class="of-evolucao-plot" role="img" aria-label="@Dados.RotuloAcessivelGrafico">
+                <MudChart T="double" ChartType="ChartType.Line" ChartSeries="@_series" ChartLabels="@_rotulos"
+                          ChartOptions="@_opcoes" Width="100%" Height="168px" MatchBoundsToSize="true" />
+                @if (Dados.ExibirMarcadorHoje)
+                {
+                    <div class="of-hoje" aria-hidden="true"><span>Hoje</span></div>
+                }
+            </div>
+
+            <div class="of-legenda" role="group" aria-label="Séries do gráfico">
+                <button type="button" class="of-legenda-chip @(_receitas ? "of-legenda-ativa" : null)"
+                        aria-pressed="@_receitas" @onclick="@(() => AlternarSerie(SerieGrafico.Receitas))">
+                    <span class="of-legenda-ponto of-ponto-receita" aria-hidden="true"></span>Receitas
+                </button>
+                <button type="button" class="of-legenda-chip @(_despesas ? "of-legenda-ativa" : null)"
+                        aria-pressed="@_despesas" @onclick="@(() => AlternarSerie(SerieGrafico.Despesas))">
+                    <span class="of-legenda-ponto of-ponto-despesa" aria-hidden="true"></span>Despesas
+                </button>
+                <button type="button" class="of-legenda-chip @(_saldo ? "of-legenda-ativa" : null)"
+                        aria-pressed="@_saldo" @onclick="@(() => AlternarSerie(SerieGrafico.Saldo))">
+                    <span class="of-legenda-ponto of-ponto-saldo" aria-hidden="true"></span>Saldo
+                </button>
+            </div>
+
+            <p class="of-evolucao-totais">@Dados.TextoTotaisFinais</p>
+            @if (Dados.ExibirPrevisto)
+            {
+                <p class="of-evolucao-nota">Tracejado = lançamentos previstos após hoje</p>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    private const double OpacidadePrevisto = 0.99;
+    private const double PreenchimentoRealizado = 0.16;
+    private const double PreenchimentoPrevisto = 0.07;
+
+    private static readonly CultureInfo PtBr = CultureInfo.GetCultureInfo("pt-BR");
+
+    [Parameter, EditorRequired] public PainelLancamentosMes Dados { get; set; } = null!;
+
+    private bool _expandido = true;
+    private bool _receitas = true;
+    private bool _despesas = true;
+    private bool _saldo = true;
+    private List<ChartSeries<double>> _series = [];
+    private string[] _rotulos = [];
+    private LineChartOptions _opcoes = new();
+
+    private string? EstiloHoje => Dados.FracaoMarcadorHoje is decimal fracao
+        ? $"--of-hoje-frac:{fracao.ToString(CultureInfo.InvariantCulture)}"
+        : null;
+
+    protected override void OnInitialized()
+        => _expandido = Configuracao.GraficoLancamentosExpandido;
+
+    protected override void OnParametersSet()
+        => MontarGrafico();
+
+    private void Alternar()
+    {
+        _expandido = !_expandido;
+        Configuracao.GraficoLancamentosExpandido = _expandido;
+    }
+
+    private void AlternarSerie(SerieGrafico serie)
+    {
+        var receitas = serie == SerieGrafico.Receitas ? !_receitas : _receitas;
+        var despesas = serie == SerieGrafico.Despesas ? !_despesas : _despesas;
+        var saldo = serie == SerieGrafico.Saldo ? !_saldo : _saldo;
+        if (!receitas && !despesas && !saldo)
+            return;
+
+        _receitas = receitas;
+        _despesas = despesas;
+        _saldo = saldo;
+        MontarGrafico();
+    }
+
+    private void MontarGrafico()
+    {
+        _rotulos = Dados.RotulosEixoX.ToArray();
+        _series =
+        [
+            Serie("Receitas realizadas", Dados.ReceitasRealizadas, _receitas),
+            Serie("Receitas previstas", Dados.ReceitasPrevistas, _receitas && Dados.ExibirPrevisto),
+            Serie("Despesas realizadas", Dados.DespesasRealizadas, _despesas),
+            Serie("Despesas previstas", Dados.DespesasPrevistas, _despesas && Dados.ExibirPrevisto),
+            Serie("Saldo realizado", Dados.SaldosRealizados, _saldo),
+            Serie("Saldo previsto", Dados.SaldosPrevistos, _saldo && Dados.ExibirPrevisto)
+        ];
+
+        _opcoes = new LineChartOptions
+        {
+            ShowLegend = false,
+            ShowToolTips = false,
+            ShowDataMarkers = false,
+            LineStrokeWidth = 2,
+            InterpolationOption = InterpolationOption.Straight,
+            YAxisRequireZeroPoint = true,
+            YAxisLines = true,
+            XAxisLines = false,
+            MaxNumYAxisTicks = 5,
+            YAxisTicks = Math.Max(1, Dados.PassoEixoY),
+            YAxisToStringFunc = FormatarEixo,
+            ChartPalette =
+            [
+                "var(--of-success)",
+                "var(--of-success)",
+                "var(--of-primary)",
+                "var(--of-primary)",
+                "var(--of-saldo)",
+                "var(--of-saldo)"
+            ],
+            SeriesDisplayOverrides = new Dictionary<IChartSeries, SeriesDisplayOverride>
+            {
+                [_series[0]] = new() { StrokeOpacity = 1 },
+                [_series[1]] = new() { StrokeOpacity = OpacidadePrevisto },
+                [_series[2]] = new() { StrokeOpacity = 1 },
+                [_series[3]] = new() { StrokeOpacity = OpacidadePrevisto },
+                [_series[4]] = new()
+                {
+                    LineDisplayType = LineDisplayType.Area,
+                    FillOpacity = PreenchimentoRealizado,
+                    StrokeOpacity = 1
+                },
+                [_series[5]] = new()
+                {
+                    LineDisplayType = LineDisplayType.Area,
+                    FillOpacity = PreenchimentoPrevisto,
+                    StrokeOpacity = OpacidadePrevisto
+                }
+            }
+        };
+    }
+
+    private static ChartSeries<double> Serie(string nome, IReadOnlyList<decimal> valores, bool visivel)
+        => new()
+        {
+            Name = nome,
+            Visible = visivel,
+            Data = valores.Select(valor => (double)valor).ToArray()
+        };
+
+    private static string FormatarEixo(double valor)
+    {
+        if (Math.Abs(valor) >= 1000)
+            return (valor / 1000d).ToString("0.#", PtBr) + "k";
+
+        return valor.ToString("0", PtBr);
+    }
+
+    private enum SerieGrafico
+    {
+        Receitas,
+        Despesas,
+        Saldo
+    }
+}

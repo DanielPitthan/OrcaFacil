@@ -1,189 +1,171 @@
 @page "/lancamentos"
+@using System.Globalization
+@implements IDisposable
 @inject ITransacaoService TransacaoService
 @inject ICategoriaService CategoriaService
 @inject IFechamentoService FechamentoService
 @inject NavigationManager NavigationManager
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject CascoNavegacao Casco
 
-<div class="pro-sticky-header">
-    <div class="d-flex justify-space-between align-center flex-wrap">
-        <div class="d-flex align-center ga-1">
-            <MudText Typo="Typo.subtitle1"><b>Lançamentos</b></MudText>
-            @if (_fechado)
-            {
-                <MudChip T="string" Size="Size.Small" Color="Color.Error" Icon="@Icons.Material.Filled.Lock" Variant="Variant.Outlined">Fechado</MudChip>
-            }
-            else
-            {
-                <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.LockOpen" Variant="Variant.Outlined">Aberto</MudChip>
-            }
-            @if (_despesasComAviso.Count > 0)
-            {
-                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.NotificationsActive"
-                         OnClick="@(() => _mostrarAvisos = !_mostrarAvisos)">
-                    @_despesasComAviso.Count
-                </MudChip>
-            }
-        </div>
-        <div class="d-flex align-center">
-            <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Size="Size.Small" OnClick="@(() => MudarMes(-1))" aria-label="Mês anterior" />
-            <MudText Typo="Typo.body1" Style="min-width:120px;text-align:center;">@_mesReferencia.ToString("MMMM/yyyy")</MudText>
-            <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" OnClick="@(() => MudarMes(1))" aria-label="Próximo mês" />
-        </div>
-    </div>
-
-    @if (_mostrarAvisos && _despesasComAviso.Count > 0)
+<div class="of-lancamentos">
+    @if (_buscaAberta)
     {
-        <MudAlert Severity="Severity.Warning" Dense="true" Class="my-1" ShowCloseIcon="true" CloseIconClicked="@(() => _mostrarAvisos = false)">
-            @foreach (var despesa in _despesasComAviso.Take(5))
-            {
-                <div>@despesa.Categoria?.Icone @despesa.Descricao — @despesa.Valor.ToString("C") (@despesa.Data.ToString("dd/MM/yyyy"))</div>
-            }
-            @if (_despesasComAviso.Count > 5)
-            {
-                <MudText Typo="Typo.caption">e mais @(_despesasComAviso.Count - 5) despesa(s)...</MudText>
-            }
-        </MudAlert>
+        <div class="of-busca">
+            <MudTextField @bind-Value="_busca" @bind-Value:after="AtualizarPainel" Immediate="true"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Placeholder="Descrição"
+                          Adornment="Adornment.End" AdornmentIcon="@Icons.Material.Filled.Search"
+                          aria-label="Buscar por descrição" />
+        </div>
     }
 
-    <EvolucaoMensalLineChart Dados="_evolucao" />
-
-    <div class="d-flex ga-2 mt-1">
-        <MudSelect T="TipoTransacao?" @bind-Value="_filtroTipo" @bind-Value:after="CarregarAsync" Label="Tipo" Clearable="true"
-                   Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined" Style="flex:1;">
-            <MudSelectItem T="TipoTransacao?" Value="TipoTransacao.Receita">Receita</MudSelectItem>
-            <MudSelectItem T="TipoTransacao?" Value="TipoTransacao.Despesa">Despesa</MudSelectItem>
-        </MudSelect>
-        <MudSelect T="int?" @bind-Value="_filtroCategoriaId" @bind-Value:after="CarregarAsync" Label="Categoria" Clearable="true"
-                   Dense="true" Margin="Margin.Dense" Variant="Variant.Outlined" Style="flex:1;">
-            @foreach (var categoria in _categorias)
-            {
-                <MudSelectItem T="int?" Value="categoria.Id">@categoria.Icone @categoria.Nome</MudSelectItem>
-            }
-        </MudSelect>
-    </div>
-</div>
-
-<div class="pro-fab-spacer">
-    @if (_carregando)
+    @if (_painel is null)
     {
-        <MudProgressCircular Indeterminate="true" />
-    }
-    else if (_transacoes.Count == 0)
-    {
-        <EmptyState Icon="@Icons.Material.Filled.ReceiptLong" Mensagem="Nenhum lançamento encontrado"
-                    Subtitulo="@(_fechado ? "Este mês está fechado" : "Use o botão + para incluir um lançamento")" />
+        <MudProgressCircular Indeterminate="true" aria-label="Carregando lançamentos" />
     }
     else
     {
-        <MudList T="Transacao" Dense="true">
-            @foreach (var t in _transacoes)
-            {
-                <MudListItem T="Transacao" OnClick="@(() => AbrirEdicao(t.Id))">
-                    <div class="d-flex justify-space-between align-center" style="width:100%">
-                        <div style="min-width:0;">
-                            <MudText Typo="Typo.body1" Style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@t.Categoria?.Icone @t.Descricao</MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">@t.Data.ToString("dd/MM/yyyy") · @t.Categoria?.Nome</MudText>
-                            @if (t.Itens.Count > 0)
-                            {
-                                <MudText Typo="Typo.body2" Class="of-item-descritivo">@ResumoItens(t)</MudText>
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">@t.Itens.Count itens · @t.Itens.Sum(i => i.Valor).ToString("C") classificados</MudText>
-                            }
-                        </div>
-                        <div class="d-flex align-center ga-1" @onclick:stopPropagation="true">
-                            <CurrencyDisplay Valor="t.Valor" Tipo="t.Tipo" />
-                            @if (t.Tipo == TipoTransacao.Despesa)
-                            {
-                                <MudTooltip Text="@(t.Pago ? "Pago — toque para marcar como não pago" : "Não pago — toque para marcar como pago")">
-                                    <MudIconButton Icon="@(t.Pago ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.RadioButtonUnchecked)"
-                                                   Color="@(t.Pago ? Color.Success : Color.Default)" Size="Size.Small"
-                                                   Disabled="_fechado" OnClick="@(() => AlternarPagoAsync(t))" />
-                                </MudTooltip>
-                            }
-                            @if (t.Itens.Count > 0)
-                            {
-                                <MudIconButton Icon="@(_expandidos.Contains(t.Id) ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
-                                               Size="Size.Small" aria-label="Itens da fatura"
-                                               OnClick="@(() => AlternarItens(t.Id))" />
-                            }
-                            @if (!_fechado)
-                            {
-                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" aria-label="Excluir"
-                                               OnClick="@(() => ExcluirAsync(t.Id))" />
-                            }
-                        </div>
-                    </div>
-                </MudListItem>
-                @if (t.Itens.Count > 0 && _expandidos.Contains(t.Id))
+        <MonthSwitcher Nome="@_painel.NomeMes" Aberto="@(!_fechado)" MesAlterado="MudarMes">
+            <Acoes>
+                @if (_despesasComAviso.Count > 0)
                 {
-                    @foreach (var item in t.Itens.OrderBy(i => i.Ordem))
-                    {
-                        <MudListItem T="Transacao" Dense="true" Class="pl-6">
-                            <div class="d-flex justify-space-between align-center" style="width:100%">
-                                <div style="min-width:0;">
-                                    <MudText Typo="Typo.body1" Class="of-item-descritivo">@item.Categoria?.Icone @ItensFaturaInclusao.Titulo(item.Descritivo, item.Categoria?.Nome ?? item.Descricao)</MudText>
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@LegendaItem(item)</MudText>
-                                </div>
-                                <CurrencyDisplay Valor="item.Valor" Tipo="TipoTransacao.Despesa" />
-                            </div>
-                        </MudListItem>
-                    }
+                    <MudIconButton Icon="@Icons.Material.Filled.NotificationsActive"
+                                   aria-label="@($"{_despesasComAviso.Count} despesas com aviso")"
+                                   Color="Color.Warning" OnClick="@(() => _mostrarAvisos = !_mostrarAvisos)" />
                 }
-            }
-        </MudList>
+                <MudMenu Icon="@Icons.Material.Filled.MoreVert" Color="Color.Inherit" AriaLabel="Ações do mês"
+                         AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                    <MudMenuItem Disabled="@(_fechado || !_temDespesasParaTrazer)" OnClick="TrazerDespesasAsync">Trazer mês anterior</MudMenuItem>
+                    <MudMenuItem OnClick="AlternarFechamentoAsync">@(_fechado ? "Reabrir mês" : "Fechar mês")</MudMenuItem>
+                </MudMenu>
+            </Acoes>
+        </MonthSwitcher>
+
+        @if (_mostrarAvisos && _despesasComAviso.Count > 0)
+        {
+            <div class="of-avisos">
+            <MudAlert Severity="Severity.Warning" Dense="true" ShowCloseIcon="true"
+                      CloseIconClicked="@(() => _mostrarAvisos = false)">
+                @foreach (var despesa in _despesasComAviso.Take(5))
+                {
+                    <div>@despesa.Categoria?.Icone @despesa.Descricao — @despesa.Valor.ToString("C") (@despesa.Data.ToString("dd/MM/yyyy"))</div>
+                }
+                @if (_despesasComAviso.Count > 5)
+                {
+                    <MudText Typo="Typo.caption">e mais @(_despesasComAviso.Count - 5) despesa(s)...</MudText>
+                }
+            </MudAlert>
+            </div>
+        }
+
+        <MonthSummaryCard Sobra="@_painel.Sobra" TextoSobra="@_painel.TextoSobra"
+                          TextoReceitas="@_painel.TextoReceitas" TextoDespesas="@_painel.TextoDespesas"
+                          TextoPagas="@_painel.TextoPagas" TextoAPagar="@_painel.TextoAPagar"
+                          TextoReceitaComprometida="@_painel.TextoReceitaComprometida"
+                          TextoDespesasPagas="@_painel.TextoDespesasPagas"
+                          ProgressoReceita="@_painel.ProgressoReceitaComprometida"
+                          ReceitaCritica="@_painel.ReceitaComprometidaCritica"
+                          ProgressoPagas="@_painel.ProgressoDespesasPagas" />
+
+        <MonthEvolutionChart Dados="_painel" />
+
+        <FilterChipBar T="FiltroListaLancamento" Valor="_filtro" ValorChanged="AlterarFiltro"
+                       Opcoes="_opcoesFiltro" AriaLabel="Filtrar por tipo"
+                       Categorias="_opcoesCategoria" CategoriasSelecionadas="_categoriasFiltro"
+                       CategoriasSelecionadasChanged="AlterarCategorias" />
+
+        <GroupedEntryList Grupos="_painel.Grupos" Quantidade="_painel.QuantidadeFiltrada"
+                          MesSemLancamentos="_painel.MesSemLancamentos" NomeMes="@_painel.NomeMes"
+                          PermiteAlterar="@(!_fechado)" NovoDesabilitado="_fechado"
+                          OnAbrir="AbrirEdicao" OnExcluir="ExcluirAsync" OnAlternarPago="AlternarPagoAsync"
+                          OnNovo="NovoLancamento" />
     }
 </div>
 
-<FabMenu>
-    <FabMenuItem Text="Adicionar lançamento" Icon="@Icons.Material.Filled.Add" Color="Color.Primary" Disabled="_fechado"
-                 Click="@(() => NavigationManager.NavigateTo("/lancamentos/novo"))" />
-    <FabMenuItem Text="Trazer mês anterior" Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Secondary" Disabled="@(_fechado || !_temDespesasParaTrazer)"
-                 Click="TrazerDespesasAsync" />
-    <FabMenuItem Text="@(_fechado ? "Reabrir mês" : "Fechar mês")" Icon="@(_fechado ? Icons.Material.Filled.LockOpen : Icons.Material.Filled.Lock)"
-                 Color="@(_fechado ? Color.Success : Color.Error)" Click="AlternarFechamentoAsync" />
-</FabMenu>
+<div class="of-fab">
+    <MudFab Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" Label="Novo lançamento"
+            Disabled="@(_carregando || _fechado)" OnClick="NovoLancamento" aria-label="Novo lançamento" />
+</div>
 
 @code {
+    private static readonly IReadOnlyList<OpcaoFiltro<FiltroListaLancamento>> _opcoesFiltro =
+    [
+        new(FiltroListaLancamento.Todos, "Todos"),
+        new(FiltroListaLancamento.Despesas, "Despesas"),
+        new(FiltroListaLancamento.Receitas, "Receitas"),
+        new(FiltroListaLancamento.APagar, "A pagar")
+    ];
+
     private bool _carregando = true;
-    private List<Transacao> _transacoes = new();
-    private List<Transacao> _despesasComAviso = new();
-    private List<Categoria> _categorias = new();
-    private TipoTransacao? _filtroTipo;
-    private int? _filtroCategoriaId;
-    private DateTime _mesReferencia = new(DateTime.Today.Year, DateTime.Today.Month, 1);
-    private bool _temDespesasParaTrazer;
+    private bool _cascoLigado;
+    private bool _buscaAberta;
     private bool _fechado;
+    private bool _temDespesasParaTrazer;
     private bool _mostrarAvisos;
-    private EvolucaoMensalDto _evolucao = new();
-    private readonly HashSet<int> _expandidos = new();
+    private string _busca = "";
+    private FiltroListaLancamento _filtro = FiltroListaLancamento.Todos;
+    private readonly HashSet<int> _categoriasFiltro = [];
+    private List<Transacao> _transacoes = [];
+    private List<Transacao> _despesasComAviso = [];
+    private List<Categoria> _categorias = [];
+    private List<OpcaoCategoriaFiltro> _opcoesCategoria = [];
+    private PainelLancamentosMes? _painel;
+    private DateTime _mesReferencia = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+
+    private RenderFragment BarraLancamentos => @<text>
+        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
+                       aria-label="Abrir menu" OnClick="AbrirMenu" />
+        <span class="of-appbar-titulo">Lançamentos</span>
+        <MudSpacer />
+        <MudIconButton Icon="@Icons.Material.Filled.Search" Color="Color.Inherit"
+                       aria-label="Buscar por descrição" aria-pressed="@_buscaAberta" OnClick="AlternarBusca" />
+    </text>;
 
     protected override async Task OnInitializedAsync()
     {
+        Casco.Definir(BarraLancamentos);
+        _cascoLigado = true;
         _categorias = await CategoriaService.ListarAsync();
+        _opcoesCategoria = _categorias
+            .Select(c => new OpcaoCategoriaFiltro(c.Id, c.Nome, c.Icone))
+            .ToList();
         await CarregarAsync();
     }
 
     private async Task CarregarAsync()
     {
         _carregando = true;
-        var filtro = new FiltroLancamentoDto
+        try
         {
-            Tipo = _filtroTipo,
-            CategoriaId = _filtroCategoriaId,
-            Inicio = _mesReferencia,
-            Fim = _mesReferencia.AddMonths(1).AddTicks(-1)
-        };
-        _transacoes = await TransacaoService.ListarAsync(filtro);
-        _fechado = await FechamentoService.EstaFechadoAsync(_mesReferencia.Month, _mesReferencia.Year);
-        _temDespesasParaTrazer = await TransacaoService.ExistemDespesasParaTrazerAsync(_mesReferencia.Month, _mesReferencia.Year);
-        _despesasComAviso = await TransacaoService.ObterDespesasComAvisoAsync();
-        await AtualizarEvolucaoAsync();
-        _carregando = false;
+            var filtro = new FiltroLancamentoDto
+            {
+                Inicio = _mesReferencia,
+                Fim = _mesReferencia.AddMonths(1).AddTicks(-1)
+            };
+            _transacoes = await TransacaoService.ListarAsync(filtro);
+            _fechado = await FechamentoService.EstaFechadoAsync(_mesReferencia.Month, _mesReferencia.Year);
+            _temDespesasParaTrazer = await TransacaoService.ExistemDespesasParaTrazerAsync(_mesReferencia.Month, _mesReferencia.Year);
+            _despesasComAviso = await TransacaoService.ObterDespesasComAvisoAsync();
+            AtualizarPainel();
+        }
+        finally
+        {
+            _carregando = false;
+        }
     }
 
-    private async Task AtualizarEvolucaoAsync()
-        => _evolucao = await TransacaoService.ObterEvolucaoDiariaAsync(_mesReferencia.Month, _mesReferencia.Year);
+    private void AtualizarPainel()
+    {
+        _painel = PainelLancamentosMes.Montar(
+            _transacoes,
+            _mesReferencia,
+            DateTime.Today,
+            _filtro,
+            _categoriasFiltro,
+            _busca,
+            CultureInfo.CurrentCulture);
+    }
 
     private async Task MudarMes(int delta)
     {
@@ -191,33 +173,44 @@
         await CarregarAsync();
     }
 
-    private void AlternarItens(int id)
+    private void AlterarFiltro(FiltroListaLancamento filtro)
     {
-        if (!_expandidos.Add(id))
-            _expandidos.Remove(id);
+        _filtro = filtro;
+        AtualizarPainel();
     }
 
-    private static string ResumoItens(Transacao transacao)
-        => string.Join(" · ", transacao.Itens
-            .OrderBy(i => i.Ordem)
-            .Select(i => ItensFaturaInclusao.Titulo(i.Descritivo, i.Categoria?.Nome ?? i.Descricao)));
-
-    private static string LegendaItem(ItemLancamento item)
+    private void AlterarCategorias(IReadOnlySet<int> categorias)
     {
-        var natureza = RotuloNatureza(item);
-        var categoria = item.Categoria?.Nome;
-        if (!ItensFaturaInclusao.TemDescritivo(item.Descritivo) || string.IsNullOrWhiteSpace(categoria))
-            return natureza;
-
-        return $"{categoria} · {natureza}";
+        _categoriasFiltro.Clear();
+        foreach (var id in categorias)
+            _categoriasFiltro.Add(id);
+        AtualizarPainel();
     }
 
-    private static string RotuloNatureza(ItemLancamento item) => item.Natureza switch
+    private void AbrirMenu() => Casco.SolicitarMenu();
+
+    private void AlternarBusca()
     {
-        NaturezaItemLancamento.Parcelada => $"Parcela {item.ParcelaAtual}/{item.TotalParcelas}",
-        NaturezaItemLancamento.Assinatura => "Assinatura",
-        _ => "Avulsa"
-    };
+        _buscaAberta = !_buscaAberta;
+        if (!_buscaAberta && !string.IsNullOrEmpty(_busca))
+        {
+            _busca = "";
+            AtualizarPainel();
+        }
+
+        Casco.Atualizar();
+    }
+
+    private void NovoLancamento()
+    {
+        if (_fechado)
+        {
+            Snackbar.Add("Mês fechado. Reabra o período para incluir lançamentos.", Severity.Info);
+            return;
+        }
+
+        NavigationManager.NavigateTo("/lancamentos/novo");
+    }
 
     private void AbrirEdicao(int id)
     {
@@ -261,14 +254,18 @@
         Snackbar.Add(_fechado ? $"{periodo} fechado" : $"{periodo} reaberto", Severity.Success);
     }
 
-    private async Task AlternarPagoAsync(Transacao transacao)
+    private async Task AlternarPagoAsync(int id)
     {
+        var transacao = _transacoes.FirstOrDefault(t => t.Id == id);
+        if (transacao is null || transacao.Tipo != TipoTransacao.Despesa)
+            return;
+
         try
         {
             await TransacaoService.MarcarComoPagoAsync(transacao.Id, !transacao.Pago);
             transacao.Pago = !transacao.Pago;
             _despesasComAviso = await TransacaoService.ObterDespesasComAvisoAsync();
-            await AtualizarEvolucaoAsync();
+            AtualizarPainel();
         }
         catch (InvalidOperationException ex)
         {
@@ -294,5 +291,11 @@
         {
             Snackbar.Add(ex.Message, Severity.Warning);
         }
+    }
+
+    public void Dispose()
+    {
+        if (_cascoLigado)
+            Casco.Definir(null);
     }
 }

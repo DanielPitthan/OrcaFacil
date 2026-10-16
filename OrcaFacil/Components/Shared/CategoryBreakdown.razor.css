@@ -1,0 +1,108 @@
+.of-categorias {
+    min-width: 0;
+    margin-bottom: 8px;
+    padding: 16px;
+    background: var(--of-surface);
+    border: 1px solid var(--of-border);
+    border-radius: var(--of-radius-card);
+}
+
+.of-pilha {
+    display: flex;
+    height: 14px;
+    overflow: hidden;
+    border-radius: 7px;
+    background: var(--of-chip-bg);
+}
+
+.of-pilha-fatia {
+    height: 14px;
+}
+
+.of-ranking,
+.of-ranking-ocultas {
+    margin: 12px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.of-ranking-item + .of-ranking-item {
+    margin-top: 12px;
+}
+
+.of-ranking-topo,
+.of-ranking-base,
+.of-outras {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.of-bolinha {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    margin-right: 8px;
+    border-radius: 50%;
+}
+
+.of-ranking-nome,
+.of-outras-texto {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    font-size: 14px;
+    color: var(--of-text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.of-ranking-valor,
+.of-ranking-pct {
+    flex: 0 0 auto;
+    margin-left: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--of-text-secondary);
+}
+
+.of-ranking-base {
+    margin-top: 6px;
+}
+
+.of-mini {
+    flex: 1 1 auto;
+    height: 4px;
+    overflow: hidden;
+    border-radius: 3px;
+    background: var(--of-border);
+}
+
+.of-mini-valor {
+    display: block;
+    height: 4px;
+    border-radius: 3px;
+}
+
+.of-outras {
+    width: 100%;
+    min-height: var(--of-touch);
+    margin-top: 8px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--of-text);
+    font: inherit;
+    text-align: left;
+}
+
+.of-outras-texto {
+    font-weight: 600;
+}
+
+.of-cat-0 { background: var(--of-primary); }
+.of-cat-1 { background: var(--of-cat-2); }
+.of-cat-2 { background: var(--of-warning); }
+.of-cat-3 { background: var(--of-cat-4); }
+.of-cat-4 { background: var(--of-danger); }
+.of-cat-outras { background: var(--of-cat-outras); }

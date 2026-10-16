@@ -7,6 +7,7 @@ using OrcaFacil.Core.Data;
 using OrcaFacil.Core.Repositories;
 using OrcaFacil.Core.Services;
 using OrcaFacil.Data;
+using OrcaFacil.Components.Layout;
 using OrcaFacil.Services;
 using OrcaFacil.Services.Interfaces;
 using Plugin.LocalNotification;
@@ -62,6 +63,8 @@ public static class MauiProgram
 
         builder.Services.AddMauiBlazorWebView();
         builder.Services.AddMudServices();
+        builder.Services.AddScoped<CascoNavegacao>();
+        builder.Services.AddScoped<RascunhoLancamento>();
         builder.Services.AddHttpClient(NoticiaService.HttpClientName, client =>
         {
             client.Timeout = TimeSpan.FromSeconds(15);

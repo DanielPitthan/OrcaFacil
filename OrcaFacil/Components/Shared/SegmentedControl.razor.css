@@ -1,0 +1,39 @@
+.of-segmented {
+    width: 100%;
+    min-width: 0;
+}
+
+.of-segmented ::deep .of-segmented-grupo {
+    width: 100%;
+}
+
+.of-segmented ::deep .mud-toggle-item {
+    min-height: var(--of-touch);
+    border-radius: var(--of-radius-control);
+}
+
+.of-segmented ::deep .mud-toggle-group {
+    width: 100%;
+    max-width: 100%;
+    border-color: var(--of-border-strong);
+    border-radius: var(--of-radius-control);
+    background: var(--of-input-bg);
+}
+
+.of-segmented:not(.of-segmented-vertical) ::deep .mud-toggle-group {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+}
+
+.of-segmented-vertical ::deep .mud-toggle-item-content {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    text-align: center;
+}
+
+.of-segmented ::deep .mud-toggle-item-content {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

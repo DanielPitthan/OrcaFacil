@@ -1,0 +1,15 @@
+<SegmentedControl T="PeriodoResumo" Valor="Valor" ValorChanged="Notificar"
+                   Opcoes="_opcoes" AriaLabel="Período do resumo" />
+
+@code {
+    private static readonly IReadOnlyList<OpcaoSegmento<PeriodoResumo>> _opcoes =
+    [
+        new(PeriodoResumo.EsteMes, "Este mês"),
+        new(PeriodoResumo.DesdeOInicio, "Desde o início")
+    ];
+
+    [Parameter] public PeriodoResumo Valor { get; set; } = PeriodoResumo.EsteMes;
+    [Parameter] public EventCallback<PeriodoResumo> ValorChanged { get; set; }
+
+    private Task Notificar(PeriodoResumo periodo) => ValorChanged.InvokeAsync(periodo);
+}

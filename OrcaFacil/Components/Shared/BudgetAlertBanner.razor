@@ -1,0 +1,18 @@
+@if (Visivel)
+{
+    <a class="of-alerta-orcamento" href="dashboard" aria-label="@($"{Titulo}. {Resumo}")">
+        <span class="of-alerta-icone" aria-hidden="true">
+            <MudIcon Icon="@Icons.Material.Outlined.WarningAmber" />
+        </span>
+        <span class="of-alerta-texto">
+            <span class="of-alerta-titulo">@Titulo</span>
+            <span class="of-alerta-resumo">@Resumo</span>
+        </span>
+    </a>
+}
+
+@code {
+    [Parameter] public bool Visivel { get; set; }
+    [Parameter] public string Titulo { get; set; } = "";
+    [Parameter] public string Resumo { get; set; } = "";
+}

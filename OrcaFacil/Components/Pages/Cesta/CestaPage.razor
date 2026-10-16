@@ -374,7 +374,7 @@
             { x => x.Locais, locais },
             { x => x.Produtos, produtos }
         };
-        var dialog = await DialogService.ShowAsync<CompraCestaDialog>(titulo, parametros, Opcoes(MaxWidth.Small));
+        var dialog = await DialogService.ShowAsync<CompraCestaDialog>(titulo, parametros, OpcoesCompra());
         var resultado = await dialog.Result;
         if (resultado is not { Canceled: false, Data: CompraCestaFormModel salvo })
             return false;
@@ -680,4 +680,12 @@
     }
 
     private static DialogOptions Opcoes(MaxWidth largura) => new() { MaxWidth = largura, FullWidth = true };
+
+    private static DialogOptions OpcoesCompra() => new()
+    {
+        FullScreen = true,
+        FullWidth = true,
+        CloseButton = false,
+        CloseOnEscapeKey = true
+    };
 }

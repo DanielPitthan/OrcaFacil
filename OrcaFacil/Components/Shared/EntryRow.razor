@@ -1,0 +1,119 @@
+<div class="of-swipe">
+    @if (PermiteAlterar && Linha.PodeAlternarPago)
+    {
+        <span class="of-swipe-pago" aria-hidden="true">Pago</span>
+    }
+    @if (PermiteAlterar)
+    {
+        <span class="of-swipe-excluir" aria-hidden="true">Excluir</span>
+    }
+    <button type="button" class="of-linha" style="@Transformacao" aria-label="@Rotulo"
+            @onpointerdown="Iniciar" @onpointermove="Mover" @onpointerup="Soltar" @onpointercancel="Cancelar"
+            @onclick="Abrir">
+        <span class="of-tile" style="background:@FundoTile" aria-hidden="true">@Linha.Icone</span>
+        <span class="of-linha-texto">
+            <span class="of-linha-titulo">@Linha.Titulo</span>
+            <span class="of-linha-sub">@Linha.Subtitulo</span>
+            @if (!string.IsNullOrWhiteSpace(Linha.Classificados))
+            {
+                <span class="of-linha-classificados">@Linha.Classificados</span>
+            }
+        </span>
+        <span class="of-linha-valores">
+            <span class="of-linha-valor of-moeda @(Linha.Tipo == TipoTransacao.Receita ? "of-linha-receita" : null)">@Linha.TextoValor</span>
+            <span class="of-linha-status @(Linha.Pago ? "of-status-pago" : "of-status-aberto")">@Linha.TextoStatus</span>
+        </span>
+    </button>
+</div>
+
+@code {
+    private const double Limiar = 72;
+    private const double CursoMaximo = 112;
+
+    [Parameter, EditorRequired] public LinhaLancamentoMes Linha { get; set; } = null!;
+    [Parameter] public bool PermiteAlterar { get; set; }
+    [Parameter] public EventCallback<int> OnAbrir { get; set; }
+    [Parameter] public EventCallback<int> OnExcluir { get; set; }
+    [Parameter] public EventCallback<int> OnAlternarPago { get; set; }
+
+    private bool _arrastando;
+    private bool _suprimirClique;
+    private double _origem;
+    private double _deslocamento;
+
+    private string Transformacao
+        => "transform:translateX(" + _deslocamento.ToString("0", System.Globalization.CultureInfo.InvariantCulture) + "px)";
+
+    private string Rotulo
+        => Linha.EhFaturaCartao
+            ? $"Editar fatura {Linha.Titulo}"
+            : $"Editar lançamento {Linha.Titulo}";
+
+    private string FundoTile
+    {
+        get
+        {
+            var hex = (Linha.CorHex ?? "").Trim().TrimStart('#');
+            if (hex.Length == 6 && hex.All(Uri.IsHexDigit))
+                return "#" + hex + "26";
+
+            return "var(--of-chip-bg)";
+        }
+    }
+
+    private void Iniciar(PointerEventArgs e)
+    {
+        if (!PermiteAlterar)
+            return;
+
+        _arrastando = true;
+        _origem = e.ClientX;
+        _deslocamento = 0;
+    }
+
+    private void Mover(PointerEventArgs e)
+    {
+        if (!_arrastando)
+            return;
+
+        var delta = e.ClientX - _origem;
+        if (delta > 0 && !Linha.PodeAlternarPago)
+            delta = 0;
+
+        _deslocamento = Math.Clamp(delta, PermiteAlterar ? -CursoMaximo : 0, Linha.PodeAlternarPago ? CursoMaximo : 0);
+    }
+
+    private async Task Soltar(PointerEventArgs _)
+    {
+        if (!_arrastando)
+            return;
+
+        _arrastando = false;
+        var delta = _deslocamento;
+        _deslocamento = 0;
+        if (Math.Abs(delta) > 8)
+            _suprimirClique = true;
+
+        if (delta <= -Limiar)
+            await OnExcluir.InvokeAsync(Linha.Id);
+        else if (delta >= Limiar && Linha.PodeAlternarPago)
+            await OnAlternarPago.InvokeAsync(Linha.Id);
+    }
+
+    private void Cancelar(PointerEventArgs _)
+    {
+        _arrastando = false;
+        _deslocamento = 0;
+    }
+
+    private async Task Abrir()
+    {
+        if (_suprimirClique)
+        {
+            _suprimirClique = false;
+            return;
+        }
+
+        await OnAbrir.InvokeAsync(Linha.Id);
+    }
+}

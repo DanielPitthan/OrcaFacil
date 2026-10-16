@@ -1,0 +1,95 @@
+<section class="of-noticias" aria-label="Notícias de economia">
+    <SectionHeader Titulo="Notícias de economia">
+        <Acao>
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" aria-label="Atualizar notícias"
+                           Disabled="Carregando" OnClick="Atualizar" />
+        </Acao>
+    </SectionHeader>
+
+    <SegmentedControl T="EscopoNoticia" Valor="Escopo" ValorChanged="NotificarEscopo"
+                      Opcoes="_escopos" AriaLabel="Região das notícias" />
+
+    <div class="of-noticias-card">
+        @if (Carregando && Itens.Count == 0)
+        {
+            <MudSkeleton Height="72px" Class="of-noticia-esqueleto" />
+            <MudSkeleton Height="72px" Class="of-noticia-esqueleto" />
+            <MudSkeleton Height="72px" Class="of-noticia-esqueleto" />
+        }
+        else if (!string.IsNullOrEmpty(Erro) && Itens.Count == 0)
+        {
+            <p class="of-noticias-erro">@Erro</p>
+            <MudButton Class="of-tentar" Variant="Variant.Outlined" Color="Color.Primary" OnClick="Atualizar">Tentar de novo</MudButton>
+        }
+        else if (Itens.Count == 0)
+        {
+            <EmptyState Icon="@Icons.Material.Outlined.Newspaper" Mensagem="Nenhuma notícia no momento" />
+        }
+        else
+        {
+            @if (!string.IsNullOrEmpty(Aviso))
+            {
+                <p class="of-noticias-aviso">@Aviso</p>
+            }
+            <ul class="of-noticias-lista">
+                @foreach (var item in Visiveis)
+                {
+                    <li>
+                        <button type="button" class="of-noticia" @onclick="() => AoAbrir.InvokeAsync(item.Link)">
+                            <span class="of-noticia-meta">
+                                <span class="of-noticia-fonte">@item.Veiculo</span>
+                                @if (!string.IsNullOrEmpty(item.Tempo))
+                                {
+                                    <span class="of-noticia-tempo"> · @item.Tempo</span>
+                                }
+                            </span>
+                            <span class="of-noticia-titulo">@item.Titulo</span>
+                        </button>
+                    </li>
+                }
+            </ul>
+            @if (Itens.Count > Visiveis.Count)
+            {
+                <button type="button" class="of-ver-mais" @onclick="Expandir">Ver mais notícias</button>
+            }
+        }
+    </div>
+</section>
+
+@code {
+    public const int QuantidadeInicial = 4;
+
+    private static readonly IReadOnlyList<OpcaoSegmento<EscopoNoticia>> _escopos =
+    [
+        new(EscopoNoticia.Brasil, "Brasil"),
+        new(EscopoNoticia.Mundo, "Mundo")
+    ];
+
+    [Parameter] public EscopoNoticia Escopo { get; set; }
+    [Parameter] public EventCallback<EscopoNoticia> EscopoChanged { get; set; }
+    [Parameter] public IReadOnlyList<LinhaNoticia> Itens { get; set; } = [];
+    [Parameter] public bool Carregando { get; set; }
+    [Parameter] public string? Erro { get; set; }
+    [Parameter] public string? Aviso { get; set; }
+    [Parameter] public EventCallback Atualizar { get; set; }
+    [Parameter] public EventCallback<string> AoAbrir { get; set; }
+
+    private bool _expandido;
+    private EscopoNoticia _escopoAnterior;
+
+    private IReadOnlyList<LinhaNoticia> Visiveis =>
+        _expandido ? Itens : Itens.Take(QuantidadeInicial).ToList();
+
+    protected override void OnParametersSet()
+    {
+        if (_escopoAnterior != Escopo)
+        {
+            _expandido = false;
+            _escopoAnterior = Escopo;
+        }
+    }
+
+    private void Expandir() => _expandido = true;
+
+    private Task NotificarEscopo(EscopoNoticia escopo) => EscopoChanged.InvokeAsync(escopo);
+}

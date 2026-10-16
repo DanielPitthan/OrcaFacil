@@ -1,0 +1,50 @@
+.of-secao {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.of-secao-cabeca {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    min-width: 0;
+    margin-bottom: 8px;
+}
+
+.of-secao-titulo {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--of-text-muted);
+}
+
+.of-secao-acao {
+    margin-left: 12px;
+    color: var(--of-text-secondary);
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.of-secao-card {
+    background: var(--of-surface);
+    border: 1px solid var(--of-border);
+    border-radius: var(--of-radius-card);
+    overflow: hidden;
+}
+
+.of-secao-card ::deep .of-form-row + .of-form-row,
+.of-secao-card ::deep .of-form-row + .of-secao-bloco,
+.of-secao-card ::deep .of-form-row + .of-seletor,
+.of-secao-card ::deep .of-secao-bloco + .of-form-row,
+.of-secao-card ::deep .of-secao-bloco + .of-secao-bloco,
+.of-secao-card ::deep .of-secao-bloco + .of-seletor,
+.of-secao-card ::deep .of-seletor + .of-form-row,
+.of-secao-card ::deep .of-seletor + .of-secao-bloco,
+.of-secao-card ::deep .of-seletor + .of-seletor {
+    border-top: 1px solid var(--of-border);
+}

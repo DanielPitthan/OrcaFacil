@@ -1,0 +1,17 @@
+<div class="of-chips-leitura" role="group" aria-label="@AriaLabel">
+    @foreach (var chip in Chips)
+    {
+        <span class="of-chip-leitura">
+            @if (!string.IsNullOrWhiteSpace(chip.Icone))
+            {
+                <span aria-hidden="true">@chip.Icone</span>
+            }
+            <span>@chip.Texto</span>
+        </span>
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<ChipSomenteLeitura> Chips { get; set; } = [];
+    [Parameter] public string AriaLabel { get; set; } = "Campos derivados";
+}

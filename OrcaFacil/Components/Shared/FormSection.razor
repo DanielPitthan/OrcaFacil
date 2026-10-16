@@ -1,0 +1,18 @@
+<section class="of-secao">
+    <div class="of-secao-cabeca">
+        <h2 class="of-secao-titulo">@Titulo</h2>
+        @if (Acao is not null)
+        {
+            <div class="of-secao-acao">@Acao</div>
+        }
+    </div>
+    <div class="of-secao-card">
+        @ChildContent
+    </div>
+</section>
+
+@code {
+    [Parameter] public string Titulo { get; set; } = "";
+    [Parameter] public RenderFragment? Acao { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

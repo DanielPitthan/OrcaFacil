@@ -1,0 +1,474 @@
+@using OrcaFacil.Core.Lancamentos
+
+<div class="of-fatura">
+    @if (!string.IsNullOrWhiteSpace(MensagemPeriodo))
+    {
+        <MudAlert Severity="Severity.Warning" Icon="@Icons.Material.Filled.Lock" Dense="true" Class="of-fatura-alerta">
+            @MensagemPeriodo
+        </MudAlert>
+    }
+
+    <div class="of-fatura-miolo">
+        <div class="of-fatura-bloco">
+            <SummaryCard Rotulo="Total da fatura" Valor="@Modelo.Valor" Contexto="@Contexto"
+                         Status="@FaturaCartaoEditor.RotuloStatus(StatusAtual)" TomStatus="@TomStatus"
+                         Progresso="@Percentual" ProgressoCritico="@Estoura" Legendas="@Legendas" />
+        </div>
+
+        @if (Estoura)
+        {
+            <div class="of-fatura-bloco">
+                <MudAlert Severity="Severity.Error" Dense="true">A soma dos itens não pode passar do total da fatura.</MudAlert>
+            </div>
+        }
+
+        <div class="of-fatura-bloco">
+            <ReadOnlyChips Chips="@ChipsDerivados" AriaLabel="Tipo e categoria" />
+        </div>
+
+        <div class="of-fatura-bloco">
+        <FormSection Titulo="Fatura">
+            <FormRow Icon="@Icons.Material.Outlined.Notes" Rotulo="Descrição">
+                <MudTextField T="string" @bind-Value="Modelo.Descricao" For="@(() => Modelo.Descricao)"
+                              Variant="Variant.Text" Margin="Margin.Dense" Immediate="true"
+                              Placeholder="Ex.: Cartão Itaú" />
+            </FormRow>
+            <FormRow Icon="@Icons.Material.Outlined.Event" Rotulo="Vencimento">
+                <MudDatePicker Date="Data" DateChanged="AlterarDataAsync" Variant="Variant.Text" Margin="Margin.Dense" />
+            </FormRow>
+            @if (Cartoes.Count == 0)
+            {
+                <div class="of-secao-bloco">
+                    <MudAlert Severity="Severity.Info" Dense="true">
+                        Cadastre seus cartões em Cartões para associar esta fatura a um cartão.
+                    </MudAlert>
+                </div>
+            }
+            else
+            {
+                <div class="of-seletor">
+                    <MudMenu ActivationEvent="@MouseEvent.LeftClick" AnchorOrigin="Origin.BottomCenter"
+                             TransformOrigin="Origin.TopCenter" MaxHeight="320">
+                        <ActivatorContent Context="menu">
+                            <FormRow Icon="@Icons.Material.Outlined.CreditCard" Rotulo="Cartão"
+                                     Valor="@CartaoAtual?.Rotulo" Chevron="true" Embutido="true"
+                                     AriaLabel="Selecionar cartão" />
+                        </ActivatorContent>
+                        <ChildContent>
+                            @foreach (var cartao in Cartoes)
+                            {
+                                <MudMenuItem OnClick="@(() => SelecionarCartaoAsync(cartao))">@cartao.Rotulo</MudMenuItem>
+                            }
+                        </ChildContent>
+                    </MudMenu>
+                </div>
+            }
+        </FormSection>
+        </div>
+
+        <div class="of-fatura-bloco">
+        <FormSection Titulo="Itens">
+            <ItemList TItem="ItemLancamentoFormModel" Itens="@Modelo.Itens" Contagem="@Contagem" SomaFormatada="@Soma.ToString("C")"
+                      Titulo="TituloItem" Subtitulo="SubtituloItem" Valor="ValorItem" Icone="IconeItem" Cor="CorItem"
+                      ChaveItem="ChaveItem" OnEditar="EditarItem" OnRemover="RemoverItem" OnAdicionar="AbrirNovo" />
+        </FormSection>
+        </div>
+
+        <div class="of-fatura-bloco">
+        <FormSection Titulo="Pagamento">
+            <FormRow Icon="@Icons.Material.Outlined.Payments" Rotulo="Total da fatura">
+                <CampoNumerico TNumber="decimal" @bind-Value="Modelo.Valor" For="@(() => Modelo.Valor)"
+                                Adornment="Adornment.Start" AdornmentText="R$" />
+            </FormRow>
+            <div class="of-secao-bloco">
+                <MudSwitch T="bool" @bind-Value="Modelo.Pago" Color="Color.Success" Label="Pago" />
+                <p class="of-apoio">@FaturaCartaoEditor.TextoApoioPago(Modelo.Pago)</p>
+            </div>
+            <div class="of-seletor">
+                <MudMenu ActivationEvent="@MouseEvent.LeftClick" AnchorOrigin="Origin.BottomCenter"
+                         TransformOrigin="Origin.TopCenter">
+                    <ActivatorContent Context="menu">
+                        <FormRow Icon="@Icons.Material.Outlined.Repeat" Rotulo="Recorrência"
+                                 Valor="@FaturaCartaoEditor.RotuloRecorrencia(Modelo.Recorrencia)"
+                                 Chevron="true" Embutido="true" AriaLabel="Selecionar recorrência" />
+                    </ActivatorContent>
+                    <ChildContent>
+                        @foreach (var recorrencia in Enum.GetValues<TipoRecorrencia>())
+                        {
+                            <MudMenuItem OnClick="@(() => Modelo.Recorrencia = recorrencia)">
+                                @FaturaCartaoEditor.RotuloRecorrencia(recorrencia)
+                            </MudMenuItem>
+                        }
+                    </ChildContent>
+                </MudMenu>
+            </div>
+            <div class="of-secao-bloco">
+                <MudTextField T="string" @bind-Value="Modelo.Observacao" For="@(() => Modelo.Observacao)"
+                              Label="Observação (opcional)" Lines="2" MaxLength="500" Immediate="true"
+                              Variant="Variant.Outlined" />
+            </div>
+        </FormSection>
+        </div>
+    </div>
+
+    <StickyActionBar TextoCancelar="Cancelar" TextoPrimario="Salvar fatura" OnCancelar="OnCancelar"
+                     PrimarioDesabilitado="@SalvarDesabilitado" TipoPrimario="ButtonType.Submit" />
+</div>
+
+<ItemSheet TItem="ItemLancamentoFormModel" @ref="_sheet" @bind-Aberto="_sheetAberto" Item="_editando"
+           Titulo="@(_editando is null ? "Adicionar item" : "Editar item")"
+           Valor="_itemValor" ValorChanged="AlterarValorItem" Dica="@Dica" DicaCritica="@DicaCritica" Erro="@_erroItem"
+           MostrarOutro="@(_editando is null)" TextoConfirmar="@(_editando is null ? "Adicionar" : "Salvar")"
+           TextoOutro="Adicionar outro" OnConfirmar="ConfirmarAsync" OnConfirmarOutro="ConfirmarOutroAsync">
+    @if (CategoriasItem.Count == 0)
+    {
+        <p class="of-apoio">Não há outra categoria de despesa para os itens.</p>
+    }
+    else if (_listaCompleta)
+    {
+        <div class="of-cats">
+            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="FecharLista">Principais</MudButton>
+            <MudList T="Categoria" Dense="true">
+                @foreach (var categoria in CategoriasItem)
+                {
+                    <MudListItem T="Categoria" OnClick="@(() => EscolherCategoria(categoria.Id))">
+                        <span class="of-cat-opcao">@categoria.Icone @categoria.Nome</span>
+                    </MudListItem>
+                }
+            </MudList>
+        </div>
+    }
+    else
+    {
+        <div class="of-cats">
+            <MudChipSet T="int" SelectedValue="_itemCategoriaId" SelectedValueChanged="EscolherCategoria"
+                        SelectionMode="SelectionMode.SingleSelection" CheckMark="false">
+                @foreach (var categoria in CategoriasVisiveis)
+                {
+                    <MudChip T="int" Value="@categoria.Id" Variant="Variant.Outlined" Color="Color.Primary"
+                             Text="@($"{categoria.Icone} {categoria.Nome}")" />
+                }
+            </MudChipSet>
+            <MudButton Variant="Variant.Text" Color="Color.Primary" Class="of-todas" OnClick="AbrirLista">Todas…</MudButton>
+        </div>
+    }
+
+    <MudTextField T="string" @bind-Value="_itemDescritivo" Label="Descritivo (opcional)"
+                  Placeholder="Ex.: McDonald's, Netflix" Immediate="true" Variant="Variant.Outlined"
+                  MaxLength="@ItensFaturaInclusao.DescritivoMaximo" Counter="@ItensFaturaInclusao.DescritivoMaximo" />
+
+    <SegmentedControl T="NaturezaItemLancamento" Valor="_itemNatureza" ValorChanged="AlterarNatureza"
+                      Opcoes="@Naturezas" AriaLabel="Natureza" />
+
+    @if (_itemNatureza == NaturezaItemLancamento.Parcelada)
+    {
+        <div class="of-steppers">
+            <div class="of-stepper">
+                <span class="of-stepper-rotulo">Parcelas</span>
+                <div class="of-stepper-controles">
+                    <MudIconButton Icon="@Icons.Material.Filled.Remove" aria-label="Diminuir parcelas"
+                                   Disabled="@(_itemTotalParcelas.GetValueOrDefault() <= FaturaCartaoEditor.ParcelasMinimas)"
+                                   OnClick="@(() => AlterarTotal(-1))" />
+                    <span class="of-stepper-valor of-moeda">@_itemTotalParcelas</span>
+                    <MudIconButton Icon="@Icons.Material.Filled.Add" aria-label="Aumentar parcelas"
+                                   OnClick="@(() => AlterarTotal(1))" />
+                </div>
+            </div>
+            <div class="of-stepper">
+                <span class="of-stepper-rotulo">Parcela atual</span>
+                <div class="of-stepper-controles">
+                    <MudIconButton Icon="@Icons.Material.Filled.Remove" aria-label="Diminuir parcela atual"
+                                   Disabled="@(_itemParcelaAtual.GetValueOrDefault() <= 1)"
+                                   OnClick="@(() => AlterarParcela(-1))" />
+                    <span class="of-stepper-valor of-moeda">@_itemParcelaAtual</span>
+                    <MudIconButton Icon="@Icons.Material.Filled.Add" aria-label="Aumentar parcela atual"
+                                   Disabled="@(_itemParcelaAtual.GetValueOrDefault() >= _itemTotalParcelas.GetValueOrDefault())"
+                                   OnClick="@(() => AlterarParcela(1))" />
+                </div>
+            </div>
+        </div>
+    }
+    else if (_itemNatureza == NaturezaItemLancamento.Assinatura)
+    {
+        <p class="of-apoio">Repete na fatura seguinte ao trazer o mês anterior.</p>
+    }
+</ItemSheet>
+
+@code {
+    private static readonly IReadOnlyList<OpcaoSegmento<NaturezaItemLancamento>> Naturezas =
+    [
+        new(NaturezaItemLancamento.Avulsa, "Avulsa"),
+        new(NaturezaItemLancamento.Parcelada, "Parcelada"),
+        new(NaturezaItemLancamento.Assinatura, "Assinatura")
+    ];
+
+    private ItemSheet<ItemLancamentoFormModel>? _sheet;
+    private bool _sheetAberto;
+    private bool _listaCompleta;
+    private ItemLancamentoFormModel? _editando;
+    private int _itemCategoriaId;
+    private string? _itemDescritivo;
+    private decimal _itemValor;
+    private NaturezaItemLancamento _itemNatureza = NaturezaItemLancamento.Avulsa;
+    private int? _itemParcelaAtual;
+    private int? _itemTotalParcelas;
+    private string? _erroItem;
+
+    [Parameter, EditorRequired] public TransacaoFormModel Modelo { get; set; } = null!;
+    [Parameter] public DateTime? Data { get; set; }
+    [Parameter] public EventCallback<DateTime?> DataChanged { get; set; }
+    [Parameter] public bool PeriodoBloqueado { get; set; }
+    [Parameter] public string? MensagemPeriodo { get; set; }
+    [Parameter] public IReadOnlyList<Categoria> Categorias { get; set; } = [];
+    [Parameter] public IReadOnlyList<Cartao> Cartoes { get; set; } = [];
+    [Parameter] public EventCallback OnCancelar { get; set; }
+    [Parameter] public EventCallback OnAlterouCartao { get; set; }
+
+    public bool SheetAberto => _sheetAberto;
+
+    private bool SalvarDesabilitado => PeriodoBloqueado || Estoura;
+
+    private Categoria? CategoriaFatura => Categorias.FirstOrDefault(c => c.Id == Modelo.CategoriaId);
+
+    private List<Categoria> CategoriasItem => Categorias
+        .Where(c => c.TipoPadrao == TipoTransacao.Despesa && c.Id != Modelo.CategoriaId)
+        .ToList();
+
+    private IReadOnlyList<Categoria> CategoriasVisiveis =>
+        FaturaCartaoEditor.EmDestaque(CategoriasItem, c => c.Id == _itemCategoriaId);
+
+    private Cartao? CartaoAtual => Cartoes.FirstOrDefault(c => c.Id == Modelo.CartaoId);
+
+    private decimal Soma => FaturaCartaoEditor.Soma(Modelo.Itens.Select(i => i.Valor));
+
+    private decimal SomaForaDoRascunho
+    {
+        get
+        {
+            var soma = Soma;
+            if (_editando is not null)
+                soma -= _editando.Valor;
+            return soma;
+        }
+    }
+
+    private decimal RestanteLista => FaturaCartaoEditor.Restante(Modelo.Valor, SomaForaDoRascunho);
+
+    private bool DicaCritica => Modelo.Valor > 0 && _itemValor > RestanteLista;
+
+    private string Dica => DicaCritica
+        ? $"Passa do restante em {(_itemValor - RestanteLista):C}"
+        : $"Restante {CategoriaFatura?.Nome}: {RestanteLista:C}";
+
+    private bool Estoura => FaturaCartaoEditor.Estoura(Modelo.Itens.Count, Soma, Modelo.Valor);
+
+    private double Percentual => FaturaCartaoEditor.PercentualClassificado(Modelo.Valor, Soma);
+
+    private string Contagem => FaturaCartaoEditor.ContagemItens(Modelo.Itens.Count);
+
+    private string Contexto => $"Vencimento {(Data ?? DateTime.Today):dd/MM/yyyy}";
+
+    private StatusFaturaCartao StatusAtual =>
+        FaturaCartaoEditor.Status(Modelo.Pago, Data ?? DateTime.Today, DateTime.Today);
+
+    private TomResumo TomStatus => StatusAtual switch
+    {
+        StatusFaturaCartao.Paga => TomResumo.Sucesso,
+        StatusFaturaCartao.Atrasada => TomResumo.Erro,
+        _ => TomResumo.Alerta
+    };
+
+    private IReadOnlyList<LegendaResumo> Legendas =>
+    [
+        new("Detalhado", Soma.ToString("C"), TomResumo.Primario),
+        new("A detalhar", FaturaCartaoEditor.ADetalhar(Modelo.Valor, Soma).ToString("C"), TomResumo.Alerta)
+    ];
+
+    private IReadOnlyList<ChipSomenteLeitura> ChipsDerivados =>
+    [
+        new(Modelo.Tipo == TipoTransacao.Receita ? "Receita" : "Despesa"),
+        new(CategoriaFatura?.Nome ?? "Cartão de Crédito", CategoriaFatura?.Icone)
+    ];
+
+    protected override void OnParametersSet() => GarantirCategoria();
+
+    private async Task AlterarDataAsync(DateTime? data) => await DataChanged.InvokeAsync(data);
+
+    private async Task SelecionarCartaoAsync(Cartao cartao)
+    {
+        Modelo.CartaoId = cartao.Id;
+        await OnAlterouCartao.InvokeAsync();
+    }
+
+    private void GarantirCategoria()
+    {
+        if (!CategoriasItem.Any(c => c.Id == _itemCategoriaId))
+            _itemCategoriaId = CategoriasItem.FirstOrDefault()?.Id ?? 0;
+    }
+
+    private void AbrirNovo()
+    {
+        _editando = null;
+        _itemValor = 0;
+        _itemDescritivo = null;
+        _itemNatureza = NaturezaItemLancamento.Avulsa;
+        _itemParcelaAtual = null;
+        _itemTotalParcelas = null;
+        _erroItem = null;
+        _listaCompleta = false;
+        GarantirCategoria();
+        _sheetAberto = true;
+    }
+
+    private void EditarItem(ItemLancamentoFormModel item)
+    {
+        _editando = item;
+        _itemCategoriaId = item.CategoriaId;
+        _itemValor = item.Valor;
+        _itemDescritivo = item.Descritivo;
+        _itemNatureza = item.Natureza;
+        _itemParcelaAtual = item.ParcelaAtual;
+        _itemTotalParcelas = item.TotalParcelas;
+        _erroItem = null;
+        _listaCompleta = false;
+        _sheetAberto = true;
+    }
+
+    private void RemoverItem(ItemLancamentoFormModel item)
+    {
+        if (_editando == item)
+        {
+            _editando = null;
+            _sheetAberto = false;
+        }
+
+        Modelo.Itens.Remove(item);
+    }
+
+    private Task AlterarValorItem(decimal valor)
+    {
+        _itemValor = valor;
+        _erroItem = null;
+        return Task.CompletedTask;
+    }
+
+    private void EscolherCategoria(int categoriaId)
+    {
+        if (categoriaId <= 0)
+            return;
+
+        _itemCategoriaId = categoriaId;
+        _listaCompleta = false;
+        _erroItem = null;
+    }
+
+    private void AbrirLista() => _listaCompleta = true;
+
+    private void FecharLista() => _listaCompleta = false;
+
+    private void AlterarNatureza(NaturezaItemLancamento natureza)
+    {
+        _itemNatureza = natureza;
+        (_itemParcelaAtual, _itemTotalParcelas) = FaturaCartaoEditor.AoEscolherNatureza(
+            _itemNatureza, _itemParcelaAtual, _itemTotalParcelas);
+        _erroItem = null;
+    }
+
+    private void AlterarTotal(int delta)
+    {
+        var total = FaturaCartaoEditor.AjustarTotal(_itemTotalParcelas ?? FaturaCartaoEditor.ParcelasMinimas, delta);
+        var atual = Math.Min(_itemParcelaAtual ?? 1, Math.Max(total, 1));
+        _itemTotalParcelas = total;
+        _itemParcelaAtual = atual;
+    }
+
+    private void AlterarParcela(int delta)
+    {
+        var total = _itemTotalParcelas ?? FaturaCartaoEditor.ParcelasMinimas;
+        _itemParcelaAtual = FaturaCartaoEditor.AjustarParcelaAtual(_itemParcelaAtual ?? 1, delta, total);
+    }
+
+    private Task ConfirmarAsync(ItemLancamentoFormModel _)
+    {
+        if (!AplicarRascunho())
+            return Task.CompletedTask;
+
+        _sheetAberto = false;
+        return Task.CompletedTask;
+    }
+
+    private async Task ConfirmarOutroAsync(ItemLancamentoFormModel _)
+    {
+        if (!AplicarRascunho(acrescentar: true))
+            return;
+
+        _itemValor = 0;
+        _itemDescritivo = null;
+        _itemNatureza = NaturezaItemLancamento.Avulsa;
+        _itemParcelaAtual = null;
+        _itemTotalParcelas = null;
+        _erroItem = null;
+        if (_sheet is not null)
+            await _sheet.FocarValorAsync();
+    }
+
+    private bool AplicarRascunho(bool acrescentar = false)
+    {
+        var natureza = _itemNatureza;
+        var (parcelaAtual, totalParcelas) = natureza == NaturezaItemLancamento.Parcelada
+            ? (_itemParcelaAtual, _itemTotalParcelas)
+            : ((int?)null, (int?)null);
+
+        var erro = FaturaCartaoEditor.ValidarItem(_itemCategoriaId, _itemValor, natureza, parcelaAtual, totalParcelas);
+        if (erro is not null)
+        {
+            _erroItem = erro;
+            return false;
+        }
+
+        var nome = Categorias.FirstOrDefault(c => c.Id == _itemCategoriaId)?.Nome ?? string.Empty;
+        try
+        {
+            if (_editando is null || acrescentar)
+            {
+                ItensFaturaInclusao.Acrescentar(
+                    Modelo.Itens, _itemCategoriaId, nome, _itemValor, natureza, parcelaAtual, totalParcelas, _itemDescritivo);
+            }
+            else
+            {
+                FaturaCartaoEditor.AplicarEdicao(
+                    _editando, _itemCategoriaId, nome, _itemValor, natureza, parcelaAtual, totalParcelas, _itemDescritivo);
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            _erroItem = ex.Message;
+            return false;
+        }
+
+        _erroItem = null;
+        return true;
+    }
+
+    private string TituloItem(ItemLancamentoFormModel item)
+    {
+        var categoria = Categorias.FirstOrDefault(c => c.Id == item.CategoriaId);
+        return ItensFaturaInclusao.Titulo(item.Descritivo, categoria?.Nome ?? item.Descricao);
+    }
+
+    private string SubtituloItem(ItemLancamentoFormModel item)
+    {
+        var categoria = Categorias.FirstOrDefault(c => c.Id == item.CategoriaId);
+        return FaturaCartaoEditor.Subtitulo(categoria?.Nome ?? item.Descricao, item.Natureza, item.ParcelaAtual, item.TotalParcelas);
+    }
+
+    private string ValorItem(ItemLancamentoFormModel item) => item.Valor.ToString("C");
+
+    private string IconeItem(ItemLancamentoFormModel item)
+        => Categorias.FirstOrDefault(c => c.Id == item.CategoriaId)?.Icone ?? "🏷️";
+
+    private string? CorItem(ItemLancamentoFormModel item)
+        => Categorias.FirstOrDefault(c => c.Id == item.CategoriaId)?.CorHex;
+
+    private static object ChaveItem(ItemLancamentoFormModel item) => item;
+}

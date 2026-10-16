@@ -1,0 +1,137 @@
+.of-evolucao {
+    min-width: 0;
+    margin-bottom: 12px;
+    background: var(--of-surface);
+    border: 1px solid var(--of-border);
+    border-radius: var(--of-radius-card);
+    overflow: hidden;
+}
+
+.of-evolucao-topo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    min-height: var(--of-touch);
+    padding: 8px 16px;
+    border: 0;
+    background: transparent;
+    color: var(--of-text);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: left;
+}
+
+.of-evolucao-corpo {
+    padding: 0 8px 12px;
+}
+
+.of-evolucao-plot {
+    position: relative;
+    min-width: 0;
+    height: 168px;
+}
+
+.of-hoje {
+    position: absolute;
+    top: 4px;
+    bottom: 28px;
+    left: calc(36px + (100% - 66px) * var(--of-hoje-frac, 0));
+    width: 0;
+    border-left: 1px dashed var(--of-text-muted);
+    pointer-events: none;
+}
+
+.of-hoje span {
+    position: absolute;
+    top: 0;
+    left: 4px;
+    font-size: 10px;
+    line-height: 1;
+    color: var(--of-text-muted);
+    white-space: nowrap;
+}
+
+.of-legenda {
+    display: flex;
+    flex-wrap: wrap;
+    margin-top: 4px;
+}
+
+.of-legenda-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--of-touch);
+    margin: 0 8px 0 0;
+    padding: 0 12px;
+    border: 1px solid var(--of-border);
+    border-radius: 18px;
+    background: var(--of-chip-bg);
+    color: var(--of-text-secondary);
+    font: inherit;
+    font-size: 13px;
+}
+
+.of-legenda-ativa {
+    border-color: var(--of-border-strong);
+    color: var(--of-text);
+}
+
+.of-legenda-ponto {
+    width: 8px;
+    height: 8px;
+    margin-right: 6px;
+    border-radius: 50%;
+}
+
+.of-ponto-receita {
+    background: var(--of-success);
+}
+
+.of-ponto-despesa {
+    background: var(--of-primary);
+}
+
+.of-ponto-saldo {
+    background: var(--of-saldo);
+}
+
+.of-evolucao-totais,
+.of-evolucao-nota {
+    margin: 8px 8px 0;
+    font-size: 12px;
+    line-height: 1.35;
+    color: var(--of-text-muted);
+}
+
+.of-evolucao-hoje ::deep path.mud-chart-line[fill="none"][stroke-opacity="1"],
+.of-evolucao-hoje ::deep path.mud-chart-line[fill="none"][stroke-opacity="1.0"],
+.of-evolucao-hoje ::deep path.mud-chart-line[fill="none"][stroke-opacity="1.00"] {
+    clip-path: inset(0 calc((1 - var(--of-hoje-frac, 0)) * 100%) 0 0);
+}
+
+.of-evolucao-hoje ::deep path.mud-chart-line[fill="none"][stroke-opacity="0.99"] {
+    stroke-dasharray: 6 4;
+    clip-path: inset(0 0 0 calc(var(--of-hoje-frac, 0) * 100%));
+}
+
+.of-evolucao ::deep path.mud-chart-line[fill="none"][stroke-opacity="0.99"] {
+    stroke-dasharray: 6 4;
+}
+
+.of-evolucao-hoje ::deep path.mud-chart-line[fill-opacity="0.16"],
+.of-evolucao-hoje ::deep path.mud-chart-line[fill-opacity="0.160"] {
+    clip-path: inset(0 calc((1 - var(--of-hoje-frac, 0)) * 100%) 0 0);
+}
+
+.of-evolucao-hoje ::deep path.mud-chart-line[fill-opacity="0.07"],
+.of-evolucao-hoje ::deep path.mud-chart-line[fill-opacity="0.070"] {
+    clip-path: inset(0 0 0 calc(var(--of-hoje-frac, 0) * 100%));
+}
+
+.of-evolucao ::deep .mud-charts-gridlines-yaxis path {
+    stroke: var(--of-border);
+    stroke-dasharray: 1 3;
+    stroke-width: 1;
+}

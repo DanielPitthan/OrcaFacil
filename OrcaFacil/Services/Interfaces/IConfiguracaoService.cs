@@ -9,6 +9,9 @@ public interface IConfiguracaoService
     bool SomAtivo { get; set; }
     PrazoAviso PrazosAviso { get; set; }
 
+    /// <summary>Gráfico da listagem de lançamentos. Começa expandido.</summary>
+    bool GraficoLancamentosExpandido { get; set; }
+
     /// <summary>Remove todas as preferências gravadas, voltando aos valores padrão.</summary>
     void Redefinir();
 }

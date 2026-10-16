@@ -1,0 +1,9 @@
+.of-empty-legivel {
+    opacity: 1;
+}
+
+.of-empty-acao {
+    margin-top: 16px;
+    min-height: var(--of-touch);
+    border-radius: var(--of-radius-control);
+}

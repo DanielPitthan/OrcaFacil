@@ -1,0 +1,95 @@
+.of-orcamentos {
+    margin: 0 0 8px;
+    padding: 4px 16px;
+    list-style: none;
+    background: var(--of-surface);
+    border: 1px solid var(--of-border);
+    border-radius: var(--of-radius-card);
+}
+
+.of-orcamento {
+    min-width: 0;
+    padding: 12px 0;
+}
+
+.of-orcamento + .of-orcamento {
+    border-top: 1px solid var(--of-border);
+}
+
+.of-orcamento-topo {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.of-orcamento-nome {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--of-text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.of-chip-pct {
+    flex: 0 0 auto;
+    max-width: 60%;
+    margin-left: 8px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: var(--of-chip-bg);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.3;
+    white-space: nowrap;
+}
+
+.of-chip-atencao {
+    color: var(--of-warning);
+}
+
+.of-chip-estouro {
+    color: var(--of-danger-text);
+}
+
+.of-trilho {
+    height: 6px;
+    margin-top: 8px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--of-border);
+}
+
+.of-trilho-atencao,
+.of-trilho-perigo,
+.of-trilho-sucesso {
+    display: block;
+    height: 6px;
+    border-radius: 999px;
+}
+
+.of-trilho-atencao {
+    background: var(--of-warning);
+}
+
+.of-trilho-perigo {
+    background: var(--of-danger);
+}
+
+.of-trilho-sucesso {
+    background: var(--of-success);
+}
+
+.of-orcamento-detalhe,
+.of-orcamento-vazio {
+    margin: 6px 0 0;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--of-text-secondary);
+}
+
+.of-orcamento-vazio {
+    margin: 0 0 12px;
+}
