@@ -1,0 +1,36 @@
+@if (Compact)
+{
+    <div class="of-meta of-meta-compacta">
+        <span class="of-meta-nome">@Nome</span>
+        <span class="of-meta-pct of-moeda">@TextoPercentual</span>
+        <span class="of-trilho of-trilho-linha" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+              aria-valuenow="@Progresso.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+              aria-label="@($"{Nome}: {TextoPercentual}")">
+            <span class="of-trilho-sucesso" style="width:@Largura"></span>
+        </span>
+    </div>
+}
+else
+{
+    <div class="of-meta">
+        <div class="of-meta-topo">
+            <span class="of-meta-nome">@Nome</span>
+            <span class="of-meta-pct of-moeda">@TextoPercentual</span>
+        </div>
+        <div class="of-trilho" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+             aria-valuenow="@Progresso.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+             aria-label="@($"{Nome}: {TextoPercentual}")">
+            <span class="of-trilho-sucesso" style="width:@Largura"></span>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string Nome { get; set; } = "";
+    [Parameter] public string TextoPercentual { get; set; } = "";
+    [Parameter] public double Progresso { get; set; }
+    [Parameter] public bool Compact { get; set; }
+
+    private string Largura
+        => Math.Clamp(Progresso, 0, 100).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "%";
+}

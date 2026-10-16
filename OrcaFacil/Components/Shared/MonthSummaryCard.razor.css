@@ -1,0 +1,171 @@
+.of-resumo-mes {
+    min-width: 0;
+    margin-bottom: 12px;
+    padding: 16px;
+    background: var(--of-surface);
+    border: 1px solid var(--of-border);
+    border-radius: var(--of-radius-card);
+}
+
+.of-resumo-kicker {
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--of-text-muted);
+}
+
+.of-resumo-sobra {
+    margin: 4px 0 12px;
+    font-size: 36px;
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+}
+
+.of-sobra-positiva {
+    color: var(--of-success);
+}
+
+.of-sobra-negativa {
+    color: var(--of-warning);
+}
+
+.of-resumo-compacto {
+    display: block;
+    position: relative;
+    color: inherit;
+    text-decoration: none;
+}
+
+.of-resumo-compacto .of-resumo-kicker {
+    padding-right: 112px;
+}
+
+.of-resumo-atalho {
+    position: absolute;
+    top: 14px;
+    right: 16px;
+    color: var(--of-primary);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.of-resumo-seletor {
+    margin-bottom: 14px;
+}
+
+.of-resumo-grade {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.of-resumo-grade-3 {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.of-resumo-empilhada {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.of-resumo-grade-3 .of-resumo-celula + .of-resumo-celula {
+    margin-left: 8px;
+}
+
+.of-resumo-empilhada .of-resumo-numero {
+    display: block;
+    max-width: 100%;
+    margin-top: 2px;
+    overflow-wrap: anywhere;
+    font-size: 13px;
+}
+
+.of-resumo-celula {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    min-width: 0;
+}
+
+.of-resumo-celula + .of-resumo-celula {
+    margin-left: 12px;
+}
+
+.of-ponto {
+    width: 8px;
+    height: 8px;
+    margin-right: 6px;
+    border-radius: 50%;
+}
+
+.of-ponto-receita {
+    background: var(--of-success);
+}
+
+.of-ponto-despesa {
+    background: var(--of-primary);
+}
+
+.of-ponto-alerta {
+    background: var(--of-warning);
+}
+
+.of-resumo-rotulo {
+    margin-right: 8px;
+    font-size: 12px;
+    color: var(--of-text-muted);
+}
+
+.of-resumo-numero {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--of-text);
+}
+
+.of-numero-alerta {
+    color: var(--of-warning);
+}
+
+.of-resumo-progresso {
+    margin-top: 12px;
+}
+
+.of-resumo-legenda {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: var(--of-text-secondary);
+}
+
+.of-resumo-divisoria {
+    height: 1px;
+    margin: 14px 0;
+    background: var(--of-border);
+}
+
+.of-barra-paga {
+    position: relative;
+    height: 6px;
+    margin-top: 12px;
+    overflow: hidden;
+    border-radius: 999px;
+}
+
+.of-barra-fundo {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background: var(--of-warning);
+    opacity: 0.35;
+}
+
+.of-barra-valor {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    background: var(--of-success);
+}

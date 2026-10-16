@@ -8,6 +8,7 @@ public class ConfiguracaoService : IConfiguracaoService
     private const string ChaveNotificacoesAtivas = "Config.NotificacoesAtivas";
     private const string ChaveSomAtivo = "Config.SomAtivo";
     private const string ChavePrazosAviso = "Config.PrazosAviso";
+    private const string ChaveGraficoLancamentos = "Config.GraficoLancamentosExpandido";
 
     public const PrazoAviso PrazosPadrao = PrazoAviso.UmDiaAntes | PrazoAviso.NoDia | PrazoAviso.Vencidas;
 
@@ -27,6 +28,12 @@ public class ConfiguracaoService : IConfiguracaoService
     {
         get => (PrazoAviso)Preferences.Default.Get(ChavePrazosAviso, (int)PrazosPadrao);
         set => Preferences.Default.Set(ChavePrazosAviso, (int)value);
+    }
+
+    public bool GraficoLancamentosExpandido
+    {
+        get => Preferences.Default.Get(ChaveGraficoLancamentos, true);
+        set => Preferences.Default.Set(ChaveGraficoLancamentos, value);
     }
 
     public void Redefinir() => Preferences.Default.Clear();

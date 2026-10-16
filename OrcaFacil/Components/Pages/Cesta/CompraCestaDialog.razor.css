@@ -1,0 +1,78 @@
+.of-cesta-cabeca {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    min-height: var(--of-touch);
+}
+
+.of-cesta {
+    min-width: 0;
+    color: var(--of-text);
+    font-variant-numeric: tabular-nums;
+    background: var(--of-background);
+}
+
+.of-cesta-miolo {
+    padding: var(--of-space-page) var(--of-space-page) 0;
+    min-width: 0;
+}
+
+.of-cesta-bloco + .of-cesta-bloco {
+    margin-top: var(--of-space-section);
+}
+
+.of-cesta-apoio,
+.of-cesta-dica {
+    margin: 4px 0 0;
+    color: var(--of-text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.4;
+}
+
+.of-cesta-dica-critica {
+    color: var(--of-error);
+}
+
+.of-cesta-erro {
+    margin: 12px 0 0;
+    color: var(--of-error);
+    font-size: 0.8125rem;
+}
+
+.of-cesta-cats {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    min-width: 0;
+    margin: -4px;
+}
+
+.of-cesta-cats ::deep .mud-chip,
+.of-cesta-cats ::deep .mud-button-root,
+.of-cesta-cats ::deep .mud-list {
+    margin: 4px;
+    max-width: calc(100% - 8px);
+}
+
+.of-cesta-cats ::deep .mud-chip {
+    border-radius: var(--of-radius-pill);
+    min-height: var(--of-touch);
+    background: var(--of-chip-bg);
+}
+
+.of-cesta-cats ::deep .mud-list {
+    width: 100%;
+    background: transparent;
+}
+
+.of-cesta-todas {
+    min-height: var(--of-touch);
+}
+
+.of-cesta-opcao {
+    color: var(--of-text);
+}
+
+.of-cesta ::deep .mud-switch {
+    min-height: var(--of-touch);
+}

@@ -34,24 +34,47 @@ public static class OrcaFacilThemes
     {
         PaletteDark = new PaletteDark
         {
-            Primary = "#B2CFE6",
+            Primary = "#6EA8FE",
+            PrimaryContrastText = "#0B1220",
             Secondary = "#A2B94F",
             Tertiary = "#659ECD",
-            Success = "#6DA538",
-            Warning = "#EF7F5D",
+            Success = "#4CC38A",
+            SuccessContrastText = "#0B1220",
+            SuccessLighten = "#6FD9A4",
+            Warning = "#F2B84B",
+            WarningContrastText = "#0B1220",
             Error = "#E07171",
-            Background = "#1A2029",
-            Surface = "#232B36",
-            AppbarBackground = "#12161C",
-            AppbarText = "#EDEFF2",
-            DrawerBackground = "#1A2029",
-            DrawerText = "#EDEFF2",
-            TextPrimary = "#EDEFF2",
-            TextSecondary = "#B7C1CB"
+            Dark = "#12151B",
+            Background = "#12151B",
+            BackgroundGray = "#151920",
+            Surface = "#1B1F27",
+            AppbarBackground = "#12151B",
+            AppbarText = "#E8EAF0",
+            DrawerBackground = "#1B1F27",
+            DrawerText = "#E8EAF0",
+            DrawerIcon = "#C9D1DD",
+            TextPrimary = "#E8EAF0",
+            TextSecondary = "#C9D1DD",
+            TextDisabled = "#9AA3B2",
+            ActionDefault = "#C9D1DD",
+            LinesDefault = "#2A303C",
+            LinesInputs = "#3A4150",
+            TableLines = "#2A303C",
+            Divider = "#2A303C",
+            DividerLight = "#2A303C",
+            GrayDefault = "#9AA3B2",
+            GrayLight = "#3A4150",
+            GrayLighter = "#262C38"
+            // Saldo #B69CFF não cabe em nenhum slot da PaletteDark (Tertiary já é a marca).
+            // O token vive em --of-saldo, no CSS do tema.
         },
         Typography = new Typography
         {
             Default = new DefaultTypography { FontFamily = new[] { "Roboto", "Segoe UI", "sans-serif" } }
+        },
+        LayoutProperties = new LayoutProperties
+        {
+            DefaultBorderRadius = "12px"
         }
     };
 }

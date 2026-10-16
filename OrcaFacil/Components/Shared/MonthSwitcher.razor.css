@@ -1,0 +1,69 @@
+.of-mes {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    margin-bottom: 12px;
+    padding: 4px;
+    background: var(--of-surface);
+    border: 1px solid var(--of-border);
+    border-radius: 14px;
+}
+
+.of-mes-miolo {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: var(--of-touch);
+    touch-action: pan-y;
+}
+
+.of-mes-nome {
+    max-width: 100%;
+    overflow: hidden;
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--of-text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.of-mes-status {
+    display: inline-flex;
+    align-items: center;
+    margin-top: 2px;
+    padding: 2px 8px;
+    border-radius: 18px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.of-mes-status ::deep .mud-icon-root {
+    margin-right: 4px;
+    font-size: 14px;
+}
+
+.of-mes-aberto {
+    color: var(--of-success-text);
+    background: var(--of-chip-bg);
+}
+
+.of-mes-fechado {
+    color: var(--of-text-muted);
+    background: var(--of-chip-bg);
+}
+
+.of-mes-acoes {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+}
+
+.of-mes ::deep .mud-icon-button {
+    width: var(--of-touch);
+    height: var(--of-touch);
+}

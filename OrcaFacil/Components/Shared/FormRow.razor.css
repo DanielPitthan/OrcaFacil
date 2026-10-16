@@ -1,0 +1,76 @@
+.of-form-row {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-height: var(--of-row-height);
+    margin: 0;
+    padding: 8px 16px;
+    box-sizing: border-box;
+    background: transparent;
+    color: var(--of-text);
+    text-align: left;
+}
+
+.of-form-row-botao {
+    border: 0;
+    cursor: pointer;
+    font: inherit;
+}
+
+.of-form-row-botao:focus-visible {
+    outline: 2px solid var(--of-primary);
+    outline-offset: -2px;
+}
+
+.of-form-row ::deep .of-form-row-icone,
+.of-form-row-icone {
+    color: var(--of-text-secondary);
+    flex: 0 0 auto;
+}
+
+.of-form-row-texto {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+    flex: 1 1 auto;
+    margin-left: 12px;
+}
+
+.of-form-row-rotulo {
+    color: var(--of-text-muted);
+    font-size: 12px;
+    line-height: 1.2;
+    margin-bottom: 2px;
+}
+
+.of-form-row-valor {
+    color: var(--of-text);
+    font-size: 1rem;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.of-form-row-campo {
+    min-width: 0;
+}
+
+.of-form-row-campo ::deep .mud-input-control {
+    margin-top: 0;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.of-form-row-campo ::deep .mud-input-slot,
+.of-form-row-campo ::deep input,
+.of-form-row-campo ::deep textarea {
+    color: var(--of-text);
+    font-variant-numeric: tabular-nums;
+}
+
+.of-form-row ::deep .of-form-row-chevron {
+    color: var(--of-text-muted);
+    flex: 0 0 auto;
+}

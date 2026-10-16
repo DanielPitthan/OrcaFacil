@@ -4,6 +4,93 @@
     --of-blue-grey: #659ECD;
     --of-lime-moss: #A2B94F;
     --of-burnt-peach: #EF7F5D;
+
+    /* Apelidos dos tokens. As cores saem do MudTheme (PaletteDark no modo escuro). */
+    --of-background: var(--mud-palette-background);
+    --of-surface: var(--mud-palette-surface);
+    --of-input-bg: var(--mud-palette-background-gray);
+    --of-chip-bg: var(--mud-palette-gray-lighter);
+    --of-border: var(--mud-palette-lines-default);
+    --of-border-strong: var(--mud-palette-lines-inputs);
+    --of-text: var(--mud-palette-text-primary);
+    --of-text-secondary: var(--mud-palette-text-secondary);
+    --of-text-muted: var(--mud-palette-text-disabled);
+    --of-primary: var(--mud-palette-primary);
+    --of-on-primary: var(--mud-palette-primary-text);
+    --of-success: var(--mud-palette-success);
+    --of-success-text: var(--mud-palette-success-lighten);
+    --of-warning: var(--mud-palette-warning);
+    --of-error: var(--mud-palette-error);
+    /* A paleta do MudBlazor não tem um slot de saldo. O roxo claro é o token do tema escuro. */
+    --of-saldo: #B69CFF;
+    /*
+      Danger é o estouro de orçamento. Error da paleta (#E07171) já colore alertas do app;
+      trocá-lo mudaria telas que esta rodada não cobre. O texto do chip fica em --of-danger-text
+      sobre o fundo do chip: #F59A9A sobre #E5677D fica em 1,5:1.
+    */
+    --of-danger: #E5677D;
+    --of-danger-text: #F59A9A;
+    --of-cat-2: #7BD3C7;
+    --of-cat-4: #F08A5D;
+    --of-cat-outras: #5F6878;
+
+    --of-radius-card: 16px;
+    --of-radius-control: 12px;
+    --of-radius-sheet: 24px;
+    --of-radius-chip: 8px;
+    --of-radius-pill: 20px;
+    --of-space-page: 16px;
+    --of-space-section: 24px;
+    --of-row-height: 64px;
+    --of-touch: 44px;
+}
+
+.of-tema-claro {
+    /* #B69CFF sobre o fundo claro fica abaixo de 4,5:1. Este roxo só vale no tema claro. */
+    --of-saldo: #5C3DB8;
+    /* #F59A9A sobre o fundo claro fica em 1,9:1. O texto do chip estourado escurece só aqui. */
+    --of-danger: #B4233A;
+    --of-danger-text: #9B2C3A;
+}
+
+.of-moeda {
+    font-variant-numeric: tabular-nums;
+}
+
+.of-appbar-titulos {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+    flex: 1 1 auto;
+    margin-left: 4px;
+}
+
+.of-appbar-titulo {
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--of-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.of-appbar-sub {
+    font-size: 0.75rem;
+    line-height: 1.2;
+    color: var(--of-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* O estado do teclado vive no html, fora do escopo isolado do bottom sheet.
+   A especificidade precisa vencer a regra scoped do sheet, que carrega por último. */
+html.of-teclado-aberto .mud-drawer.of-sheet.mud-drawer-temporary.mud-drawer--open.mud-drawer-pos-bottom {
+    bottom: var(--of-teclado, 0px) !important;
+    max-height: calc(100vh - var(--of-teclado, 0px) - 8px) !important;
+    max-height: calc(100dvh - var(--of-teclado, 0px) - 8px) !important;
 }
 
 html, body {
@@ -156,6 +243,34 @@ div.mud-input-slot.mud-input-root {
     max-height: calc(100% - 24px);
     max-height: calc(100% - 24px - env(safe-area-inset-bottom, 0px));
     overflow: hidden;
+}
+
+/* A compra da cesta ocupa a tela. O bottom sheet precisa pintar fora do papel do diálogo. */
+.mud-dialog-container .mud-dialog.mud-dialog-fullscreen {
+    height: 100%;
+    max-height: none;
+    margin: 0;
+    border-radius: 0;
+    overflow: visible;
+}
+
+.mud-dialog-title.of-cesta-titulo,
+.mud-dialog-actions.of-cesta-acoes,
+.mud-dialog-content.of-cesta-conteudo {
+    background: var(--of-background);
+}
+
+.mud-dialog-title.of-cesta-titulo {
+    padding: 4px 8px 4px 4px;
+}
+
+.mud-dialog-content.of-cesta-conteudo {
+    padding: 0;
+}
+
+.mud-dialog-actions.of-cesta-acoes {
+    display: block;
+    padding: 0;
 }
 
 /* Quando o WebView não encolhe com o teclado, a área útil termina acima dele. */

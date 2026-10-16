@@ -1,0 +1,20 @@
+<MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Inherit" Edge="Edge.Start"
+               aria-label="Voltar" OnClick="OnVoltar" />
+<div class="of-appbar-titulos">
+    <span class="of-appbar-titulo">Fatura do cartão</span>
+    <span class="of-appbar-sub">@Subtitulo</span>
+</div>
+<MudMenu Icon="@Icons.Material.Filled.MoreVert" Color="Color.Inherit" AriaLabel="Ações da fatura"
+         AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+    <MudMenuItem Disabled="@(!PodeExcluir)" OnClick="OnExcluir">Excluir</MudMenuItem>
+    <MudMenuItem Disabled="@(!PodeDuplicar)" OnClick="OnDuplicar">Duplicar</MudMenuItem>
+</MudMenu>
+
+@code {
+    [Parameter] public string Subtitulo { get; set; } = "";
+    [Parameter] public bool PodeExcluir { get; set; }
+    [Parameter] public bool PodeDuplicar { get; set; }
+    [Parameter] public EventCallback OnVoltar { get; set; }
+    [Parameter] public EventCallback OnExcluir { get; set; }
+    [Parameter] public EventCallback OnDuplicar { get; set; }
+}

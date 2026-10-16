@@ -1,0 +1,24 @@
+.of-chips-leitura {
+    display: flex;
+    flex-wrap: wrap;
+    min-width: 0;
+    margin: -4px;
+}
+
+.of-chip-leitura {
+    display: inline-flex;
+    align-items: center;
+    min-height: 32px;
+    max-width: calc(100% - 8px);
+    margin: 4px;
+    padding: 4px 10px;
+    border-radius: var(--of-radius-chip);
+    background: var(--of-chip-bg);
+    color: var(--of-text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.2;
+}
+
+.of-chip-leitura > span + span {
+    margin-left: 6px;
+}

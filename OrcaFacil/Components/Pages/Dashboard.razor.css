@@ -1,0 +1,14 @@
+.of-dashboard {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+.of-dashboard-esqueleto {
+    margin-bottom: 12px;
+}
+
+.of-dashboard-erro {
+    margin: 0 0 12px;
+    color: var(--of-danger-text);
+}
