@@ -87,6 +87,7 @@
                             <MudText Typo="Typo.caption" Color="Color.Secondary">@t.Data.ToString("dd/MM/yyyy") · @t.Categoria?.Nome</MudText>
                             @if (t.Itens.Count > 0)
                             {
+                                <MudText Typo="Typo.body2" Class="of-item-descritivo">@ResumoItens(t)</MudText>
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">@t.Itens.Count itens · @t.Itens.Sum(i => i.Valor).ToString("C") classificados</MudText>
                             }
                         </div>
@@ -121,8 +122,8 @@
                         <MudListItem T="Transacao" Dense="true" Class="pl-6">
                             <div class="d-flex justify-space-between align-center" style="width:100%">
                                 <div style="min-width:0;">
-                                    <MudText Typo="Typo.body2">@item.Categoria?.Icone @item.Descricao</MudText>
-                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@item.Categoria?.Nome · @RotuloNatureza(item)</MudText>
+                                    <MudText Typo="Typo.body1" Class="of-item-descritivo">@item.Categoria?.Icone @ItensFaturaInclusao.Titulo(item.Descritivo, item.Categoria?.Nome ?? item.Descricao)</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@LegendaItem(item)</MudText>
                                 </div>
                                 <CurrencyDisplay Valor="item.Valor" Tipo="TipoTransacao.Despesa" />
                             </div>
@@ -194,6 +195,21 @@
     {
         if (!_expandidos.Add(id))
             _expandidos.Remove(id);
+    }
+
+    private static string ResumoItens(Transacao transacao)
+        => string.Join(" · ", transacao.Itens
+            .OrderBy(i => i.Ordem)
+            .Select(i => ItensFaturaInclusao.Titulo(i.Descritivo, i.Categoria?.Nome ?? i.Descricao)));
+
+    private static string LegendaItem(ItemLancamento item)
+    {
+        var natureza = RotuloNatureza(item);
+        var categoria = item.Categoria?.Nome;
+        if (!ItensFaturaInclusao.TemDescritivo(item.Descritivo) || string.IsNullOrWhiteSpace(categoria))
+            return natureza;
+
+        return $"{categoria} · {natureza}";
     }
 
     private static string RotuloNatureza(ItemLancamento item) => item.Natureza switch

@@ -66,14 +66,19 @@
                 }
             }
 
-            @* Passar item, como no caixa *@
+            @* Passar item, como no caixa. Cada inclusão é uma linha nova, mesmo repetindo a categoria. *@
             <MudText Typo="Typo.subtitle2">Passar item</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">A categoria pode se repetir. Use o descritivo para dizer onde foi cada compra.</MudText>
             <MudSelect T="int" @bind-Value="_itemCategoriaId" Label="Despesa" Class="mb-2" AnchorOrigin="Origin.BottomCenter">
                 @foreach (var categoria in CategoriasDosItens)
                 {
                     <MudSelectItem T="int" Value="@categoria.Id">@categoria.Icone @categoria.Nome</MudSelectItem>
                 }
             </MudSelect>
+            <MudTextField T="string" @bind-Value="_itemDescritivo" Label="Descritivo (opcional)"
+                          Placeholder="Ex.: McDonald's, Big Steak, Netflix"
+                          MaxLength="@ItensFaturaInclusao.DescritivoMaximo" Counter="@ItensFaturaInclusao.DescritivoMaximo"
+                          Immediate="true" Class="mb-2" />
             <div class="of-linha-valor mb-2">
                 <div class="of-linha-valor-campo">
                     <CampoNumerico @ref="_valorCampo" TNumber="decimal" @bind-Value="_itemValor" Label="Valor"
@@ -119,22 +124,29 @@
                 @foreach (var item in _modelo.Itens)
                 {
                     var categoria = _categorias.FirstOrDefault(c => c.Id == item.CategoriaId);
-                    <div @key="item" class="d-flex justify-space-between align-center ga-2">
-                        <div style="cursor:pointer; flex:1; min-width:0;" @onclick="@(() => EditarLinha(item))">
-                            <MudText Typo="Typo.body2" Style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@categoria?.Icone @categoria?.Nome</MudText>
-                            @if (item.Natureza != NaturezaItemLancamento.Avulsa)
+                    <div @key="item" class="of-item-fatura">
+                        <div class="of-item-fatura-texto">
+                            @if (_linhaEditando == item)
                             {
-                                <MudText Typo="Typo.caption" Color="Color.Secondary">@RotuloNatureza(item)</MudText>
+                                <MudTextField T="string" @bind-Value="item.Descritivo" Label="Descritivo (opcional)"
+                                              Placeholder="Ex.: McDonald's, Netflix"
+                                              MaxLength="@ItensFaturaInclusao.DescritivoMaximo" Counter="@ItensFaturaInclusao.DescritivoMaximo"
+                                              Immediate="true" Class="mb-1" />
+                                <CampoNumerico TNumber="decimal" @bind-Value="item.Valor" Label="Valor"
+                                                Adornment="Adornment.Start" AdornmentText="R$" />
+                            }
+                            else
+                            {
+                                <div style="cursor:pointer;" @onclick="@(() => EditarLinha(item))">
+                                    <MudText Typo="Typo.body1" Class="of-item-descritivo">@categoria?.Icone @ItensFaturaInclusao.Titulo(item.Descritivo, categoria?.Nome ?? item.Descricao)</MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@LegendaItem(item, categoria)</MudText>
+                                </div>
                             }
                         </div>
                         @if (_linhaEditando == item)
                         {
-                            <div style="width:140px;">
-                                <CampoNumerico TNumber="decimal" @bind-Value="item.Valor" Label="Valor"
-                                                Adornment="Adornment.Start" AdornmentText="R$" />
-                            </div>
                             <MudIconButton Icon="@Icons.Material.Filled.Check" Color="Color.Success" Size="Size.Small"
-                                           aria-label="Confirmar valor" OnClick="@(() => ConfirmarEdicao(item))" />
+                                           aria-label="Confirmar item" OnClick="@(() => ConfirmarEdicao(item))" />
                         }
                         else
                         {
@@ -244,6 +256,7 @@
 
     private CampoNumerico<decimal> _valorCampo = null!;
     private int _itemCategoriaId;
+    private string? _itemDescritivo;
     private decimal _itemValor;
     private NaturezaItemLancamento _itemNatureza = NaturezaItemLancamento.Avulsa;
     private int? _itemParcelaAtual;
@@ -301,6 +314,7 @@
                     {
                         Id = i.Id,
                         Descricao = i.Descricao,
+                        Descritivo = i.Descritivo,
                         Valor = i.Valor,
                         Natureza = i.Natureza,
                         ParcelaAtual = i.ParcelaAtual,
@@ -378,6 +392,16 @@
     private double PercentualClassificado =>
         _modelo.Valor <= 0 ? 100 : (double)Math.Min(100m, SomaItens / _modelo.Valor * 100m);
 
+    private static string LegendaItem(ItemLancamentoFormModel item, Categoria? categoria)
+    {
+        var natureza = RotuloNatureza(item);
+        var nome = categoria?.Nome;
+        if (!ItensFaturaInclusao.TemDescritivo(item.Descritivo) || string.IsNullOrWhiteSpace(nome))
+            return natureza;
+
+        return $"{nome} · {natureza}";
+    }
+
     private static string RotuloNatureza(ItemLancamentoFormModel item) => item.Natureza switch
     {
         NaturezaItemLancamento.Parcelada => $"Parcela {item.ParcelaAtual}/{item.TotalParcelas}",
@@ -423,33 +447,27 @@
             return;
         }
 
-        var parcelaAtual = _itemNatureza == NaturezaItemLancamento.Parcelada ? _itemParcelaAtual : null;
-        var totalParcelas = _itemNatureza == NaturezaItemLancamento.Parcelada ? _itemTotalParcelas : null;
-        var nomeCategoria = _categorias.FirstOrDefault(c => c.Id == _itemCategoriaId)?.Nome ?? string.Empty;
-
-        var existente = _modelo.Itens.FirstOrDefault(i => i.CategoriaId == _itemCategoriaId);
-        if (existente is null)
+        try
         {
-            _modelo.Itens.Add(new ItemLancamentoFormModel
-            {
-                Descricao = nomeCategoria,
-                Valor = _itemValor,
-                Natureza = _itemNatureza,
-                ParcelaAtual = parcelaAtual,
-                TotalParcelas = totalParcelas,
-                CategoriaId = _itemCategoriaId
-            });
+            var nomeCategoria = _categorias.FirstOrDefault(c => c.Id == _itemCategoriaId)?.Nome ?? string.Empty;
+            ItensFaturaInclusao.Acrescentar(
+                _modelo.Itens,
+                _itemCategoriaId,
+                nomeCategoria,
+                _itemValor,
+                _itemNatureza,
+                _itemParcelaAtual,
+                _itemTotalParcelas,
+                _itemDescritivo);
         }
-        else
+        catch (InvalidOperationException ex)
         {
-            existente.Descricao = nomeCategoria;
-            existente.Valor = _itemValor;
-            existente.Natureza = _itemNatureza;
-            existente.ParcelaAtual = parcelaAtual;
-            existente.TotalParcelas = totalParcelas;
+            _erroItem = ex.Message;
+            return;
         }
 
         _itemValor = 0;
+        _itemDescritivo = null;
         _linhaEditando = null;
         _erroItem = null;
         await _valorCampo.FocusAsync();
@@ -466,6 +484,16 @@
         if (item.Valor <= 0)
         {
             _erroItem = "Informe o valor do item.";
+            return;
+        }
+
+        try
+        {
+            item.Descritivo = ItensFaturaInclusao.NormalizarDescritivo(item.Descritivo);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _erroItem = ex.Message;
             return;
         }
 

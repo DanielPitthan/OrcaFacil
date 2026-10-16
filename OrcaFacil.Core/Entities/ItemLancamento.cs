@@ -10,6 +10,10 @@ public class ItemLancamento
     [Required, MaxLength(120)]
     public string Descricao { get; set; } = string.Empty;
 
+    /// <summary>Texto livre para distinguir compras da mesma categoria na fatura. Ex.: McDonald's, Netflix.</summary>
+    [MaxLength(120)]
+    public string? Descritivo { get; set; }
+
     [Range(0.01, 1_000_000_000)]
     public decimal Valor { get; set; }
 

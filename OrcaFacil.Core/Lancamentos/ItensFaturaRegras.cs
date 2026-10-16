@@ -16,6 +16,9 @@ public static class ItensFaturaRegras
         if (itens.Any(i => string.IsNullOrWhiteSpace(i.Descricao) || i.Descricao.Length > 120))
             throw new InvalidOperationException("Informe a descrição de cada item da fatura.");
 
+        if (itens.Any(i => i.Descritivo is not null && i.Descritivo.Trim().Length > ItensFaturaInclusao.DescritivoMaximo))
+            throw new InvalidOperationException($"O descritivo pode ter no máximo {ItensFaturaInclusao.DescritivoMaximo} caracteres.");
+
         if (itens.Any(i => i.Valor <= 0))
             throw new InvalidOperationException("Cada item da fatura precisa de um valor maior que zero.");
 
@@ -79,6 +82,7 @@ public static class ItensFaturaRegras
     private static ItemLancamento Clonar(ItemLancamento item, int? parcelaAtual, int? totalParcelas) => new()
     {
         Descricao = item.Descricao,
+        Descritivo = string.IsNullOrWhiteSpace(item.Descritivo) ? null : item.Descritivo.Trim(),
         Valor = item.Valor,
         Natureza = item.Natureza,
         ParcelaAtual = item.Natureza == NaturezaItemLancamento.Parcelada ? parcelaAtual : null,

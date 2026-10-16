@@ -275,5 +275,95 @@ public class TransacaoRepositoryTests : IDisposable
         Assert.Equal("Salário", lista[1].Descricao);
     }
 
+    [Fact]
+    public async Task AddAsync_ItensRepetidosMesmaCategoriaCartaoEValor_PersisteDescritivoDeCadaLinha()
+    {
+        var (alimentacaoId, membroId) = await CriarDependenciasAsync();
+        var cartaoCategoria = new Categoria { Nome = "Cartão de Crédito", Icone = "💳", CorHex = "#B2CFE6", PermiteItensFatura = true };
+        var lazer = new Categoria { Nome = "Lazer", Icone = "🎉", CorHex = "#A2B94F" };
+        var compras = new Categoria { Nome = "Compras", Icone = "📦", CorHex = "#A2B94F" };
+        await _categoriaRepository.AddAsync(cartaoCategoria);
+        await _categoriaRepository.AddAsync(lazer);
+        await _categoriaRepository.AddAsync(compras);
+
+        var cartoes = new CartaoRepository(_factory);
+        var nubank = new Cartao { Nome = "Nubank", Bandeira = "Mastercard", UltimosDigitos = "1234", Tipo = TipoCartao.Credito };
+        await cartoes.AdicionarAsync(nubank);
+
+        var mes = new DateTime(2026, 10, 1);
+        await _repository.AddAsync(new Transacao
+        {
+            Descricao = "Fatura Nubank",
+            Valor = 2010.70m,
+            Data = mes.AddDays(17),
+            Tipo = TipoTransacao.Despesa,
+            CategoriaId = cartaoCategoria.Id,
+            CartaoId = nubank.Id,
+            MembroFamiliaId = membroId,
+            Itens =
+            [
+                Linha("Alimentação", "McDonald's", 40m, alimentacaoId, 0),
+                Linha("Alimentação", "Big Steak", 40m, alimentacaoId, 1),
+                Linha("Alimentação", "Jantar no restaurante XPTO", 40m, alimentacaoId, 2),
+                Linha("Compras", "Celular da loja A", 900m, compras.Id, 3),
+                Linha("Compras", "Celular da loja B", 900m, compras.Id, 4),
+                Linha("Lazer", "Netflix", 55.90m, lazer.Id, 5, NaturezaItemLancamento.Assinatura),
+                Linha("Lazer", "Amazon Prime", 14.90m, lazer.Id, 6, NaturezaItemLancamento.Assinatura),
+                Linha("Lazer", null, 19.90m, lazer.Id, 7, NaturezaItemLancamento.Assinatura)
+            ]
+        });
+
+        await _repository.AddAsync(new Transacao
+        {
+            Descricao = "Fatura Nubank",
+            Valor = 2010.70m,
+            Data = mes.AddDays(18),
+            Tipo = TipoTransacao.Despesa,
+            CategoriaId = cartaoCategoria.Id,
+            CartaoId = nubank.Id,
+            MembroFamiliaId = membroId,
+            Itens = [Linha("Alimentação", "Padaria", 40m, alimentacaoId, 0)]
+        });
+
+        var lista = await _repository.GetByPeriodoAsync(mes, mes.AddMonths(1).AddTicks(-1));
+
+        Assert.Equal(2, lista.Count);
+        Assert.All(lista, t =>
+        {
+            Assert.Equal(nubank.Id, t.CartaoId);
+            Assert.Equal(cartaoCategoria.Id, t.CategoriaId);
+            Assert.Equal(2010.70m, t.Valor);
+        });
+
+        var fatura = lista.Single(t => t.Itens.Count == 8);
+        var alimentacao = fatura.Itens.Where(i => i.CategoriaId == alimentacaoId).OrderBy(i => i.Ordem).ToList();
+        Assert.Equal(3, alimentacao.Count);
+        Assert.All(alimentacao, i => Assert.Equal(40m, i.Valor));
+        Assert.Equal(["McDonald's", "Big Steak", "Jantar no restaurante XPTO"], alimentacao.Select(i => i.Descritivo));
+
+        var assinaturas = fatura.Itens.Where(i => i.CategoriaId == lazer.Id).OrderBy(i => i.Ordem).ToList();
+        Assert.Equal(["Netflix", "Amazon Prime", null], assinaturas.Select(i => i.Descritivo));
+
+        fatura.Itens.Single(i => i.Descritivo == "Netflix").Descritivo = "Streaming 1";
+        await _repository.SubstituirItensAsync(fatura.Id, fatura.Itens.OrderBy(i => i.Ordem).ToList());
+
+        var atualizada = await _repository.GetByIdAsync(fatura.Id);
+        Assert.NotNull(atualizada);
+        Assert.Equal(8, atualizada.Itens.Count);
+        Assert.Contains(atualizada.Itens, i => i.Descritivo == "Streaming 1" && i.CategoriaId == lazer.Id);
+        Assert.Equal(3, atualizada.Itens.Count(i => i.CategoriaId == alimentacaoId && i.Valor == 40m));
+    }
+
+    private static ItemLancamento Linha(string descricao, string? descritivo, decimal valor, int categoriaId, int ordem, NaturezaItemLancamento natureza = NaturezaItemLancamento.Avulsa)
+        => new()
+        {
+            Descricao = descricao,
+            Descritivo = descritivo,
+            Valor = valor,
+            CategoriaId = categoriaId,
+            Ordem = ordem,
+            Natureza = natureza
+        };
+
     public void Dispose() => _factory.Dispose();
 }
