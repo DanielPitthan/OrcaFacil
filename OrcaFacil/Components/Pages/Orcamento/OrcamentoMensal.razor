@@ -4,12 +4,14 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
-<div class="d-flex justify-space-between align-center mb-4 flex-wrap ga-2">
-    <MudText Typo="Typo.subtitle1"><b>Orçamento Mensal</b></MudText>
-    <div class="d-flex align-center ga-2">
-        <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" OnClick="@(() => MudarMes(-1))" />
-        <MudText Typo="Typo.subtitle1">@_mesReferencia.ToString("MMMM/yyyy")</MudText>
-        <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" OnClick="@(() => MudarMes(1))" />
+<div class="pro-sticky-header">
+    <div class="d-flex justify-space-between align-center">
+        <MudText Typo="Typo.subtitle1"><b>Orçamento Mensal</b></MudText>
+        <div class="d-flex align-center">
+            <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Size="Size.Small" OnClick="@(() => MudarMes(-1))" aria-label="Mês anterior" />
+            <MudText Typo="Typo.body1" Style="min-width:120px;text-align:center;">@_mesReferencia.ToString("MMMM/yyyy")</MudText>
+            <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" OnClick="@(() => MudarMes(1))" aria-label="Próximo mês" />
+        </div>
     </div>
 </div>
 
@@ -65,7 +67,7 @@
 
 <FabMenu>
     <FabMenuItem Text="Definir limite" Icon="@Icons.Material.Filled.Add" Color="Color.Primary" Click="NovoAsync" />
-    <FabMenuItem Text="Trazer mês anterior" Icon="@Icons.Material.Filled.ContentCopy" Disabled="!_temOrcamentosParaTrazer"
+    <FabMenuItem Text="Trazer mês anterior" Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Secondary" Disabled="!_temOrcamentosParaTrazer"
                  Click="TrazerOrcamentosAsync" />
 </FabMenu>
 

@@ -4,7 +4,11 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
-<MudText Typo="Typo.h5" Class="mb-4">Metas de Economia</MudText>
+<div class="pro-sticky-header">
+    <div class="d-flex justify-space-between align-center">
+        <MudText Typo="Typo.subtitle1"><b>Metas de Economia</b></MudText>
+    </div>
+</div>
 
 @if (_carregando)
 {
@@ -22,25 +26,32 @@ else
             <MudItem xs="12" sm="6">
                 <MudPaper Class="pa-4" Elevation="2">
                     <div class="d-flex justify-space-between align-center mb-2">
-                        <MudText Typo="Typo.h6">@meta.Icone @meta.Nome</MudText>
-                        @if (meta.Concluida)
-                        {
-                            <MudChip T="string" Color="Color.Success" Size="Size.Small">Concluída</MudChip>
-                        }
+                        <div class="d-flex align-center ga-2">
+                            <MudText Typo="Typo.h6">@meta.Icone @meta.Nome</MudText>
+                            @if (meta.Concluida)
+                            {
+                                <MudChip T="string" Color="Color.Success" Size="Size.Small">Concluída</MudChip>
+                            }
+                        </div>
+                        <div class="d-flex align-center">
+                            @if (!meta.Concluida)
+                            {
+                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success" Class="mr-1"
+                                           StartIcon="@Icons.Material.Filled.Add" OnClick="@(() => ContribuirAsync(meta.Id))">
+                                    Contribuir
+                                </MudButton>
+                            }
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small"
+                                           aria-label="Editar meta" OnClick="@(() => EditarAsync(meta))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                           aria-label="Excluir meta" OnClick="@(() => ExcluirAsync(meta.Id))" />
+                        </div>
                     </div>
                     <MudText Typo="Typo.body2" Class="mb-1">@meta.ValorAtual.ToString("C") de @meta.ValorAlvo.ToString("C")</MudText>
                     <MudProgressLinear Color="Color.Success" Value="@((double)meta.PercentualConcluido)" Rounded="true" Class="mb-2" />
                     @if (meta.Prazo is not null)
                     {
                         <MudText Typo="Typo.caption" Color="Color.Secondary">Prazo: @meta.Prazo.Value.ToString("dd/MM/yyyy")</MudText>
-                    }
-                    @if (!meta.Concluida)
-                    {
-                        <div class="d-flex ga-2 mt-2">
-                            <MudButton Size="Size.Small" Variant="Variant.Outlined" OnClick="@(() => ContribuirAsync(meta.Id))">Contribuir</MudButton>
-                            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="@(() => EditarAsync(meta))">Editar</MudButton>
-                            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" OnClick="@(() => ExcluirAsync(meta.Id))">Excluir</MudButton>
-                        </div>
                     }
                 </MudPaper>
             </MudItem>
@@ -49,7 +60,7 @@ else
 }
 
 <div class="pro-fab-single">
-    <MudFab Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Add" OnClick="AbrirNovaAsync" aria-label="Nova meta" />
+    <MudFab Color="Color.Primary" Size="Size.Medium" StartIcon="@Icons.Material.Filled.Add" OnClick="AbrirNovaAsync" aria-label="Nova meta" />
 </div>
 
 @code {

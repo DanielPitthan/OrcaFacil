@@ -3,7 +3,11 @@
 @inject IFotoPerfilService FotoPerfilService
 @inject ISnackbar Snackbar
 
-<MudText Typo="Typo.h5" Class="mb-4">Meu Perfil</MudText>
+<div class="pro-sticky-header">
+    <div class="d-flex justify-space-between align-center">
+        <MudText Typo="Typo.subtitle1"><b>Meu Perfil</b></MudText>
+    </div>
+</div>
 
 <MudPaper Class="pa-4" Elevation="2">
     <div class="d-flex flex-column align-center mb-4">
@@ -44,7 +48,9 @@
     <MudTextField T="string" @bind-Value="_nome" Label="Nome" MaxLength="60" Class="mb-3" />
     <MudTextField T="string" @bind-Value="_apelido" Label="Apelido (como prefere ser chamado)" MaxLength="40" Class="mb-3" />
 
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SalvarAsync">Salvar</MudButton>
+    <div class="d-flex justify-end mt-3">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SalvarAsync">Salvar</MudButton>
+    </div>
 </MudPaper>
 
 @code {

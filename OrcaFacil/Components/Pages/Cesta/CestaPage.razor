@@ -18,8 +18,6 @@
 <MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true" Class="mb-2" @bind-ActivePanelIndex="_aba">
     <MudTabPanel Text="Compras" Icon="@Icons.Material.Filled.Receipt">
         <div class="pro-fab-spacer pa-2">
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="mb-3" StartIcon="@Icons.Material.Filled.ContentCopy"
-                       OnClick="TrazerMesAnteriorAsync">Trazer cesta do mês anterior</MudButton>
             @if (_carregando)
             {
                 <MudProgressCircular Indeterminate="true" />
@@ -42,9 +40,9 @@
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">@compra.Data.ToString("dd/MM/yyyy")</MudText>
                             </div>
                             <div class="d-flex">
-                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" aria-label="Editar compra"
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" aria-label="Editar compra"
                                                OnClick="@(() => EditarCompraAsync(compra))" />
-                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" aria-label="Excluir compra"
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" aria-label="Excluir compra"
                                                OnClick="@(() => ExcluirCompraAsync(compra))" />
                             </div>
                         </div>
@@ -219,10 +217,8 @@
     <MudTabPanel Text="Produtos" Icon="@Icons.Material.Filled.ShoppingBasket">
         <div class="pro-fab-spacer">
             <div class="pa-2">
-                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Upload"
-                           Disabled="@_importando" OnClick="ImportarProdutosAsync">Importar CSV</MudButton>
-                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-1">
-                    Colunas Produto e Categoria, separadas por ponto e vírgula. Se vier só o nome, a categoria é escolhida na hora.
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
+                    Importação CSV: colunas Produto e Categoria, separadas por ponto e vírgula. Se vier só o nome, a categoria é escolhida na hora.
                 </MudText>
             </div>
             @if (_produtos.Count == 0)
@@ -248,9 +244,9 @@
                                     <MudText Typo="Typo.caption" Color="Color.Secondary">@produto.Categoria?.Icone @produto.Categoria?.Nome</MudText>
                                 </div>
                                 <div class="d-flex">
-                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" aria-label="Editar produto"
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" aria-label="Editar produto"
                                                    OnClick="@(() => EditarProdutoAsync(produto))" />
-                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" aria-label="Excluir produto"
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" aria-label="Excluir produto"
                                                    OnClick="@(() => ExcluirProdutoAsync(produto))" />
                                 </div>
                             </div>
@@ -283,9 +279,9 @@
                                     }
                                 </MudText>
                                 <div class="d-flex">
-                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" aria-label="Editar local"
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" aria-label="Editar local"
                                                    OnClick="@(() => EditarLocalAsync(local))" />
-                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" aria-label="Excluir local"
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" aria-label="Excluir local"
                                                    OnClick="@(() => ExcluirLocalAsync(local))" />
                                 </div>
                             </div>
@@ -299,8 +295,10 @@
 
 <FabMenu>
     <FabMenuItem Text="Nova compra" Icon="@Icons.Material.Filled.AddShoppingCart" Color="Color.Primary" Click="NovaCompraAsync" />
-    <FabMenuItem Text="Novo produto" Icon="@Icons.Material.Filled.ShoppingBasket" Click="NovoProdutoAsync" />
-    <FabMenuItem Text="Novo local" Icon="@Icons.Material.Filled.Store" Click="NovoLocalAsync" />
+    <FabMenuItem Text="Trazer cesta do mês anterior" Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Secondary" Click="TrazerMesAnteriorAsync" />
+    <FabMenuItem Text="Novo produto" Icon="@Icons.Material.Filled.ShoppingBasket" Color="Color.Secondary" Click="NovoProdutoAsync" />
+    <FabMenuItem Text="Importar CSV" Icon="@Icons.Material.Filled.Upload" Color="Color.Secondary" Disabled="@_importando" Click="ImportarProdutosAsync" />
+    <FabMenuItem Text="Novo local" Icon="@Icons.Material.Filled.Store" Color="Color.Secondary" Click="NovoLocalAsync" />
 </FabMenu>
 
 @code {

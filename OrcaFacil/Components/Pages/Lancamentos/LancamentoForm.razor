@@ -183,7 +183,7 @@ else
                                 <MudText Typo="Typo.body2">@item.Valor.ToString("C")</MudText>
                             </div>
                         }
-                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" aria-label="Remover item"
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Error" Size="Size.Small" aria-label="Remover item"
                                        OnClick="@(() => RemoverLinha(item))" />
                     </div>
                 }
@@ -223,8 +223,8 @@ else
             <MudTextField T="string" Label="Observação (opcional)" @bind-Value="_modelo.Observacao" Lines="2" Class="mb-2" />
 
             <div class="of-form-acoes">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="@(PeriodoBloqueado || SomaEstoura)">Salvar</MudButton>
                 <MudButton Variant="Variant.Text" OnClick="@(() => NavigationManager.NavigateTo("/lancamentos"))">Cancelar</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="@(PeriodoBloqueado || SomaEstoura)">Salvar</MudButton>
             </div>
         </MudPaper>
     }
@@ -265,8 +265,8 @@ else
             <MudTextField T="string" Label="Observação (opcional)" @bind-Value="_modelo.Observacao" Lines="2" Class="mb-3" />
 
             <div class="of-form-acoes">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="@PeriodoBloqueado">Salvar</MudButton>
                 <MudButton Variant="Variant.Text" OnClick="@(() => NavigationManager.NavigateTo("/lancamentos"))">Cancelar</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="@PeriodoBloqueado">Salvar</MudButton>
             </div>
         </MudPaper>
     }

@@ -6,10 +6,6 @@
 <div class="pro-sticky-header">
     <div class="d-flex justify-space-between align-center">
         <MudText Typo="Typo.subtitle1"><b>Cartões</b></MudText>
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
-                   StartIcon="@Icons.Material.Filled.Add" OnClick="NovoCartaoAsync">
-            Novo cartão
-        </MudButton>
     </div>
 </div>
 
@@ -50,9 +46,9 @@
                                 Recarregar
                             </MudButton>
                         }
-                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" aria-label="Editar cartão"
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" aria-label="Editar cartão"
                                        OnClick="@(() => EditarCartaoAsync(cartao))" />
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" aria-label="Excluir cartão"
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" aria-label="Excluir cartão"
                                        OnClick="@(() => ExcluirOuInativarCartaoAsync(cartao))" />
                     </div>
                 </div>
@@ -78,7 +74,7 @@
                                 <MudText Typo="Typo.body2">@recarga.Data.ToString("dd/MM/yyyy")</MudText>
                                 <div class="d-flex align-center">
                                     <MudText Typo="Typo.body2">@recarga.Valor.ToString("C")</MudText>
-                                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                    <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Error" Size="Size.Small"
                                                    aria-label="Excluir recarga"
                                                    OnClick="@(() => ExcluirRecargaAsync(recarga))" />
                                 </div>
@@ -89,6 +85,10 @@
             </MudPaper>
         }
     }
+</div>
+
+<div class="pro-fab-single">
+    <MudFab Color="Color.Primary" Size="Size.Medium" StartIcon="@Icons.Material.Filled.Add" OnClick="NovoCartaoAsync" aria-label="Novo cartão" />
 </div>
 
 @code {
