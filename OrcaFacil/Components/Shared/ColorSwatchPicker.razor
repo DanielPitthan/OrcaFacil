@@ -1,5 +1,5 @@
 <div class="d-flex flex-wrap ga-2 align-center">
-    @foreach (var cor in Cores)
+    @foreach (var cor in CoresCategoria.Opcoes)
     {
         <div class="of-color-swatch @(string.Equals(cor, Value, StringComparison.OrdinalIgnoreCase) ? "selected" : "")"
              style="background-color:@cor;"
@@ -12,12 +12,6 @@
 @code {
     [Parameter] public string Value { get; set; } = "#A2B94F";
     [Parameter] public EventCallback<string> ValueChanged { get; set; }
-
-    private static readonly string[] Cores =
-    {
-        "#6DA538", "#D64242", "#659ECD", "#A2B94F", "#EF7F5D",
-        "#c7a98f", "#a97ca0", "#8fa9c7"
-    };
 
     private async Task Selecionar(string cor)
     {
