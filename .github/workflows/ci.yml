@@ -1,0 +1,49 @@
+# CI mínimo dos testes. Não compila o app MAUI: OrcaFacil.csproj usa net10.0-android,
+# UseMaui e o alvo PatchBlazorWebViewForLegacyAndroid, que chama PatchBlazorWebView.ps1
+# e lê USERPROFILE. No Linux isso exige o workload maui-android. OrcaFacil.Tests só
+# referencia o Core; ParametrosComponentesRazorTests lê os .razor no disco.
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  testes:
+    name: Testes sem workload MAUI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Obter o código
+        uses: actions/checkout@v7
+
+      - name: Instalar o SDK .NET 10
+        uses: actions/setup-dotnet@v6
+        with:
+          # Não há global.json. Os projetos de teste e o Core usam TargetFramework net10.0.
+          dotnet-version: 10.0.x
+          cache: true
+          # Sem packages.lock.json na raiz, o cache do setup-dotnet exige este caminho.
+          # A chave usa só o que o restore deste job consome.
+          cache-dependency-path: |
+            OrcaFacil.Tests/OrcaFacil.Tests.csproj
+            OrcaFacil.Core/OrcaFacil.Core.csproj
+            Directory.Build.props
+
+      - name: Restaurar pacotes
+        run: dotnet restore OrcaFacil.Tests/OrcaFacil.Tests.csproj
+
+      - name: Compilar
+        run: dotnet build OrcaFacil.Tests/OrcaFacil.Tests.csproj --no-restore --configuration Release
+
+      - name: Executar testes
+        run: dotnet test OrcaFacil.Tests/OrcaFacil.Tests.csproj --no-build --configuration Release
