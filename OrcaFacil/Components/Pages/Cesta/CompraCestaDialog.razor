@@ -35,7 +35,7 @@
                                 <MudMenu ActivationEvent="@MouseEvent.LeftClick" AnchorOrigin="Origin.BottomCenter"
                                          TransformOrigin="Origin.TopCenter" MaxHeight="320">
                                     <ActivatorContent>
-                                        <FormRow Icon="@Icons.Material.Outlined.Store" Rotulo="Local de compra"
+                                        <FormRow Icone="@Icons.Material.Outlined.Store" Rotulo="Local de compra"
                                                  Valor="@LocalAtual?.Nome" Chevron="true" Embutido="true"
                                                  AriaLabel="Selecionar local de compra" />
                                     </ActivatorContent>
@@ -48,7 +48,7 @@
                                 </MudMenu>
                             </div>
                         }
-                        <FormRow Icon="@Icons.Material.Outlined.Event" Rotulo="Data">
+                        <FormRow Icone="@Icons.Material.Outlined.Event" Rotulo="Data">
                             <MudDatePicker Date="_data" DateChanged="AlterarData" Variant="Variant.Text" Margin="Margin.Dense" />
                         </FormRow>
                     </FormSection>
@@ -86,7 +86,7 @@
                                     <MudMenu ActivationEvent="@MouseEvent.LeftClick" AnchorOrigin="Origin.BottomCenter"
                                              TransformOrigin="Origin.TopCenter" MaxHeight="320">
                                         <ActivatorContent>
-                                            <FormRow Icon="@Icons.Material.Outlined.CardGiftcard" Rotulo="Cartão de benefício"
+                                            <FormRow Icone="@Icons.Material.Outlined.CardGiftcard" Rotulo="Cartão de benefício"
                                                      Valor="@RotuloCartaoBeneficio" Chevron="true" Embutido="true"
                                                      AriaLabel="Selecionar cartão de benefício" />
                                         </ActivatorContent>
@@ -106,7 +106,7 @@
                                     </p>
                                 </div>
                             }
-                            <FormRow Icon="@Icons.Material.Outlined.Payments" Rotulo="Valor usado do benefício">
+                            <FormRow Icone="@Icons.Material.Outlined.Payments" Rotulo="Valor usado do benefício">
                                 <CampoNumerico TNumber="decimal" Value="_beneficio" ValueChanged="AlterarValorBeneficio"
                                                Adornment="Adornment.Start" AdornmentText="R$" />
                             </FormRow>
@@ -127,7 +127,7 @@
                             </div>
                             @if (_modo == ModoPagamentoCesta.Dividido)
                             {
-                                <FormRow Icon="@Icons.Material.Outlined.Payments" Rotulo="Quanto em dinheiro">
+                                <FormRow Icone="@Icons.Material.Outlined.Payments" Rotulo="Quanto em dinheiro">
                                     <CampoNumerico TNumber="decimal" Value="_dinheiroInformado" ValueChanged="AlterarDinheiro"
                                                    Adornment="Adornment.Start" AdornmentText="R$" />
                                 </FormRow>
@@ -154,7 +154,7 @@
                                         <MudMenu ActivationEvent="@MouseEvent.LeftClick" AnchorOrigin="Origin.BottomCenter"
                                                  TransformOrigin="Origin.TopCenter" MaxHeight="320">
                                             <ActivatorContent>
-                                                <FormRow Icon="@Icons.Material.Outlined.CreditCard" Rotulo="Cartão de crédito"
+                                                <FormRow Icone="@Icons.Material.Outlined.CreditCard" Rotulo="Cartão de crédito"
                                                          Valor="@CartaoCreditoAtual?.Rotulo" Chevron="true" Embutido="true"
                                                          AriaLabel="Selecionar cartão de crédito" />
                                             </ActivatorContent>
@@ -181,7 +181,7 @@
                                             <MudMenu ActivationEvent="@MouseEvent.LeftClick" AnchorOrigin="Origin.BottomCenter"
                                                      TransformOrigin="Origin.TopCenter" MaxHeight="320">
                                                 <ActivatorContent>
-                                                    <FormRow Icon="@Icons.Material.Outlined.Receipt" Rotulo="Lançamento da fatura"
+                                                    <FormRow Icone="@Icons.Material.Outlined.Receipt" Rotulo="Lançamento da fatura"
                                                              Valor="@RotuloFatura" Chevron="true" Embutido="true"
                                                              AriaLabel="Selecionar lançamento da fatura" />
                                                 </ActivatorContent>

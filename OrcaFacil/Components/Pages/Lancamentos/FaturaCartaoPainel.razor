@@ -28,12 +28,12 @@
 
         <div class="of-fatura-bloco">
         <FormSection Titulo="Fatura">
-            <FormRow Icon="@Icons.Material.Outlined.Notes" Rotulo="Descrição">
+            <FormRow Icone="@Icons.Material.Outlined.Notes" Rotulo="Descrição">
                 <MudTextField T="string" @bind-Value="Modelo.Descricao" For="@(() => Modelo.Descricao)"
                               Variant="Variant.Text" Margin="Margin.Dense" Immediate="true"
                               Placeholder="Ex.: Cartão Itaú" />
             </FormRow>
-            <FormRow Icon="@Icons.Material.Outlined.Event" Rotulo="Vencimento">
+            <FormRow Icone="@Icons.Material.Outlined.Event" Rotulo="Vencimento">
                 <MudDatePicker Date="Data" DateChanged="AlterarDataAsync" Variant="Variant.Text" Margin="Margin.Dense" />
             </FormRow>
             @if (Cartoes.Count == 0)
@@ -50,7 +50,7 @@
                     <MudMenu ActivationEvent="@MouseEvent.LeftClick" AnchorOrigin="Origin.BottomCenter"
                              TransformOrigin="Origin.TopCenter" MaxHeight="320">
                         <ActivatorContent Context="menu">
-                            <FormRow Icon="@Icons.Material.Outlined.CreditCard" Rotulo="Cartão"
+                            <FormRow Icone="@Icons.Material.Outlined.CreditCard" Rotulo="Cartão"
                                      Valor="@CartaoAtual?.Rotulo" Chevron="true" Embutido="true"
                                      AriaLabel="Selecionar cartão" />
                         </ActivatorContent>
@@ -76,7 +76,7 @@
 
         <div class="of-fatura-bloco">
         <FormSection Titulo="Pagamento">
-            <FormRow Icon="@Icons.Material.Outlined.Payments" Rotulo="Total da fatura">
+            <FormRow Icone="@Icons.Material.Outlined.Payments" Rotulo="Total da fatura">
                 <CampoNumerico TNumber="decimal" @bind-Value="Modelo.Valor" For="@(() => Modelo.Valor)"
                                 Adornment="Adornment.Start" AdornmentText="R$" />
             </FormRow>
@@ -88,7 +88,7 @@
                 <MudMenu ActivationEvent="@MouseEvent.LeftClick" AnchorOrigin="Origin.BottomCenter"
                          TransformOrigin="Origin.TopCenter">
                     <ActivatorContent Context="menu">
-                        <FormRow Icon="@Icons.Material.Outlined.Repeat" Rotulo="Recorrência"
+                        <FormRow Icone="@Icons.Material.Outlined.Repeat" Rotulo="Recorrência"
                                  Valor="@FaturaCartaoEditor.RotuloRecorrencia(Modelo.Recorrencia)"
                                  Chevron="true" Embutido="true" AriaLabel="Selecionar recorrência" />
                     </ActivatorContent>
