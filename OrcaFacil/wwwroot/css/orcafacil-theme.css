@@ -45,12 +45,27 @@
     --of-touch: 44px;
 }
 
+/* A classe fica em html e body, não no MudLayout. Diálogo, popover e snackbar
+   são irmãos do layout e só herdam estes tokens se o ancestral comum tiver a classe.
+   color-scheme segue a classe que o MAUI aplica. Não usar prefers-color-scheme. */
 .of-tema-claro {
     /* #B69CFF sobre o fundo claro fica abaixo de 4,5:1. Este roxo só vale no tema claro. */
     --of-saldo: #5C3DB8;
     /* #F59A9A sobre o fundo claro fica em 1,9:1. O texto do chip estourado escurece só aqui. */
     --of-danger: #B4233A;
     --of-danger-text: #9B2C3A;
+}
+
+html.of-tema-claro,
+body.of-tema-claro {
+    color-scheme: light;
+    background-color: #EFF3F7;
+}
+
+html.of-tema-escuro,
+body.of-tema-escuro {
+    color-scheme: dark;
+    background-color: #12151B;
 }
 
 .of-moeda {

@@ -1,4 +1,5 @@
 using OrcaFacil.Core.Enums;
+using OrcaFacil.Core.Tema;
 using OrcaFacil.Services.Interfaces;
 
 namespace OrcaFacil.Services;
@@ -9,6 +10,8 @@ public class ConfiguracaoService : IConfiguracaoService
     private const string ChaveSomAtivo = "Config.SomAtivo";
     private const string ChavePrazosAviso = "Config.PrazosAviso";
     private const string ChaveGraficoLancamentos = "Config.GraficoLancamentosExpandido";
+
+    private readonly PreferenciasTema _tema = new(new PreferenciasMaui());
 
     public const PrazoAviso PrazosPadrao = PrazoAviso.UmDiaAntes | PrazoAviso.NoDia | PrazoAviso.Vencidas;
 
@@ -36,5 +39,11 @@ public class ConfiguracaoService : IConfiguracaoService
         set => Preferences.Default.Set(ChaveGraficoLancamentos, value);
     }
 
-    public void Redefinir() => Preferences.Default.Clear();
+    public TemaPreferido Tema
+    {
+        get => _tema.Tema;
+        set => _tema.Tema = value;
+    }
+
+    public void Redefinir() => _tema.Redefinir();
 }

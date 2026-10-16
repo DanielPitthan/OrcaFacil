@@ -130,6 +130,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IPerfilContext, PerfilContext>();
         builder.Services.AddSingleton<IFotoPerfilService, FotoPerfilService>();
         builder.Services.AddSingleton<IConfiguracaoService, ConfiguracaoService>();
+        builder.Services.AddSingleton<ITemaAppService, TemaAppService>();
         builder.Services.AddSingleton<INoticiaService, NoticiaService>();
 
         var app = builder.Build();
