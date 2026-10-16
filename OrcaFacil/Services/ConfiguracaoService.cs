@@ -50,5 +50,5 @@ public class ConfiguracaoService : IConfiguracaoService
         set => _tema.Tema = value;
     }
 
-    public void Redefinir() => LimpezaDePreferencias.Aplicar(TipoLimpezaDados.Tudo, _tema);
+    public void Redefinir() => _tema.Redefinir();
 }

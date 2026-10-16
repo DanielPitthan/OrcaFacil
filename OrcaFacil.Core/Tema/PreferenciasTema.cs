@@ -1,10 +1,19 @@
 namespace OrcaFacil.Core.Tema;
 
 /// <summary>
+/// Apaga as preferências gravadas e devolve <c>Config.Tema</c> como estava.
+/// <c>ConfiguracaoService.Redefinir</c> só delega para este método.
+/// </summary>
+public interface IRedefinicaoPreferencias
+{
+    void Redefinir();
+}
+
+/// <summary>
 /// Chave <c>Config.Tema</c>. O padrão é Automático e só é gravado quando alguém escolhe.
 /// <see cref="Redefinir"/> apaga as outras preferências e devolve esta chave como estava.
 /// </summary>
-public sealed class PreferenciasTema
+public sealed class PreferenciasTema : IRedefinicaoPreferencias
 {
     public const string Chave = "Config.Tema";
 

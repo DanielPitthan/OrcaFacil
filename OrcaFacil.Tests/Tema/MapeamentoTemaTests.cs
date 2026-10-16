@@ -54,6 +54,20 @@ public class MapeamentoTemaTests
         Assert.Equal(tema, MapeamentoTema.Interpretar(valor));
     }
 
+    [Fact]
+    public void Automatico_TemCaseExplicitoEmTextoUserAppThemeEIsDarkMode()
+    {
+        var fonte = File.ReadAllText(Path.Combine(EncontrarRaiz(), "OrcaFacil.Core", "Tema", "MapeamentoTema.cs"));
+
+        Assert.Contains("TemaPreferido.Automatico => TextoAutomatico", fonte, StringComparison.Ordinal);
+        Assert.Contains("TemaPreferido.Automatico => TemaUsuarioApp.Unspecified", fonte, StringComparison.Ordinal);
+        Assert.Contains("TemaPreferido.Automatico => sistemaEscuro", fonte, StringComparison.Ordinal);
+        Assert.Equal(MapeamentoTema.TextoAutomatico, MapeamentoTema.ParaTexto(TemaPreferido.Automatico));
+        Assert.Equal(TemaUsuarioApp.Unspecified, MapeamentoTema.ParaUserAppTheme(TemaPreferido.Automatico));
+        Assert.False(MapeamentoTema.IsDarkMode(TemaPreferido.Automatico, sistemaEscuro: false));
+        Assert.True(MapeamentoTema.IsDarkMode(TemaPreferido.Automatico, sistemaEscuro: true));
+    }
+
     [Theory]
     [InlineData(TemaUsuarioApp.Dark, true)]
     [InlineData(TemaUsuarioApp.Light, false)]
@@ -62,5 +76,19 @@ public class MapeamentoTemaTests
     {
         Assert.Equal(isDarkMode, MapeamentoTema.IsDarkMode(temaSolicitado));
         Assert.Equal(isDarkMode ? MapeamentoTema.ClasseEscuro : MapeamentoTema.ClasseClaro, MapeamentoTema.ClasseCss(isDarkMode));
+    }
+
+    private static string EncontrarRaiz()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "OrcaFacil.Core", "Tema", "MapeamentoTema.cs")))
+                return dir.FullName;
+
+            dir = dir.Parent;
+        }
+
+        throw new InvalidOperationException("Não foi possível localizar MapeamentoTema.cs a partir de " + AppContext.BaseDirectory);
     }
 }

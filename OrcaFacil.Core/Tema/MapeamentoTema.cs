@@ -26,6 +26,7 @@ public static class MapeamentoTema
     {
         TemaPreferido.Claro => TextoClaro,
         TemaPreferido.Escuro => TextoEscuro,
+        TemaPreferido.Automatico => TextoAutomatico,
         _ => TextoAutomatico
     };
 
@@ -59,6 +60,7 @@ public static class MapeamentoTema
     {
         TemaPreferido.Claro => TemaUsuarioApp.Light,
         TemaPreferido.Escuro => TemaUsuarioApp.Dark,
+        TemaPreferido.Automatico => TemaUsuarioApp.Unspecified,
         _ => TemaUsuarioApp.Unspecified
     };
 
@@ -69,6 +71,7 @@ public static class MapeamentoTema
     {
         TemaPreferido.Claro => false,
         TemaPreferido.Escuro => true,
+        TemaPreferido.Automatico => sistemaEscuro,
         _ => sistemaEscuro
     };
 
