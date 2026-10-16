@@ -18,8 +18,18 @@
     border-color: var(--of-border-strong);
     border-radius: var(--of-radius-control);
     background: var(--of-input-bg);
+}
+
+.of-segmented:not(.of-segmented-vertical) ::deep .mud-toggle-group {
     grid-auto-flow: column;
     grid-auto-columns: minmax(0, 1fr);
+}
+
+.of-segmented-vertical ::deep .mud-toggle-item-content {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    text-align: center;
 }
 
 .of-segmented ::deep .mud-toggle-item-content {

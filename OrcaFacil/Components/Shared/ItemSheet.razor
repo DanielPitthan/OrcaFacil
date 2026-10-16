@@ -1,6 +1,6 @@
 @typeparam TItem
 
-<div class="of-sheet-host">
+<div class="of-sheet-host @(AcimaDeDialogo ? "of-sheet-sobre" : null)">
     <MudDrawer @bind-Open="Aberto" Anchor="Anchor.Bottom" Variant="DrawerVariant.Temporary" Overlay="true"
                ClipMode="DrawerClipMode.Never" Elevation="8" Class="of-sheet" aria-label="@Titulo">
         <div class="of-sheet-corpo">
@@ -64,6 +64,9 @@
     [Parameter] public EventCallback<TItem> OnConfirmar { get; set; }
     [Parameter] public EventCallback<TItem> OnConfirmarOutro { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>O sheet da cesta abre por cima do diálogo, que já ocupa o z-index de diálogo.</summary>
+    [Parameter] public bool AcimaDeDialogo { get; set; }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

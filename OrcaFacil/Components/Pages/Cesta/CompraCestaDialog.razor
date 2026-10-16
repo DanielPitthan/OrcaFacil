@@ -1,215 +1,282 @@
 @inject ICartaoService CartaoService
 
-<MudDialog>
-    <DialogContent>
-        <MudSelect T="int" @bind-Value="_localId" Label="Local de compra" Class="mb-3" AnchorOrigin="Origin.BottomCenter">
-            @foreach (var local in Locais)
-            {
-                <MudSelectItem T="int" Value="@local.Id">@local.Nome</MudSelectItem>
-            }
-        </MudSelect>
-
-        <MudDatePicker Label="Data" @bind-Date="_data" Class="mb-3" />
-
-        <MudText Typo="Typo.subtitle2" Class="mb-2">Passar item</MudText>
-        <MudSelect T="int" @bind-Value="_produtoId" Label="Produto" Class="mb-2" AnchorOrigin="Origin.BottomCenter">
-            @foreach (var produto in Produtos)
-            {
-                <MudSelectItem T="int" Value="@produto.Id">@produto.Nome</MudSelectItem>
-            }
-        </MudSelect>
-        <div class="of-linha-valor mb-3">
-            <div class="of-linha-valor-campo">
-                <CampoNumerico @ref="_precoCampo" TNumber="decimal" @bind-Value="_precoItem" Label="Preço"
-                                Adornment="Adornment.Start" AdornmentText="R$" />
+<MudDialog Gutters="false" TitleClass="of-cesta-titulo" ContentClass="of-cesta-conteudo" ActionsClass="of-cesta-acoes">
+    <TitleContent>
+        <div class="of-cesta-cabeca">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Inherit" Edge="Edge.Start"
+                           aria-label="Voltar" OnClick="Cancelar" />
+            <div class="of-appbar-titulos">
+                <span class="of-appbar-titulo">Cesta básica</span>
+                <span class="of-appbar-sub">@Subtitulo</span>
             </div>
-            <MudIconButton Icon="@Icons.Material.Filled.Add" aria-label="Incluir item" Color="Color.Success"
-                           Variant="Variant.Filled" Size="Size.Medium" OnClick="IncluirItemAsync" />
         </div>
-
-        @if (_linhas.Count == 0)
-        {
-            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">Nenhum item ainda. Inclua um por vez, como no caixa.</MudText>
-        }
-        else
-        {
-            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">@_linhas.Count @(_linhas.Count == 1 ? "item" : "itens")</MudText>
-            @foreach (var linha in _linhas)
-            {
-                <div @key="linha" class="d-flex justify-space-between align-center">
-                    <div style="cursor:pointer; flex:1;" @onclick="@(() => EditarLinha(linha))">
-                        <MudText Typo="Typo.body2">@NomeProduto(linha.ProdutoId)</MudText>
-                    </div>
-                    @if (_linhaEditando == linha)
-                    {
-                        <div style="width:140px;">
-                            <CampoNumerico TNumber="decimal" @bind-Value="linha.Preco" Label="Preço"
-                                            Adornment="Adornment.Start" AdornmentText="R$" />
-                        </div>
-                        <MudIconButton Icon="@Icons.Material.Filled.Check" Color="Color.Success" Size="Size.Small"
-                                       aria-label="Confirmar valor" OnClick="@(() => ConfirmarEdicao(linha))" />
-                    }
-                    else
-                    {
-                        <div style="cursor:pointer;" @onclick="@(() => EditarLinha(linha))">
-                            <MudText Typo="Typo.body2">@linha.Preco.ToString("C")</MudText>
-                        </div>
-                    }
-                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" aria-label="Remover item"
-                                   OnClick="@(() => RemoverLinha(linha))" />
+    </TitleContent>
+    <DialogContent>
+        <div class="of-cesta">
+            <div class="of-cesta-miolo">
+                <div class="of-cesta-bloco">
+                    <SummaryCard Rotulo="Total da cesta" Valor="@Total" Contexto="@Contexto"
+                                 Status="@RotuloStatus" TomStatus="@TomStatus"
+                                 Progresso="@Percentual" ProgressoCritico="@BeneficioEstoura"
+                                 RotuloProgresso="Aproveitamento do benefício" Legendas="@Legendas" />
                 </div>
-            }
-            <MudDivider Class="my-2" />
-        }
 
-        <MudText Typo="Typo.subtitle2" Class="mb-2">Pagamento</MudText>
-        <MudCheckBox T="bool" @bind-Value="_usarBeneficio" Label="Usar cartão de benefício" Class="mb-2" />
-        @if (_usarBeneficio)
-        {
-            @if (_cartoesBeneficio.Count == 0)
-            {
-                <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
-                    Cadastre um cartão de benefício em Cartões antes de usar este desconto.
-                </MudAlert>
-            }
-            else
-            {
-                <MudSelect T="int" Value="_cartaoBeneficioId" ValueChanged="OnCartaoBeneficioChangedAsync"
-                           Label="Cartão de benefício" Class="mb-1" AnchorOrigin="Origin.BottomCenter">
-                    @foreach (var cartao in _cartoesBeneficio)
-                    {
-                        <MudSelectItem T="int" Value="@cartao.Id">@cartao.Rotulo (@(cartao.TipoBeneficio?.Rotulo() ?? "Benefício"))</MudSelectItem>
-                    }
-                </MudSelect>
-                <MudText Typo="Typo.caption" Color="@(SaldoBeneficioSelecionado < BeneficioInformado ? Color.Error : Color.Secondary)" Class="mb-2 d-block">
-                    Saldo disponível: <b>@SaldoBeneficioSelecionado.ToString("C")</b>
-                </MudText>
-            }
-            <CampoNumerico TNumber="decimal" @bind-Value="_beneficio" Label="Valor usado do benefício"
-                            Adornment="Adornment.Start" AdornmentText="R$" Class="mb-3" />
-        }
-
-        @if (Saldo <= 0 && Total > 0 && BeneficioInformado >= Total)
-        {
-            <MudAlert Severity="Severity.Success" Dense="true" Class="mb-3">O benefício cobre a compra. Nada a pagar do bolso.</MudAlert>
-        }
-        else if (Saldo > 0)
-        {
-            <MudText Typo="Typo.caption" Color="Color.Secondary">Saldo de @Saldo.ToString("C")</MudText>
-            <MudChipSet T="ModoPagamentoSaldo" SelectedValue="_modo" SelectedValueChanged="AlterarModo"
-                        SelectionMode="SelectionMode.SingleSelection" CheckMark="false" Class="mb-3">
-                <MudChip T="ModoPagamentoSaldo" Value="ModoPagamentoSaldo.Dinheiro" Text="Dinheiro" Color="Color.Primary" Variant="Variant.Outlined" />
-                <MudChip T="ModoPagamentoSaldo" Value="ModoPagamentoSaldo.Cartao" Text="Cartão de crédito" Color="Color.Primary" Variant="Variant.Outlined" />
-                <MudChip T="ModoPagamentoSaldo" Value="ModoPagamentoSaldo.Dividido" Text="Dividir" Color="Color.Primary" Variant="Variant.Outlined" />
-            </MudChipSet>
-            @if (_modo == ModoPagamentoSaldo.Dividido)
-            {
-                <CampoNumerico TNumber="decimal" @bind-Value="_dinheiroInformado" Label="Quanto em dinheiro"
-                                Adornment="Adornment.Start" AdornmentText="R$" Class="mb-2" />
-                <MudText Typo="Typo.body2" Color="@(CartaoEfetivo < 0 ? Color.Error : Color.Default)" Class="mb-3">
-                    Restante no cartão de crédito: @Math.Max(0, CartaoEfetivo).ToString("C")
-                </MudText>
-            }
-
-            @if (CartaoEfetivo > 0)
-            {
-                @if (_cartoesCredito.Count == 0)
-                {
-                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
-                        Cadastre um cartão de crédito em Cartões para registrar o pagamento no crédito.
-                    </MudAlert>
-                }
-                else
-                {
-                    <MudSelect T="int" Value="_cartaoCreditoId" ValueChanged="OnCartaoCreditoChangedAsync"
-                               Label="Cartão de crédito" Class="mb-2" AnchorOrigin="Origin.BottomCenter">
-                        @foreach (var cartao in _cartoesCredito)
+                <div class="of-cesta-bloco">
+                    <FormSection Titulo="Compra">
+                        @if (Locais.Count == 0)
                         {
-                            <MudSelectItem T="int" Value="@cartao.Id">@cartao.Rotulo</MudSelectItem>
+                            <div class="of-secao-bloco">
+                                <MudAlert Severity="Severity.Info" Dense="true">Cadastre um local de compra antes de registrar a cesta.</MudAlert>
+                            </div>
                         }
-                    </MudSelect>
+                        else
+                        {
+                            <div class="of-seletor">
+                                <MudMenu ActivationEvent="@MouseEvent.LeftClick" AnchorOrigin="Origin.BottomCenter"
+                                         TransformOrigin="Origin.TopCenter" MaxHeight="320">
+                                    <ActivatorContent>
+                                        <FormRow Icon="@Icons.Material.Outlined.Store" Rotulo="Local de compra"
+                                                 Valor="@LocalAtual?.Nome" Chevron="true" Embutido="true"
+                                                 AriaLabel="Selecionar local de compra" />
+                                    </ActivatorContent>
+                                    <ChildContent>
+                                        @foreach (var local in Locais)
+                                        {
+                                            <MudMenuItem OnClick="@(() => SelecionarLocal(local))">@local.Nome</MudMenuItem>
+                                        }
+                                    </ChildContent>
+                                </MudMenu>
+                            </div>
+                        }
+                        <FormRow Icon="@Icons.Material.Outlined.Event" Rotulo="Data">
+                            <MudDatePicker Date="_data" DateChanged="AlterarData" Variant="Variant.Text" Margin="Margin.Dense" />
+                        </FormRow>
+                    </FormSection>
+                </div>
 
-                    @if (_faturasAbertas.Count == 0)
-                    {
-                        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
-                            Nenhuma fatura em aberto para este cartão. Uma nova fatura será criada nos lançamentos.
-                        </MudAlert>
-                    }
-                    else
-                    {
-                        <MudSelect T="int?" @bind-Value="_faturaTransacaoId" Label="Lançamento da fatura" Class="mb-3" AnchorOrigin="Origin.BottomCenter">
-                            <MudSelectItem T="int?" Value="@((int?)null)">Criar nova fatura</MudSelectItem>
-                            @foreach (var fatura in _faturasAbertas)
+                <div class="of-cesta-bloco">
+                    <FormSection Titulo="Itens">
+                        <ItemList TItem="ItemCompraCestaFormModel" Itens="@_linhas" Contagem="@Contagem" SomaFormatada="@Total.ToString("C")"
+                                  Titulo="TituloItem" Subtitulo="SubtituloItem" Valor="ValorItem" Icone="IconeItem" Cor="CorItem"
+                                  ChaveItem="ChaveItem" TextoVazio="Nenhum item ainda. Inclua um por vez, como no caixa."
+                                  OnEditar="EditarItem" OnRemover="RemoverItem" OnAdicionar="AbrirNovo" />
+                    </FormSection>
+                </div>
+
+                <div class="of-cesta-bloco">
+                    <FormSection Titulo="Pagamento">
+                        <div class="of-secao-bloco">
+                            <MudSwitch T="bool" Value="_usarBeneficio" ValueChanged="AlterarBeneficio" Color="Color.Success" Label="Usar cartão de benefício" />
+                            <p class="of-cesta-apoio">@CompraCestaEditor.TextoApoioBeneficio(_usarBeneficio)</p>
+                        </div>
+
+                        @if (_usarBeneficio)
+                        {
+                            @if (_cartoesBeneficio.Count == 0)
                             {
-                                <MudSelectItem T="int?" Value="@((int?)fatura.Id)">
-                                    @fatura.Descricao — @fatura.Data.ToString("dd/MM/yyyy") (@fatura.Valor.ToString("C"))
-                                </MudSelectItem>
+                                <div class="of-secao-bloco">
+                                    <MudAlert Severity="Severity.Warning" Dense="true">
+                                        Cadastre um cartão de benefício em Cartões antes de usar este desconto.
+                                    </MudAlert>
+                                </div>
                             }
-                        </MudSelect>
-                    }
+                            else
+                            {
+                                <div class="of-seletor">
+                                    <MudMenu ActivationEvent="@MouseEvent.LeftClick" AnchorOrigin="Origin.BottomCenter"
+                                             TransformOrigin="Origin.TopCenter" MaxHeight="320">
+                                        <ActivatorContent>
+                                            <FormRow Icon="@Icons.Material.Outlined.CardGiftcard" Rotulo="Cartão de benefício"
+                                                     Valor="@RotuloCartaoBeneficio" Chevron="true" Embutido="true"
+                                                     AriaLabel="Selecionar cartão de benefício" />
+                                        </ActivatorContent>
+                                        <ChildContent>
+                                            @foreach (var cartao in _cartoesBeneficio)
+                                            {
+                                                <MudMenuItem OnClick="@(() => OnCartaoBeneficioChangedAsync(cartao.Id))">
+                                                    @cartao.Rotulo (@(cartao.TipoBeneficio?.Rotulo() ?? "Benefício"))
+                                                </MudMenuItem>
+                                            }
+                                        </ChildContent>
+                                    </MudMenu>
+                                </div>
+                                <div class="of-secao-bloco">
+                                    <p class="of-cesta-dica @(SaldoBeneficioSelecionado < BeneficioInformado ? "of-cesta-dica-critica" : null)">
+                                        Saldo disponível: <b class="of-moeda">@SaldoBeneficioSelecionado.ToString("C")</b>
+                                    </p>
+                                </div>
+                            }
+                            <FormRow Icon="@Icons.Material.Outlined.Payments" Rotulo="Valor usado do benefício">
+                                <CampoNumerico TNumber="decimal" Value="_beneficio" ValueChanged="AlterarValorBeneficio"
+                                               Adornment="Adornment.Start" AdornmentText="R$" />
+                            </FormRow>
+                        }
+
+                        @if (BeneficioCobre)
+                        {
+                            <div class="of-secao-bloco">
+                                <MudAlert Severity="Severity.Success" Dense="true">O benefício cobre a compra. Nada a pagar do bolso.</MudAlert>
+                            </div>
+                        }
+                        else if (Saldo > 0)
+                        {
+                            <div class="of-secao-bloco">
+                                <p class="of-cesta-apoio">Saldo de <span class="of-moeda">@Saldo.ToString("C")</span></p>
+                                <SegmentedControl T="ModoPagamentoCesta" Valor="_modo" ValorChanged="AlterarModo"
+                                                  Opcoes="@Modos" AriaLabel="Forma do saldo" Vertical="true" />
+                            </div>
+                            @if (_modo == ModoPagamentoCesta.Dividido)
+                            {
+                                <FormRow Icon="@Icons.Material.Outlined.Payments" Rotulo="Quanto em dinheiro">
+                                    <CampoNumerico TNumber="decimal" Value="_dinheiroInformado" ValueChanged="AlterarDinheiro"
+                                                   Adornment="Adornment.Start" AdornmentText="R$" />
+                                </FormRow>
+                                <div class="of-secao-bloco">
+                                    <p class="of-cesta-dica @(CartaoEfetivo < 0 ? "of-cesta-dica-critica" : null)">
+                                        Restante no cartão de crédito: <span class="of-moeda">@Math.Max(0, CartaoEfetivo).ToString("C")</span>
+                                    </p>
+                                </div>
+                            }
+
+                            @if (CartaoEfetivo > 0)
+                            {
+                                @if (_cartoesCredito.Count == 0)
+                                {
+                                    <div class="of-secao-bloco">
+                                        <MudAlert Severity="Severity.Warning" Dense="true">
+                                            Cadastre um cartão de crédito em Cartões para registrar o pagamento no crédito.
+                                        </MudAlert>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="of-seletor">
+                                        <MudMenu ActivationEvent="@MouseEvent.LeftClick" AnchorOrigin="Origin.BottomCenter"
+                                                 TransformOrigin="Origin.TopCenter" MaxHeight="320">
+                                            <ActivatorContent>
+                                                <FormRow Icon="@Icons.Material.Outlined.CreditCard" Rotulo="Cartão de crédito"
+                                                         Valor="@CartaoCreditoAtual?.Rotulo" Chevron="true" Embutido="true"
+                                                         AriaLabel="Selecionar cartão de crédito" />
+                                            </ActivatorContent>
+                                            <ChildContent>
+                                                @foreach (var cartao in _cartoesCredito)
+                                                {
+                                                    <MudMenuItem OnClick="@(() => OnCartaoCreditoChangedAsync(cartao.Id))">@cartao.Rotulo</MudMenuItem>
+                                                }
+                                            </ChildContent>
+                                        </MudMenu>
+                                    </div>
+
+                                    @if (_faturasAbertas.Count == 0)
+                                    {
+                                        <div class="of-secao-bloco">
+                                            <MudAlert Severity="Severity.Info" Dense="true">
+                                                Nenhuma fatura em aberto para este cartão. Uma nova fatura será criada nos lançamentos.
+                                            </MudAlert>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <div class="of-seletor">
+                                            <MudMenu ActivationEvent="@MouseEvent.LeftClick" AnchorOrigin="Origin.BottomCenter"
+                                                     TransformOrigin="Origin.TopCenter" MaxHeight="320">
+                                                <ActivatorContent>
+                                                    <FormRow Icon="@Icons.Material.Outlined.Receipt" Rotulo="Lançamento da fatura"
+                                                             Valor="@RotuloFatura" Chevron="true" Embutido="true"
+                                                             AriaLabel="Selecionar lançamento da fatura" />
+                                                </ActivatorContent>
+                                                <ChildContent>
+                                                    <MudMenuItem OnClick="@(() => _faturaTransacaoId = null)">Criar nova fatura</MudMenuItem>
+                                                    @foreach (var fatura in _faturasAbertas)
+                                                    {
+                                                        <MudMenuItem OnClick="@(() => _faturaTransacaoId = fatura.Id)">
+                                                            @fatura.Descricao — @fatura.Data.ToString("dd/MM/yyyy") (@fatura.Valor.ToString("C"))
+                                                        </MudMenuItem>
+                                                    }
+                                                </ChildContent>
+                                            </MudMenu>
+                                        </div>
+                                    }
+                                }
+                            }
+                        }
+                    </FormSection>
+                </div>
+
+                @if (_erro is not null)
+                {
+                    <p class="of-cesta-erro" role="alert">@_erro</p>
                 }
-            }
-        }
-
-        <MudPaper Outlined="true" Class="pa-3">
-            <div class="d-flex justify-space-between">
-                <MudText Typo="Typo.body2">Total da cesta</MudText>
-                <MudText Typo="Typo.body2"><b>@Total.ToString("C")</b></MudText>
             </div>
-            @if (BeneficioInformado > 0)
-            {
-                <div class="d-flex justify-space-between">
-                    <MudText Typo="Typo.body2">@RotuloBeneficioSelecionado</MudText>
-                    <MudText Typo="Typo.body2">@BeneficioInformado.ToString("C")</MudText>
-                </div>
-            }
-            @if (DinheiroEfetivo > 0)
-            {
-                <div class="d-flex justify-space-between">
-                    <MudText Typo="Typo.body2">Dinheiro</MudText>
-                    <MudText Typo="Typo.body2">@DinheiroEfetivo.ToString("C")</MudText>
-                </div>
-            }
-            @if (CartaoEfetivo > 0)
-            {
-                <div class="d-flex justify-space-between">
-                    <MudText Typo="Typo.body2">@RotuloCreditoSelecionado</MudText>
-                    <MudText Typo="Typo.body2">@CartaoEfetivo.ToString("C")</MudText>
-                </div>
-            }
-            @if (BeneficioInformado > 0 && Total > 0)
-            {
-                <div class="d-flex justify-space-between">
-                    <MudText Typo="Typo.body2">Aproveitamento</MudText>
-                    <MudText Typo="Typo.body2">@Aproveitamento.ToString("0.##")%</MudText>
-                </div>
-            }
-        </MudPaper>
-
-        @if (_erro is not null)
-        {
-            <MudText Typo="Typo.caption" Color="Color.Error" Class="mt-2">@_erro</MudText>
-        }
+        </div>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancelar</MudButton>
-        <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="Salvar">Salvar compra</MudButton>
+        <StickyActionBar Contido="true" TextoCancelar="Cancelar" TextoPrimario="Salvar compra"
+                         OnCancelar="Cancelar" OnPrimario="Salvar" TipoPrimario="ButtonType.Button" />
     </DialogActions>
 </MudDialog>
 
+<ItemSheet TItem="ItemCompraCestaFormModel" @ref="_sheet" @bind-Aberto="_sheetAberto" Item="_editando" AcimaDeDialogo="true"
+           Titulo="@(_editando is null ? "Adicionar item" : "Editar item")" RotuloValor="Preço"
+           Valor="_precoItem" ValorChanged="AlterarPreco" Dica="@DicaItem" Erro="@_erroItem"
+           MostrarOutro="@(_editando is null)" TextoConfirmar="@(_editando is null ? "Adicionar" : "Salvar")"
+           TextoOutro="Adicionar outro" OnConfirmar="ConfirmarAsync" OnConfirmarOutro="ConfirmarOutroAsync">
+    @if (Produtos.Count == 0)
+    {
+        <p class="of-cesta-apoio">Não há produto cadastrado para a cesta.</p>
+    }
+    else if (_listaCompleta)
+    {
+        <div class="of-cesta-cats">
+            <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="FecharLista">Principais</MudButton>
+            <MudList T="ProdutoCesta" Dense="true">
+                @foreach (var produto in Produtos)
+                {
+                    <MudListItem T="ProdutoCesta" OnClick="@(() => EscolherProduto(produto.Id))">
+                        <span class="of-cesta-opcao">@produto.Nome</span>
+                    </MudListItem>
+                }
+            </MudList>
+        </div>
+    }
+    else
+    {
+        <div class="of-cesta-cats">
+            <MudChipSet T="int" SelectedValue="_produtoId" SelectedValueChanged="EscolherProduto"
+                        SelectionMode="SelectionMode.SingleSelection" CheckMark="false">
+                @foreach (var produto in ProdutosVisiveis)
+                {
+                    <MudChip T="int" Value="@produto.Id" Variant="Variant.Outlined" Color="Color.Primary" Text="@produto.Nome" />
+                }
+            </MudChipSet>
+            <MudButton Variant="Variant.Text" Color="Color.Primary" Class="of-cesta-todas" OnClick="AbrirLista">Todas…</MudButton>
+        </div>
+    }
+</ItemSheet>
+
 @code {
+    private static readonly IReadOnlyList<OpcaoSegmento<ModoPagamentoCesta>> Modos =
+    [
+        new(ModoPagamentoCesta.Dinheiro, "Dinheiro"),
+        new(ModoPagamentoCesta.Cartao, "Cartão de crédito"),
+        new(ModoPagamentoCesta.Dividido, "Dividir")
+    ];
+
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
     [Parameter] public CompraCestaFormModel Modelo { get; set; } = new();
     [Parameter] public IReadOnlyList<LocalCompra> Locais { get; set; } = Array.Empty<LocalCompra>();
     [Parameter] public IReadOnlyList<ProdutoCesta> Produtos { get; set; } = Array.Empty<ProdutoCesta>();
 
-    private readonly List<LinhaItem> _linhas = new();
+    private readonly List<ItemCompraCestaFormModel> _linhas = new();
     private List<Cartao> _cartoesBeneficio = new();
     private List<Cartao> _cartoesCredito = new();
     private List<Transacao> _faturasAbertas = new();
     private readonly Dictionary<int, decimal> _saldosBeneficio = new();
 
-    private CampoNumerico<decimal> _precoCampo = null!;
+    private ItemSheet<ItemCompraCestaFormModel>? _sheet;
+    private bool _sheetAberto;
+    private bool _listaCompleta;
+    private ItemCompraCestaFormModel? _editando;
     private int _localId;
     private int _produtoId;
     private decimal _precoItem;
@@ -220,30 +287,91 @@
     private decimal _dinheiroInformado;
     private int _cartaoCreditoId;
     private int? _faturaTransacaoId;
-    private ModoPagamentoSaldo _modo = ModoPagamentoSaldo.Dinheiro;
-    private LinhaItem? _linhaEditando;
+    private ModoPagamentoCesta _modo = ModoPagamentoCesta.Dinheiro;
     private string? _erro;
+    private string? _erroItem;
 
     private decimal Total => _linhas.Sum(l => l.Preco);
     private decimal BeneficioInformado => _usarBeneficio ? _beneficio : 0;
-    private decimal Saldo => Math.Max(0, CestaDespesaRegras.Dinheiro(Total) - CestaDespesaRegras.Dinheiro(BeneficioInformado));
-    private decimal DinheiroEfetivo => _modo switch
-    {
-        ModoPagamentoSaldo.Cartao => 0,
-        ModoPagamentoSaldo.Dividido => CestaDespesaRegras.Dinheiro(_dinheiroInformado),
-        _ => Saldo
-    };
-    private decimal CartaoEfetivo => Saldo - DinheiroEfetivo;
-    private decimal Aproveitamento => Total <= 0 ? 0 : BeneficioInformado / Total * 100m;
+    private decimal Saldo => CompraCestaEditor.Saldo(Total, BeneficioInformado);
+    private (decimal Dinheiro, decimal Cartao) Partes => CompraCestaEditor.Pagamento(_modo, Saldo, _dinheiroInformado);
+    private decimal DinheiroEfetivo => Partes.Dinheiro;
+    private decimal CartaoEfetivo => Partes.Cartao;
+    private decimal Aproveitamento => CompraCestaEditor.Aproveitamento(Total, BeneficioInformado);
     private decimal SaldoBeneficioSelecionado => _saldosBeneficio.GetValueOrDefault(_cartaoBeneficioId);
+    private bool BeneficioCobre => Saldo <= 0 && Total > 0 && BeneficioInformado >= Total;
+    private bool BeneficioEstoura => _usarBeneficio && CestaDespesaRegras.Dinheiro(_beneficio) > CestaDespesaRegras.Dinheiro(Total);
 
+    private LocalCompra? LocalAtual => Locais.FirstOrDefault(l => l.Id == _localId);
     private Cartao? CartaoBeneficioAtual => _cartoesBeneficio.FirstOrDefault(c => c.Id == _cartaoBeneficioId);
     private Cartao? CartaoCreditoAtual => _cartoesCredito.FirstOrDefault(c => c.Id == _cartaoCreditoId);
+    private string Subtitulo => LocalAtual?.Nome ?? "Sem local";
+    private string Contagem => CompraCestaEditor.Contagem(_linhas.Count);
+    private string Contexto
+    {
+        get
+        {
+            var data = (_data ?? DateTime.Today).ToString("dd/MM/yyyy");
+            return BeneficioInformado > 0 && Total > 0
+                ? $"{data} · Aproveitamento {Aproveitamento.ToString("0.##")}%"
+                : data;
+        }
+    }
+
+    private string RotuloCartaoBeneficio => CartaoBeneficioAtual is null
+        ? ""
+        : $"{CartaoBeneficioAtual.Rotulo} ({CartaoBeneficioAtual.TipoBeneficio?.Rotulo() ?? "Benefício"})";
 
     private string RotuloBeneficioSelecionado => CartaoBeneficioAtual?.Rotulo
         ?? (Modelo.TipoCartaoBeneficio ?? TipoCartaoBeneficio.ValeAlimentacao).Rotulo();
 
     private string RotuloCreditoSelecionado => CartaoCreditoAtual?.Rotulo ?? "Cartão de crédito";
+
+    private string RotuloFatura
+    {
+        get
+        {
+            if (_faturaTransacaoId is not int id)
+                return "Criar nova fatura";
+
+            var fatura = _faturasAbertas.FirstOrDefault(f => f.Id == id);
+            return fatura is null
+                ? "Criar nova fatura"
+                : $"{fatura.Descricao} — {fatura.Data:dd/MM/yyyy}";
+        }
+    }
+
+    private SituacaoCompraCesta? SituacaoAtual => CompraCestaEditor.Situacao(Total, BeneficioInformado, Saldo);
+    private string? RotuloStatus => SituacaoAtual is { } situacao ? CompraCestaEditor.RotuloSituacao(situacao) : null;
+    private TomResumo TomStatus => SituacaoAtual == SituacaoCompraCesta.Coberta ? TomResumo.Sucesso : TomResumo.Alerta;
+    private double Percentual => CompraCestaEditor.PercentualBeneficio(Total, BeneficioInformado);
+
+    private IReadOnlyList<LegendaResumo> Legendas
+    {
+        get
+        {
+            var itens = new List<LegendaResumo>
+            {
+                new("A pagar", Saldo.ToString("C"), TomResumo.Alerta)
+            };
+            if (BeneficioInformado > 0)
+                itens.Insert(0, new(RotuloBeneficioSelecionado, BeneficioInformado.ToString("C"), TomResumo.Sucesso));
+            if (DinheiroEfetivo > 0 && CartaoEfetivo > 0)
+            {
+                itens.Add(new("Dinheiro", DinheiroEfetivo.ToString("C"), TomResumo.Primario));
+                itens.Add(new(RotuloCreditoSelecionado, CartaoEfetivo.ToString("C"), TomResumo.Neutro));
+            }
+            return itens;
+        }
+    }
+
+    private IReadOnlyList<ProdutoCesta> ProdutosVisiveis =>
+        CompraCestaEditor.EmDestaque(Produtos, p => p.Id == _produtoId);
+
+    private string? DicaItem =>
+        _editando is null && _linhas.Any(l => l.ProdutoCestaId == _produtoId)
+            ? "Este produto já está na compra. O preço será atualizado."
+            : null;
 
     protected override async Task OnInitializedAsync()
     {
@@ -252,8 +380,12 @@
         _data = Modelo.Data == default ? DateTime.Today : Modelo.Data;
         _usarBeneficio = Modelo.ValorBeneficio > 0;
         _beneficio = Modelo.ValorBeneficio;
-        _linhas.AddRange(Modelo.Itens.Select(item => new LinhaItem { ProdutoId = item.ProdutoCestaId, Preco = item.Preco }));
-        _modo = DefinirModo(Modelo.ValorDinheiro, Modelo.ValorCartaoCredito);
+        _linhas.AddRange(Modelo.Itens.Select(item => new ItemCompraCestaFormModel
+        {
+            ProdutoCestaId = item.ProdutoCestaId,
+            Preco = item.Preco
+        }));
+        _modo = CompraCestaEditor.DefinirModo(Modelo.ValorDinheiro, Modelo.ValorCartaoCredito);
         _dinheiroInformado = Modelo.ValorDinheiro;
 
         var todosCartoes = await CartaoService.ListarAsync();
@@ -278,6 +410,47 @@
         _faturaTransacaoId = Modelo.FaturaTransacaoId;
         if (_cartaoCreditoId > 0)
             await CarregarFaturasAsync(_cartaoCreditoId, preservarSelecionada: true);
+    }
+
+    private void Cancelar() => MudDialog.Cancel();
+
+    private void SelecionarLocal(LocalCompra local)
+    {
+        _localId = local.Id;
+        _erro = null;
+    }
+
+    private void AlterarData(DateTime? data)
+    {
+        _data = data;
+        _erro = null;
+    }
+
+    private void AlterarBeneficio(bool usar)
+    {
+        _usarBeneficio = usar;
+        _erro = null;
+    }
+
+    private Task AlterarValorBeneficio(decimal valor)
+    {
+        _beneficio = valor;
+        _erro = null;
+        return Task.CompletedTask;
+    }
+
+    private Task AlterarDinheiro(decimal valor)
+    {
+        _dinheiroInformado = valor;
+        _erro = null;
+        return Task.CompletedTask;
+    }
+
+    private Task AlterarPreco(decimal valor)
+    {
+        _precoItem = valor;
+        _erroItem = null;
+        return Task.CompletedTask;
     }
 
     private Task OnCartaoBeneficioChangedAsync(int cartaoId)
@@ -307,69 +480,120 @@
             ?? _faturasAbertas.FirstOrDefault()?.Id;
     }
 
-    private async Task IncluirItemAsync()
-    {
-        if (_produtoId <= 0)
-        {
-            _erro = "Selecione o produto.";
-            return;
-        }
-
-        if (_precoItem <= 0)
-        {
-            _erro = "Informe o preço do item.";
-            await _precoCampo.FocusAsync();
-            return;
-        }
-
-        var existente = _linhas.FirstOrDefault(l => l.ProdutoId == _produtoId);
-        if (existente is null)
-            _linhas.Add(new LinhaItem { ProdutoId = _produtoId, Preco = _precoItem });
-        else
-            existente.Preco = _precoItem;
-
-        _precoItem = 0;
-        _linhaEditando = null;
-        _erro = null;
-        await _precoCampo.FocusAsync();
-    }
-
-    private void EditarLinha(LinhaItem linha)
-    {
-        _linhaEditando = linha;
-        _erro = null;
-    }
-
-    private void ConfirmarEdicao(LinhaItem linha)
-    {
-        if (linha.Preco <= 0)
-        {
-            _erro = "Informe o preço do item.";
-            return;
-        }
-
-        _linhaEditando = null;
-        _erro = null;
-    }
-
-    private void RemoverLinha(LinhaItem linha)
-    {
-        if (_linhaEditando == linha)
-            _linhaEditando = null;
-        _linhas.Remove(linha);
-    }
-
-    private void AlterarModo(ModoPagamentoSaldo modo)
+    private void AlterarModo(ModoPagamentoCesta modo)
     {
         _modo = modo;
-        if (modo == ModoPagamentoSaldo.Dividido && _dinheiroInformado <= 0)
+        if (modo == ModoPagamentoCesta.Dividido && _dinheiroInformado <= 0)
             _dinheiroInformado = 0;
         _erro = null;
     }
 
+    private void AbrirNovo()
+    {
+        _editando = null;
+        _precoItem = 0;
+        _erroItem = null;
+        _listaCompleta = false;
+        GarantirProduto();
+        _sheetAberto = true;
+    }
+
+    private void EditarItem(ItemCompraCestaFormModel item)
+    {
+        _editando = item;
+        _produtoId = item.ProdutoCestaId;
+        _precoItem = item.Preco;
+        _erroItem = null;
+        _listaCompleta = false;
+        _sheetAberto = true;
+    }
+
+    private void RemoverItem(ItemCompraCestaFormModel item)
+    {
+        if (_editando == item)
+        {
+            _editando = null;
+            _sheetAberto = false;
+        }
+
+        _linhas.Remove(item);
+        _erro = null;
+    }
+
+    private void GarantirProduto()
+    {
+        if (!Produtos.Any(p => p.Id == _produtoId))
+            _produtoId = Produtos.FirstOrDefault()?.Id ?? 0;
+    }
+
+    private void EscolherProduto(int produtoId)
+    {
+        if (produtoId <= 0)
+            return;
+
+        _produtoId = produtoId;
+        _listaCompleta = false;
+        _erroItem = null;
+    }
+
+    private void AbrirLista() => _listaCompleta = true;
+
+    private void FecharLista() => _listaCompleta = false;
+
+    private Task ConfirmarAsync(ItemCompraCestaFormModel _)
+    {
+        if (!AplicarRascunho())
+            return Task.CompletedTask;
+
+        _sheetAberto = false;
+        return Task.CompletedTask;
+    }
+
+    private async Task ConfirmarOutroAsync(ItemCompraCestaFormModel _)
+    {
+        if (!AplicarRascunho())
+            return;
+
+        _precoItem = 0;
+        _erroItem = null;
+        if (_sheet is not null)
+            await _sheet.FocarValorAsync();
+    }
+
+    private bool AplicarRascunho()
+    {
+        var erro = CompraCestaEditor.ValidarItem(_produtoId, _precoItem);
+        if (erro is not null)
+        {
+            _erroItem = erro;
+            return false;
+        }
+
+        if (_editando is null)
+            CompraCestaEditor.AcrescentarOuAtualizar(_linhas, _produtoId, _precoItem);
+        else
+            CompraCestaEditor.AplicarEdicao(_linhas, _editando, _produtoId, _precoItem);
+
+        _erroItem = null;
+        _erro = null;
+        return true;
+    }
+
     private void Salvar()
     {
-        _erro = Validar();
+        _erro = CompraCestaEditor.Validar(
+            _localId,
+            _data,
+            _linhas,
+            _usarBeneficio,
+            _cartaoBeneficioId,
+            _beneficio,
+            SaldoBeneficioSelecionado,
+            DinheiroEfetivo,
+            CartaoEfetivo,
+            Saldo,
+            Total,
+            _cartaoCreditoId);
         if (_erro is not null)
             return;
 
@@ -386,61 +610,25 @@
         Modelo.FaturaTransacaoId = CartaoEfetivo > 0 ? _faturaTransacaoId : null;
         Modelo.Itens = _linhas.Select(linha => new ItemCompraCestaFormModel
         {
-            ProdutoCestaId = linha.ProdutoId,
+            ProdutoCestaId = linha.ProdutoCestaId,
             Preco = linha.Preco
         }).ToList();
         MudDialog.Close(DialogResult.Ok(Modelo));
     }
 
-    private string? Validar()
-    {
-        if (_localId <= 0)
-            return "Selecione o local da compra.";
-        if (_data is null)
-            return "Informe a data da compra.";
-        if (_linhas.Count == 0)
-            return "Inclua ao menos um produto.";
-        if (_linhas.Any(l => l.Preco <= 0))
-            return "Todo item precisa de um preço maior que zero.";
-        if (_usarBeneficio && _cartaoBeneficioId <= 0)
-            return "Selecione o cartão de benefício.";
-        if (_usarBeneficio && _beneficio <= 0)
-            return "Informe o valor usado do cartão de benefício.";
-        if (_usarBeneficio && CestaDespesaRegras.Dinheiro(_beneficio) > CestaDespesaRegras.Dinheiro(Total))
-            return "O benefício não pode ser maior que o total da cesta.";
-        if (_usarBeneficio && CestaDespesaRegras.Dinheiro(_beneficio) > SaldoBeneficioSelecionado)
-            return $"Saldo insuficiente no cartão de benefício (disponível: {SaldoBeneficioSelecionado:C}). Recarregue antes de usar.";
-        if (DinheiroEfetivo < 0 || CartaoEfetivo < 0)
-            return "O dinheiro não pode passar do saldo.";
-        if (DinheiroEfetivo + CartaoEfetivo != Saldo)
-            return "Dinheiro e cartão de crédito precisam somar o saldo da compra.";
-        if (CartaoEfetivo > 0 && _cartaoCreditoId <= 0)
-            return "Selecione o cartão de crédito.";
-        return null;
-    }
+    private string TituloItem(ItemCompraCestaFormModel item)
+        => Produtos.FirstOrDefault(p => p.Id == item.ProdutoCestaId)?.Nome ?? "Produto";
 
-    private string NomeProduto(int produtoId)
-        => Produtos.FirstOrDefault(p => p.Id == produtoId)?.Nome ?? "Produto";
+    private string SubtituloItem(ItemCompraCestaFormModel item)
+        => CompraCestaEditor.Subtitulo(Produtos.FirstOrDefault(p => p.Id == item.ProdutoCestaId)?.Categoria?.Nome);
 
-    private static ModoPagamentoSaldo DefinirModo(decimal dinheiro, decimal cartao)
-    {
-        if (dinheiro > 0 && cartao > 0)
-            return ModoPagamentoSaldo.Dividido;
-        if (cartao > 0)
-            return ModoPagamentoSaldo.Cartao;
-        return ModoPagamentoSaldo.Dinheiro;
-    }
+    private string ValorItem(ItemCompraCestaFormModel item) => item.Preco.ToString("C");
 
-    private sealed class LinhaItem
-    {
-        public int ProdutoId { get; set; }
-        public decimal Preco { get; set; }
-    }
+    private string IconeItem(ItemCompraCestaFormModel item)
+        => Produtos.FirstOrDefault(p => p.Id == item.ProdutoCestaId)?.Categoria?.Icone ?? "🏷️";
 
-    private enum ModoPagamentoSaldo
-    {
-        Dinheiro,
-        Cartao,
-        Dividido
-    }
+    private string? CorItem(ItemCompraCestaFormModel item)
+        => Produtos.FirstOrDefault(p => p.Id == item.ProdutoCestaId)?.Categoria?.CorHex;
+
+    private static object ChaveItem(ItemCompraCestaFormModel item) => item;
 }

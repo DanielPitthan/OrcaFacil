@@ -1,3 +1,11 @@
+.of-sheet-sobre ::deep .mud-overlay {
+    z-index: calc(var(--mud-zindex-dialog) + 3) !important;
+}
+
+.of-sheet-sobre ::deep .mud-drawer.of-sheet {
+    z-index: calc(var(--mud-zindex-dialog) + 4) !important;
+}
+
 /* Aberto com altura ainda não medida: o MudDrawer 9 deixa visibility:hidden inline. */
 .of-sheet-host ::deep .of-sheet.mud-drawer.mud-drawer--open.mud-drawer-pos-bottom {
     visibility: visible !important;

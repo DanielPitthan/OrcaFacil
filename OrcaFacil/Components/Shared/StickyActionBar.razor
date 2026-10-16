@@ -1,3 +1,4 @@
+<div class="of-action @(Contido ? "of-action-contida" : null)">
 <div class="of-action-spacer" aria-hidden="true"></div>
 <div class="of-action-bar">
     <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="of-action-botao"
@@ -9,6 +10,7 @@
         @TextoPrimario
     </MudButton>
 </div>
+</div>
 
 @code {
     [Parameter] public string TextoCancelar { get; set; } = "Cancelar";
@@ -17,4 +19,10 @@
     [Parameter] public EventCallback OnPrimario { get; set; }
     [Parameter] public bool PrimarioDesabilitado { get; set; }
     [Parameter] public ButtonType TipoPrimario { get; set; } = ButtonType.Submit;
+
+    /// <summary>
+    /// Dentro de um diálogo a barra fica no fluxo do rodapé.
+    /// Fixa, ela pintaria atrás do overlay (z-index do diálogo).
+    /// </summary>
+    [Parameter] public bool Contido { get; set; }
 }

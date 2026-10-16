@@ -23,7 +23,7 @@
     <div class="of-resumo-barra">
         <MudProgressLinear Value="@Progresso" Min="0" Max="100" Rounded="true" Size="Size.Small"
                            Color="@(ProgressoCritico ? Color.Error : Color.Primary)"
-                           aria-label="Progresso do detalhamento" />
+                           aria-label="@RotuloProgresso" />
     </div>
 
     @if (Legendas.Count > 0)
@@ -49,6 +49,7 @@
     [Parameter] public TomResumo TomStatus { get; set; } = TomResumo.Neutro;
     [Parameter] public double Progresso { get; set; }
     [Parameter] public bool ProgressoCritico { get; set; }
+    [Parameter] public string RotuloProgresso { get; set; } = "Progresso do detalhamento";
     [Parameter] public IReadOnlyList<LegendaResumo> Legendas { get; set; } = [];
 
     private string Simbolo => FaturaCartaoEditor.PartirMoeda(Valor, CultureInfo.CurrentCulture).Simbolo;

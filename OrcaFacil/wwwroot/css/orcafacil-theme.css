@@ -225,6 +225,34 @@ div.mud-input-slot.mud-input-root {
     overflow: hidden;
 }
 
+/* A compra da cesta ocupa a tela. O bottom sheet precisa pintar fora do papel do diálogo. */
+.mud-dialog-container .mud-dialog.mud-dialog-fullscreen {
+    height: 100%;
+    max-height: none;
+    margin: 0;
+    border-radius: 0;
+    overflow: visible;
+}
+
+.mud-dialog-title.of-cesta-titulo,
+.mud-dialog-actions.of-cesta-acoes,
+.mud-dialog-content.of-cesta-conteudo {
+    background: var(--of-background);
+}
+
+.mud-dialog-title.of-cesta-titulo {
+    padding: 4px 8px 4px 4px;
+}
+
+.mud-dialog-content.of-cesta-conteudo {
+    padding: 0;
+}
+
+.mud-dialog-actions.of-cesta-acoes {
+    display: block;
+    padding: 0;
+}
+
 /* Quando o WebView não encolhe com o teclado, a área útil termina acima dele. */
 html.of-teclado-aberto .mud-dialog-container {
     height: calc(100% - var(--of-teclado, 0px));

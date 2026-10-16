@@ -1,3 +1,20 @@
+.of-action-contida,
+.of-action-contida .of-action-bar {
+    width: 100%;
+}
+
+.of-action-contida .of-action-spacer {
+    display: none;
+}
+
+.of-action-contida .of-action-bar {
+    position: static;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    z-index: 1;
+}
+
 .of-action-spacer {
     height: calc(76px + env(safe-area-inset-bottom, 0px));
 }
