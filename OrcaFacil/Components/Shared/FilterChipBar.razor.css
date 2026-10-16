@@ -1,0 +1,89 @@
+.of-filtros {
+    display: flex;
+    align-items: flex-start;
+    min-width: 0;
+    margin-bottom: 8px;
+}
+
+.of-filtros-chips {
+    display: flex;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.of-filtro-chip {
+    min-height: var(--of-touch);
+    margin: 0 8px 8px 0;
+    padding: 0 14px;
+    border: 1px solid var(--of-border);
+    border-radius: 18px;
+    background: var(--of-chip-bg);
+    color: var(--of-text);
+    font: inherit;
+    font-size: 14px;
+}
+
+.of-filtro-ativa {
+    border-color: var(--of-primary);
+    background: var(--of-primary);
+    color: var(--of-on-primary);
+}
+
+.of-filtros ::deep .mud-icon-button {
+    width: var(--of-touch);
+    height: var(--of-touch);
+}
+
+::deep .of-filtro-sheet.mud-drawer {
+    border-radius: var(--of-radius-sheet) var(--of-radius-sheet) 0 0;
+    background: var(--of-surface);
+    color: var(--of-text);
+}
+
+.of-filtro-cabeca {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 8px 0 16px;
+}
+
+.of-filtro-titulo {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.of-filtro-lista {
+    max-height: 50vh;
+    max-height: 50dvh;
+    overflow: auto;
+    padding: 0 8px;
+}
+
+.of-filtro-item {
+    display: flex;
+    align-items: center;
+    min-height: var(--of-touch);
+}
+
+.of-filtro-nome {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.of-filtro-vazio {
+    margin: 8px 16px 16px;
+    color: var(--of-text-muted);
+}
+
+.of-filtro-rodape {
+    display: flex;
+    justify-content: flex-end;
+    padding: 8px 16px 16px;
+}
+
+.of-filtro-rodape ::deep .mud-button + .mud-button {
+    margin-left: 8px;
+}

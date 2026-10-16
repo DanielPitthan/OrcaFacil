@@ -1,0 +1,64 @@
+<section class="of-resumo-mes" aria-label="Resumo do mês">
+    <p class="of-resumo-kicker">Sobra do mês</p>
+    <p class="of-resumo-sobra of-moeda @(Sobra < 0 ? "of-sobra-negativa" : "of-sobra-positiva")">@TextoSobra</p>
+
+    <div class="of-resumo-grade">
+        <div class="of-resumo-celula">
+            <span class="of-ponto of-ponto-receita" aria-hidden="true"></span>
+            <span class="of-resumo-rotulo">Receitas</span>
+            <span class="of-resumo-numero of-moeda">@TextoReceitas</span>
+        </div>
+        <div class="of-resumo-celula">
+            <span class="of-ponto of-ponto-despesa" aria-hidden="true"></span>
+            <span class="of-resumo-rotulo">Despesas</span>
+            <span class="of-resumo-numero of-moeda">@TextoDespesas</span>
+        </div>
+    </div>
+
+    <div class="of-resumo-progresso">
+        <MudProgressLinear Value="@ProgressoReceita" Min="0" Max="100" Rounded="true" Size="Size.Small"
+                           Color="@(ReceitaCritica ? Color.Warning : Color.Success)"
+                           aria-label="@TextoReceitaComprometida" />
+    </div>
+    <p class="of-resumo-legenda">@TextoReceitaComprometida</p>
+
+    <div class="of-resumo-divisoria" role="separator"></div>
+
+    <div class="of-resumo-grade">
+        <div class="of-resumo-celula">
+            <span class="of-ponto of-ponto-receita" aria-hidden="true"></span>
+            <span class="of-resumo-rotulo">Pagas</span>
+            <span class="of-resumo-numero of-moeda">@TextoPagas</span>
+        </div>
+        <div class="of-resumo-celula">
+            <span class="of-ponto of-ponto-alerta" aria-hidden="true"></span>
+            <span class="of-resumo-rotulo">A pagar</span>
+            <span class="of-resumo-numero of-moeda of-numero-alerta">@TextoAPagar</span>
+        </div>
+    </div>
+
+    <div class="of-barra-paga" role="progressbar" aria-valuemin="0" aria-valuemax="100"
+         aria-valuenow="@ProgressoPagas.ToString(System.Globalization.CultureInfo.InvariantCulture)"
+         aria-label="@TextoDespesasPagas">
+        <span class="of-barra-fundo" aria-hidden="true"></span>
+        <span class="of-barra-valor" style="width:@LarguraPagas"></span>
+    </div>
+    <p class="of-resumo-legenda">@TextoDespesasPagas</p>
+</section>
+
+@code {
+    [Parameter] public decimal Sobra { get; set; }
+    [Parameter] public string TextoSobra { get; set; } = "";
+    [Parameter] public string TextoReceitas { get; set; } = "";
+    [Parameter] public string TextoDespesas { get; set; } = "";
+    [Parameter] public string TextoPagas { get; set; } = "";
+    [Parameter] public string TextoAPagar { get; set; } = "";
+    [Parameter] public string TextoReceitaComprometida { get; set; } = "";
+    [Parameter] public string TextoDespesasPagas { get; set; } = "";
+    [Parameter] public double ProgressoReceita { get; set; }
+    [Parameter] public bool ReceitaCritica { get; set; }
+    [Parameter] public double ProgressoPagas { get; set; }
+
+    private string LarguraPagas
+        => Math.Clamp(ProgressoPagas, 0, 100).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "%";
+}

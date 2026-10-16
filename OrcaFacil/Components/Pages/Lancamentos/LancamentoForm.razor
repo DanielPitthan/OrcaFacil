@@ -27,7 +27,16 @@ else if (UsarLayoutFatura)
 }
 else
 {
-    <MudText Typo="Typo.h5" Class="mb-4">@(Id.HasValue ? "Editar Lançamento" : "Novo Lançamento")</MudText>
+    <div class="d-flex justify-space-between align-center mb-4">
+        <MudText Typo="Typo.h5">@(Id.HasValue ? "Editar Lançamento" : "Novo Lançamento")</MudText>
+        @if (Id.HasValue)
+        {
+            <MudMenu Icon="@Icons.Material.Filled.MoreVert" Color="Color.Inherit" AriaLabel="Ações do lançamento"
+                     AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                <MudMenuItem Disabled="@(!PodeExcluir)" OnClick="ExcluirAsync">Excluir</MudMenuItem>
+            </MudMenu>
+        }
+    </div>
 
 @if (PeriodoBloqueado)
 {

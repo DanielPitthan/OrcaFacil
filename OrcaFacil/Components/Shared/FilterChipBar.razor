@@ -1,0 +1,76 @@
+@typeparam T where T : notnull
+
+<div class="of-filtros">
+    <div class="of-filtros-chips" role="group" aria-label="@AriaLabel">
+        @foreach (var opcao in Opcoes)
+        {
+            var selecionada = EqualityComparer<T>.Default.Equals(opcao.Valor, Valor);
+            <button type="button" class="of-filtro-chip @(selecionada ? "of-filtro-ativa" : null)"
+                    aria-pressed="@selecionada" @onclick="@(() => ValorChanged.InvokeAsync(opcao.Valor))">
+                @opcao.Texto
+            </button>
+        }
+    </div>
+    <MudBadge Content="@CategoriasSelecionadas.Count" Color="Color.Primary" Overlap="true"
+              Visible="@(CategoriasSelecionadas.Count > 0)">
+        <MudIconButton Icon="@Icons.Material.Filled.FilterList" aria-label="Filtrar por categoria"
+                       OnClick="@(() => _aberto = true)" />
+    </MudBadge>
+</div>
+
+<MudDrawer @bind-Open="_aberto" Anchor="Anchor.Bottom" Elevation="1" Variant="DrawerVariant.Temporary"
+           Overlay="true" Class="of-filtro-sheet">
+    <div class="of-filtro-cabeca">
+        <span class="of-filtro-titulo">Categorias</span>
+        <MudIconButton Icon="@Icons.Material.Filled.Close" aria-label="Fechar filtro de categoria"
+                       OnClick="@(() => _aberto = false)" />
+    </div>
+    @if (Categorias.Count == 0)
+    {
+        <p class="of-filtro-vazio">Nenhuma categoria cadastrada</p>
+    }
+    else
+    {
+        <div class="of-filtro-lista">
+            @foreach (var categoria in Categorias)
+            {
+                <label class="of-filtro-item">
+                    <MudCheckBox T="bool" Value="@CategoriasSelecionadas.Contains(categoria.Id)"
+                                 ValueChanged="@(marcada => AlternarCategoria(categoria.Id, marcada))"
+                                 aria-label="@categoria.Nome" />
+                    <span class="of-filtro-nome">@categoria.Icone @categoria.Nome</span>
+                </label>
+            }
+        </div>
+    }
+    <div class="of-filtro-rodape">
+        <MudButton Variant="Variant.Text" OnClick="Limpar" Disabled="@(CategoriasSelecionadas.Count == 0)">Limpar</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="@(() => _aberto = false)">Concluir</MudButton>
+    </div>
+</MudDrawer>
+
+@code {
+    [Parameter] public T Valor { get; set; } = default!;
+    [Parameter] public EventCallback<T> ValorChanged { get; set; }
+    [Parameter] public IReadOnlyList<OpcaoFiltro<T>> Opcoes { get; set; } = [];
+    [Parameter] public string AriaLabel { get; set; } = "Filtrar lançamentos";
+    [Parameter] public IReadOnlyList<OpcaoCategoriaFiltro> Categorias { get; set; } = [];
+    [Parameter] public IReadOnlySet<int> CategoriasSelecionadas { get; set; } = new HashSet<int>();
+    [Parameter] public EventCallback<IReadOnlySet<int>> CategoriasSelecionadasChanged { get; set; }
+
+    private bool _aberto;
+
+    private Task AlternarCategoria(int id, bool marcada)
+    {
+        var proximo = CategoriasSelecionadas.ToHashSet();
+        if (marcada)
+            proximo.Add(id);
+        else
+            proximo.Remove(id);
+
+        return CategoriasSelecionadasChanged.InvokeAsync(proximo);
+    }
+
+    private Task Limpar()
+        => CategoriasSelecionadasChanged.InvokeAsync(new HashSet<int>());
+}

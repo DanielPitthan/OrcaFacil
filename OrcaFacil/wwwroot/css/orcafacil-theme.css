@@ -21,6 +21,8 @@
     --of-success-text: var(--mud-palette-success-lighten);
     --of-warning: var(--mud-palette-warning);
     --of-error: var(--mud-palette-error);
+    /* A paleta do MudBlazor não tem um slot de saldo. O roxo claro é o token do tema escuro. */
+    --of-saldo: #B69CFF;
 
     --of-radius-card: 16px;
     --of-radius-control: 12px;
@@ -31,6 +33,11 @@
     --of-space-section: 24px;
     --of-row-height: 64px;
     --of-touch: 44px;
+}
+
+.of-tema-claro {
+    /* #B69CFF sobre o fundo claro fica abaixo de 4,5:1. Este roxo só vale no tema claro. */
+    --of-saldo: #5C3DB8;
 }
 
 .of-moeda {

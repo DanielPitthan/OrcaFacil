@@ -1,0 +1,67 @@
+@if (Grupos.Count == 0)
+{
+    <EmptyState Legivel="true" Mensagem="@MensagemVazia" Subtitulo="@SubtituloVazio"
+                TextoAcao="Novo lançamento" AcaoDesabilitada="NovoDesabilitado" OnAcao="OnNovo">
+        <Ilustracao>
+            <svg class="of-empty-desenho" viewBox="0 0 80 80" aria-hidden="true">
+                <rect x="18" y="14" width="44" height="52" rx="8" fill="none" stroke="currentColor" stroke-width="2" />
+                <path d="M28 30h24M28 40h24M28 50h14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            </svg>
+        </Ilustracao>
+    </EmptyState>
+}
+else if (Quantidade > 50)
+{
+    <div class="of-lista-virtual">
+        <Virtualize Items="@_grupos" Context="grupo" OverscanCount="4">
+            @Grupo(grupo)
+        </Virtualize>
+    </div>
+}
+else
+{
+    @foreach (var grupo in Grupos)
+    {
+        @Grupo(grupo)
+    }
+}
+
+@code {
+    [Parameter] public IReadOnlyList<GrupoDiaLancamentos> Grupos { get; set; } = [];
+    [Parameter] public int Quantidade { get; set; }
+    [Parameter] public bool MesSemLancamentos { get; set; }
+    [Parameter] public string NomeMes { get; set; } = "";
+    [Parameter] public bool PermiteAlterar { get; set; }
+    [Parameter] public bool NovoDesabilitado { get; set; }
+    [Parameter] public EventCallback<int> OnAbrir { get; set; }
+    [Parameter] public EventCallback<int> OnExcluir { get; set; }
+    [Parameter] public EventCallback<int> OnAlternarPago { get; set; }
+    [Parameter] public EventCallback OnNovo { get; set; }
+
+    private List<GrupoDiaLancamentos> _grupos = [];
+
+    private string MensagemVazia => MesSemLancamentos
+        ? $"Nenhum lançamento em {NomeMes}"
+        : "Nenhum lançamento com esses filtros";
+
+    private string? SubtituloVazio => MesSemLancamentos && NovoDesabilitado
+        ? "Este mês está fechado"
+        : null;
+
+    protected override void OnParametersSet()
+        => _grupos = Grupos as List<GrupoDiaLancamentos> ?? Grupos.ToList();
+
+    private RenderFragment Grupo(GrupoDiaLancamentos grupo) => @<section class="of-grupo">
+        <header class="of-grupo-cabeca">
+            <span>@grupo.Cabecalho</span>
+            <span class="of-moeda @(grupo.TotalLiquido < 0 ? "of-grupo-negativo" : grupo.TotalLiquido > 0 ? "of-grupo-positivo" : null)">@grupo.TextoTotal</span>
+        </header>
+        <div class="of-grupo-card">
+            @foreach (var linha in grupo.Linhas)
+            {
+                <EntryRow Linha="linha" PermiteAlterar="PermiteAlterar"
+                          OnAbrir="OnAbrir" OnExcluir="OnExcluir" OnAlternarPago="OnAlternarPago" />
+            }
+        </div>
+    </section>;
+}

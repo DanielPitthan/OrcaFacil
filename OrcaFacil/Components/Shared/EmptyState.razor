@@ -1,9 +1,23 @@
-<div class="of-empty-state">
-    <MudIcon Icon="@Icon" Size="Size.Large" Color="Color.Secondary" />
+<div class="of-empty-state @(Legivel ? "of-empty-legivel" : null)">
+    @if (Ilustracao is not null)
+    {
+        @Ilustracao
+    }
+    else
+    {
+        <MudIcon Icon="@Icon" Size="Size.Large" Color="Color.Secondary" aria-hidden="true" />
+    }
     <MudText Typo="Typo.subtitle1" Class="mt-2">@Mensagem</MudText>
     @if (!string.IsNullOrWhiteSpace(Subtitulo))
     {
         <MudText Typo="Typo.body2" Color="Color.Secondary">@Subtitulo</MudText>
+    }
+    @if (!string.IsNullOrWhiteSpace(TextoAcao))
+    {
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="of-empty-acao"
+                   Disabled="AcaoDesabilitada" OnClick="OnAcao" aria-label="@TextoAcao">
+            @TextoAcao
+        </MudButton>
     }
 </div>
 
@@ -11,4 +25,9 @@
     [Parameter] public string Icon { get; set; } = MudBlazor.Icons.Material.Filled.Inbox;
     [Parameter] public string Mensagem { get; set; } = "Nada por aqui ainda";
     [Parameter] public string? Subtitulo { get; set; }
+    [Parameter] public RenderFragment? Ilustracao { get; set; }
+    [Parameter] public string? TextoAcao { get; set; }
+    [Parameter] public EventCallback OnAcao { get; set; }
+    [Parameter] public bool AcaoDesabilitada { get; set; }
+    [Parameter] public bool Legivel { get; set; }
 }

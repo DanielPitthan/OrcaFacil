@@ -1,0 +1,21 @@
+.of-lancamentos {
+    min-width: 0;
+    max-width: 100%;
+    padding-bottom: 96px;
+    overflow-x: hidden;
+}
+
+.of-busca {
+    margin-bottom: 12px;
+}
+
+.of-avisos {
+    margin-bottom: 12px;
+}
+
+.of-fab {
+    position: fixed;
+    right: 16px;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    z-index: 1200;
+}

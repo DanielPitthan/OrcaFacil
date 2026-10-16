@@ -65,6 +65,8 @@ public static class OrcaFacilThemes
             GrayDefault = "#9AA3B2",
             GrayLight = "#3A4150",
             GrayLighter = "#262C38"
+            // Saldo #B69CFF não cabe em nenhum slot da PaletteDark (Tertiary já é a marca).
+            // O token vive em --of-saldo, no CSS do tema.
         },
         Typography = new Typography
         {
