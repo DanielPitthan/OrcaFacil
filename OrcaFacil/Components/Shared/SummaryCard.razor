@@ -1,0 +1,74 @@
+@using System.Globalization
+@using OrcaFacil.Core.Lancamentos
+
+<section class="of-resumo" aria-label="@Rotulo">
+    <div class="of-resumo-topo">
+        <span class="of-resumo-rotulo">@Rotulo</span>
+        @if (!string.IsNullOrWhiteSpace(Status))
+        {
+            <span class="of-status @ClasseStatus">@Status</span>
+        }
+    </div>
+
+    <p class="of-resumo-valor of-moeda">
+        <span class="of-resumo-simbolo">@Simbolo</span>
+        <span class="of-resumo-numero">@Numero</span>
+    </p>
+
+    @if (!string.IsNullOrWhiteSpace(Contexto))
+    {
+        <p class="of-resumo-contexto">@Contexto</p>
+    }
+
+    <div class="of-resumo-barra">
+        <MudProgressLinear Value="@Progresso" Min="0" Max="100" Rounded="true" Size="Size.Small"
+                           Color="@(ProgressoCritico ? Color.Error : Color.Primary)"
+                           aria-label="Progresso do detalhamento" />
+    </div>
+
+    @if (Legendas.Count > 0)
+    {
+        <div class="of-resumo-grade">
+            @foreach (var legenda in Legendas)
+            {
+                <div class="of-resumo-legenda">
+                    <span class="of-resumo-marca @ClasseTom(legenda.Tom)" aria-hidden="true"></span>
+                    <span class="of-resumo-legenda-rotulo">@legenda.Rotulo</span>
+                    <span class="of-resumo-legenda-valor of-moeda">@legenda.Valor</span>
+                </div>
+            }
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter] public string Rotulo { get; set; } = "";
+    [Parameter] public decimal Valor { get; set; }
+    [Parameter] public string? Contexto { get; set; }
+    [Parameter] public string? Status { get; set; }
+    [Parameter] public TomResumo TomStatus { get; set; } = TomResumo.Neutro;
+    [Parameter] public double Progresso { get; set; }
+    [Parameter] public bool ProgressoCritico { get; set; }
+    [Parameter] public IReadOnlyList<LegendaResumo> Legendas { get; set; } = [];
+
+    private string Simbolo => FaturaCartaoEditor.PartirMoeda(Valor, CultureInfo.CurrentCulture).Simbolo;
+    private string Numero => FaturaCartaoEditor.PartirMoeda(Valor, CultureInfo.CurrentCulture).Numero;
+
+    private string ClasseStatus => ClasseTom(TomStatus) switch
+    {
+        "of-tom-sucesso" => "of-status-sucesso",
+        "of-tom-alerta" => "of-status-alerta",
+        "of-tom-erro" => "of-status-erro",
+        "of-tom-primario" => "of-status-primario",
+        _ => "of-status-neutro"
+    };
+
+    private static string ClasseTom(TomResumo tom) => tom switch
+    {
+        TomResumo.Sucesso => "of-tom-sucesso",
+        TomResumo.Alerta => "of-tom-alerta",
+        TomResumo.Erro => "of-tom-erro",
+        TomResumo.Primario => "of-tom-primario",
+        _ => "of-tom-neutro"
+    };
+}

@@ -1,0 +1,27 @@
+.of-action-spacer {
+    height: calc(76px + env(safe-area-inset-bottom, 0px));
+}
+
+.of-action-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: var(--of-teclado, 0px);
+    z-index: 1000;
+    display: flex;
+    box-sizing: border-box;
+    padding: 12px var(--of-space-page) calc(12px + env(safe-area-inset-bottom, 0px));
+    background: var(--of-surface);
+    border-top: 1px solid var(--of-border);
+}
+
+.of-action-bar ::deep .of-action-botao {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: var(--of-touch);
+    border-radius: var(--of-radius-control);
+}
+
+.of-action-bar ::deep .of-action-botao + .of-action-botao {
+    margin-left: 12px;
+}

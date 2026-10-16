@@ -1,0 +1,112 @@
+/* Aberto com altura ainda não medida: o MudDrawer 9 deixa visibility:hidden inline. */
+.of-sheet-host ::deep .of-sheet.mud-drawer.mud-drawer--open.mud-drawer-pos-bottom {
+    visibility: visible !important;
+    height: auto !important;
+    max-height: 92vh;
+    max-height: min(92vh, 720px);
+    max-height: min(92dvh, 720px);
+    border-radius: var(--of-radius-sheet) var(--of-radius-sheet) 0 0;
+    background: var(--of-surface);
+    color: var(--of-text);
+    overflow: hidden;
+}
+
+.of-sheet-host ::deep .of-sheet.mud-drawer--open .mud-drawer-content {
+    height: auto;
+    max-height: inherit;
+    min-height: 0;
+}
+
+.of-sheet-corpo {
+    display: flex;
+    flex-direction: column;
+    max-height: 92vh;
+    max-height: min(92vh, 720px);
+    max-height: min(92dvh, 720px);
+    padding: 8px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+    box-sizing: border-box;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.of-sheet-cabeca {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: var(--of-touch);
+}
+
+.of-sheet-titulo {
+    margin: 0 12px 0 0;
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--of-text);
+}
+
+.of-valor-destaque {
+    padding: 8px 0 12px;
+}
+
+.of-valor-destaque ::deep .mud-input-outlined-border,
+.of-valor-destaque ::deep .mud-input-underline {
+    border-color: var(--of-border-strong);
+}
+
+.of-valor-destaque ::deep .mud-input-control {
+    background: var(--of-input-bg);
+    border-radius: var(--of-radius-control);
+}
+
+.of-valor-destaque ::deep input {
+    text-align: center;
+    font-size: 2rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--of-text);
+    min-height: 56px;
+}
+
+.of-sheet-dica {
+    margin: 8px 0 0;
+    text-align: center;
+    color: var(--of-text-secondary);
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.of-sheet-dica-critica {
+    color: var(--of-error);
+}
+
+.of-sheet-campos {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.of-sheet-campos > * + * {
+    margin-top: 16px;
+}
+
+.of-sheet-erro {
+    margin: 8px 0 0;
+    color: var(--of-error);
+    font-size: 0.8125rem;
+}
+
+.of-sheet-acoes {
+    display: flex;
+    margin-top: 16px;
+}
+
+.of-sheet-acoes ::deep .of-sheet-botao + .of-sheet-botao {
+    margin-left: 12px;
+}
+
+.of-sheet-acoes ::deep .of-sheet-botao {
+    flex: 1 1 0;
+    min-height: var(--of-touch);
+    border-radius: var(--of-radius-control);
+}

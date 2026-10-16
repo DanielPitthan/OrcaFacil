@@ -1,0 +1,92 @@
+@typeparam TItem
+
+<div class="of-sheet-host">
+    <MudDrawer @bind-Open="Aberto" Anchor="Anchor.Bottom" Variant="DrawerVariant.Temporary" Overlay="true"
+               ClipMode="DrawerClipMode.Never" Elevation="8" Class="of-sheet" aria-label="@Titulo">
+        <div class="of-sheet-corpo">
+            <div class="of-sheet-cabeca">
+                <h2 class="of-sheet-titulo">@Titulo</h2>
+                <MudIconButton Icon="@Icons.Material.Filled.Close" aria-label="Fechar" OnClick="FecharAsync" />
+            </div>
+
+            <div class="of-valor-destaque">
+                <CampoNumerico @ref="_valor" TNumber="decimal" Value="Valor" ValueChanged="ValorChanged" Label="@RotuloValor"
+                                Adornment="Adornment.Start" AdornmentText="R$" />
+                @if (!string.IsNullOrWhiteSpace(Dica))
+                {
+                    <p class="of-sheet-dica @(DicaCritica ? "of-sheet-dica-critica" : null)">@Dica</p>
+                }
+            </div>
+
+            <div class="of-sheet-campos">
+                @ChildContent
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(Erro))
+            {
+                <p class="of-sheet-erro" role="alert">@Erro</p>
+            }
+
+            <div class="of-sheet-acoes">
+                @if (MostrarOutro)
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="of-sheet-botao"
+                               OnClick="ConfirmarOutroAsync">
+                        @TextoOutro
+                    </MudButton>
+                }
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="of-sheet-botao"
+                           OnClick="ConfirmarAsync">
+                    @TextoConfirmar
+                </MudButton>
+            </div>
+        </div>
+    </MudDrawer>
+</div>
+
+@code {
+    private CampoNumerico<decimal>? _valor;
+    private bool _estavaAberto;
+
+    [Parameter] public TItem? Item { get; set; }
+    [Parameter] public bool Aberto { get; set; }
+    [Parameter] public EventCallback<bool> AbertoChanged { get; set; }
+    [Parameter] public string Titulo { get; set; } = "Item";
+    [Parameter] public string RotuloValor { get; set; } = "Valor";
+    [Parameter] public decimal Valor { get; set; }
+    [Parameter] public EventCallback<decimal> ValorChanged { get; set; }
+    [Parameter] public string? Dica { get; set; }
+    [Parameter] public bool DicaCritica { get; set; }
+    [Parameter] public string? Erro { get; set; }
+    [Parameter] public bool MostrarOutro { get; set; } = true;
+    [Parameter] public string TextoConfirmar { get; set; } = "Adicionar";
+    [Parameter] public string TextoOutro { get; set; } = "Adicionar outro";
+    [Parameter] public EventCallback<TItem> OnConfirmar { get; set; }
+    [Parameter] public EventCallback<TItem> OnConfirmarOutro { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Aberto && !_estavaAberto && _valor is not null)
+            await _valor.FocusAsync();
+
+        _estavaAberto = Aberto;
+    }
+
+    public async Task FocarValorAsync()
+    {
+        if (_valor is not null)
+            await _valor.FocusAsync();
+    }
+
+    private Task FecharAsync() => AbertoChanged.InvokeAsync(false);
+
+    private Task ConfirmarAsync() => OnConfirmar.InvokeAsync(Item!);
+
+    private async Task ConfirmarOutroAsync()
+    {
+        await OnConfirmarOutro.InvokeAsync(Item!);
+        if (Aberto)
+            await FocarValorAsync();
+    }
+}

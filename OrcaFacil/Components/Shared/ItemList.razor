@@ -1,0 +1,66 @@
+@typeparam TItem
+
+<div class="of-lista">
+    <div class="of-lista-cabeca">
+        <span>@Contagem</span>
+        <span class="of-moeda">@SomaFormatada</span>
+    </div>
+
+    @if (Itens.Count == 0)
+    {
+        <p class="of-lista-vazia">@TextoVazio</p>
+    }
+    else
+    {
+        <ul class="of-lista-itens">
+            @foreach (var item in Itens)
+            {
+                <li @key="Chave(item)" class="of-lista-item">
+                    <span class="of-lista-icone" style="@Fundo(item)" aria-hidden="true">@Icone(item)</span>
+                    <span class="of-lista-texto">
+                        <span class="of-lista-titulo">@Titulo(item)</span>
+                        <span class="of-lista-sub">@Subtitulo(item)</span>
+                    </span>
+                    <span class="of-lista-valor of-moeda">@Valor(item)</span>
+                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" AriaLabel="@AriaMenu(item)" Size="Size.Medium"
+                             AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopRight">
+                        <MudMenuItem OnClick="@(() => OnEditar.InvokeAsync(item))">Editar</MudMenuItem>
+                        <MudMenuItem OnClick="@(() => OnRemover.InvokeAsync(item))">Remover</MudMenuItem>
+                    </MudMenu>
+                </li>
+            }
+        </ul>
+    }
+
+    <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
+               Class="of-lista-adicionar" OnClick="OnAdicionar">
+        @TextoAdicionar
+    </MudButton>
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<TItem> Itens { get; set; } = [];
+    [Parameter] public string Contagem { get; set; } = "";
+    [Parameter] public string SomaFormatada { get; set; } = "";
+    [Parameter] public string TextoVazio { get; set; } = "Nenhum item ainda. Inclua um por vez.";
+    [Parameter] public string TextoAdicionar { get; set; } = "Adicionar item";
+    [Parameter, EditorRequired] public Func<TItem, string> Titulo { get; set; } = null!;
+    [Parameter, EditorRequired] public Func<TItem, string> Subtitulo { get; set; } = null!;
+    [Parameter, EditorRequired] public Func<TItem, string> Valor { get; set; } = null!;
+    [Parameter, EditorRequired] public Func<TItem, string> Icone { get; set; } = null!;
+    [Parameter] public Func<TItem, string?>? Cor { get; set; }
+    [Parameter] public Func<TItem, object>? ChaveItem { get; set; }
+    [Parameter] public EventCallback<TItem> OnEditar { get; set; }
+    [Parameter] public EventCallback<TItem> OnRemover { get; set; }
+    [Parameter] public EventCallback OnAdicionar { get; set; }
+
+    private object Chave(TItem item) => ChaveItem?.Invoke(item) ?? (object)item!;
+
+    private string? Fundo(TItem item)
+    {
+        var cor = Cor?.Invoke(item);
+        return string.IsNullOrWhiteSpace(cor) ? null : $"background:{cor}";
+    }
+
+    private string AriaMenu(TItem item) => $"Ações de {Titulo(item)}";
+}

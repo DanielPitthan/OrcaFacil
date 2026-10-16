@@ -4,6 +4,73 @@
     --of-blue-grey: #659ECD;
     --of-lime-moss: #A2B94F;
     --of-burnt-peach: #EF7F5D;
+
+    /* Apelidos dos tokens. As cores saem do MudTheme (PaletteDark no modo escuro). */
+    --of-background: var(--mud-palette-background);
+    --of-surface: var(--mud-palette-surface);
+    --of-input-bg: var(--mud-palette-background-gray);
+    --of-chip-bg: var(--mud-palette-gray-lighter);
+    --of-border: var(--mud-palette-lines-default);
+    --of-border-strong: var(--mud-palette-lines-inputs);
+    --of-text: var(--mud-palette-text-primary);
+    --of-text-secondary: var(--mud-palette-text-secondary);
+    --of-text-muted: var(--mud-palette-text-disabled);
+    --of-primary: var(--mud-palette-primary);
+    --of-on-primary: var(--mud-palette-primary-text);
+    --of-success: var(--mud-palette-success);
+    --of-success-text: var(--mud-palette-success-lighten);
+    --of-warning: var(--mud-palette-warning);
+    --of-error: var(--mud-palette-error);
+
+    --of-radius-card: 16px;
+    --of-radius-control: 12px;
+    --of-radius-sheet: 24px;
+    --of-radius-chip: 8px;
+    --of-radius-pill: 20px;
+    --of-space-page: 16px;
+    --of-space-section: 24px;
+    --of-row-height: 64px;
+    --of-touch: 44px;
+}
+
+.of-moeda {
+    font-variant-numeric: tabular-nums;
+}
+
+.of-appbar-titulos {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+    flex: 1 1 auto;
+    margin-left: 4px;
+}
+
+.of-appbar-titulo {
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--of-text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.of-appbar-sub {
+    font-size: 0.75rem;
+    line-height: 1.2;
+    color: var(--of-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* O estado do teclado vive no html, fora do escopo isolado do bottom sheet.
+   A especificidade precisa vencer a regra scoped do sheet, que carrega por último. */
+html.of-teclado-aberto .mud-drawer.of-sheet.mud-drawer-temporary.mud-drawer--open.mud-drawer-pos-bottom {
+    bottom: var(--of-teclado, 0px) !important;
+    max-height: calc(100vh - var(--of-teclado, 0px) - 8px) !important;
+    max-height: calc(100dvh - var(--of-teclado, 0px) - 8px) !important;
 }
 
 html, body {

@@ -1,0 +1,18 @@
+@typeparam T where T : notnull
+
+<div class="of-segmented" role="group" aria-label="@AriaLabel">
+    <MudToggleGroup T="T" Value="Valor" ValueChanged="ValorChanged" SelectionMode="SelectionMode.SingleSelection"
+                    CheckMark="false" Outlined="true" Delimiters="true" Color="Color.Primary" Class="of-segmented-grupo">
+        @foreach (var opcao in Opcoes)
+        {
+            <MudToggleItem T="T" Value="@opcao.Valor" Text="@opcao.Texto" />
+        }
+    </MudToggleGroup>
+</div>
+
+@code {
+    [Parameter] public T? Valor { get; set; }
+    [Parameter] public EventCallback<T?> ValorChanged { get; set; }
+    [Parameter] public IReadOnlyList<OpcaoSegmento<T>> Opcoes { get; set; } = [];
+    [Parameter] public string AriaLabel { get; set; } = "Seleção";
+}

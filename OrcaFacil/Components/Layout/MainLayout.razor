@@ -1,5 +1,6 @@
 @inherits LayoutComponentBase
 @implements IDisposable
+@inject CascoNavegacao Casco
 
 <MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
@@ -8,9 +9,16 @@
 
 <MudLayout>
     <MudAppBar Elevation="1">
-        <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" OnClick="@(() => _drawerOpen = !_drawerOpen)" />
-        <MudText Typo="Typo.h6" Class="ml-2">Pro Orçamento</MudText>
-        <MudSpacer />
+        @if (Casco.Barra is { } barra)
+        {
+            @barra
+        }
+        else
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start" aria-label="Abrir menu" OnClick="@(() => _drawerOpen = !_drawerOpen)" />
+            <MudText Typo="Typo.h6" Class="ml-2">Pro Orçamento</MudText>
+            <MudSpacer />
+        }
     </MudAppBar>
 
     <MudDrawer @bind-Open="_drawerOpen" ClipMode="DrawerClipMode.Always" Elevation="1">
@@ -32,6 +40,7 @@
 
     protected override void OnInitialized()
     {
+        Casco.Alterado += OnCascoAlterado;
         AtualizarTema(Application.Current?.RequestedTheme ?? AppTheme.Light);
 
         if (Application.Current is not null)
@@ -50,8 +59,11 @@
         _theme = _isDarkMode ? OrcaFacil.Theme.OrcaFacilThemes.Dark : OrcaFacil.Theme.OrcaFacilThemes.Light;
     }
 
+    private void OnCascoAlterado() => _ = InvokeAsync(StateHasChanged);
+
     public void Dispose()
     {
+        Casco.Alterado -= OnCascoAlterado;
         if (Application.Current is not null)
             Application.Current.RequestedThemeChanged -= OnRequestedThemeChanged;
     }

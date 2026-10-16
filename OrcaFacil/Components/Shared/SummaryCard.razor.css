@@ -1,0 +1,148 @@
+.of-resumo {
+    background: var(--of-surface);
+    border: 1px solid var(--of-border);
+    border-radius: var(--of-radius-card);
+    padding: 16px;
+    color: var(--of-text);
+}
+
+.of-resumo-topo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.of-resumo-rotulo {
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--of-text-muted);
+}
+
+.of-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    padding: 2px 10px;
+    border-radius: var(--of-radius-pill);
+    background: var(--of-chip-bg);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.of-status-sucesso {
+    color: var(--of-success-text);
+}
+
+.of-status-alerta {
+    color: var(--of-warning);
+}
+
+.of-status-erro {
+    color: var(--of-error);
+}
+
+.of-status-primario {
+    color: var(--of-primary);
+}
+
+.of-status-neutro {
+    color: var(--of-text-secondary);
+}
+
+.of-resumo-valor {
+    display: flex;
+    align-items: baseline;
+    margin: 8px 0 0;
+    min-width: 0;
+    color: var(--of-text);
+}
+
+.of-resumo-simbolo {
+    font-size: 1rem;
+    font-weight: 500;
+    color: var(--of-text-muted);
+}
+
+.of-resumo-numero {
+    margin-left: 6px;
+    font-size: 2rem;
+    font-weight: 600;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.of-resumo-contexto {
+    margin: 4px 0 0;
+    color: var(--of-text-secondary);
+    font-size: 0.875rem;
+}
+
+.of-resumo-barra {
+    margin-top: 14px;
+}
+
+.of-resumo-grade {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px;
+    margin-top: 12px;
+}
+
+.of-resumo-legenda {
+    display: grid;
+    grid-template-columns: 8px minmax(0, 1fr);
+    column-gap: 8px;
+    row-gap: 2px;
+    align-items: center;
+    min-width: 0;
+}
+
+.of-resumo-marca {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    grid-row: 1 / span 2;
+}
+
+.of-tom-primario {
+    background: var(--of-primary);
+}
+
+.of-tom-sucesso {
+    background: var(--of-success);
+}
+
+.of-tom-alerta {
+    background: var(--of-warning);
+}
+
+.of-tom-erro {
+    background: var(--of-error);
+}
+
+.of-tom-neutro {
+    background: var(--of-text-muted);
+}
+
+.of-resumo-legenda-rotulo {
+    color: var(--of-text-muted);
+    font-size: 12px;
+    line-height: 1.2;
+}
+
+.of-resumo-legenda-valor {
+    color: var(--of-text);
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
