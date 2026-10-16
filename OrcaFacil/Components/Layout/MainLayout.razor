@@ -1,13 +1,15 @@
 @inherits LayoutComponentBase
 @implements IDisposable
 @inject CascoNavegacao Casco
+@inject ITemaAppService TemaApp
+@inject IJSRuntime Js
 
 <MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
-<MudLayout Class="@(_isDarkMode ? "of-tema-escuro" : "of-tema-claro")">
+<MudLayout>
     <MudAppBar Elevation="1">
         @if (Casco.Barra is { } barra)
         {
@@ -36,12 +38,19 @@
 @code {
     private bool _drawerOpen = true;
     private bool _isDarkMode;
+    private string _classeCss = MapeamentoTema.ClasseClaro;
+    private string? _classeAplicada;
     private MudTheme _theme = OrcaFacil.Theme.OrcaFacilThemes.Light;
 
     protected override void OnInitialized()
     {
         Casco.Alterado += OnCascoAlterado;
         Casco.AlternarMenu += OnAlternarMenu;
+
+        // UserAppTheme dispara RequestedThemeChanged na hora, no mesmo call stack.
+        // Aplica e lê o tema efetivo antes de assinar: senão o StateHasChanged do
+        // handler corre dentro do OnInitialized e o layout renderiza duas vezes.
+        TemaApp.AplicarPreferenciaSalva();
         AtualizarTema(Application.Current?.RequestedTheme ?? AppTheme.Light);
 
         if (Application.Current is not null)
@@ -50,15 +59,53 @@
 
     private void OnRequestedThemeChanged(object? sender, AppThemeChangedEventArgs e)
     {
-        AtualizarTema(e.RequestedTheme);
-        InvokeAsync(StateHasChanged);
+        var solicitado = e.RequestedTheme;
+        _ = InvokeAsync(() =>
+        {
+            if (!AtualizarTema(solicitado))
+                return;
+
+            StateHasChanged();
+        });
     }
 
-    private void AtualizarTema(AppTheme appTheme)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        _isDarkMode = appTheme == AppTheme.Dark;
-        _theme = _isDarkMode ? OrcaFacil.Theme.OrcaFacilThemes.Dark : OrcaFacil.Theme.OrcaFacilThemes.Light;
+        if (!firstRender && _classeAplicada == _classeCss)
+            return;
+
+        var classe = _classeCss;
+        try
+        {
+            await Js.InvokeVoidAsync("OrcaFacilTema.aplicar", classe);
+            _classeAplicada = classe;
+        }
+        catch (JSDisconnectedException)
+        {
+        }
     }
+
+    /// <returns>true quando o claro/escuro efetivo mudou.</returns>
+    private bool AtualizarTema(AppTheme appTheme)
+    {
+        var escuro = MapeamentoTema.IsDarkMode(ParaTemaUsuario(appTheme));
+        var classe = MapeamentoTema.ClasseCss(escuro);
+        var theme = escuro ? OrcaFacil.Theme.OrcaFacilThemes.Dark : OrcaFacil.Theme.OrcaFacilThemes.Light;
+        if (_isDarkMode == escuro && _classeCss == classe && ReferenceEquals(_theme, theme))
+            return false;
+
+        _isDarkMode = escuro;
+        _classeCss = classe;
+        _theme = theme;
+        return true;
+    }
+
+    private static TemaUsuarioApp ParaTemaUsuario(AppTheme tema) => tema switch
+    {
+        AppTheme.Dark => TemaUsuarioApp.Dark,
+        AppTheme.Light => TemaUsuarioApp.Light,
+        _ => TemaUsuarioApp.Unspecified
+    };
 
     private void OnCascoAlterado() => _ = InvokeAsync(StateHasChanged);
 

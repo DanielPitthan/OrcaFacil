@@ -1,4 +1,5 @@
 using OrcaFacil.Core.Enums;
+using OrcaFacil.Core.Tema;
 
 namespace OrcaFacil.Services.Interfaces;
 
@@ -12,6 +13,9 @@ public interface IConfiguracaoService
     /// <summary>Gráfico da listagem de lançamentos. Começa expandido.</summary>
     bool GraficoLancamentosExpandido { get; set; }
 
-    /// <summary>Remove todas as preferências gravadas, voltando aos valores padrão.</summary>
+    /// <summary>Tema da interface. Chave <c>Config.Tema</c>: Claro, Escuro ou Automatico. Padrão: Automatico.</summary>
+    TemaPreferido Tema { get; set; }
+
+    /// <summary>Remove as preferências gravadas e volta ao padrão. A chave <c>Config.Tema</c> é preservada.</summary>
     void Redefinir();
 }
