@@ -269,6 +269,9 @@ namespace OrcaFacil.Core.Data.Migrations
                         .HasMaxLength(120)
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("EhEstorno")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("Natureza")
                         .HasColumnType("INTEGER");
 

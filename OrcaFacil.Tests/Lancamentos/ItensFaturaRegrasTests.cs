@@ -101,6 +101,85 @@ public class ItensFaturaRegrasTests
     }
 
     [Fact]
+    public void Validar_MagnitudeNaoPositiva_Recusa()
+    {
+        var exZero = Assert.Throws<InvalidOperationException>(() =>
+            ItensFaturaRegras.Validar(100m, categoriaFaturaId: 1, permiteItens: true, TipoTransacao.Despesa, [Item("Almoço", 0m, 2)]));
+        var exNegativo = Assert.Throws<InvalidOperationException>(() =>
+            ItensFaturaRegras.Validar(100m, categoriaFaturaId: 1, permiteItens: true, TipoTransacao.Despesa, [Item("Almoço", -10m, 2)]));
+
+        Assert.Contains("maior que zero", exZero.Message);
+        Assert.Contains("maior que zero", exNegativo.Message);
+    }
+
+    [Fact]
+    public void Validar_SomaAssinadaAcimaDoTotal_RecusaEDentroDoTotalAceita()
+    {
+        var acima = new List<ItemLancamento>
+        {
+            Item("Almoço", 80m, 2),
+            Estorno("Devolução", 10m, 3)
+        };
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            ItensFaturaRegras.Validar(60m, categoriaFaturaId: 1, permiteItens: true, TipoTransacao.Despesa, acima));
+        Assert.Contains("não pode passar", ex.Message);
+
+        var dentro = new List<ItemLancamento>
+        {
+            Item("Almoço", 80m, 2),
+            Estorno("Devolução", 30m, 3)
+        };
+        ItensFaturaRegras.Validar(50m, categoriaFaturaId: 1, permiteItens: true, TipoTransacao.Despesa, dentro);
+        Assert.Equal(50m, dentro.Sum(ItensFaturaRegras.ValorAssinado));
+    }
+
+    [Fact]
+    public void Validar_TotalLiquidoAbaixoDoMinimo_Recusa()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            ItensFaturaRegras.Validar(0m, categoriaFaturaId: 1, permiteItens: true, TipoTransacao.Despesa, [Item("Almoço", 10m, 2)]));
+
+        Assert.Contains("0,01", ex.Message);
+    }
+
+    [Theory]
+    [InlineData(NaturezaItemLancamento.Parcelada)]
+    [InlineData(NaturezaItemLancamento.Assinatura)]
+    public void Validar_EstornoForaDeAvulso_Recusa(NaturezaItemLancamento natureza)
+    {
+        var item = Estorno("Devolução", 20m, 2);
+        item.Natureza = natureza;
+        if (natureza == NaturezaItemLancamento.Parcelada)
+        {
+            item.ParcelaAtual = 1;
+            item.TotalParcelas = 2;
+        }
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            ItensFaturaRegras.Validar(100m, categoriaFaturaId: 1, permiteItens: true, TipoTransacao.Despesa, [item]));
+
+        Assert.Contains("avulso", ex.Message);
+    }
+
+    [Fact]
+    public void SelecionarParaCopia_IgnoraEstorno()
+    {
+        var itens = new List<ItemLancamento>
+        {
+            new() { Id = 1, Descricao = "Netflix", Valor = 70m, Natureza = NaturezaItemLancamento.Assinatura, CategoriaId = 2, Ordem = 0 },
+            new() { Id = 2, Descricao = "Estorno mercado", Valor = 40m, EhEstorno = true, Natureza = NaturezaItemLancamento.Avulsa, CategoriaId = 3, Ordem = 1 },
+            new() { Id = 3, Descricao = "Mesa", Valor = 200m, Natureza = NaturezaItemLancamento.Parcelada, ParcelaAtual = 1, TotalParcelas = 3, CategoriaId = 4, Ordem = 2 }
+        };
+
+        var copias = ItensFaturaRegras.SelecionarParaCopia(itens);
+
+        Assert.Equal(2, copias.Count);
+        Assert.DoesNotContain(copias, i => i.EhEstorno);
+        Assert.Equal(["Netflix", "Mesa"], copias.Select(i => i.Descricao));
+        Assert.Equal(270m, copias.Sum(ItensFaturaRegras.ValorAssinado));
+    }
+
+    [Fact]
     public void SelecionarParaCopia_PreservaDescritivoDeAssinaturasDaMesmaCategoria()
     {
         var itens = new List<ItemLancamento>
@@ -125,6 +204,15 @@ public class ItensFaturaRegrasTests
         Descricao = descricao,
         Descritivo = descritivo,
         Valor = valor,
+        CategoriaId = categoriaId,
+        Natureza = NaturezaItemLancamento.Avulsa
+    };
+
+    private static ItemLancamento Estorno(string descricao, decimal valor, int categoriaId) => new()
+    {
+        Descricao = descricao,
+        Valor = valor,
+        EhEstorno = true,
         CategoriaId = categoriaId,
         Natureza = NaturezaItemLancamento.Avulsa
     };

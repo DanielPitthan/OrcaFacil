@@ -154,6 +154,7 @@ public class TransacaoService : ITransacaoService
             Descricao = item.Descricao?.Trim() ?? string.Empty,
             Descritivo = ItensFaturaInclusao.NormalizarDescritivo(item.Descritivo),
             Valor = item.Valor,
+            EhEstorno = item.EhEstorno,
             Natureza = item.Natureza,
             ParcelaAtual = item.Natureza == NaturezaItemLancamento.Parcelada ? item.ParcelaAtual : null,
             TotalParcelas = item.Natureza == NaturezaItemLancamento.Parcelada ? item.TotalParcelas : null,

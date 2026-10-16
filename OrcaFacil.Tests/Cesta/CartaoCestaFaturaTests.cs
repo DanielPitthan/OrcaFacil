@@ -252,5 +252,78 @@ public class CartaoCestaFaturaTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task Credito_EditarCompra_NaoRegravaNemApagaEstorno()
+    {
+        var nubank = await _cartaoService.SalvarAsync(new CartaoFormModel
+        {
+            Nome = "Nubank",
+            Bandeira = "Mastercard",
+            UltimosDigitos = "2222",
+            Tipo = TipoCartao.Credito
+        });
+        var categoriaCartaoId = await _cestas.ObterOuCriarCategoriaCartaoCreditoAsync();
+        var faturaExistente = new Transacao
+        {
+            Descricao = "Fatura Outubro",
+            Valor = 100m,
+            Data = new DateTime(2026, 10, 20),
+            Tipo = TipoTransacao.Despesa,
+            Pago = true,
+            CategoriaId = categoriaCartaoId,
+            MembroFamiliaId = _membroId
+        };
+        await _transacaoRepo.AddAsync(faturaExistente);
+
+        var arroz = await _cestaService.SalvarProdutoAsync(new ProdutoCestaFormModel { Nome = "Arroz", CategoriaId = _alimentacao.Id });
+        var local = await _cestaService.SalvarLocalAsync(new LocalCompraFormModel { Nome = "Boa Supermercado" });
+        var modelo = new CompraCestaFormModel
+        {
+            LocalCompraId = local.Id,
+            Data = new DateTime(2026, 10, 12),
+            ValorDinheiro = 0m,
+            ValorCartaoCredito = 90m,
+            CartaoCreditoId = nubank.Id,
+            FaturaTransacaoId = faturaExistente.Id,
+            Itens = [new ItemCompraCestaFormModel { ProdutoCestaId = arroz.Id, Preco = 90m }]
+        };
+        var compra = await _cestaService.SalvarCompraAsync(modelo, _membroId);
+        var estorno = await new EstornoFaturaService(_factory).LancarAsync(
+            faturaExistente.Id, 80m, "Estorno mercado", _alimentacao.Id);
+
+        modelo.Id = compra.Id;
+        modelo.ValorCartaoCredito = 40m;
+        modelo.Itens[0].Preco = 40m;
+        await _cestaService.SalvarCompraAsync(modelo, _membroId);
+
+        await using (var ctx = _factory.CreateDbContext())
+        {
+            var fatura = await ctx.Transacoes.Include(t => t.Itens).SingleAsync(t => t.Id == faturaExistente.Id);
+            Assert.Equal(60m, fatura.Valor);
+            var credito = fatura.Itens.Single(i => i.Id == estorno.Id);
+            Assert.True(credito.EhEstorno);
+            Assert.Equal(80m, credito.Valor);
+            Assert.Equal("Estorno mercado", credito.Descricao);
+            Assert.Equal(_alimentacao.Id, credito.CategoriaId);
+            Assert.Equal(NaturezaItemLancamento.Avulsa, credito.Natureza);
+            Assert.Equal(40m, fatura.Itens.Single(i => !i.EhEstorno).Valor);
+        }
+
+        modelo.ValorCartaoCredito = 0m;
+        modelo.ValorDinheiro = 40m;
+        await _cestaService.SalvarCompraAsync(modelo, _membroId);
+
+        await using (var ctx = _factory.CreateDbContext())
+        {
+            var fatura = await ctx.Transacoes.Include(t => t.Itens).SingleAsync(t => t.Id == faturaExistente.Id);
+            var credito = Assert.Single(fatura.Itens);
+            Assert.Equal(estorno.Id, credito.Id);
+            Assert.True(credito.EhEstorno);
+            Assert.Equal(80m, credito.Valor);
+            Assert.Equal("Estorno mercado", credito.Descricao);
+            Assert.Equal(20m, fatura.Valor);
+        }
+    }
+
     public void Dispose() => _factory.Dispose();
 }

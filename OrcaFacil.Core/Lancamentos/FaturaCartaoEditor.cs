@@ -1,5 +1,6 @@
 using System.Globalization;
 using OrcaFacil.Core.Dtos;
+using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
 
 namespace OrcaFacil.Core.Lancamentos;
@@ -35,7 +36,11 @@ public static class FaturaCartaoEditor
         _ => "Pendente"
     };
 
-    public static decimal Soma(IEnumerable<decimal> valores) => valores.Sum();
+    public static decimal Soma(IEnumerable<ItemLancamentoFormModel> itens)
+        => itens.Sum(ItensFaturaRegras.ValorAssinado);
+
+    public static decimal Soma(IEnumerable<ItemLancamento> itens)
+        => itens.Sum(ItensFaturaRegras.ValorAssinado);
 
     public static decimal Restante(decimal total, decimal soma) => total - soma;
 
@@ -45,7 +50,15 @@ public static class FaturaCartaoEditor
         => quantidade > 0 && soma > total;
 
     public static double PercentualClassificado(decimal total, decimal soma)
-        => total <= 0 ? 100d : (double)Math.Min(100m, soma / total * 100m);
+    {
+        if (total <= 0)
+            return 100d;
+
+        if (soma <= 0)
+            return 0d;
+
+        return (double)Math.Min(100m, soma / total * 100m);
+    }
 
     public static (string Simbolo, string Numero) PartirMoeda(decimal valor, CultureInfo cultura)
     {
@@ -74,13 +87,17 @@ public static class FaturaCartaoEditor
         decimal valor,
         NaturezaItemLancamento natureza,
         int? parcelaAtual,
-        int? totalParcelas)
+        int? totalParcelas,
+        bool ehEstorno = false)
     {
         if (categoriaId <= 0)
             return "Selecione a despesa.";
 
         if (valor <= 0)
             return "Informe o valor do item.";
+
+        if (ehEstorno && natureza != NaturezaItemLancamento.Avulsa)
+            return "Estorno só pode ser avulso.";
 
         if (natureza == NaturezaItemLancamento.Parcelada
             && (parcelaAtual is not > 0 || totalParcelas is not > 0 || parcelaAtual > totalParcelas))
@@ -89,6 +106,32 @@ public static class FaturaCartaoEditor
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Mesma regra de <see cref="ItensFaturaRegras.Validar"/>, a partir do rascunho da tela.
+    /// A cesta e o salvamento da fatura passam pela regra de itens; esta entrada cobre o editor.
+    /// </summary>
+    public static void ValidarItens(
+        decimal total,
+        int categoriaFaturaId,
+        bool permiteItens,
+        TipoTransacao tipo,
+        IReadOnlyList<ItemLancamentoFormModel> itens)
+    {
+        var entidades = itens.Select(item => new ItemLancamento
+        {
+            Descricao = item.Descricao,
+            Descritivo = item.Descritivo,
+            Valor = item.Valor,
+            EhEstorno = item.EhEstorno,
+            Natureza = item.Natureza,
+            ParcelaAtual = item.ParcelaAtual,
+            TotalParcelas = item.TotalParcelas,
+            CategoriaId = item.CategoriaId
+        }).ToList();
+
+        ItensFaturaRegras.Validar(total, categoriaFaturaId, permiteItens, tipo, entidades);
     }
 
     public static (int? ParcelaAtual, int? TotalParcelas) AoEscolherNatureza(
@@ -155,7 +198,7 @@ public static class FaturaCartaoEditor
         int? totalParcelas,
         string? descritivo)
     {
-        var erro = ValidarItem(categoriaId, valor, natureza, parcelaAtual, totalParcelas);
+        var erro = ValidarItem(categoriaId, valor, natureza, parcelaAtual, totalParcelas, item.EhEstorno);
         if (erro is not null)
             throw new InvalidOperationException(erro);
 
@@ -206,6 +249,7 @@ public static class FaturaCartaoEditor
         Descricao = item.Descricao,
         Descritivo = item.Descritivo,
         Valor = item.Valor,
+        EhEstorno = item.EhEstorno,
         Natureza = item.Natureza,
         ParcelaAtual = item.ParcelaAtual,
         TotalParcelas = item.TotalParcelas,

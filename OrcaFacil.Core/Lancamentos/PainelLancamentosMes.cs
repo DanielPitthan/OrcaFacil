@@ -318,7 +318,7 @@ public sealed class PainelLancamentosMes
         var categoria = lancamento.Categoria?.Nome ?? "";
         var ehCartao = string.Equals(categoria, "Cartão de Crédito", StringComparison.OrdinalIgnoreCase);
         var quantidade = lancamento.Itens?.Count ?? 0;
-        var soma = lancamento.Itens?.Sum(i => i.Valor) ?? 0m;
+        var soma = lancamento.Itens?.Sum(ItensFaturaRegras.ValorAssinado) ?? 0m;
         var itens = quantidade == 1 ? "1 item" : $"{quantidade} itens";
         var subtitulo = ehCartao ? $"Cartão de crédito · {itens}" : categoria;
         string? classificados = ehCartao && soma < lancamento.Valor
