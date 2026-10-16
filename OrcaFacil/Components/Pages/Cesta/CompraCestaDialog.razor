@@ -55,7 +55,7 @@
                             <MudText Typo="Typo.body2">@linha.Preco.ToString("C")</MudText>
                         </div>
                     }
-                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" aria-label="Remover item"
+                    <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Error" Size="Size.Small" aria-label="Remover item"
                                    OnClick="@(() => RemoverLinha(linha))" />
                 </div>
             }
@@ -193,7 +193,7 @@
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="@(() => MudDialog.Cancel())">Cancelar</MudButton>
-        <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="Salvar">Salvar compra</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Salvar">Salvar compra</MudButton>
     </DialogActions>
 </MudDialog>
 

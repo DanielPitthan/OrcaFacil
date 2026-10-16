@@ -108,7 +108,7 @@
                             }
                             @if (!_fechado)
                             {
-                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" aria-label="Excluir"
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" aria-label="Excluir"
                                                OnClick="@(() => ExcluirAsync(t.Id))" />
                             }
                         </div>
@@ -137,7 +137,7 @@
 <FabMenu>
     <FabMenuItem Text="Adicionar lançamento" Icon="@Icons.Material.Filled.Add" Color="Color.Primary" Disabled="_fechado"
                  Click="@(() => NavigationManager.NavigateTo("/lancamentos/novo"))" />
-    <FabMenuItem Text="Trazer mês anterior" Icon="@Icons.Material.Filled.ContentCopy" Disabled="@(_fechado || !_temDespesasParaTrazer)"
+    <FabMenuItem Text="Trazer mês anterior" Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Secondary" Disabled="@(_fechado || !_temDespesasParaTrazer)"
                  Click="TrazerDespesasAsync" />
     <FabMenuItem Text="@(_fechado ? "Reabrir mês" : "Fechar mês")" Icon="@(_fechado ? Icons.Material.Filled.LockOpen : Icons.Material.Filled.Lock)"
                  Color="@(_fechado ? Color.Success : Color.Error)" Click="AlternarFechamentoAsync" />

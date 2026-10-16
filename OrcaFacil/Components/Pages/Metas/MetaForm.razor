@@ -1,7 +1,7 @@
-<MudDialog>
-    <DialogContent>
-        <EditForm Model="Modelo" OnValidSubmit="Salvar">
-            <DataAnnotationsValidator />
+<EditForm Model="Modelo" OnValidSubmit="Salvar">
+    <DataAnnotationsValidator />
+    <MudDialog>
+        <DialogContent>
             <MudTextField T="string" Label="Nome" @bind-Value="Modelo.Nome" For="@(() => Modelo.Nome)" Class="mb-3" />
 
             <MudText Typo="Typo.body2" Class="mb-1">Ícone</MudText>
@@ -16,15 +16,14 @@
                                 Adornment="Adornment.Start" AdornmentText="R$" Class="mb-3" />
             }
 
-            <MudDatePicker Label="Prazo (opcional)" @bind-Date="_prazo" Class="mb-3" />
-
-            <div class="d-flex ga-2 mt-2">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit">Salvar</MudButton>
-                <MudButton Variant="Variant.Text" OnClick="Cancelar">Cancelar</MudButton>
-            </div>
-        </EditForm>
-    </DialogContent>
-</MudDialog>
+            <MudDatePicker Label="Prazo (opcional)" @bind-Date="_prazo" Class="mb-1" />
+        </DialogContent>
+        <DialogActions>
+            <MudButton Variant="Variant.Text" OnClick="Cancelar">Cancelar</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit">Salvar</MudButton>
+        </DialogActions>
+    </MudDialog>
+</EditForm>
 
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;

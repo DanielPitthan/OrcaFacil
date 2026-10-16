@@ -1,19 +1,18 @@
-<MudDialog>
-    <DialogContent>
-        <EditForm Model="Modelo" OnValidSubmit="Salvar">
-            <DataAnnotationsValidator />
+<EditForm Model="Modelo" OnValidSubmit="Salvar">
+    <DataAnnotationsValidator />
+    <MudDialog>
+        <DialogContent>
             <CampoNumerico TNumber="decimal" Label="Valor da contribuição" @bind-Value="Modelo.Valor" For="@(() => Modelo.Valor)"
                             Adornment="Adornment.Start" AdornmentText="R$" Class="mb-3" />
 
             <MudCheckBox T="bool" @bind-Value="Modelo.RegistrarComoLancamento" Label="Registrar também como lançamento (despesa)" />
-
-            <div class="d-flex ga-2 mt-3">
-                <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit">Contribuir</MudButton>
-                <MudButton Variant="Variant.Text" OnClick="Cancelar">Cancelar</MudButton>
-            </div>
-        </EditForm>
-    </DialogContent>
-</MudDialog>
+        </DialogContent>
+        <DialogActions>
+            <MudButton Variant="Variant.Text" OnClick="Cancelar">Cancelar</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit">Contribuir</MudButton>
+        </DialogActions>
+    </MudDialog>
+</EditForm>
 
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;

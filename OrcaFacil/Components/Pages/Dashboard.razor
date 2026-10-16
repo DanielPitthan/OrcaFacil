@@ -3,7 +3,11 @@
 @inject IOrcamentoService OrcamentoService
 @inject IMetaService MetaService
 
-<MudText Typo="Typo.h5" Class="mb-4">Dashboard</MudText>
+<div class="pro-sticky-header">
+    <div class="d-flex justify-space-between align-center">
+        <MudText Typo="Typo.subtitle1"><b>Dashboard</b></MudText>
+    </div>
+</div>
 
 @if (_carregando)
 {

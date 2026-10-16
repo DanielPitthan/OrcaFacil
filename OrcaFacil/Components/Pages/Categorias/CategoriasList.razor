@@ -3,7 +3,11 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
-<MudText Typo="Typo.h5" Class="mb-4">Categorias</MudText>
+<div class="pro-sticky-header">
+    <div class="d-flex justify-space-between align-center">
+        <MudText Typo="Typo.subtitle1"><b>Categorias</b></MudText>
+    </div>
+</div>
 
 @if (_carregando)
 {
@@ -25,8 +29,8 @@ else
                         <MudText Typo="Typo.caption" Color="Color.Secondary">@categoria.TipoPadrao</MudText>
                     </div>
                     <div>
-                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => EditarAsync(categoria))" />
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" OnClick="@(() => RemoverAsync(categoria.Id))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" aria-label="Editar categoria" OnClick="@(() => EditarAsync(categoria))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small" aria-label="Remover categoria" OnClick="@(() => RemoverAsync(categoria.Id))" />
                     </div>
                 </MudPaper>
             </MudItem>
@@ -35,7 +39,7 @@ else
 }
 
 <div class="pro-fab-single">
-    <MudFab Color="Color.Primary" Size="Size.Small" StartIcon="@Icons.Material.Filled.Add" OnClick="AbrirNovaAsync" aria-label="Nova categoria" />
+    <MudFab Color="Color.Primary" Size="Size.Medium" StartIcon="@Icons.Material.Filled.Add" OnClick="AbrirNovaAsync" aria-label="Nova categoria" />
 </div>
 
 @code {
