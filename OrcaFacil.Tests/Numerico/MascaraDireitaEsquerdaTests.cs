@@ -42,6 +42,18 @@ public class MascaraDireitaEsquerdaTests
         Assert.Equal("123,45", MascaraDireitaEsquerda.Formatar(MascaraDireitaEsquerda.ValorDe(digitos, 2), 2));
     }
 
+    [Fact]
+    public void TeclaDeMenosNaoEntraNaMagnitude()
+    {
+        var digitos = MascaraDireitaEsquerda.AplicarEntrada("1000", "-", 2, null, substituir: false);
+        Assert.Equal("1000", digitos);
+        Assert.Equal(10m, MascaraDireitaEsquerda.ValorDe(digitos, 2));
+
+        var colado = MascaraDireitaEsquerda.AplicarEntrada("", "-100,00", 2, null, substituir: true);
+        Assert.Equal("10000", colado);
+        Assert.Equal(100m, MascaraDireitaEsquerda.ValorDe(colado, 2));
+    }
+
     [Theory]
     [InlineData("R$ 1.234,56", "123456")]
     [InlineData("1234.56", "123456")]

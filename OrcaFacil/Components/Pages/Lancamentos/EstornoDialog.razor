@@ -1,0 +1,147 @@
+@using OrcaFacil.Core.Lancamentos
+
+<ItemSheet TItem="ItemLancamentoFormModel" Aberto="Aberto" AbertoChanged="AoFechar" Titulo="@Titulo"
+           Valor="_valor" ValorChanged="AlterarValor" Erro="@_erro"
+           Dica="@(Semente is null ? "Este valor abate o total da fatura." : "A diferença ajusta o total da fatura.")"
+           MostrarOutro="false" MostrarCancelar="true"
+           TextoConfirmar="Confirmar" TextoCancelar="Cancelar"
+           OnConfirmar="ConfirmarAsync">
+    <div class="of-estorno-campos">
+        @if (Categorias.Count == 0)
+        {
+            <p class="of-apoio">Não há outra categoria de despesa para os itens.</p>
+        }
+        else if (_listaCompleta)
+        {
+            <div class="of-cats">
+                <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="FecharLista">Principais</MudButton>
+                <MudList T="Categoria" Dense="true">
+                    @foreach (var categoria in Categorias)
+                    {
+                        <MudListItem T="Categoria" OnClick="@(() => EscolherCategoria(categoria.Id))">
+                            <span class="of-cat-opcao">@categoria.Icone @categoria.Nome</span>
+                        </MudListItem>
+                    }
+                </MudList>
+            </div>
+        }
+        else
+        {
+            <div class="of-cats">
+                <MudChipSet T="int" SelectedValue="_categoriaId" SelectedValueChanged="EscolherCategoria"
+                            SelectionMode="SelectionMode.SingleSelection" CheckMark="false">
+                    @foreach (var categoria in CategoriasVisiveis)
+                    {
+                        <MudChip T="int" Value="@categoria.Id" Variant="Variant.Outlined" Color="Color.Primary"
+                                 Text="@($"{categoria.Icone} {categoria.Nome}")" />
+                    }
+                </MudChipSet>
+                <MudButton Variant="Variant.Text" Color="Color.Primary" Class="of-todas" OnClick="AbrirLista">Todas…</MudButton>
+            </div>
+        }
+
+        <MudTextField T="string" @bind-Value="_descritivo" Label="Descrição"
+                      Placeholder="Ex.: Devolução loja X" Immediate="true" Variant="Variant.Outlined"
+                      MaxLength="@ItensFaturaInclusao.DescritivoMaximo" Counter="@ItensFaturaInclusao.DescritivoMaximo" />
+    </div>
+</ItemSheet>
+
+@code {
+    private bool _visivel;
+    private bool _listaCompleta;
+    private decimal _valor;
+    private int _categoriaId;
+    private string? _descritivo;
+    private string? _erro;
+
+    [Parameter] public bool Aberto { get; set; }
+    [Parameter] public EventCallback<bool> AbertoChanged { get; set; }
+    [Parameter] public string Titulo { get; set; } = "Estorno";
+    [Parameter] public IReadOnlyList<Categoria> Categorias { get; set; } = [];
+    [Parameter] public PedidoEstorno? Semente { get; set; }
+    [Parameter] public int CategoriaSugerida { get; set; }
+    [Parameter] public EventCallback<PedidoEstorno> OnConfirmar { get; set; }
+
+    private IReadOnlyList<Categoria> CategoriasVisiveis =>
+        FaturaCartaoEditor.EmDestaque(Categorias, c => c.Id == _categoriaId);
+
+    protected override void OnParametersSet()
+    {
+        if (Aberto && !_visivel)
+            Reiniciar();
+
+        _visivel = Aberto;
+    }
+
+    private void Reiniciar()
+    {
+        _listaCompleta = false;
+        _erro = null;
+        if (Semente is null)
+        {
+            _valor = 0;
+            _descritivo = null;
+            _categoriaId = Categorias.Any(c => c.Id == CategoriaSugerida)
+                ? CategoriaSugerida
+                : Categorias.FirstOrDefault()?.Id ?? 0;
+            return;
+        }
+
+        _valor = Semente.Valor;
+        _descritivo = Semente.Descritivo;
+        _categoriaId = Semente.CategoriaId;
+    }
+
+    private Task AlterarValor(decimal valor)
+    {
+        _valor = valor;
+        _erro = null;
+        return Task.CompletedTask;
+    }
+
+    private void EscolherCategoria(int categoriaId)
+    {
+        if (categoriaId <= 0)
+            return;
+
+        _categoriaId = categoriaId;
+        _listaCompleta = false;
+        _erro = null;
+    }
+
+    private void AbrirLista() => _listaCompleta = true;
+
+    private void FecharLista() => _listaCompleta = false;
+
+    private Task AoFechar(bool aberto) => AbertoChanged.InvokeAsync(aberto);
+
+    private async Task ConfirmarAsync(ItemLancamentoFormModel _)
+    {
+        var erro = FaturaCartaoEditor.ValidarItem(
+            _categoriaId, _valor, NaturezaItemLancamento.Avulsa, null, null, ehEstorno: true);
+        if (erro is not null)
+        {
+            _erro = erro;
+            return;
+        }
+
+        try
+        {
+            ItensFaturaInclusao.NormalizarDescritivo(_descritivo);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _erro = ex.Message;
+            return;
+        }
+
+        try
+        {
+            await OnConfirmar.InvokeAsync(new PedidoEstorno(_valor, _categoriaId, _descritivo));
+        }
+        catch (InvalidOperationException ex)
+        {
+            _erro = ex.Message;
+        }
+    }
+}

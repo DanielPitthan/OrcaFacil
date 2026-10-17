@@ -127,6 +127,132 @@ public class EstornoFaturaServiceTests : IDisposable
         Assert.Empty(gravada.Itens);
     }
 
+    [Fact]
+    public async Task LancarAsync_Descritivo_GravaOTextoLivreSeparadoDaCategoria()
+    {
+        var fatura = await CriarFaturaAsync(500m, pago: false);
+
+        var item = await _service.LancarAsync(fatura.Id, 100m, "Lazer", _alimentacaoId, "  Devolução loja X ");
+
+        Assert.Equal("Lazer", item.Descricao);
+        Assert.Equal("Devolução loja X", item.Descritivo);
+        Assert.True(item.EhEstorno);
+        Assert.Equal(400m, await TotalAsync());
+    }
+
+    [Fact]
+    public async Task ExcluirAsync_DevolveAMagnitudeAoTotalEMantemACompra()
+    {
+        var fatura = await CriarFaturaAsync(500m, pago: false, itens:
+        [
+            new ItemLancamento
+            {
+                Descricao = "Alimentação",
+                Descritivo = "Mercado",
+                Valor = 500m,
+                CategoriaId = _alimentacaoId,
+                Natureza = NaturezaItemLancamento.Avulsa,
+                Ordem = 0
+            }
+        ]);
+        var estorno = await _service.LancarAsync(fatura.Id, 100m, "Lazer", _alimentacaoId, "Devolução");
+        Assert.Equal(400m, await TotalAsync());
+
+        await _service.ExcluirAsync(fatura.Id, estorno.Id);
+
+        await using var contexto = _factory.CreateDbContext();
+        var gravada = await contexto.Transacoes.Include(t => t.Itens).SingleAsync();
+        Assert.Equal(500m, gravada.Valor);
+        var restante = Assert.Single(gravada.Itens);
+        Assert.False(restante.EhEstorno);
+        Assert.Equal(500m, restante.Valor);
+        Assert.Equal("Mercado", restante.Descritivo);
+    }
+
+    [Fact]
+    public async Task ExcluirAsync_MesFechado_RecusaENaoRestaura()
+    {
+        var fatura = await CriarFaturaAsync(200m, pago: true);
+        var estorno = await _service.LancarAsync(fatura.Id, 40m, "Estorno", _alimentacaoId);
+        await using (var contexto = _factory.CreateDbContext())
+        {
+            contexto.FechamentosPeriodo.Add(new FechamentoPeriodo { Mes = 10, Ano = 2026, Fechado = true });
+            await contexto.SaveChangesAsync();
+        }
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.ExcluirAsync(fatura.Id, estorno.Id));
+
+        Assert.Equal(ItensFaturaRegras.MensagemMesFechado(fatura.Data), ex.Message);
+        await using var conferido = _factory.CreateDbContext();
+        var gravada = await conferido.Transacoes.Include(t => t.Itens).SingleAsync();
+        Assert.Equal(160m, gravada.Valor);
+        Assert.True(gravada.Itens.Single().EhEstorno);
+    }
+
+    [Fact]
+    public async Task ExcluirAsync_Compra_NaoAlteraOTotal()
+    {
+        var fatura = await CriarFaturaAsync(500m, pago: false, itens:
+        [
+            new ItemLancamento
+            {
+                Descricao = "Alimentação",
+                Valor = 200m,
+                CategoriaId = _alimentacaoId,
+                Natureza = NaturezaItemLancamento.Avulsa,
+                Ordem = 0
+            }
+        ]);
+        var compraId = fatura.Itens.Single().Id;
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.ExcluirAsync(fatura.Id, compraId));
+
+        Assert.Contains("estorno", ex.Message, StringComparison.OrdinalIgnoreCase);
+        await using var conferido = _factory.CreateDbContext();
+        var gravada = await conferido.Transacoes.Include(t => t.Itens).SingleAsync();
+        Assert.Equal(500m, gravada.Valor);
+        Assert.Equal(200m, Assert.Single(gravada.Itens).Valor);
+    }
+
+    [Fact]
+    public async Task EditarAsync_DiferencaAjustaOTotal()
+    {
+        var fatura = await CriarFaturaAsync(500m, pago: false);
+        var estorno = await _service.LancarAsync(fatura.Id, 100m, "Lazer", _alimentacaoId, "Loja X");
+
+        var editado = await _service.EditarAsync(fatura.Id, estorno.Id, 40m, "Lazer", _alimentacaoId, " Loja Y ");
+
+        Assert.Equal(40m, editado.Valor);
+        Assert.Equal("Loja Y", editado.Descritivo);
+        Assert.True(editado.EhEstorno);
+        Assert.Equal(NaturezaItemLancamento.Avulsa, editado.Natureza);
+        Assert.Equal(460m, await TotalAsync());
+    }
+
+    [Fact]
+    public async Task EditarAsync_LiquidoAbaixoDoMinimo_RecusaENaoGrava()
+    {
+        var fatura = await CriarFaturaAsync(100m, pago: false);
+        var estorno = await _service.LancarAsync(fatura.Id, 10m, "Lazer", _alimentacaoId, "Devolução");
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.EditarAsync(fatura.Id, estorno.Id, 100m, "Lazer", _alimentacaoId, "Devolução"));
+
+        Assert.Contains("0,01", ex.Message);
+        await using var conferido = _factory.CreateDbContext();
+        var gravada = await conferido.Transacoes.Include(t => t.Itens).SingleAsync();
+        Assert.Equal(90m, gravada.Valor);
+        Assert.Equal(10m, gravada.Itens.Single().Valor);
+    }
+
+    private async Task<decimal> TotalAsync()
+    {
+        await using var contexto = _factory.CreateDbContext();
+        return await contexto.Transacoes.Select(t => t.Valor).SingleAsync();
+    }
+
     private async Task<Transacao> CriarFaturaAsync(decimal valor, bool pago, List<ItemLancamento>? itens = null)
     {
         var fatura = new Transacao

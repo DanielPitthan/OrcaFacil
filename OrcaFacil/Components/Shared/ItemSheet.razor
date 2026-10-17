@@ -28,6 +28,13 @@
             }
 
             <div class="of-sheet-acoes">
+                @if (MostrarCancelar)
+                {
+                    <MudButton Variant="Variant.Text" Color="Color.Default" Class="of-sheet-botao"
+                               OnClick="FecharAsync">
+                        @TextoCancelar
+                    </MudButton>
+                }
                 @if (MostrarOutro)
                 {
                     <MudButton Variant="Variant.Outlined" Color="Color.Primary" Class="of-sheet-botao"
@@ -59,8 +66,10 @@
     [Parameter] public bool DicaCritica { get; set; }
     [Parameter] public string? Erro { get; set; }
     [Parameter] public bool MostrarOutro { get; set; } = true;
+    [Parameter] public bool MostrarCancelar { get; set; }
     [Parameter] public string TextoConfirmar { get; set; } = "Adicionar";
     [Parameter] public string TextoOutro { get; set; } = "Adicionar outro";
+    [Parameter] public string TextoCancelar { get; set; } = "Cancelar";
     [Parameter] public EventCallback<TItem> OnConfirmar { get; set; }
     [Parameter] public EventCallback<TItem> OnConfirmarOutro { get; set; }
     [Parameter] public RenderFragment? ChildContent { get; set; }
