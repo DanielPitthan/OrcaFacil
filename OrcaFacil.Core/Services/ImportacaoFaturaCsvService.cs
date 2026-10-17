@@ -167,7 +167,8 @@ public class ImportacaoFaturaCsvService
                     linha.Descricao,
                     linha.CategoriaId,
                     linha.Descritivo,
-                    linha.Hash);
+                    linha.Hash,
+                    arredondar: true);
                 continue;
             }
 
@@ -275,30 +276,35 @@ public class ImportacaoFaturaCsvService
     {
         var hashes = new HashSet<string>(StringComparer.Ordinal);
         foreach (var item in fatura.Itens)
-        {
-            if (!string.IsNullOrWhiteSpace(item.HashImportacao))
-            {
-                hashes.Add(item.HashImportacao.Trim());
-                continue;
-            }
-
-            var descritivo = string.IsNullOrWhiteSpace(item.Descritivo)
-                ? item.Descricao?.Trim() ?? string.Empty
-                : item.Descritivo.Trim();
-
-            hashes.Add(FaturaCsv.CalcularHash(
-                fatura.Data,
-                item.Descricao?.Trim() ?? string.Empty,
-                item.Valor,
-                item.EhEstorno,
-                item.CategoriaId,
-                item.Natureza,
-                item.ParcelaAtual,
-                item.TotalParcelas,
-                descritivo));
-        }
+            hashes.Add(HashParaDeduplicacao(fatura, item));
 
         return hashes;
+    }
+
+    /// <summary>
+    /// Item importado usa só o hash gravado, da data da linha.
+    /// Recalcular na data da fatura misturaria, por exemplo, o Uber do dia 02 com o do dia 18.
+    /// Sem hash, o item foi lançado na mão e a comparação usa a data da fatura.
+    /// </summary>
+    private static string HashParaDeduplicacao(Transacao fatura, ItemLancamento item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.HashImportacao))
+            return item.HashImportacao.Trim();
+
+        var descritivo = string.IsNullOrWhiteSpace(item.Descritivo)
+            ? item.Descricao?.Trim() ?? string.Empty
+            : item.Descritivo.Trim();
+
+        return FaturaCsv.CalcularHash(
+            fatura.Data,
+            item.Descricao?.Trim() ?? string.Empty,
+            item.Valor,
+            item.EhEstorno,
+            item.CategoriaId,
+            item.Natureza,
+            item.ParcelaAtual,
+            item.TotalParcelas,
+            descritivo);
     }
 
     private static decimal Somar(IEnumerable<FaturaCsv.Linha> linhas, bool estorno)

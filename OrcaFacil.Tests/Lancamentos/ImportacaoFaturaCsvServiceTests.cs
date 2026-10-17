@@ -212,6 +212,9 @@ public class ImportacaoFaturaCsvServiceTests : IDisposable
         var previa = await _service.PreverAsync(fatura.Id, dia18);
 
         var linha = Assert.Single(previa.LinhasValidas);
+        var gravado = (await CarregarAsync(fatura.Id)).Itens.Single().HashImportacao;
+        Assert.Equal(FaturaCsv.Ler(FaturaCsvLayout.Codificar(dia02), await CategoriasAsync()).Linhas[0].Hash, gravado);
+        Assert.NotEqual(gravado, linha.Hash);
         Assert.False(linha.Duplicada);
         Assert.Equal(new DateTime(2026, 10, 18), linha.Data);
         Assert.Equal(20m, previa.TotalCompras);

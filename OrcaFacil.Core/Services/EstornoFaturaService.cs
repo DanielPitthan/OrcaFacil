@@ -38,7 +38,7 @@ public class EstornoFaturaService
         await ExigirMesAbertoAsync(context, fatura, cancellationToken);
         await GarantirCategoriaAsync(context, categoriaId, cancellationToken);
 
-        var item = Aplicar(fatura, valor, descricao, categoriaId, descritivo);
+        var item = Aplicar(fatura, valor, descricao, categoriaId, descritivo, arredondar: true);
 
         await context.SaveChangesAsync(cancellationToken);
         await transacaoEf.CommitAsync(cancellationToken);
@@ -118,7 +118,7 @@ public class EstornoFaturaService
     /// <summary>
     /// Inclui um estorno avulso na fatura já carregada e abate a magnitude no total.
     /// Não abre transação e não grava: quem chama confirma ou desfaz.
-    /// A magnitude e o total líquido passam por <see cref="DinheiroEstorno.Arredondar"/>.
+    /// Com <paramref name="arredondar"/>, magnitude e total usam <see cref="DinheiroEstorno.Arredondar"/>.
     /// </summary>
     public ItemLancamento Aplicar(
         Transacao fatura,
@@ -126,12 +126,13 @@ public class EstornoFaturaService
         string descricao,
         int categoriaId,
         string? descritivo,
-        string? hashImportacao = null)
+        string? hashImportacao = null,
+        bool arredondar = false)
     {
         ArgumentNullException.ThrowIfNull(fatura);
 
-        var magnitude = DinheiroEstorno.Arredondar(valor);
-        var novoTotal = DinheiroEstorno.Arredondar(fatura.Valor - magnitude);
+        var magnitude = arredondar ? DinheiroEstorno.Arredondar(valor) : valor;
+        var novoTotal = arredondar ? DinheiroEstorno.Arredondar(fatura.Valor - magnitude) : fatura.Valor - magnitude;
         var ordem = fatura.Itens.Count == 0 ? 0 : fatura.Itens.Max(i => i.Ordem) + 1;
         var item = new ItemLancamento
         {
