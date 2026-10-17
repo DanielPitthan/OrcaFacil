@@ -4,7 +4,8 @@
 @inject ITemaAppService TemaApp
 @inject IJSRuntime Js
 
-<MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" />
+@* false: o padrão do MudBlazor observa o WebView e troca a paleta mesmo com Claro ou Escuro forçado. *@
+<MudThemeProvider Theme="_theme" IsDarkMode="_isDarkMode" ObserveSystemDarkModeChange="false" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />

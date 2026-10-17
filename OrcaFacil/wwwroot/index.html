@@ -1,7 +1,24 @@
 <!DOCTYPE html>
-<html lang="pt-BR" class="of-tema-claro">
+<html lang="pt-BR">
 <head>
-    <!-- of-tema-claro é o casco até o MAUI aplicar a preferência. A classe fica em html e body. -->
+    <!--
+      Não nasce com of-tema-claro: no escuro o primeiro quadro não pode pintar #EFF3F7.
+      O script é bloqueante e roda antes do CSS. Com a classe no localStorage
+      (gravada por OrcaFacilTema.aplicar), ela entra no html agora.
+      Sem classe, color-scheme: light dark deixa o fundo seguir o sistema
+      até o Blazor resolver. O padrão do app é Automático, que também segue o sistema.
+    -->
+    <script>
+        (function () {
+            var classe = null;
+            try {
+                classe = localStorage.getItem("orcafacil.tema.classe");
+            } catch (e) {
+            }
+            if (classe === "of-tema-claro" || classe === "of-tema-escuro")
+                document.documentElement.classList.add(classe);
+        })();
+    </script>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <title>Pro Orçamento</title>
@@ -13,7 +30,7 @@
     <link rel="icon" href="data:,">
 </head>
 
-<body class="of-tema-claro">
+<body>
 
     <div id="app">Carregando...</div>
 

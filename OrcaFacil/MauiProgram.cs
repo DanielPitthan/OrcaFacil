@@ -6,6 +6,7 @@ using MudBlazor.Services;
 using OrcaFacil.Core.Data;
 using OrcaFacil.Core.Repositories;
 using OrcaFacil.Core.Services;
+using OrcaFacil.Core.Tema;
 using OrcaFacil.Data;
 using OrcaFacil.Components.Layout;
 using OrcaFacil.Services;
@@ -129,6 +130,8 @@ public static class MauiProgram
         builder.Services.AddSingleton<ISyncService, MockSyncService>();
         builder.Services.AddSingleton<IPerfilContext, PerfilContext>();
         builder.Services.AddSingleton<IFotoPerfilService, FotoPerfilService>();
+        builder.Services.AddSingleton<IPreferenciasSimples, PreferenciasMaui>();
+        builder.Services.AddSingleton<PreferenciasTema>();
         builder.Services.AddSingleton<IConfiguracaoService, ConfiguracaoService>();
         builder.Services.AddSingleton<ITemaAppService, TemaAppService>();
         builder.Services.AddSingleton<INoticiaService, NoticiaService>();

@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace OrcaFacil.Core.Tema;
 
 /// <summary>Resultado de traduzir a preferência para o tema do MAUI e para o modo escuro efetivo.</summary>
@@ -24,21 +26,41 @@ public static class MapeamentoTema
     {
         TemaPreferido.Claro => TextoClaro,
         TemaPreferido.Escuro => TextoEscuro,
+        TemaPreferido.Automatico => TextoAutomatico,
         _ => TextoAutomatico
     };
 
-    public static TemaPreferido Interpretar(string? valor) => valor switch
+    /// <summary>
+    /// Aceita o nome já gravado (<c>Claro</c>, <c>Escuro</c>, <c>Automatico</c>)
+    /// ou o inteiro do enum (<c>1</c>, <c>2</c>, <c>0</c>). Não regrava a chave.
+    /// </summary>
+    public static TemaPreferido Interpretar(string? valor)
     {
-        TextoClaro => TemaPreferido.Claro,
-        TextoEscuro => TemaPreferido.Escuro,
-        TextoAutomatico => TemaPreferido.Automatico,
-        _ => Padrao
-    };
+        switch (valor)
+        {
+            case TextoClaro:
+                return TemaPreferido.Claro;
+            case TextoEscuro:
+                return TemaPreferido.Escuro;
+            case TextoAutomatico:
+                return TemaPreferido.Automatico;
+        }
+
+        if (int.TryParse(valor, NumberStyles.Integer, CultureInfo.InvariantCulture, out var numero))
+        {
+            var candidato = (TemaPreferido)numero;
+            if (Enum.IsDefined(candidato))
+                return candidato;
+        }
+
+        return Padrao;
+    }
 
     public static TemaUsuarioApp ParaUserAppTheme(TemaPreferido preferencia) => preferencia switch
     {
         TemaPreferido.Claro => TemaUsuarioApp.Light,
         TemaPreferido.Escuro => TemaUsuarioApp.Dark,
+        TemaPreferido.Automatico => TemaUsuarioApp.Unspecified,
         _ => TemaUsuarioApp.Unspecified
     };
 
@@ -49,6 +71,7 @@ public static class MapeamentoTema
     {
         TemaPreferido.Claro => false,
         TemaPreferido.Escuro => true,
+        TemaPreferido.Automatico => sistemaEscuro,
         _ => sistemaEscuro
     };
 

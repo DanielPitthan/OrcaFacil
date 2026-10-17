@@ -11,9 +11,14 @@ public class ConfiguracaoService : IConfiguracaoService
     private const string ChavePrazosAviso = "Config.PrazosAviso";
     private const string ChaveGraficoLancamentos = "Config.GraficoLancamentosExpandido";
 
-    private readonly PreferenciasTema _tema = new(new PreferenciasMaui());
-
     public const PrazoAviso PrazosPadrao = PrazoAviso.UmDiaAntes | PrazoAviso.NoDia | PrazoAviso.Vencidas;
+
+    private readonly PreferenciasTema _tema;
+
+    public ConfiguracaoService(PreferenciasTema tema)
+    {
+        _tema = tema;
+    }
 
     public bool NotificacoesAtivas
     {

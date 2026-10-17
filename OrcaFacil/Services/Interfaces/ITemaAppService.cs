@@ -1,3 +1,5 @@
+using OrcaFacil.Core.Tema;
+
 namespace OrcaFacil.Services.Interfaces;
 
 /// <summary>
@@ -9,4 +11,7 @@ namespace OrcaFacil.Services.Interfaces;
 public interface ITemaAppService
 {
     void AplicarPreferenciaSalva();
+
+    /// <summary>Grava <c>Config.Tema</c> e aplica no MAUI. Caminho único da aba Aparência.</summary>
+    void DefinirEAplicar(TemaPreferido tema);
 }

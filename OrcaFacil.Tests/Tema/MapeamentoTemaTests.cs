@@ -27,6 +27,47 @@ public class MapeamentoTemaTests
         Assert.Equal(isDarkMode, MapeamentoTema.IsDarkMode(preferencia, sistemaEscuro));
     }
 
+    [Fact]
+    public void DefaultDoEnum_EAutomatico_ENaoClaro()
+    {
+        Assert.Equal(TemaPreferido.Automatico, default(TemaPreferido));
+        Assert.Equal(0, (int)TemaPreferido.Automatico);
+        Assert.Equal(1, (int)TemaPreferido.Claro);
+        Assert.Equal(2, (int)TemaPreferido.Escuro);
+        Assert.NotEqual(default, TemaPreferido.Claro);
+        Assert.NotEqual(default, TemaPreferido.Escuro);
+    }
+
+    [Theory]
+    [InlineData("Claro", TemaPreferido.Claro)]
+    [InlineData("Escuro", TemaPreferido.Escuro)]
+    [InlineData("Automatico", TemaPreferido.Automatico)]
+    [InlineData("1", TemaPreferido.Claro)]
+    [InlineData("2", TemaPreferido.Escuro)]
+    [InlineData("0", TemaPreferido.Automatico)]
+    [InlineData(null, TemaPreferido.Automatico)]
+    [InlineData("", TemaPreferido.Automatico)]
+    [InlineData("claro", TemaPreferido.Automatico)]
+    [InlineData("3", TemaPreferido.Automatico)]
+    public void Interpretar_LeNomeOuInteiroJaGravado(string? valor, TemaPreferido tema)
+    {
+        Assert.Equal(tema, MapeamentoTema.Interpretar(valor));
+    }
+
+    [Fact]
+    public void Automatico_TemCaseExplicitoEmTextoUserAppThemeEIsDarkMode()
+    {
+        var fonte = File.ReadAllText(Path.Combine(EncontrarRaiz(), "OrcaFacil.Core", "Tema", "MapeamentoTema.cs"));
+
+        Assert.Contains("TemaPreferido.Automatico => TextoAutomatico", fonte, StringComparison.Ordinal);
+        Assert.Contains("TemaPreferido.Automatico => TemaUsuarioApp.Unspecified", fonte, StringComparison.Ordinal);
+        Assert.Contains("TemaPreferido.Automatico => sistemaEscuro", fonte, StringComparison.Ordinal);
+        Assert.Equal(MapeamentoTema.TextoAutomatico, MapeamentoTema.ParaTexto(TemaPreferido.Automatico));
+        Assert.Equal(TemaUsuarioApp.Unspecified, MapeamentoTema.ParaUserAppTheme(TemaPreferido.Automatico));
+        Assert.False(MapeamentoTema.IsDarkMode(TemaPreferido.Automatico, sistemaEscuro: false));
+        Assert.True(MapeamentoTema.IsDarkMode(TemaPreferido.Automatico, sistemaEscuro: true));
+    }
+
     [Theory]
     [InlineData(TemaUsuarioApp.Dark, true)]
     [InlineData(TemaUsuarioApp.Light, false)]
@@ -35,5 +76,19 @@ public class MapeamentoTemaTests
     {
         Assert.Equal(isDarkMode, MapeamentoTema.IsDarkMode(temaSolicitado));
         Assert.Equal(isDarkMode ? MapeamentoTema.ClasseEscuro : MapeamentoTema.ClasseClaro, MapeamentoTema.ClasseCss(isDarkMode));
+    }
+
+    private static string EncontrarRaiz()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "OrcaFacil.Core", "Tema", "MapeamentoTema.cs")))
+                return dir.FullName;
+
+            dir = dir.Parent;
+        }
+
+        throw new InvalidOperationException("Não foi possível localizar MapeamentoTema.cs a partir de " + AppContext.BaseDirectory);
     }
 }
