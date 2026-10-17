@@ -1,6 +1,39 @@
-﻿<Router AppAssembly="typeof(MauiProgram).Assembly" NotFoundPage="typeof(Pages.NotFound)">
-    <Found Context="routeData">
-        <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
-        <FocusOnNavigate RouteData="routeData" Selector="h1" />
-    </Found>
-</Router>
+﻿@using OrcaFacil.Components.Pages
+@implements IDisposable
+@inject InicializacaoApp Inicializacao
+
+@if (Inicializacao.LerEstado().Fase == FaseInicializacao.Pronta)
+{
+    <Router AppAssembly="typeof(MauiProgram).Assembly" NotFoundPage="typeof(Pages.NotFound)">
+        <Found Context="routeData">
+            <RouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)" />
+            <FocusOnNavigate RouteData="routeData" Selector="h1" />
+        </Found>
+    </Router>
+}
+else
+{
+    <RecuperacaoInicializacao />
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        Inicializacao.AoMudar += OnMudou;
+        if (Inicializacao.LerEstado().Fase == FaseInicializacao.Pendente)
+            Inicializacao.IniciarSemBloquear();
+    }
+
+    private void OnMudou()
+    {
+        try
+        {
+            _ = InvokeAsync(StateHasChanged);
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+    }
+
+    public void Dispose() => Inicializacao.AoMudar -= OnMudou;
+}

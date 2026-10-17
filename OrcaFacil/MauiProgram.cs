@@ -93,8 +93,10 @@ public static class MauiProgram
 
         // EF Core — DbContextFactory (não Scoped): evita uso concorrente de um único DbContext
         // (não thread-safe) num app MAUI Blazor Hybrid, que tem um único "circuito" de vida longa.
+        // O caminho é lido na thread principal; o arquivo orcafacil.db não muda durante o processo.
+        var conexaoSqlite = DbPathProvider.GetConnectionString();
         builder.Services.AddDbContextFactory<AppDbContext>(options =>
-            options.UseSqlite(DbPathProvider.GetConnectionString()));
+            options.UseSqlite(conexaoSqlite));
 
         // Repositórios — stateless (só guardam o IDbContextFactory, que já é Singleton),
         // por isso registrados como Singleton também: evita capturar um serviço "Scoped"
@@ -136,20 +138,13 @@ public static class MauiProgram
         builder.Services.AddSingleton<IConfiguracaoService, ConfiguracaoService>();
         builder.Services.AddSingleton<ITemaAppService, TemaAppService>();
         builder.Services.AddSingleton<INoticiaService, NoticiaService>();
+        builder.Services.AddSingleton<InicializacaoApp>();
 
         var app = builder.Build();
 
-        using (var scope = app.Services.CreateScope())
-        {
-            var factory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<AppDbContext>>();
-            DbInitializer.InitializeAsync(factory).GetAwaiter().GetResult();
-
-            var perfilContext = scope.ServiceProvider.GetRequiredService<IPerfilContext>();
-            perfilContext.InicializarAsync().GetAwaiter().GetResult();
-
-            var notificationScheduler = scope.ServiceProvider.GetRequiredService<INotificationSchedulerService>();
-            notificationScheduler.ReagendarTodasAsync().GetAwaiter().GetResult();
-        }
+        // Migração, perfil e lembretes não bloqueiam esta thread. Falha de banco ou perfil
+        // abre a tela de recuperação; o Serilog grava em AppDataDirectory/logs. O banco não é apagado.
+        app.Services.GetRequiredService<InicializacaoApp>().IniciarSemBloquear();
 
         return app;
     }

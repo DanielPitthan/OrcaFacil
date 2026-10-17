@@ -1,0 +1,68 @@
+@inject InicializacaoApp Inicializacao
+
+<div class="of-boot">
+    <section class="of-boot-card">
+        <p class="of-boot-marca">Pro Orçamento</p>
+        @if (_falhou)
+        {
+            <h1>Não foi possível abrir seus dados</h1>
+            <p>
+                O arquivo orcafacil.db continua no aparelho. Nenhum lançamento foi apagado.
+            </p>
+            @if (!string.IsNullOrWhiteSpace(_passo))
+            {
+                <p class="of-boot-passo">Etapa: @_passo</p>
+            }
+            <p class="of-boot-detalhe" role="alert">@(_resumo ?? "Erro sem mensagem.")</p>
+            <p class="of-boot-log">O erro completo foi gravado na pasta de logs do aplicativo.</p>
+            <button type="button" disabled="@_tentando" @onclick="TentarNovamenteAsync">
+                @(_tentando ? "Tentando de novo…" : "Tentar novamente")
+            </button>
+        }
+        else
+        {
+            <h1 role="status">Preparando o Pro Orçamento…</h1>
+            <p>Estamos organizando seus lançamentos. Seus dados permanecem no aparelho.</p>
+        }
+    </section>
+</div>
+
+@code {
+    private bool _falhou;
+    private bool _tentando;
+    private string? _passo;
+    private string? _resumo;
+
+    protected override void OnInitialized()
+    {
+        Atualizar();
+    }
+
+    protected override void OnParametersSet() => Atualizar();
+
+    private void Atualizar()
+    {
+        var (fase, passo, resumo) = Inicializacao.LerEstado();
+        _falhou = fase == FaseInicializacao.Falhou;
+        _passo = passo;
+        _resumo = resumo;
+        if (fase != FaseInicializacao.EmAndamento)
+            _tentando = false;
+    }
+
+    private async Task TentarNovamenteAsync()
+    {
+        if (_tentando)
+            return;
+
+        _tentando = true;
+        try
+        {
+            await Inicializacao.TentarNovamenteAsync();
+        }
+        finally
+        {
+            _tentando = false;
+        }
+    }
+}
