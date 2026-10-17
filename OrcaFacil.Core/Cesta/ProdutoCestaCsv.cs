@@ -99,7 +99,11 @@ public static class ProdutoCestaCsv
         return ';';
     }
 
-    private static List<string> Separar(string linha, char separador)
+    /// <summary>
+    /// Separa uma linha com aspas: aspas duplicadas viram uma aspa, e o separador
+    /// dentro das aspas não parte o campo. A importação de fatura reutiliza a mesma regra.
+    /// </summary>
+    internal static List<string> Separar(string linha, char separador)
     {
         var campos = new List<string>();
         var atual = new StringBuilder();
