@@ -28,6 +28,8 @@ public class EstornoFaturaService
         string? descritivo = null,
         CancellationToken cancellationToken = default)
     {
+        valor = DinheiroEstorno.Arredondar(valor);
+
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transacaoEf = await context.Database.BeginTransactionAsync(cancellationToken);
 
@@ -35,7 +37,7 @@ public class EstornoFaturaService
         await GarantirMesAbertoAsync(context, fatura, cancellationToken);
         await GarantirCategoriaAsync(context, categoriaId, cancellationToken);
 
-        var novoTotal = fatura.Valor - valor;
+        var novoTotal = DinheiroEstorno.Arredondar(fatura.Valor - valor);
         var ordem = fatura.Itens.Count == 0 ? 0 : fatura.Itens.Max(i => i.Ordem) + 1;
         var item = new ItemLancamento
         {
@@ -74,6 +76,7 @@ public class EstornoFaturaService
         string? descritivo = null,
         CancellationToken cancellationToken = default)
     {
+        valor = DinheiroEstorno.Arredondar(valor);
         var textoDescritivo = ItensFaturaInclusao.NormalizarDescritivo(descritivo);
 
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -88,7 +91,7 @@ public class EstornoFaturaService
         if (!item.EhEstorno)
             throw new InvalidOperationException("Só um estorno pode ser editado por este caminho.");
 
-        var novoTotal = fatura.Valor + item.Valor - valor;
+        var novoTotal = DinheiroEstorno.Arredondar(fatura.Valor + item.Valor - valor);
         item.Descricao = descricao?.Trim() ?? string.Empty;
         item.Descritivo = textoDescritivo;
         item.Valor = valor;
@@ -125,7 +128,7 @@ public class EstornoFaturaService
         if (!item.EhEstorno)
             throw new InvalidOperationException("Só um estorno altera o total da fatura ao ser excluído.");
 
-        fatura.Valor += item.Valor;
+        fatura.Valor = DinheiroEstorno.Arredondar(fatura.Valor + item.Valor);
         fatura.Itens.Remove(item);
         context.ItensLancamento.Remove(item);
         fatura.AtualizadoEm = DateTime.UtcNow;
