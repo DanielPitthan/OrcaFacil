@@ -81,6 +81,71 @@ public class FaturaCartaoEditorTests
     }
 
     [Fact]
+    public void Classificar_UsaSomaAssinadaEClampaABarra()
+    {
+        var parcial = FaturaCartaoEditor.Classificar(500m,
+        [
+            new() { Valor = 400m },
+            new() { Valor = 100m, EhEstorno = true }
+        ]);
+        Assert.Equal(300m, parcial.SomaAssinada);
+        Assert.Equal(200m, parcial.ADetalhar);
+        Assert.Equal(60d, parcial.Percentual);
+
+        var quitada = FaturaCartaoEditor.Classificar(400m,
+        [
+            new() { Valor = 500m },
+            new() { Valor = 100m, EhEstorno = true }
+        ]);
+        Assert.Equal(400m, quitada.SomaAssinada);
+        Assert.Equal(0m, quitada.ADetalhar);
+        Assert.Equal(100d, quitada.Percentual);
+
+        var soCredito = FaturaCartaoEditor.Classificar(400m,
+        [
+            new() { Valor = 100m, EhEstorno = true }
+        ]);
+        Assert.Equal(-100m, soCredito.SomaAssinada);
+        Assert.Equal(500m, soCredito.ADetalhar);
+        Assert.Equal(0d, soCredito.Percentual);
+
+        var estoura = FaturaCartaoEditor.Classificar(100m, [new() { Valor = 250m }]);
+        Assert.Equal(0m, estoura.ADetalhar);
+        Assert.Equal(100d, estoura.Percentual);
+        Assert.InRange(estoura.Percentual, 0d, 100d);
+        Assert.InRange(soCredito.Percentual, 0d, 100d);
+    }
+
+    [Fact]
+    public void Ordenar_MisturaEstornoPelaOrdem()
+    {
+        var itens = new List<ItemLancamentoFormModel>
+        {
+            new() { Descricao = "Mercado", Valor = 80m, Ordem = 2 },
+            new() { Descricao = "Devolução", Valor = 30m, EhEstorno = true, Ordem = 1 },
+            new() { Descricao = "Farmácia", Valor = 20m, Ordem = 0 }
+        };
+
+        var ordenados = FaturaCartaoEditor.Ordenar(itens);
+
+        Assert.Equal(["Farmácia", "Devolução", "Mercado"], ordenados.Select(i => i.Descricao));
+    }
+
+    [Fact]
+    public void Linha_EstornoUsaDescritivoEMarcaEstorno()
+    {
+        Assert.Equal(
+            "Devolução loja X",
+            FaturaCartaoEditor.TituloLinha("Devolução loja X", "Alimentação", "Alimentação", ehEstorno: true));
+        Assert.Equal(
+            "Estorno mercado",
+            FaturaCartaoEditor.TituloLinha(null, "Estorno mercado", "Alimentação", ehEstorno: true));
+        Assert.Equal("McDonald's", FaturaCartaoEditor.TituloLinha("McDonald's", "Alimentação", "Alimentação", ehEstorno: false));
+        Assert.Equal("Alimentação · Estorno", FaturaCartaoEditor.SubtituloLinha("Alimentação", true, NaturezaItemLancamento.Avulsa, null, null));
+        Assert.Equal("Lazer · Assinatura", FaturaCartaoEditor.SubtituloLinha("Lazer", false, NaturezaItemLancamento.Assinatura, null, null));
+    }
+
+    [Fact]
     public void Soma_AplicaSinalDoEstorno()
     {
         var itens = new List<ItemLancamentoFormModel>

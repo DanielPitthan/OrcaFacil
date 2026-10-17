@@ -28,4 +28,7 @@ public class ItemLancamentoFormModel
 
     [Range(1, int.MaxValue, ErrorMessage = "Selecione a categoria do item")]
     public int CategoriaId { get; set; }
+
+    /// <summary>Posição na fatura. Compra e estorno dividem a mesma sequência.</summary>
+    public int Ordem { get; set; }
 }

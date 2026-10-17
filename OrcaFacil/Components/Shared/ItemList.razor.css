@@ -77,6 +77,10 @@
     white-space: nowrap;
 }
 
+.of-lista-valor-credito {
+    color: var(--of-success);
+}
+
 .of-lista ::deep .mud-icon-button {
     width: var(--of-touch);
     height: var(--of-touch);
@@ -90,6 +94,24 @@
     padding-right: 16px;
     border-radius: 0;
     border-top: 1px solid var(--of-border);
+}
+
+.of-lista-acoes {
+    display: flex;
+    border-top: 1px solid var(--of-border);
+}
+
+.of-lista-acoes ::deep .of-lista-acao {
+    flex: 1 1 0;
+    min-height: var(--of-touch);
+    justify-content: flex-start;
+    padding-left: 16px;
+    padding-right: 16px;
+    border-radius: 0;
+}
+
+.of-lista-acoes ::deep .of-lista-acao + .of-lista-acao {
+    border-left: 1px solid var(--of-border);
 }
 
 .of-lista-vazia {
