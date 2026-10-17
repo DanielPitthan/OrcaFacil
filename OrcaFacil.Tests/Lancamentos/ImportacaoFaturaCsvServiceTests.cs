@@ -48,10 +48,10 @@ public class ImportacaoFaturaCsvServiceTests : IDisposable
     [Fact]
     public void Arredondar_MeioExato_AfastaDeZero()
     {
-        Assert.Equal(0.01m, EstornoFaturaService.Arredondar(0.005m));
-        Assert.Equal(1.01m, EstornoFaturaService.Arredondar(1.005m));
-        Assert.Equal(-0.01m, EstornoFaturaService.Arredondar(-0.005m));
-        Assert.Equal(10.00m, EstornoFaturaService.Arredondar(10.00m));
+        Assert.Equal(0.01m, DinheiroEstorno.Arredondar(0.005m));
+        Assert.Equal(1.01m, DinheiroEstorno.Arredondar(1.005m));
+        Assert.Equal(-0.01m, DinheiroEstorno.Arredondar(-0.005m));
+        Assert.Equal(10.00m, DinheiroEstorno.Arredondar(10.00m));
     }
 
     [Fact]
@@ -199,6 +199,70 @@ public class ImportacaoFaturaCsvServiceTests : IDisposable
 
         Assert.True(Assert.Single(previa.LinhasValidas).Duplicada);
         Assert.Equal(0m, previa.TotalCompras);
+    }
+
+    [Fact]
+    public async Task PreverAsync_MesmaCompraEmOutroDia_NaoEDuplicataDoHashGravado()
+    {
+        var fatura = await CriarFaturaAsync(200m, new DateTime(2026, 10, 18));
+        var dia02 = Arquivo("02/10/2026;Uber;20,00;Lazer;;;;");
+        await _service.ConfirmarAsync(fatura.Id, dia02);
+
+        var dia18 = Arquivo("18/10/2026;Uber;20,00;Lazer;;;;");
+        var previa = await _service.PreverAsync(fatura.Id, dia18);
+
+        var linha = Assert.Single(previa.LinhasValidas);
+        Assert.False(linha.Duplicada);
+        Assert.Equal(new DateTime(2026, 10, 18), linha.Data);
+        Assert.Equal(20m, previa.TotalCompras);
+
+        var deNovo = await _service.PreverAsync(fatura.Id, dia02);
+        Assert.True(Assert.Single(deNovo.LinhasValidas).Duplicada);
+
+        var resultado = await _service.ConfirmarAsync(fatura.Id, dia18);
+        Assert.Equal(1, resultado.Gravados);
+        Assert.Equal(0, resultado.DuplicatasIgnoradas);
+        var gravada = await CarregarAsync(fatura.Id);
+        Assert.Equal(2, gravada.Itens.Count);
+        Assert.Equal(200m, gravada.Valor);
+        Assert.Equal(2, gravada.Itens.Select(i => i.HashImportacao).Distinct().Count());
+    }
+
+    [Fact]
+    public async Task PreverAsync_ItemManual_SoDuplicaNaDataDaFatura()
+    {
+        var fatura = await CriarFaturaAsync(200m, new DateTime(2026, 10, 18), itens:
+        [
+            new ItemLancamento
+            {
+                Descricao = "Uber",
+                Valor = 20m,
+                CategoriaId = _lazerId,
+                Natureza = NaturezaItemLancamento.Avulsa,
+                Ordem = 0
+            }
+        ]);
+
+        var noVencimento = await _service.PreverAsync(fatura.Id, Arquivo("18/10/2026;Uber;20,00;Lazer;;;;"));
+        var outroDia = await _service.PreverAsync(fatura.Id, Arquivo("02/10/2026;Uber;20,00;Lazer;;;;"));
+
+        Assert.True(Assert.Single(noVencimento.LinhasValidas).Duplicada);
+        Assert.False(Assert.Single(outroDia.LinhasValidas).Duplicada);
+        Assert.Equal(20m, outroDia.TotalCompras);
+    }
+
+    [Fact]
+    public async Task ConfirmarAsync_ArquivoMaiorQueUmMega_NaoGrava()
+    {
+        var fatura = await CriarFaturaAsync(100m);
+        var grande = new byte[FaturaCsvLayout.TamanhoMaximoBytes + 1];
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.ConfirmarAsync(fatura.Id, grande));
+
+        Assert.Contains("1 MB", ex.Message);
+        Assert.Contains("Nada foi importado", ex.Message);
+        Assert.Empty((await CarregarAsync(fatura.Id)).Itens);
     }
 
     [Fact]

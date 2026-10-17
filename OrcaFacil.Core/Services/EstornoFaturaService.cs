@@ -10,6 +10,7 @@ namespace OrcaFacil.Core.Services;
 /// Lança, edita ou exclui um estorno avulso e ajusta o total líquido na mesma gravação.
 /// O sheet da fatura chama estes métodos quando a fatura já existe; o item de compra continua separado.
 /// Excluir um estorno devolve a magnitude ao total.
+/// A magnitude e o total usam <see cref="DinheiroEstorno.Arredondar"/>: 2 casas, afastando de zero.
 /// </summary>
 public class EstornoFaturaService
 {
@@ -28,6 +29,8 @@ public class EstornoFaturaService
         string? descritivo = null,
         CancellationToken cancellationToken = default)
     {
+        valor = DinheiroEstorno.Arredondar(valor);
+
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
         await using var transacaoEf = await context.Database.BeginTransactionAsync(cancellationToken);
 
@@ -51,6 +54,7 @@ public class EstornoFaturaService
         string? descritivo = null,
         CancellationToken cancellationToken = default)
     {
+        valor = DinheiroEstorno.Arredondar(valor);
         var textoDescritivo = ItensFaturaInclusao.NormalizarDescritivo(descritivo);
 
         await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
@@ -65,7 +69,7 @@ public class EstornoFaturaService
         if (!item.EhEstorno)
             throw new InvalidOperationException("Só um estorno pode ser editado por este caminho.");
 
-        var novoTotal = fatura.Valor + item.Valor - valor;
+        var novoTotal = DinheiroEstorno.Arredondar(fatura.Valor + item.Valor - valor);
         item.Descricao = descricao?.Trim() ?? string.Empty;
         item.Descritivo = textoDescritivo;
         item.Valor = valor;
@@ -102,7 +106,7 @@ public class EstornoFaturaService
         if (!item.EhEstorno)
             throw new InvalidOperationException("Só um estorno altera o total da fatura ao ser excluído.");
 
-        fatura.Valor += item.Valor;
+        fatura.Valor = DinheiroEstorno.Arredondar(fatura.Valor + item.Valor);
         fatura.Itens.Remove(item);
         context.ItensLancamento.Remove(item);
         fatura.AtualizadoEm = DateTime.UtcNow;
@@ -111,24 +115,10 @@ public class EstornoFaturaService
         await transacaoEf.CommitAsync(cancellationToken);
     }
 
-    private static async Task<Transacao> CarregarAsync(
-        AppDbContext context,
-        int faturaId,
-        CancellationToken cancellationToken)
-        => await context.Transacoes
-            .Include(t => t.Categoria)
-            .Include(t => t.Itens)
-            .FirstOrDefaultAsync(t => t.Id == faturaId, cancellationToken)
-            ?? throw new InvalidOperationException("Lançamento não encontrado.");
-
-    /// <summary>2 casas decimais. No meio do caminho, afasta de zero.</summary>
-    public static decimal Arredondar(decimal valor)
-        => Math.Round(valor, 2, MidpointRounding.AwayFromZero);
-
     /// <summary>
     /// Inclui um estorno avulso na fatura já carregada e abate a magnitude no total.
     /// Não abre transação e não grava: quem chama confirma ou desfaz.
-    /// Com <paramref name="arredondar"/>, a magnitude e o total líquido ficam com 2 casas.
+    /// A magnitude e o total líquido passam por <see cref="DinheiroEstorno.Arredondar"/>.
     /// </summary>
     public ItemLancamento Aplicar(
         Transacao fatura,
@@ -136,13 +126,12 @@ public class EstornoFaturaService
         string descricao,
         int categoriaId,
         string? descritivo,
-        string? hashImportacao = null,
-        bool arredondar = false)
+        string? hashImportacao = null)
     {
         ArgumentNullException.ThrowIfNull(fatura);
 
-        var magnitude = arredondar ? Arredondar(valor) : valor;
-        var novoTotal = arredondar ? Arredondar(fatura.Valor - magnitude) : fatura.Valor - magnitude;
+        var magnitude = DinheiroEstorno.Arredondar(valor);
+        var novoTotal = DinheiroEstorno.Arredondar(fatura.Valor - magnitude);
         var ordem = fatura.Itens.Count == 0 ? 0 : fatura.Itens.Max(i => i.Ordem) + 1;
         var item = new ItemLancamento
         {
@@ -191,6 +180,16 @@ public class EstornoFaturaService
         if (await MesEstaFechadoAsync(context, fatura, cancellationToken))
             throw new InvalidOperationException(ItensFaturaRegras.MensagemMesFechado(fatura.Data));
     }
+
+    private static async Task<Transacao> CarregarAsync(
+        AppDbContext context,
+        int faturaId,
+        CancellationToken cancellationToken)
+        => await context.Transacoes
+            .Include(t => t.Categoria)
+            .Include(t => t.Itens)
+            .FirstOrDefaultAsync(t => t.Id == faturaId, cancellationToken)
+            ?? throw new InvalidOperationException("Lançamento não encontrado.");
 
     private static async Task GarantirCategoriaAsync(
         AppDbContext context,

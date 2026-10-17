@@ -6,7 +6,11 @@ using OrcaFacil.Core.Lancamentos;
 
 namespace OrcaFacil.Core.Services;
 
-/// <summary>Linha válida da prévia. <see cref="Duplicada"/> compara o hash com a fatura e com as linhas anteriores do próprio arquivo.</summary>
+/// <summary>
+/// Linha válida da prévia. <see cref="Duplicada"/> compara o hash da linha com o hash gravado
+/// dos itens importados. Item lançado na mão, sem hash, usa a data da fatura.
+/// Também marca a repetição dentro do próprio arquivo.
+/// </summary>
 public sealed record LinhaPreviaImportacaoFaturaCsv(
     int Numero,
     DateTime Data,
@@ -163,8 +167,7 @@ public class ImportacaoFaturaCsvService
                     linha.Descricao,
                     linha.CategoriaId,
                     linha.Descritivo,
-                    linha.Hash,
-                    arredondar: true);
+                    linha.Hash);
                 continue;
             }
 
@@ -189,7 +192,7 @@ public class ImportacaoFaturaCsvService
             ignoradas,
             compras,
             estornos,
-            EstornoFaturaService.Arredondar(compras - estornos),
+            DinheiroEstorno.Arredondar(compras - estornos),
             fatura.Valor);
     }
 
@@ -223,8 +226,8 @@ public class ImportacaoFaturaCsvService
         }
 
         var novas = linhas.Where(l => !l.Duplicada).ToList();
-        var compras = EstornoFaturaService.Arredondar(novas.Where(l => !l.EhEstorno).Sum(l => l.Valor));
-        var estornos = EstornoFaturaService.Arredondar(novas.Where(l => l.EhEstorno).Sum(l => l.Valor));
+        var compras = DinheiroEstorno.Arredondar(novas.Where(l => !l.EhEstorno).Sum(l => l.Valor));
+        var estornos = DinheiroEstorno.Arredondar(novas.Where(l => l.EhEstorno).Sum(l => l.Valor));
         return new PreviaImportacaoFaturaCsv(
             true,
             null,
@@ -233,7 +236,7 @@ public class ImportacaoFaturaCsvService
             leitura.Erros,
             compras,
             estornos,
-            EstornoFaturaService.Arredondar(compras - estornos));
+            DinheiroEstorno.Arredondar(compras - estornos));
     }
 
     private static List<FaturaCsv.Linha> Selecionar(
@@ -258,7 +261,7 @@ public class ImportacaoFaturaCsvService
     {
         Descricao = linha.Descricao.Trim(),
         Descritivo = ItensFaturaInclusao.NormalizarDescritivo(linha.Descritivo),
-        Valor = EstornoFaturaService.Arredondar(linha.Valor),
+        Valor = DinheiroEstorno.Arredondar(linha.Valor),
         EhEstorno = false,
         Natureza = linha.Natureza,
         ParcelaAtual = linha.Natureza == NaturezaItemLancamento.Parcelada ? linha.ParcelaAtual : null,
@@ -274,7 +277,10 @@ public class ImportacaoFaturaCsvService
         foreach (var item in fatura.Itens)
         {
             if (!string.IsNullOrWhiteSpace(item.HashImportacao))
+            {
                 hashes.Add(item.HashImportacao.Trim());
+                continue;
+            }
 
             var descritivo = string.IsNullOrWhiteSpace(item.Descritivo)
                 ? item.Descricao?.Trim() ?? string.Empty
@@ -296,7 +302,7 @@ public class ImportacaoFaturaCsvService
     }
 
     private static decimal Somar(IEnumerable<FaturaCsv.Linha> linhas, bool estorno)
-        => EstornoFaturaService.Arredondar(linhas.Where(l => l.EhEstorno == estorno).Sum(l => l.Valor));
+        => DinheiroEstorno.Arredondar(linhas.Where(l => l.EhEstorno == estorno).Sum(l => l.Valor));
 
     private static async Task<FaturaCsv.Leitura> LerAsync(
         AppDbContext context,

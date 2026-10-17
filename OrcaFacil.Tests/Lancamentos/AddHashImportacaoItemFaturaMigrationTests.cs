@@ -1,6 +1,8 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.Data;
+using OrcaFacil.Core.Entities;
+using OrcaFacil.Core.Enums;
 
 namespace OrcaFacil.Tests.Lancamentos;
 
@@ -67,6 +69,99 @@ public class AddHashImportacaoItemFaturaMigrationTests
         Assert.Equal(40m, preservado.Valor);
         Assert.Equal("Alimentação", preservado.Descricao);
         Assert.Equal(80m, deNovo.Transacoes.Single().Valor);
+    }
+
+    [Fact]
+    public void Indice_UnicoPorFatura_RecusaHashRepetidoEPermiteVariosNulos()
+    {
+        const string hash = "0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF";
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        using (var atual = new AppDbContext(options))
+        {
+            atual.Database.Migrate();
+            SemearDoisItens(atual);
+            Assert.Equal(1L, Escalar(connection, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'IX_ItensLancamento_TransacaoId_HashImportacao'"));
+            Assert.Equal(0L, Escalar(connection, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'IX_ItensLancamento_TransacaoId'"));
+            Assert.Equal(2, atual.ItensLancamento.Count());
+            Assert.All(atual.ItensLancamento, item => Assert.Null(item.HashImportacao));
+        }
+
+        using (var repetido = new AppDbContext(options))
+        {
+            var itens = repetido.ItensLancamento.OrderBy(i => i.Ordem).ToList();
+            itens[0].HashImportacao = hash;
+            itens[1].HashImportacao = hash;
+            Assert.Throws<DbUpdateException>(() => repetido.SaveChanges());
+        }
+
+        using (var semIndice = new AppDbContext(options))
+        {
+            Assert.All(semIndice.ItensLancamento, item => Assert.Null(item.HashImportacao));
+            semIndice.Database.Migrate("20261017164213_AddHashImportacaoItemFatura");
+            Assert.Equal(0L, Escalar(connection, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'IX_ItensLancamento_TransacaoId_HashImportacao'"));
+            Assert.Equal(1L, Escalar(connection, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'IX_ItensLancamento_TransacaoId'"));
+
+            var itens = semIndice.ItensLancamento.OrderBy(i => i.Ordem).ToList();
+            itens[0].HashImportacao = hash;
+            itens[1].HashImportacao = hash;
+            semIndice.SaveChanges();
+        }
+
+        using (var deNovo = new AppDbContext(options))
+        {
+            foreach (var item in deNovo.ItensLancamento)
+                item.HashImportacao = null;
+            deNovo.SaveChanges();
+            deNovo.Database.Migrate();
+            Assert.Equal(1L, Escalar(connection, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'IX_ItensLancamento_TransacaoId_HashImportacao'"));
+            Assert.Equal(2, deNovo.ItensLancamento.Count(i => i.HashImportacao == null));
+        }
+    }
+
+    private static void SemearDoisItens(AppDbContext db)
+    {
+        var cartao = new Categoria { Nome = "Cartão de Crédito", Icone = "💳", CorHex = "#B2CFE6", PermiteItensFatura = true };
+        var alimentacao = new Categoria { Nome = "Alimentação", Icone = "🛒", CorHex = "#B2CFE6" };
+        db.Categorias.AddRange(cartao, alimentacao);
+        var membro = new MembroFamilia { Nome = "Daniel" };
+        db.MembrosFamilia.Add(membro);
+        db.SaveChanges();
+
+        db.Transacoes.Add(new Transacao
+        {
+            Descricao = "Fatura Nubank",
+            Valor = 80m,
+            Data = new DateTime(2026, 10, 18),
+            Tipo = TipoTransacao.Despesa,
+            Pago = true,
+            CategoriaId = cartao.Id,
+            MembroFamiliaId = membro.Id,
+            Itens =
+            [
+                new ItemLancamento
+                {
+                    Descricao = "Alimentação",
+                    Descritivo = "McDonald's",
+                    Valor = 40m,
+                    CategoriaId = alimentacao.Id,
+                    Ordem = 0
+                },
+                new ItemLancamento
+                {
+                    Descricao = "Alimentação",
+                    Descritivo = "Padaria",
+                    Valor = 40m,
+                    CategoriaId = alimentacao.Id,
+                    Ordem = 1
+                }
+            ]
+        });
+        db.SaveChanges();
     }
 
     private static long Escalar(SqliteConnection connection, string sql)
