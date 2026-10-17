@@ -13,6 +13,9 @@ public sealed class OpcoesPreparoBanco
 
 public static class PreparoBanco
 {
+    public const string AvisoArquivoIlegivel =
+        "Não foi possível ler o orcafacil.db (arquivo ilegível ou corrompido). O check não alterou o arquivo e nada foi apagado.";
+
     public static Task<ResultadoPreparoBanco> MigrarEVerificarAsync(
         AppDbContext context,
         CancellationToken cancellationToken = default)
@@ -37,12 +40,14 @@ public static class PreparoBanco
             }
             catch (Exception ex)
             {
-                var relatorioBackup = await VerificadorIntegridadeBanco.VerificarAsync(context, cancellationToken);
+                var (relatorioBackup, falhaLeitura) = await TentarVerificarAsync(context, cancellationToken);
                 return new ResultadoPreparoBanco(
-                    ex,
+                    falhaLeitura ?? ex,
                     relatorioBackup,
                     caminhoBackup: null,
-                    aviso: "Não foi possível criar o backup consistente antes da migração. A migração não rodou e o banco não foi apagado.");
+                    aviso: falhaLeitura is null
+                        ? "Não foi possível criar o backup consistente antes da migração. A migração não rodou e o banco não foi apagado."
+                        : AvisoArquivoIlegivel);
             }
         }
 
@@ -53,17 +58,24 @@ public static class PreparoBanco
         }
         catch (Exception ex)
         {
-            var relatorioFalha = await VerificadorIntegridadeBanco.VerificarAsync(context, cancellationToken);
+            var (relatorioFalha, falhaLeitura) = await TentarVerificarAsync(context, cancellationToken);
             return new ResultadoPreparoBanco(
-                ex,
+                falhaLeitura ?? ex,
                 relatorioFalha,
                 backup,
-                "Não foi possível reconciliar a migration AddCartoes. A migração não foi repetida e o banco não foi apagado.");
+                falhaLeitura is null
+                    ? "Não foi possível reconciliar a migration AddCartoes. A migração não foi repetida e o banco não foi apagado."
+                    : AvisoArquivoIlegivel);
         }
 
         if (reconciliacao.Bloqueado)
         {
-            var relatorioParcial = await VerificadorIntegridadeBanco.VerificarAsync(context, cancellationToken);
+            var (relatorioParcial, falhaLeitura) = await TentarVerificarAsync(context, cancellationToken);
+            if (falhaLeitura is not null)
+            {
+                return new ResultadoPreparoBanco(falhaLeitura, relatorioParcial, backup, AvisoArquivoIlegivel);
+            }
+
             return new ResultadoPreparoBanco(
                 new InvalidOperationException(reconciliacao.Motivo),
                 relatorioParcial,
@@ -81,8 +93,31 @@ public static class PreparoBanco
             falhaMigrate = ex;
         }
 
-        var relatorio = await VerificadorIntegridadeBanco.VerificarAsync(context, cancellationToken);
+        var (relatorio, falhaLeituraFinal) = await TentarVerificarAsync(context, cancellationToken);
+        if (falhaLeituraFinal is not null)
+        {
+            return new ResultadoPreparoBanco(
+                falhaMigrate ?? falhaLeituraFinal,
+                relatorio,
+                backup,
+                AvisoArquivoIlegivel);
+        }
+
         return new ResultadoPreparoBanco(falhaMigrate, relatorio, backup);
+    }
+
+    private static async Task<(RelatorioIntegridadeBanco Relatorio, Exception? FalhaLeitura)> TentarVerificarAsync(
+        AppDbContext context,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (await VerificadorIntegridadeBanco.VerificarAsync(context, cancellationToken), null);
+        }
+        catch (Exception ex)
+        {
+            return (VerificadorIntegridadeBanco.RelatorioIlegivel(context), ex);
+        }
     }
 
     public static async Task ExigirIntegroAsync(AppDbContext context, CancellationToken cancellationToken = default)

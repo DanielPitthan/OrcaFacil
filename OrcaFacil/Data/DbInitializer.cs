@@ -9,9 +9,18 @@ public static class DbInitializer
     public static async Task InitializeAsync(IDbContextFactory<AppDbContext> factory)
     {
         await using var context = await factory.CreateDbContextAsync();
-        var resultado = await PreparoBanco.MigrarEVerificarAsync(
-            context,
-            new OpcoesPreparoBanco { VersaoAplicativo = VersaoAplicativo() });
+        ResultadoPreparoBanco resultado;
+        try
+        {
+            resultado = await PreparoBanco.MigrarEVerificarAsync(
+                context,
+                new OpcoesPreparoBanco { VersaoAplicativo = VersaoAplicativo() });
+        }
+        catch (Exception ex)
+        {
+            resultado = FalhaSemRelatorio(context, ex);
+        }
+
         Registrar(resultado);
         if (resultado.ExigeRecuperacao)
             throw new IntegridadeBancoException(resultado);
@@ -34,47 +43,32 @@ public static class DbInitializer
         }
     }
 
-    private static void Registrar(ResultadoPreparoBanco resultado)
+    private static ResultadoPreparoBanco FalhaSemRelatorio(AppDbContext context, Exception ex)
     {
-        var relatorio = resultado.Relatorio;
+        RelatorioIntegridadeBanco relatorio;
         try
         {
-            if (resultado.CaminhoBackup is not null)
-            {
-                Log.Information(
-                    "Backup consistente antes da migração, sem apagar os anteriores: {Backup}.",
-                    resultado.CaminhoBackup);
-            }
-
-            if (!resultado.ExigeRecuperacao)
-            {
-                Log.Information(
-                    "Integridade do orcafacil.db ok. Tabelas: {Tabelas}. Migrations no histórico: {Historico}.",
-                    Juntar(relatorio.TabelasExistentes),
-                    Juntar(relatorio.MigrationsNoHistorico));
-                return;
-            }
-
-            Log.Error(
-                resultado.FalhaMigrate,
-                "Integridade do orcafacil.db falhou. O check não alterou o arquivo e nada foi apagado. Existe: {Tabelas}. Faltam tabelas: {TabelasFaltando}. Faltam colunas: {Colunas}. Faltam índices: {Indices}. Histórico: {Historico}. Histórico sem: {Ausentes}. Histórico desconhecido: {Desconhecidas}. Migration pela metade: {PelaMetade}. Histórico com objeto faltando: {HistoricoIncompleto}. Próxima migration não registrada: {Pendente}.",
-                Juntar(relatorio.TabelasExistentes),
-                Juntar(relatorio.TabelasFaltando),
-                Juntar(relatorio.ColunasFaltando),
-                Juntar(relatorio.IndicesFaltando),
-                Juntar(relatorio.MigrationsNoHistorico),
-                Juntar(relatorio.MigrationsAusentesNoHistorico),
-                Juntar(relatorio.MigrationsDesconhecidasNoHistorico),
-                Juntar(relatorio.MigrationsPelaMetade),
-                Juntar(relatorio.MigrationsNoHistoricoComObjetoFaltando),
-                relatorio.PrimeiraMigrationNaoRegistrada ?? "(nenhuma)");
+            relatorio = VerificadorIntegridadeBanco.RelatorioIlegivel(context);
         }
-        catch (Exception logEx)
+        catch (Exception)
         {
-            System.Diagnostics.Debug.WriteLine(logEx);
+            relatorio = RelatorioIntegridadeBanco.IlegivelMinimo;
         }
+
+        return new ResultadoPreparoBanco(ex, relatorio, aviso: PreparoBanco.AvisoArquivoIlegivel);
     }
 
-    private static string Juntar(IReadOnlyList<string> itens) =>
-        itens.Count == 0 ? "(nenhum)" : string.Join(", ", itens);
+    private static void Registrar(ResultadoPreparoBanco resultado) =>
+        RegistroPreparoBanco.Registrar(resultado, AdaptadorLog.Instancia);
+
+    private sealed class AdaptadorLog : IRegistroLog
+    {
+        public static AdaptadorLog Instancia { get; } = new();
+
+        public void Informacao(string mensagem, object?[] argumentos) =>
+            Log.Information(mensagem, argumentos);
+
+        public void Erro(Exception? excecao, string mensagem, object?[] argumentos) =>
+            Log.Error(excecao, mensagem, argumentos);
+    }
 }
