@@ -79,6 +79,12 @@ public class AppDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(i => i.CategoriaId)
                   .OnDelete(DeleteBehavior.Restrict);
+
+            // Vários itens sem hash (lançados na mão) continuam válidos: o único ignora nulos.
+            entity.HasIndex(i => new { i.TransacaoId, i.HashImportacao })
+                  .IsUnique()
+                  .HasFilter("\"HashImportacao\" IS NOT NULL")
+                  .HasDatabaseName("IX_ItensLancamento_TransacaoId_HashImportacao");
         });
 
         modelBuilder.Entity<Meta>(entity =>

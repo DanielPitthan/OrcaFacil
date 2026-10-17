@@ -117,6 +117,27 @@ public class FaturaCartaoEditorTests
     }
 
     [Fact]
+    public void RestanteAoEditar_Estorno30ComLiquido50_Devolve80()
+    {
+        var estorno = new ItemLancamentoFormModel { Valor = 30m, EhEstorno = true };
+
+        Assert.Equal(-30m, ItensFaturaRegras.ValorAssinado(estorno));
+        Assert.Equal(80m, FaturaCartaoEditor.SomaForaDoEditado(50m, estorno));
+        Assert.Equal(20m, FaturaCartaoEditor.RestanteAoEditar(100m, 50m, estorno));
+    }
+
+    [Fact]
+    public void RestanteAoEditar_Compra_TiraSoAMagnitude()
+    {
+        var compra = new ItemLancamentoFormModel { Valor = 20m, EhEstorno = false };
+
+        Assert.Equal(30m, FaturaCartaoEditor.SomaForaDoEditado(50m, compra));
+        Assert.Equal(70m, FaturaCartaoEditor.RestanteAoEditar(100m, 50m, compra));
+        Assert.Equal(50m, FaturaCartaoEditor.SomaForaDoEditado(50m, null));
+        Assert.Equal(50m, FaturaCartaoEditor.RestanteAoEditar(100m, 50m, null));
+    }
+
+    [Fact]
     public void Ordenar_MisturaEstornoPelaOrdem()
     {
         var itens = new List<ItemLancamentoFormModel>

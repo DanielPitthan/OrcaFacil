@@ -232,6 +232,143 @@ public class EstornoFaturaServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ExcluirAsync_CreditoDe80_DevolveOTotalNaMesmaGravacao()
+    {
+        var fatura = await CriarFaturaAsync(200m, pago: false);
+        var estorno = await _service.LancarAsync(fatura.Id, 80m, "Estorno", _alimentacaoId);
+        Assert.Equal(120m, await TotalAsync());
+
+        await _service.ExcluirAsync(fatura.Id, estorno.Id);
+
+        await using var contexto = _factory.CreateDbContext();
+        var gravada = await contexto.Transacoes.Include(t => t.Itens).SingleAsync();
+        Assert.Equal(200m, gravada.Valor);
+        Assert.Empty(gravada.Itens);
+    }
+
+    [Fact]
+    public async Task LancarAsync_ArredondaDuasCasasAfastandoDoZero()
+    {
+        var fatura = await CriarFaturaAsync(100m, pago: false);
+
+        var meio = await _service.LancarAsync(fatura.Id, 10.005m, "Estorno", _alimentacaoId);
+
+        Assert.Equal(10.01m, meio.Valor);
+        Assert.Equal(89.99m, await TotalAsync());
+    }
+
+    [Fact]
+    public async Task LancarAsync_AbaixoDoMeioCentavo_ArredondaParaBaixo()
+    {
+        var fatura = await CriarFaturaAsync(100m, pago: false);
+
+        var item = await _service.LancarAsync(fatura.Id, 10.004m, "Estorno", _alimentacaoId);
+
+        Assert.Equal(10.00m, item.Valor);
+        Assert.Equal(90.00m, await TotalAsync());
+    }
+
+    [Fact]
+    public async Task LancarAsync_FaturaInexistente_Recusa()
+    {
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.LancarAsync(999, 10m, "Estorno", _alimentacaoId));
+
+        Assert.Contains("não encontrado", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task LancarAsync_CategoriaInexistente_RecusaENaoGrava()
+    {
+        var fatura = await CriarFaturaAsync(100m, pago: false);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.LancarAsync(fatura.Id, 10m, "Estorno", 999));
+
+        Assert.Contains("Categoria", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(100m, await TotalAsync());
+        await using var contexto = _factory.CreateDbContext();
+        Assert.Empty(await contexto.ItensLancamento.ToListAsync());
+    }
+
+    [Fact]
+    public async Task LancarAsync_ValorZeroOuQueSomaZero_RecusaENaoGrava()
+    {
+        var fatura = await CriarFaturaAsync(100m, pago: false);
+
+        var zero = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.LancarAsync(fatura.Id, 0m, "Estorno", _alimentacaoId));
+        var quase = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.LancarAsync(fatura.Id, 0.004m, "Estorno", _alimentacaoId));
+
+        Assert.Contains("valor", zero.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("valor", quase.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(100m, await TotalAsync());
+        await using var contexto = _factory.CreateDbContext();
+        Assert.Empty(await contexto.ItensLancamento.ToListAsync());
+    }
+
+    [Fact]
+    public async Task EditarAsync_ItemInexistente_RecusaENaoMexeNoTotal()
+    {
+        var fatura = await CriarFaturaAsync(100m, pago: false);
+        var estorno = await _service.LancarAsync(fatura.Id, 10m, "Estorno", _alimentacaoId);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.EditarAsync(fatura.Id, estorno.Id + 50, 5m, "Estorno", _alimentacaoId));
+
+        Assert.Contains("não encontrado", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(90m, await TotalAsync());
+    }
+
+    [Fact]
+    public async Task EditarAsync_Compra_RecusaENaoMexeNoTotal()
+    {
+        var fatura = await CriarFaturaAsync(200m, pago: false, itens:
+        [
+            new ItemLancamento
+            {
+                Descricao = "Alimentação",
+                Valor = 80m,
+                CategoriaId = _alimentacaoId,
+                Natureza = NaturezaItemLancamento.Avulsa,
+                Ordem = 0
+            }
+        ]);
+        var compraId = fatura.Itens.Single().Id;
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.EditarAsync(fatura.Id, compraId, 10m, "Alimentação", _alimentacaoId));
+
+        Assert.Contains("estorno", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(200m, await TotalAsync());
+        await using var contexto = _factory.CreateDbContext();
+        Assert.Equal(80m, (await contexto.ItensLancamento.SingleAsync()).Valor);
+    }
+
+    [Fact]
+    public async Task ExcluirAsync_FaturaInexistente_Recusa()
+    {
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.ExcluirAsync(999, 1));
+
+        Assert.Contains("não encontrado", ex.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExcluirAsync_ItemInexistente_RecusaENaoMexeNoTotal()
+    {
+        var fatura = await CriarFaturaAsync(200m, pago: false);
+        var estorno = await _service.LancarAsync(fatura.Id, 80m, "Estorno", _alimentacaoId);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.ExcluirAsync(fatura.Id, estorno.Id + 50));
+
+        Assert.Contains("não encontrado", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(120m, await TotalAsync());
+    }
+
+    [Fact]
     public async Task EditarAsync_LiquidoAbaixoDoMinimo_RecusaENaoGrava()
     {
         var fatura = await CriarFaturaAsync(100m, pago: false);

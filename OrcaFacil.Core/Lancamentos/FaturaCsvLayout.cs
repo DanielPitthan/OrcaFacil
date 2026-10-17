@@ -18,6 +18,9 @@ public static class FaturaCsvLayout
 
     public const char Separador = ';';
 
+    /// <summary>Acima disto o arquivo é recusado, sem ler o conteúdo.</summary>
+    public const int TamanhoMaximoBytes = 1_048_576;
+
     public const string ColunaData = "Data";
     public const string ColunaDescricao = "Descricao";
     public const string ColunaValor = "Valor";
@@ -67,14 +70,67 @@ public static class FaturaCsvLayout
         => string.Equals(linha, Exemplo1, StringComparison.Ordinal)
             || string.Equals(linha, Exemplo2, StringComparison.Ordinal);
 
-    /// <summary>Mesma regra de <c>CsvExportService.EscaparCsv</c>: aspas se houver separador, aspas ou quebra de linha.</summary>
+    /// <summary>
+    /// Mesma regra de <c>CsvExportService.EscaparCsv</c>: aspas se houver separador, aspas ou quebra de linha.
+    /// Texto que abre com =, +, @ ou com hífen que não é valor recebe um apóstrofo,
+    /// para o Excel não tratar a célula como fórmula. <c>-10,00</c> continua negativo.
+    /// </summary>
     public static string Escapar(string valor)
     {
         ArgumentNullException.ThrowIfNull(valor);
-        if (valor.Contains(Separador) || valor.Contains('"') || valor.Contains('\n'))
-            return $"\"{valor.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
+        var texto = ProtegerFormula(valor);
+        if (texto.Contains(Separador) || texto.Contains('"') || texto.Contains('\n') || texto.Contains('\r'))
+            return $"\"{texto.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
+
+        return texto;
+    }
+
+    /// <summary>Apóstrofo na frente de gatilho de fórmula. Valor monetário negativo não muda.</summary>
+    public static string ProtegerFormula(string valor)
+    {
+        ArgumentNullException.ThrowIfNull(valor);
+        if (valor.Length == 0)
+            return valor;
+
+        if (valor[0] is '=' or '+' or '@')
+            return "'" + valor;
+
+        if (valor[0] == '-' && !PareceValorMonetario(valor))
+            return "'" + valor;
 
         return valor;
+    }
+
+    private static bool PareceValorMonetario(string valor)
+    {
+        if (valor.Length < 2 || valor[0] != '-')
+            return false;
+
+        var virgula = valor.IndexOf(',');
+        var fimInteiro = virgula >= 0 ? virgula : valor.Length;
+        if (fimInteiro <= 1)
+            return false;
+
+        for (var i = 1; i < fimInteiro; i++)
+        {
+            if (!char.IsAsciiDigit(valor[i]))
+                return false;
+        }
+
+        if (virgula < 0)
+            return true;
+
+        var fracao = valor.Length - virgula - 1;
+        if (fracao is < 1 or > 2)
+            return false;
+
+        for (var i = virgula + 1; i < valor.Length; i++)
+        {
+            if (!char.IsAsciiDigit(valor[i]))
+                return false;
+        }
+
+        return true;
     }
 
     private static string Montar(params string[] campos)
