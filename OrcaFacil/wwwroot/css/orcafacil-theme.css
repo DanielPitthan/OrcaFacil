@@ -297,6 +297,25 @@ div.mud-input-slot.mud-input-root {
     padding: 0;
 }
 
+.mud-dialog-title.of-import-titulo,
+.mud-dialog-actions.of-import-acoes,
+.mud-dialog-content.of-import-conteudo {
+    background: var(--of-background);
+}
+
+.mud-dialog-title.of-import-titulo {
+    padding: 4px 8px 4px 4px;
+}
+
+.mud-dialog-content.of-import-conteudo {
+    padding: 0;
+}
+
+.mud-dialog-actions.of-import-acoes {
+    display: block;
+    padding: 0;
+}
+
 /* Quando o WebView não encolhe com o teclado, a área útil termina acima dele. */
 html.of-teclado-aberto .mud-dialog-container {
     height: calc(100% - var(--of-teclado, 0px));

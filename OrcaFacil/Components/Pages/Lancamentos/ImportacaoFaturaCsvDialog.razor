@@ -1,0 +1,357 @@
+@using System.Globalization
+@using OrcaFacil.Core.Lancamentos
+@using OrcaFacil.Core.Services
+@inject ImportacaoFaturaCsvService Importacao
+@inject ICsvExportService CsvExport
+
+<MudDialog Gutters="false" TitleClass="of-import-titulo" ContentClass="of-import-conteudo" ActionsClass="of-import-acoes">
+    <TitleContent>
+        <div class="of-import-cabeca">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Inherit" Edge="Edge.Start"
+                           aria-label="Voltar" Disabled="@_toque.EmAndamento" OnClick="Cancelar" />
+            <div class="of-appbar-titulos">
+                <span class="of-appbar-titulo">@ImportacaoFaturaCsvApresentacao.Titulo</span>
+                <span class="of-appbar-sub">Fatura do cartão</span>
+            </div>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <div class="of-import">
+            <div class="of-import-miolo">
+                @if (Ocupado)
+                {
+                    <div class="of-import-bloco">
+                        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+                        <p class="of-import-status" role="status">
+                            @(_toque.EmAndamento ? ImportacaoFaturaCsvApresentacao.TextoImportando : ImportacaoFaturaCsvApresentacao.TextoLendo)
+                        </p>
+                    </div>
+                }
+
+                @if (!PodeLerArquivo)
+                {
+                    <div class="of-import-bloco">
+                        <MudAlert Severity="Severity.Info" Dense="true">@ImportacaoFaturaCsvApresentacao.MensagemSalvarAntes</MudAlert>
+                    </div>
+                }
+
+                @if (MesFechadoVisivel)
+                {
+                    <div class="of-import-bloco">
+                        <MudAlert Severity="Severity.Warning" Icon="@Icons.Material.Filled.Lock" Dense="true">
+                            @ImportacaoFaturaCsvApresentacao.MensagemMesFechado
+                        </MudAlert>
+                    </div>
+                }
+
+                <div class="of-import-bloco">
+                    <FormSection Titulo="Arquivo">
+                        <div class="of-import-arquivo">
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.FileDownload"
+                                       Class="of-import-botao" ButtonType="ButtonType.Button"
+                                       Disabled="@_toque.EmAndamento" OnClick="BaixarModeloAsync">
+                                @ImportacaoFaturaCsvApresentacao.TextoBaixarModelo
+                            </MudButton>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                                       StartIcon="@Icons.Material.Filled.UploadFile"
+                                       Class="of-import-botao" ButtonType="ButtonType.Button"
+                                       Disabled="@Ocupado" OnClick="EscolherArquivoAsync">
+                                @ImportacaoFaturaCsvApresentacao.TextoEscolherArquivo
+                            </MudButton>
+                            @if (!string.IsNullOrWhiteSpace(_nomeArquivo))
+                            {
+                                <p class="of-import-nome">@_nomeArquivo</p>
+                            }
+                        </div>
+                    </FormSection>
+                </div>
+
+                @if (_previa is { ArquivoAceito: true } && _vista is not null)
+                {
+                    <div class="of-import-bloco">
+                        <FormSection Titulo="Totais">
+                            <FormRow Icone="@Icons.Material.Outlined.Payments" Rotulo="Compras" Valor="@_vista.Totais.ComprasTexto" />
+                            <FormRow Icone="@Icons.Material.Filled.Undo" Rotulo="Estornos">
+                                <span class="of-moeda @(_vista.Totais.EstornosEmCredito ? "of-import-credito" : null)">@_vista.Totais.EstornosTexto</span>
+                            </FormRow>
+                            <FormRow Icone="@Icons.Material.Filled.AccountBalanceWallet" Rotulo="Líquido" Valor="@_vista.Totais.LiquidoTexto" />
+                        </FormSection>
+                    </div>
+
+                    @if (_vista.Erros.Count > 0)
+                    {
+                        <div class="of-import-bloco">
+                            <FormSection Titulo="Erros">
+                                <ul class="of-import-erros">
+                                    @foreach (var erro in _vista.Erros)
+                                    {
+                                        <li>
+                                            <span class="of-import-erro-onde">Linha @erro.Numero · @erro.Coluna</span>
+                                            <span class="of-import-erro-msg">@erro.Mensagem</span>
+                                        </li>
+                                    }
+                                </ul>
+                            </FormSection>
+                        </div>
+                    }
+
+                    @if (_vista.Linhas.Count > 0)
+                    {
+                        <div class="of-import-bloco">
+                            <FormSection Titulo="Linhas">
+                                <p class="of-import-selecao">@_vista.TextoSelecao</p>
+                                <ul class="of-import-linhas">
+                                    @foreach (var linha in _vista.Linhas)
+                                    {
+                                        <li @key="linha.Numero" class="of-import-linha @(linha.Duplicata ? "of-import-duplicata" : null)">
+                                            <span class="of-import-check">
+                                                <MudCheckBox T="bool" Value="@linha.Selecionada" ValueChanged="@(_ => Alternar(linha.Numero))"
+                                                             Color="Color.Primary" Disabled="@Ocupado" AriaLabel="@linha.Aria" />
+                                            </span>
+                                            <button type="button" class="of-import-linha-botao" disabled="@Ocupado"
+                                                    @onclick="() => Alternar(linha.Numero)">
+                                                <span class="of-import-icone" style="@Fundo(linha.CategoriaId)" aria-hidden="true">@Icone(linha.CategoriaId)</span>
+                                                <span class="of-import-texto">
+                                                    <span class="of-import-titulo">@linha.Titulo</span>
+                                                    <span class="of-import-sub">@linha.Subtitulo</span>
+                                                    @if (linha.EscolhaDuplicata is not null)
+                                                    {
+                                                        <span class="of-import-tag">Duplicata · @linha.EscolhaDuplicata</span>
+                                                    }
+                                                </span>
+                                                <span class="of-moeda of-import-valor @(linha.EhEstorno ? "of-import-credito" : null)">@linha.Valor</span>
+                                            </button>
+                                        </li>
+                                    }
+                                </ul>
+                            </FormSection>
+                        </div>
+                    }
+
+                    @if (_vista.AvisoDuplicata is not null)
+                    {
+                        <div class="of-import-bloco">
+                            <MudAlert Severity="Severity.Warning" Dense="true">@_vista.AvisoDuplicata</MudAlert>
+                        </div>
+                    }
+                }
+                else if (_previa is { ArquivoAceito: false })
+                {
+                    <div class="of-import-bloco">
+                        <p class="of-import-falha" role="alert">@_previa.ErroArquivo</p>
+                    </div>
+                }
+            </div>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        @if (Rodape is { } rodape)
+        {
+            <p class="of-import-bloqueio @ClasseRodape(rodape.Tom)" role="status">@rodape.Texto</p>
+        }
+        <StickyActionBar Contido="true" TextoCancelar="Cancelar"
+                         TextoPrimario="@(_toque.EmAndamento ? ImportacaoFaturaCsvApresentacao.TextoImportando : ImportacaoFaturaCsvApresentacao.TextoConfirmar)"
+                         OnCancelar="Cancelar" OnPrimario="ConfirmarAsync" TipoPrimario="ButtonType.Button"
+                         CancelarDesabilitado="@_toque.EmAndamento" PrimarioDesabilitado="@(!PodeConfirmar)" />
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private static readonly CultureInfo Cultura = CultureInfo.GetCultureInfo("pt-BR");
+
+    private readonly GuardaToque _toque = new();
+    private PreviaImportacaoFaturaCsv? _previa;
+    private HashSet<int> _selecionadas = [];
+    private byte[]? _bytes;
+    private string? _nomeArquivo;
+    private string? _erroOperacao;
+    private bool _lendo;
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public int? FaturaId { get; set; }
+    [Parameter] public bool PeriodoBloqueado { get; set; }
+    [Parameter] public bool PodeLerArquivo { get; set; }
+    [Parameter] public IReadOnlyList<Categoria> Categorias { get; set; } = [];
+
+    private bool Ocupado => _lendo || _toque.EmAndamento;
+
+    private bool MesFechadoVisivel => PeriodoBloqueado || _previa?.MesFechado == true;
+
+    private VistaImportacaoFaturaCsv? _vista => _previa is null
+        ? null
+        : ImportacaoFaturaCsvApresentacao.Montar(_previa, _selecionadas, Cultura, PeriodoBloqueado);
+
+    private bool PodeConfirmar => !Ocupado && _bytes is not null && FaturaId is not null && _vista?.PodeConfirmar == true;
+
+    private (string Texto, TomMensagemImportacaoFatura Tom)? Rodape
+    {
+        get
+        {
+            if (_erroOperacao is not null)
+                return (_erroOperacao, TomMensagemImportacaoFatura.Erro);
+
+            if (_vista?.Bloqueio is { } bloqueio)
+                return (bloqueio.Texto, bloqueio.Tom);
+
+            if (_previa is null && !_lendo)
+                return (ImportacaoFaturaCsvApresentacao.MensagemEscolhaArquivo, TomMensagemImportacaoFatura.Neutro);
+
+            return null;
+        }
+    }
+
+    private static string ClasseRodape(TomMensagemImportacaoFatura tom) => tom switch
+    {
+        TomMensagemImportacaoFatura.Erro => "of-import-bloqueio-erro",
+        TomMensagemImportacaoFatura.Aviso => "of-import-bloqueio-aviso",
+        _ => "of-import-bloqueio-neutro"
+    };
+
+    private void Cancelar()
+    {
+        if (_toque.EmAndamento)
+            return;
+
+        MudDialog.Cancel();
+    }
+
+    private void Alternar(int numero)
+    {
+        if (Ocupado || _previa is null)
+            return;
+
+        _erroOperacao = null;
+        _selecionadas = ImportacaoFaturaCsvApresentacao.Alternar(_selecionadas, numero);
+    }
+
+    private string Icone(int categoriaId)
+        => Categorias.FirstOrDefault(c => c.Id == categoriaId)?.Icone ?? "🏷️";
+
+    private string? Fundo(int categoriaId)
+    {
+        var cor = Categorias.FirstOrDefault(c => c.Id == categoriaId)?.CorHex;
+        return string.IsNullOrWhiteSpace(cor) ? null : $"background:{cor}";
+    }
+
+    private async Task BaixarModeloAsync()
+    {
+        if (_toque.EmAndamento)
+            return;
+
+        try
+        {
+            var caminho = Path.Combine(FileSystem.CacheDirectory, FaturaCsvLayout.NomeArquivoModelo);
+            await File.WriteAllBytesAsync(caminho, ImportacaoFaturaCsvApresentacao.BytesDoModelo());
+            await CsvExport.CompartilharAsync(caminho, ImportacaoFaturaCsvApresentacao.TituloCompartilharModelo);
+        }
+        catch (Exception ex)
+        {
+            _erroOperacao = ImportacaoFaturaCsvApresentacao.MensagemFalhaModelo(ex.Message);
+        }
+    }
+
+    private async Task EscolherArquivoAsync()
+    {
+        if (Ocupado)
+            return;
+
+        FileResult? arquivo;
+        try
+        {
+            arquivo = await FilePicker.Default.PickAsync(new PickOptions
+            {
+                PickerTitle = ImportacaoFaturaCsvApresentacao.Titulo,
+                FileTypes = new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>>
+                {
+                    { DevicePlatform.Android, new[] { "text/csv", "text/comma-separated-values", "text/plain", "application/vnd.ms-excel", "application/octet-stream" } },
+                    { DevicePlatform.WinUI, new[] { ".csv", ".txt" } }
+                })
+            });
+        }
+        catch (Exception)
+        {
+            _erroOperacao = ImportacaoFaturaCsvApresentacao.MensagemSeletor;
+            return;
+        }
+
+        if (arquivo is null)
+            return;
+
+        _lendo = true;
+        _erroOperacao = null;
+        _previa = null;
+        _bytes = null;
+        _nomeArquivo = arquivo.FileName;
+        try
+        {
+            await using var stream = await arquivo.OpenReadAsync();
+            using var memoria = new MemoryStream();
+            await stream.CopyToAsync(memoria);
+            var bytes = memoria.ToArray();
+            if (!PodeLerArquivo || FaturaId is not int faturaId)
+            {
+                _erroOperacao = ImportacaoFaturaCsvApresentacao.MensagemSalvarAntes;
+                return;
+            }
+
+            _bytes = bytes;
+            _previa = await Importacao.PreverAsync(faturaId, bytes);
+            _selecionadas = ImportacaoFaturaCsvApresentacao.SelecaoInicial(_previa);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _previa = null;
+            _bytes = null;
+            _erroOperacao = ex.Message;
+        }
+        catch (Exception)
+        {
+            _previa = null;
+            _bytes = null;
+            _erroOperacao = ImportacaoFaturaCsvApresentacao.MensagemFalha;
+        }
+        finally
+        {
+            _lendo = false;
+        }
+    }
+
+    private async Task ConfirmarAsync()
+    {
+        if (!_toque.Tentar())
+            return;
+
+        string? resumo = null;
+        try
+        {
+            if (_bytes is null || FaturaId is not int faturaId || _previa is null || _vista is not { PodeConfirmar: true })
+                return;
+
+            var previa = _previa;
+            var selecionadas = _selecionadas;
+            var bytes = _bytes;
+            _erroOperacao = null;
+            var pedido = ImportacaoFaturaCsvApresentacao.MontarPedido(previa, selecionadas);
+            var resultado = await Importacao.ConfirmarAsync(faturaId, bytes, pedido);
+            resumo = ImportacaoFaturaCsvApresentacao.ResumoDaConfirmacao(resultado, previa, selecionadas);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _erroOperacao = ex.Message;
+        }
+        catch (Exception)
+        {
+            _erroOperacao = ImportacaoFaturaCsvApresentacao.MensagemFalha;
+        }
+        finally
+        {
+            if (resumo is null)
+                _toque.Liberar();
+        }
+
+        if (resumo is not null)
+            MudDialog.Close(DialogResult.Ok(resumo));
+    }
+}
