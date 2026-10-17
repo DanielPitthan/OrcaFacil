@@ -147,7 +147,7 @@
         return PainelInicio.Classificar(fonte.Select(t => new LancamentoCategoria(
             t.Categoria?.Nome ?? "Sem categoria",
             t.Valor,
-            t.Itens?.Select(i => new EntradaCategoria(i.Categoria?.Nome ?? "Sem categoria", i.Valor)).ToList())));
+            t.Itens?.Select(i => new EntradaCategoria(i.Categoria?.Nome ?? "Sem categoria", i.Valor, i.EhEstorno)).ToList())));
     }
 
     private void Voltar() => Navigation.NavigateTo("/");

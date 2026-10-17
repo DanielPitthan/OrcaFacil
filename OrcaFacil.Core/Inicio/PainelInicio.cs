@@ -1,6 +1,7 @@
 using System.Globalization;
 using OrcaFacil.Core.Dtos;
 using OrcaFacil.Core.Entities;
+using OrcaFacil.Core.Lancamentos;
 using OrcaFacil.Core.Noticias;
 
 namespace OrcaFacil.Core.Inicio;
@@ -218,7 +219,7 @@ public sealed class PainelInicio
                 continue;
             }
 
-            var somaItens = itens.Sum(i => i.Total);
+            var somaItens = itens.Sum(ValorAssinado);
             if (somaItens > lancamento.Valor)
             {
                 Somar(lancamento.Categoria, lancamento.Valor);
@@ -226,12 +227,19 @@ public sealed class PainelInicio
             }
 
             foreach (var item in itens)
-                Somar(item.Nome, item.Total);
+                Somar(item.Nome, ValorAssinado(item));
             Somar(lancamento.Categoria, lancamento.Valor - somaItens);
         }
 
         return somas.Select(kv => new EntradaCategoria(nomes[kv.Key], kv.Value)).ToList();
     }
+
+    private static decimal ValorAssinado(EntradaCategoria item)
+        => ItensFaturaRegras.ValorAssinado(new ItemLancamentoFormModel
+        {
+            Valor = item.Total,
+            EhEstorno = item.EhEstorno
+        });
 
     public static string FormatarMarca(decimal valor, CultureInfo cultura)
     {
@@ -543,7 +551,7 @@ public sealed record EntradaPainelInicio(
     DateTime Hoje,
     decimal LimiarOrcamento = PainelInicio.LimiarOrcamentoPadrao);
 
-public readonly record struct EntradaCategoria(string Nome, decimal Total);
+public readonly record struct EntradaCategoria(string Nome, decimal Total, bool EhEstorno = false);
 
 public sealed record LancamentoCategoria(string Categoria, decimal Valor, IReadOnlyList<EntradaCategoria>? Itens);
 

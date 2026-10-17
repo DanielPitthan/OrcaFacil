@@ -65,6 +65,23 @@ public class PainelInicioTests
     }
 
     [Fact]
+    public void Classificar_EstornoAbateACategoriaSemDobrarOTotal()
+    {
+        var classificadas = PainelInicio.Classificar(
+        [
+            new LancamentoCategoria("Cartão de Crédito", 400m,
+            [
+                new EntradaCategoria("Alimentação", 300m),
+                new EntradaCategoria("Alimentação", 100m, EhEstorno: true)
+            ])
+        ]);
+
+        Assert.Equal(200m, classificadas.Single(c => c.Nome == "Alimentação").Total);
+        Assert.Equal(200m, classificadas.Single(c => c.Nome == "Cartão de Crédito").Total);
+        Assert.Equal(400m, classificadas.Sum(c => c.Total));
+    }
+
+    [Fact]
     public void Categorias_ComCincoOuMenos_NaoCriaOutras()
     {
         var painel = Montar(categorias: [new("Energia", 10m), new("Moradia", 5m)]);

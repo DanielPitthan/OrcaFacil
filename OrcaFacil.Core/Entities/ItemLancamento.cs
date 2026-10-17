@@ -14,8 +14,15 @@ public class ItemLancamento
     [MaxLength(120)]
     public string? Descritivo { get; set; }
 
+    /// <summary>Magnitude sempre positiva. O sinal entra pela flag <see cref="EhEstorno"/>.</summary>
     [Range(0.01, 1_000_000_000)]
     public decimal Valor { get; set; }
+
+    /// <summary>
+    /// Quando verdadeiro, o item é crédito na fatura: a soma usa o valor com sinal negativo
+    /// e a natureza fica avulsa. Não copia para o mês seguinte.
+    /// </summary>
+    public bool EhEstorno { get; set; }
 
     public NaturezaItemLancamento Natureza { get; set; } = NaturezaItemLancamento.Avulsa;
 

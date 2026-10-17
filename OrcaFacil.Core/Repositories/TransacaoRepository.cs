@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.Data;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
+using OrcaFacil.Core.Lancamentos;
 
 namespace OrcaFacil.Core.Repositories;
 
@@ -96,11 +97,11 @@ public class TransacaoRepository : GenericRepository<Transacao>, ITransacaoRepos
             .Include(t => t.Itens)
             .Where(t => t.Tipo == TipoTransacao.Despesa && t.Data >= inicio && t.Data <= fim)
             .Where(t => t.Recorrencia != TipoRecorrencia.Unica
-                || t.Itens.Any(i => i.Natureza == NaturezaItemLancamento.Assinatura
+                || t.Itens.Any(i => !i.EhEstorno && (i.Natureza == NaturezaItemLancamento.Assinatura
                     || (i.Natureza == NaturezaItemLancamento.Parcelada
                         && i.ParcelaAtual != null
                         && i.TotalParcelas != null
-                        && i.ParcelaAtual < i.TotalParcelas)))
+                        && i.ParcelaAtual < i.TotalParcelas))))
             .OrderBy(t => t.Data)
             .ThenBy(t => t.Id)
             .ToListAsync();
@@ -169,7 +170,12 @@ public class TransacaoRepository : GenericRepository<Transacao>, ITransacaoRepos
             {
                 t.CategoriaId,
                 t.Valor,
-                Itens = t.Itens.Select(i => new { i.CategoriaId, i.Valor }).ToList()
+                Itens = t.Itens.Select(i => new ItemLancamento
+                {
+                    CategoriaId = i.CategoriaId,
+                    Valor = i.Valor,
+                    EhEstorno = i.EhEstorno
+                }).ToList()
             })
             .ToListAsync();
 
@@ -183,9 +189,9 @@ public class TransacaoRepository : GenericRepository<Transacao>, ITransacaoRepos
             }
 
             foreach (var item in transacao.Itens)
-                Somar(somas, item.CategoriaId, item.Valor);
+                Somar(somas, item.CategoriaId, ItensFaturaRegras.ValorAssinado(item));
 
-            var restante = transacao.Valor - transacao.Itens.Sum(i => i.Valor);
+            var restante = transacao.Valor - transacao.Itens.Sum(ItensFaturaRegras.ValorAssinado);
             if (restante > 0)
                 Somar(somas, transacao.CategoriaId, restante);
         }

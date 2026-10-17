@@ -239,7 +239,7 @@
 
     private Cartao? CartaoAtual => Cartoes.FirstOrDefault(c => c.Id == Modelo.CartaoId);
 
-    private decimal Soma => FaturaCartaoEditor.Soma(Modelo.Itens.Select(i => i.Valor));
+    private decimal Soma => FaturaCartaoEditor.Soma(Modelo.Itens);
 
     private decimal SomaForaDoRascunho
     {
@@ -419,7 +419,8 @@
             ? (_itemParcelaAtual, _itemTotalParcelas)
             : ((int?)null, (int?)null);
 
-        var erro = FaturaCartaoEditor.ValidarItem(_itemCategoriaId, _itemValor, natureza, parcelaAtual, totalParcelas);
+        var ehEstorno = _editando is not null && !acrescentar && _editando.EhEstorno;
+        var erro = FaturaCartaoEditor.ValidarItem(_itemCategoriaId, _itemValor, natureza, parcelaAtual, totalParcelas, ehEstorno);
         if (erro is not null)
         {
             _erroItem = erro;

@@ -335,7 +335,7 @@ else
     private IEnumerable<Categoria> CategoriasDosItens =>
         CategoriasFiltradas.Where(c => c.Id != _modelo.CategoriaId);
 
-    private decimal SomaItens => _modelo.Itens.Sum(i => i.Valor);
+    private decimal SomaItens => FaturaCartaoEditor.Soma(_modelo.Itens);
 
     private decimal Restante => _modelo.Valor - SomaItens;
 
@@ -369,6 +369,7 @@ else
                         Descricao = i.Descricao,
                         Descritivo = i.Descritivo,
                         Valor = i.Valor,
+                        EhEstorno = i.EhEstorno,
                         Natureza = i.Natureza,
                         ParcelaAtual = i.ParcelaAtual,
                         TotalParcelas = i.TotalParcelas,
@@ -555,7 +556,7 @@ else
     }
 
     private double PercentualClassificado =>
-        _modelo.Valor <= 0 ? 100 : (double)Math.Min(100m, SomaItens / _modelo.Valor * 100m);
+        FaturaCartaoEditor.PercentualClassificado(_modelo.Valor, SomaItens);
 
     private static string LegendaItem(ItemLancamentoFormModel item, Categoria? categoria)
     {

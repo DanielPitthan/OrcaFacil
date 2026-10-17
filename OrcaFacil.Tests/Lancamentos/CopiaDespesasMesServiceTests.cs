@@ -85,6 +85,30 @@ public class CopiaDespesasMesServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task CopiarAsync_EstornoNaoVoltaNoMesSeguinte()
+    {
+        await _transacoes.AddAsync(Fatura(new DateTime(2026, 3, 18), TipoRecorrencia.Mensal, 230m,
+        [
+            Item("Netflix", 70m, NaturezaItemLancamento.Assinatura, _lazerId, 0),
+            Item("Estorno mercado", 40m, NaturezaItemLancamento.Avulsa, _alimentacaoId, 1, ehEstorno: true),
+            Item("Almoço", 200m, NaturezaItemLancamento.Avulsa, _alimentacaoId, 2)
+        ]));
+        await _transacoes.AddAsync(Fatura(new DateTime(2026, 3, 8), TipoRecorrencia.Mensal, 100m,
+        [
+            Item("Estorno isolado", 25m, NaturezaItemLancamento.Avulsa, _alimentacaoId, 0, ehEstorno: true)
+        ]));
+
+        var copias = await _service.CopiarAsync(4, 2026);
+
+        var copia = Assert.Single(copias);
+        Assert.Equal(70m, copia.Valor);
+        var item = Assert.Single(copia.Itens);
+        Assert.Equal("Netflix", item.Descricao);
+        Assert.False(item.EhEstorno);
+        Assert.Equal(NaturezaItemLancamento.Assinatura, item.Natureza);
+    }
+
+    [Fact]
     public async Task CopiarAsync_SoAvulsas_NaoCopia()
     {
         await _transacoes.AddAsync(Fatura(new DateTime(2026, 3, 10), TipoRecorrencia.Mensal, 500m,
@@ -109,10 +133,11 @@ public class CopiaDespesasMesServiceTests : IDisposable
         Itens = itens
     };
 
-    private static ItemLancamento Item(string descricao, decimal valor, NaturezaItemLancamento natureza, int categoriaId, int ordem, int? parcelaAtual = null, int? totalParcelas = null) => new()
+    private static ItemLancamento Item(string descricao, decimal valor, NaturezaItemLancamento natureza, int categoriaId, int ordem, int? parcelaAtual = null, int? totalParcelas = null, bool ehEstorno = false) => new()
     {
         Descricao = descricao,
         Valor = valor,
+        EhEstorno = ehEstorno,
         Natureza = natureza,
         CategoriaId = categoriaId,
         Ordem = ordem,

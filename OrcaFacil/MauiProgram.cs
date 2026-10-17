@@ -114,6 +114,7 @@ public static class MauiProgram
 
         // Serviços de negócio
         builder.Services.AddSingleton<CopiaDespesasMesService>();
+        builder.Services.AddSingleton<EstornoFaturaService>();
         builder.Services.AddScoped<IFechamentoService, FechamentoService>();
         builder.Services.AddScoped<ITransacaoService, TransacaoService>();
         builder.Services.AddScoped<ICategoriaService, CategoriaService>();

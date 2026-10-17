@@ -3,6 +3,7 @@ using OrcaFacil.Core.Cesta;
 using OrcaFacil.Core.Data;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
+using OrcaFacil.Core.Lancamentos;
 
 namespace OrcaFacil.Core.Repositories;
 
@@ -333,6 +334,9 @@ public class CestaRepository : ICestaRepository
 
                 if (mesmaFatura)
                 {
+                    if (itemAnterior.EhEstorno)
+                        throw new InvalidOperationException("O item da fatura vinculado à compra não pode ser um estorno.");
+
                     var diferenca = CestaDespesaRegras.Dinheiro(faturaCredito.Valor - itemAnterior.Valor);
                     itemAnterior.Descricao = faturaCredito.DescricaoItem;
                     itemAnterior.Valor = faturaCredito.Valor;
@@ -413,11 +417,11 @@ public class CestaRepository : ICestaRepository
     private static async Task RemoverItemFaturaAsync(AppDbContext context, int itemFaturaId)
     {
         var item = await context.ItensLancamento.FirstOrDefaultAsync(i => i.Id == itemFaturaId);
-        if (item is null)
+        if (item is null || item.EhEstorno)
             return;
 
         var transacaoId = item.TransacaoId;
-        var valorItem = item.Valor;
+        var valorItem = ItensFaturaRegras.ValorAssinado(item);
         context.ItensLancamento.Remove(item);
         await context.SaveChangesAsync();
 
@@ -428,7 +432,7 @@ public class CestaRepository : ICestaRepository
             return;
 
         var novoTotal = CestaDespesaRegras.Dinheiro(fatura.Valor - valorItem);
-        var somaItensRestantes = CestaDespesaRegras.Dinheiro(fatura.Itens.Sum(i => i.Valor));
+        var somaItensRestantes = CestaDespesaRegras.Dinheiro(fatura.Itens.Sum(ItensFaturaRegras.ValorAssinado));
 
         if (fatura.Itens.Count == 0 && novoTotal <= 0)
         {
@@ -437,7 +441,11 @@ public class CestaRepository : ICestaRepository
             return;
         }
 
-        fatura.Valor = Math.Max(somaItensRestantes, Math.Max(0.01m, novoTotal));
+        var liquido = Math.Max(ItensFaturaRegras.TotalMinimo, novoTotal);
+        if (somaItensRestantes > liquido)
+            liquido = somaItensRestantes;
+
+        fatura.Valor = liquido;
         fatura.AtualizadoEm = DateTime.UtcNow;
         await context.SaveChangesAsync();
     }

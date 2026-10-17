@@ -17,6 +17,9 @@ public class ItemLancamentoFormModel
     [Range(0.01, 1_000_000_000, ErrorMessage = "Informe um valor maior que zero")]
     public decimal Valor { get; set; }
 
+    /// <summary>Magnitude positiva. O lançamento de estorno (não o item de compra) marca verdadeiro.</summary>
+    public bool EhEstorno { get; set; }
+
     public NaturezaItemLancamento Natureza { get; set; } = NaturezaItemLancamento.Avulsa;
 
     public int? ParcelaAtual { get; set; }

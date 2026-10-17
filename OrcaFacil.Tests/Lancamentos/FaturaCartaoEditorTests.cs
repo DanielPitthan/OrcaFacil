@@ -66,6 +66,87 @@ public class FaturaCartaoEditorTests
     }
 
     [Fact]
+    public void ValidarItem_MagnitudeNaoPositiva_Recusa()
+    {
+        Assert.Equal("Informe o valor do item.", FaturaCartaoEditor.ValidarItem(2, 0m, NaturezaItemLancamento.Avulsa, null, null));
+        Assert.Equal("Informe o valor do item.", FaturaCartaoEditor.ValidarItem(2, -5m, NaturezaItemLancamento.Avulsa, null, null, ehEstorno: true));
+    }
+
+    [Fact]
+    public void ValidarItem_EstornoSoAvulso()
+    {
+        Assert.Equal("Estorno só pode ser avulso.", FaturaCartaoEditor.ValidarItem(2, 10m, NaturezaItemLancamento.Parcelada, 1, 2, ehEstorno: true));
+        Assert.Equal("Estorno só pode ser avulso.", FaturaCartaoEditor.ValidarItem(2, 10m, NaturezaItemLancamento.Assinatura, null, null, ehEstorno: true));
+        Assert.Null(FaturaCartaoEditor.ValidarItem(2, 10m, NaturezaItemLancamento.Avulsa, null, null, ehEstorno: true));
+    }
+
+    [Fact]
+    public void Soma_AplicaSinalDoEstorno()
+    {
+        var itens = new List<ItemLancamentoFormModel>
+        {
+            new() { Valor = 80m },
+            new() { Valor = 30m, EhEstorno = true }
+        };
+
+        Assert.Equal(50m, FaturaCartaoEditor.Soma(itens));
+    }
+
+    [Fact]
+    public void ValidarItens_SomaAssinadaAcimaDoTotal_Recusa()
+    {
+        var itens = new List<ItemLancamentoFormModel>
+        {
+            new() { Descricao = "Almoço", Valor = 80m, CategoriaId = 2 },
+            new() { Descricao = "Devolução", Valor = 10m, EhEstorno = true, CategoriaId = 3 }
+        };
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            FaturaCartaoEditor.ValidarItens(60m, categoriaFaturaId: 1, permiteItens: true, TipoTransacao.Despesa, itens));
+
+        Assert.Contains("não pode passar", ex.Message);
+    }
+
+    [Fact]
+    public void ValidarItens_TotalLiquidoAbaixoDoMinimo_Recusa()
+    {
+        var itens = new List<ItemLancamentoFormModel>
+        {
+            new() { Descricao = "Almoço", Valor = 10m, CategoriaId = 2 }
+        };
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            FaturaCartaoEditor.ValidarItens(0.009m, categoriaFaturaId: 1, permiteItens: true, TipoTransacao.Despesa, itens));
+
+        Assert.Contains("0,01", ex.Message);
+    }
+
+    [Theory]
+    [InlineData(NaturezaItemLancamento.Parcelada)]
+    [InlineData(NaturezaItemLancamento.Assinatura)]
+    public void ValidarItens_EstornoForaDeAvulso_Recusa(NaturezaItemLancamento natureza)
+    {
+        var itens = new List<ItemLancamentoFormModel>
+        {
+            new()
+            {
+                Descricao = "Devolução",
+                Valor = 20m,
+                EhEstorno = true,
+                Natureza = natureza,
+                ParcelaAtual = natureza == NaturezaItemLancamento.Parcelada ? 1 : null,
+                TotalParcelas = natureza == NaturezaItemLancamento.Parcelada ? 2 : null,
+                CategoriaId = 2
+            }
+        };
+
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            FaturaCartaoEditor.ValidarItens(100m, categoriaFaturaId: 1, permiteItens: true, TipoTransacao.Despesa, itens));
+
+        Assert.Contains("avulso", ex.Message);
+    }
+
+    [Fact]
     public void Stepper_NaoDesceDeDuasParcelasEPreservaTotalLegado()
     {
         Assert.Equal(2, FaturaCartaoEditor.AjustarTotal(2, -1));

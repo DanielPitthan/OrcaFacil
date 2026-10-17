@@ -1,4 +1,5 @@
 using OrcaFacil.Core.Enums;
+using OrcaFacil.Core.Lancamentos;
 using OrcaFacil.Core.Repositories;
 using OrcaFacil.Services.Interfaces;
 
@@ -32,6 +33,6 @@ public class FechamentoService : IFechamentoService
     public async Task GarantirPeriodoAbertoAsync(DateTime data)
     {
         if (await _fechamentoRepository.EstaFechadoAsync(data.Month, data.Year))
-            throw new InvalidOperationException($"O mês {data:MM/yyyy} está fechado. Reabra o período para alterar lançamentos.");
+            throw new InvalidOperationException(ItensFaturaRegras.MensagemMesFechado(data));
     }
 }

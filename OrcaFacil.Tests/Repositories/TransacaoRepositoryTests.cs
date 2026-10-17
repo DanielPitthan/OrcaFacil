@@ -91,6 +91,49 @@ public class TransacaoRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task SomaPorCategoriaAsync_ComEstorno_AbateOCreditoDaCategoria()
+    {
+        var (alimentacaoId, membroId) = await CriarDependenciasAsync();
+        var cartao = new Categoria { Nome = "Cartão de Crédito", Icone = "💳", CorHex = "#B2CFE6", PermiteItensFatura = true };
+        await _categoriaRepository.AddAsync(cartao);
+
+        var mes = new DateTime(2026, 3, 1);
+        await _repository.AddAsync(new Transacao
+        {
+            Descricao = "Fatura",
+            Valor = 400m,
+            Data = mes.AddDays(18),
+            Tipo = TipoTransacao.Despesa,
+            CategoriaId = cartao.Id,
+            MembroFamiliaId = membroId,
+            Itens =
+            [
+                new ItemLancamento { Descricao = "Almoço", Valor = 300m, CategoriaId = alimentacaoId, Natureza = NaturezaItemLancamento.Avulsa, Ordem = 0 },
+                new ItemLancamento { Descricao = "Estorno almoço", Valor = 100m, EhEstorno = true, CategoriaId = alimentacaoId, Natureza = NaturezaItemLancamento.Avulsa, Ordem = 1 }
+            ]
+        });
+        await _repository.AddAsync(new Transacao
+        {
+            Descricao = "Feira",
+            Valor = 80m,
+            Data = mes.AddDays(2),
+            Tipo = TipoTransacao.Despesa,
+            CategoriaId = alimentacaoId,
+            MembroFamiliaId = membroId
+        });
+
+        var inicio = mes;
+        var fim = mes.AddMonths(1).AddTicks(-1);
+        var somas = await _repository.SomaPorCategoriaAsync(inicio, fim, TipoTransacao.Despesa);
+        var totalDespesas = await _repository.SomaPorTipoAsync(TipoTransacao.Despesa, inicio, fim);
+
+        Assert.Equal(280m, somas[alimentacaoId]);
+        Assert.Equal(200m, somas[cartao.Id]);
+        Assert.Equal(480m, totalDespesas);
+        Assert.Equal(totalDespesas, somas.Values.Sum());
+    }
+
+    [Fact]
     public async Task GetByPeriodoAsync_FiltraPelaCategoriaDoItem()
     {
         var (alimentacaoId, membroId) = await CriarDependenciasAsync();
