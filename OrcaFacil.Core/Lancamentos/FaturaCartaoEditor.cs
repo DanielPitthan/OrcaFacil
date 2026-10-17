@@ -39,6 +39,44 @@ public static class FaturaCartaoEditor
     public static decimal Soma(IEnumerable<ItemLancamentoFormModel> itens)
         => itens.Sum(ItensFaturaRegras.ValorAssinado);
 
+    /// <summary>
+    /// "A detalhar" e a barra usam a soma com sinal do estorno.
+    /// A barra fica entre 0 e 100.
+    /// </summary>
+    public static ResumoClassificacaoFatura Classificar(decimal total, IEnumerable<ItemLancamentoFormModel> itens)
+    {
+        var soma = Soma(itens);
+        return new ResumoClassificacaoFatura(soma, ADetalhar(total, soma), PercentualClassificado(total, soma));
+    }
+
+    public static IReadOnlyList<ItemLancamentoFormModel> Ordenar(IEnumerable<ItemLancamentoFormModel> itens)
+        => itens.OrderBy(i => i.Ordem).ToList();
+
+    public static string TituloLinha(string? descritivo, string? descricao, string? categoria, bool ehEstorno)
+    {
+        if (ehEstorno)
+        {
+            var reserva = string.IsNullOrWhiteSpace(descricao) ? categoria : descricao;
+            return ItensFaturaInclusao.Titulo(descritivo, string.IsNullOrWhiteSpace(reserva) ? "Estorno" : reserva);
+        }
+
+        return ItensFaturaInclusao.Titulo(descritivo, categoria ?? descricao ?? "");
+    }
+
+    public static string SubtituloLinha(
+        string? categoria,
+        bool ehEstorno,
+        NaturezaItemLancamento natureza,
+        int? parcelaAtual,
+        int? totalParcelas)
+    {
+        if (!ehEstorno)
+            return Subtitulo(categoria, natureza, parcelaAtual, totalParcelas);
+
+        var nome = string.IsNullOrWhiteSpace(categoria) ? "Sem categoria" : categoria.Trim();
+        return $"{nome} · Estorno";
+    }
+
     public static decimal Soma(IEnumerable<ItemLancamento> itens)
         => itens.Sum(ItensFaturaRegras.ValorAssinado);
 
@@ -253,6 +291,10 @@ public static class FaturaCartaoEditor
         Natureza = item.Natureza,
         ParcelaAtual = item.ParcelaAtual,
         TotalParcelas = item.TotalParcelas,
-        CategoriaId = item.CategoriaId
+        CategoriaId = item.CategoriaId,
+        Ordem = item.Ordem
     };
 }
+
+/// <summary>Soma com sinal, o que falta detalhar e o percentual da barra (0–100).</summary>
+public readonly record struct ResumoClassificacaoFatura(decimal SomaAssinada, decimal ADetalhar, double Percentual);

@@ -28,6 +28,7 @@ public class ItensFaturaInclusaoTests
         Assert.Equal("Lazer", ItensFaturaInclusao.Titulo(itens.Last().Descritivo, itens.Last().Descricao));
         Assert.Equal("Netflix", ItensFaturaInclusao.Titulo(itens[5].Descritivo, itens[5].Descricao));
         Assert.All(itens.Where(i => i.CategoriaId == 2), i => Assert.Equal("Alimentação", i.Descricao));
+        Assert.Equal(Enumerable.Range(0, 8), itens.Select(i => i.Ordem));
     }
 
     [Fact]

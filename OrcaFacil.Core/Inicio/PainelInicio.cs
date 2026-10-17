@@ -98,7 +98,7 @@ public sealed class PainelInicio
         var (progressoReceita, critica) = Barra(percentualReceita);
         var (progressoPagas, _) = Barra(percentualPagas);
 
-        var textoSaldo = TextoMoeda(saldo, cultura, sinalNegativo: true);
+        var textoSaldo = FormatadorMoeda.FormatarSaldo(saldo, cultura);
         var rotuloSaldo = esteMes ? "Saldo do mês" : "Saldo acumulado";
         var orcamentos = MontarOrcamentos(entrada.Alertas, entrada.LimiarOrcamento, cultura);
         var metas = MontarMetas(entrada.Metas, cultura);
@@ -506,13 +506,6 @@ public sealed class PainelInicio
         return arred == decimal.Truncate(arred)
             ? arred.ToString("0", cultura) + "%"
             : arred.ToString("0.0", cultura) + "%";
-    }
-
-    private static string TextoMoeda(decimal valor, CultureInfo cultura, bool sinalNegativo)
-    {
-        if (sinalNegativo && valor < 0)
-            return "− " + Math.Abs(valor).ToString("C", cultura);
-        return valor.ToString("C", cultura);
     }
 
     private static (double Visual, bool Critico) Barra(decimal? percentual)
