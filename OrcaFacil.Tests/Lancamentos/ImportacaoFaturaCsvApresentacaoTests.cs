@@ -210,6 +210,83 @@ public class ImportacaoFaturaCsvApresentacaoTests
         Assert.Equal("Incluir", vista.Linhas[1].EscolhaDuplicata);
         Assert.False(pedido.IgnorarDuplicatas);
         Assert.Equal([3, 4], pedido.LinhasEscolhidas!.Order());
+        Assert.Equal(0m, vista.Totais.Compras);
+        Assert.Equal(0m, vista.Totais.Liquido);
+    }
+
+    [Fact]
+    public void Montar_DuplicataMarcadaNaoSomaLinhaQueAConfirmacaoRecusa()
+    {
+        var previa = Previa(
+            [Linha(3, 100m, "NOVA", duplicada: false), Linha(4, 40m, "JA", duplicada: true, estorno: true)],
+            [],
+            totalFatura: 10m);
+        var selecao = ImportacaoFaturaCsvApresentacao.Alternar(
+            ImportacaoFaturaCsvApresentacao.SelecaoInicial(previa),
+            4);
+
+        var vista = ImportacaoFaturaCsvApresentacao.Montar(previa, selecao, PtBr);
+
+        Assert.Equal(0m, vista.Totais.Compras);
+        Assert.Equal(0m, vista.Totais.Estornos);
+        Assert.Equal(0m, vista.Totais.Liquido);
+        Assert.Equal("R$ 0,00", vista.Totais.ComprasTexto);
+        Assert.Equal("R$ 0,00", vista.Totais.EstornosTexto);
+        Assert.False(vista.Totais.EstornosEmCredito);
+        Assert.True(vista.PodeConfirmar);
+        Assert.Equal(ImportacaoFaturaCsvApresentacao.MensagemIncluirDuplicata, vista.AvisoDuplicata);
+    }
+
+    [Fact]
+    public void Montar_SomaAcimaDoTotalBloqueiaComoAConfirmacao()
+    {
+        var previa = Previa(
+            [Linha(3, 40m, "A", duplicada: false), Linha(4, 70m, "B", duplicada: false)],
+            [],
+            totalFatura: 100m,
+            somaItensAtual: 20m);
+
+        var vista = ImportacaoFaturaCsvApresentacao.Montar(
+            previa, ImportacaoFaturaCsvApresentacao.SelecaoInicial(previa), PtBr);
+
+        Assert.False(vista.PodeConfirmar);
+        Assert.Equal(ItensFaturaRegras.MensagemSomaAcimaDoTotal, vista.Bloqueio!.Texto);
+        Assert.Equal(TomMensagemImportacaoFatura.Erro, vista.Bloqueio.Tom);
+        Assert.Equal(110m, vista.Totais.Compras);
+
+        var soAQueCabe = ImportacaoFaturaCsvApresentacao.Montar(
+            previa, new HashSet<int> { 3 }, PtBr);
+        Assert.True(soAQueCabe.PodeConfirmar);
+        Assert.Null(soAQueCabe.Bloqueio);
+        Assert.Equal(40m, soAQueCabe.Totais.Compras);
+    }
+
+    [Fact]
+    public void Montar_LiquidoAbaixoDoMinimoBloqueiaComoAConfirmacao()
+    {
+        var previa = Previa(
+            [
+                Linha(3, 10m, "C", duplicada: false),
+                Linha(4, 50m, "E", duplicada: false, estorno: true)
+            ],
+            [],
+            totalFatura: 50m);
+
+        var vista = ImportacaoFaturaCsvApresentacao.Montar(
+            previa, ImportacaoFaturaCsvApresentacao.SelecaoInicial(previa), PtBr);
+
+        Assert.False(vista.PodeConfirmar);
+        Assert.Equal(ItensFaturaRegras.MensagemTotalMinimo, vista.Bloqueio!.Texto);
+        Assert.Contains("0,01", vista.Bloqueio.Texto, StringComparison.Ordinal);
+
+        var noPiso = Previa(
+            [Linha(3, 49.99m, "E", duplicada: false, estorno: true)],
+            [],
+            totalFatura: 50m);
+        var cabe = ImportacaoFaturaCsvApresentacao.Montar(
+            noPiso, ImportacaoFaturaCsvApresentacao.SelecaoInicial(noPiso), PtBr);
+        Assert.True(cabe.PodeConfirmar);
+        Assert.Null(cabe.Bloqueio);
     }
 
     [Fact]
@@ -272,7 +349,16 @@ public class ImportacaoFaturaCsvApresentacaoTests
         };
         var itens = new[]
         {
-            new ItemLancamento { Id = 2, Descricao = "Netflix", Valor = 39.90m, CategoriaId = 4, Ordem = 2, Descritivo = "Streaming" },
+            new ItemLancamento
+            {
+                Id = 2,
+                Descricao = "Netflix",
+                Valor = 39.90m,
+                CategoriaId = 4,
+                Ordem = 2,
+                Descritivo = "Streaming",
+                HashImportacao = "ABC"
+            },
             new ItemLancamento
             {
                 Id = 1,
@@ -292,6 +378,8 @@ public class ImportacaoFaturaCsvApresentacaoTests
         Assert.True(modelo.Itens[0].EhEstorno);
         Assert.Equal(18m, modelo.Itens[0].Valor);
         Assert.Equal("Streaming", modelo.Itens[1].Descritivo);
+        Assert.Equal("ABC", modelo.Itens[1].HashImportacao);
+        Assert.Null(modelo.Itens[0].HashImportacao);
         Assert.NotSame(itens[0], modelo.Itens[0]);
     }
 
@@ -319,8 +407,10 @@ public class ImportacaoFaturaCsvApresentacaoTests
     private static PreviaImportacaoFaturaCsv Previa(
         IReadOnlyList<LinhaPreviaImportacaoFaturaCsv> linhas,
         IReadOnlyList<FaturaCsv.ErroLinha> erros,
-        bool mesFechado = false)
-        => new(true, null, mesFechado, linhas, erros, 0, 0, 0);
+        bool mesFechado = false,
+        decimal totalFatura = 1_000_000_000m,
+        decimal somaItensAtual = 0m)
+        => new(true, null, mesFechado, linhas, erros, 0, 0, 0, totalFatura, somaItensAtual);
 
     private static LinhaPreviaImportacaoFaturaCsv Linha(
         int numero,
@@ -369,6 +459,7 @@ public class ImportacaoFaturaCsvTelaArquivosTests
         Assert.Contains("CompartilharAsync", dialog, StringComparison.Ordinal);
         Assert.Contains("TextoConfirmar", dialog, StringComparison.Ordinal);
         Assert.Contains("GuardaToque", dialog, StringComparison.Ordinal);
+        Assert.Contains("FaturaCsv.LerArquivoAsync", dialog, StringComparison.Ordinal);
         Assert.Contains("var(--of-error)", css, StringComparison.Ordinal);
         Assert.Contains("var(--of-success)", css, StringComparison.Ordinal);
         Assert.Contains("var(--of-warning)", css, StringComparison.Ordinal);

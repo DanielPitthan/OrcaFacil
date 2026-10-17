@@ -174,6 +174,8 @@ public class ImportacaoFaturaCsvServiceTests : IDisposable
         Assert.Equal(12m, previa.TotalCompras);
         Assert.Equal(0m, previa.TotalEstornos);
         Assert.Equal(12m, previa.TotalLiquido);
+        Assert.Equal(400m, previa.TotalFatura);
+        Assert.Equal(100m, previa.SomaItensAtual);
     }
 
     [Fact]
@@ -454,6 +456,35 @@ public class ImportacaoFaturaCsvServiceTests : IDisposable
 
         Assert.Contains("Nada foi importado", ex.Message);
         Assert.Empty((await CarregarAsync(fatura.Id)).Itens);
+    }
+
+    [Fact]
+    public async Task SalvarFaturaDepoisDeImportar_PreservaHashEReimportarNaoDuplica()
+    {
+        var fatura = await CriarFaturaAsync(500m, new DateTime(2026, 10, 18));
+        var texto = Arquivo("16/10/2026;Supermercado;100,00;Alimentação;Avulsa;;;Semana");
+
+        var primeira = await _service.ConfirmarAsync(fatura.Id, texto);
+        Assert.Equal(1, primeira.Gravados);
+
+        var gravada = await CarregarAsync(fatura.Id);
+        var hash = gravada.Itens.Single().HashImportacao;
+        Assert.False(string.IsNullOrWhiteSpace(hash));
+
+        var formulario = ImportacaoFaturaCsvApresentacao.CopiarItens(gravada.Itens);
+        Assert.Equal(hash, formulario.Single().HashImportacao);
+
+        var regravar = FaturaCartaoEditor.MapearItens(formulario);
+        Assert.Equal(hash, regravar.Single().HashImportacao);
+        await _transacoes.SubstituirItensAsync(fatura.Id, regravar);
+
+        var depois = await CarregarAsync(fatura.Id);
+        Assert.Equal(hash, depois.Itens.Single().HashImportacao);
+
+        var segunda = await _service.ConfirmarAsync(fatura.Id, texto);
+        Assert.Equal(0, segunda.Gravados);
+        Assert.Equal(1, segunda.DuplicatasIgnoradas);
+        Assert.Single((await CarregarAsync(fatura.Id)).Itens);
     }
 
     [Fact]

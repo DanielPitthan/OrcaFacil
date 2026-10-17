@@ -129,7 +129,8 @@ public static class ImportacaoFaturaCsvApresentacao
             .Where(c => c.Selecionada && !c.DuplicataEfetiva)
             .Select(c => c.Linha)
             .ToList();
-        var bloqueio = Bloqueio(previa, classificadas, mesFechadoNaTela);
+        var incluiDuplicata = classificadas.Any(c => c.Selecionada && c.DuplicataEfetiva);
+        var bloqueio = Bloqueio(previa, classificadas, importaveis, mesFechadoNaTela);
         var aviso = classificadas.Any(c => c.Selecionada && c.DuplicataEfetiva)
             ? MensagemIncluirDuplicata
             : null;
@@ -138,7 +139,7 @@ public static class ImportacaoFaturaCsvApresentacao
         return new VistaImportacaoFaturaCsv(
             classificadas.Select(c => MontarLinha(c, cultura)).ToList(),
             previa.Erros.Select(MontarErro).ToList(),
-            MontarTotais(importaveis, cultura),
+            MontarTotais(incluiDuplicata ? [] : importaveis, cultura),
             bloqueio,
             aviso,
             classificadas.Count == 0 ? "" : $"{marcadas} de {classificadas.Count} linhas selecionadas",
@@ -215,7 +216,8 @@ public static class ImportacaoFaturaCsvApresentacao
                 ParcelaAtual = i.ParcelaAtual,
                 TotalParcelas = i.TotalParcelas,
                 CategoriaId = i.CategoriaId,
-                Ordem = i.Ordem
+                Ordem = i.Ordem,
+                HashImportacao = i.HashImportacao
             })
             .ToList();
 
@@ -263,6 +265,7 @@ public static class ImportacaoFaturaCsvApresentacao
     private static MensagemImportacaoFaturaCsv? Bloqueio(
         PreviaImportacaoFaturaCsv previa,
         IReadOnlyList<Classificacao> classificadas,
+        IReadOnlyList<LinhaPreviaImportacaoFaturaCsv> importaveis,
         bool mesFechadoNaTela)
     {
         if (!previa.ArquivoAceito)
@@ -285,10 +288,52 @@ public static class ImportacaoFaturaCsvApresentacao
 
         var incluiDuplicata = classificadas.Any(c => c.Selecionada && c.DuplicataEfetiva);
         var temNova = classificadas.Any(c => c.Selecionada && !c.DuplicataEfetiva);
-        if (incluiDuplicata || temNova || classificadas.All(c => c.DuplicataEfetiva))
+        if (incluiDuplicata || classificadas.All(c => c.DuplicataEfetiva))
             return null;
 
-        return new MensagemImportacaoFaturaCsv(MensagemNadaSelecionado, TomMensagemImportacaoFatura.Aviso);
+        if (!temNova)
+            return new MensagemImportacaoFaturaCsv(MensagemNadaSelecionado, TomMensagemImportacaoFatura.Aviso);
+
+        return LimiteDaFatura(previa.TotalFatura, previa.SomaItensAtual, importaveis);
+    }
+
+    /// <summary>
+    /// A confirmação recusa o lote inteiro se a soma passar do total ou se o líquido ficar abaixo de R$ 0,01.
+    /// A prévia usa a mesma ordem: compra soma no teto; estorno abate o total e exige o mínimo.
+    /// </summary>
+    private static MensagemImportacaoFaturaCsv? LimiteDaFatura(
+        decimal total,
+        decimal soma,
+        IReadOnlyList<LinhaPreviaImportacaoFaturaCsv> importaveis)
+    {
+        foreach (var linha in importaveis)
+        {
+            var magnitude = DinheiroEstorno.Arredondar(linha.Valor);
+            if (!linha.EhEstorno)
+            {
+                soma += magnitude;
+                if (soma > total)
+                    return new MensagemImportacaoFaturaCsv(
+                        ItensFaturaRegras.MensagemSomaAcimaDoTotal,
+                        TomMensagemImportacaoFatura.Erro);
+
+                continue;
+            }
+
+            total = DinheiroEstorno.Arredondar(total - magnitude);
+            soma -= magnitude;
+            if (total < ItensFaturaRegras.TotalMinimo)
+                return new MensagemImportacaoFaturaCsv(
+                    ItensFaturaRegras.MensagemTotalMinimo,
+                    TomMensagemImportacaoFatura.Erro);
+
+            if (soma > total)
+                return new MensagemImportacaoFaturaCsv(
+                    ItensFaturaRegras.MensagemSomaAcimaDoTotal,
+                    TomMensagemImportacaoFatura.Erro);
+        }
+
+        return null;
     }
 
     private static LinhaImportacaoFaturaCsvTela MontarLinha(Classificacao classificacao, CultureInfo cultura)
@@ -334,9 +379,9 @@ public static class ImportacaoFaturaCsvApresentacao
         IReadOnlyList<LinhaPreviaImportacaoFaturaCsv> importaveis,
         CultureInfo cultura)
     {
-        var compras = EstornoFaturaService.Arredondar(importaveis.Where(l => !l.EhEstorno).Sum(l => l.Valor));
-        var estornos = EstornoFaturaService.Arredondar(importaveis.Where(l => l.EhEstorno).Sum(l => l.Valor));
-        var liquido = EstornoFaturaService.Arredondar(compras - estornos);
+        var compras = DinheiroEstorno.Arredondar(importaveis.Where(l => !l.EhEstorno).Sum(l => l.Valor));
+        var estornos = DinheiroEstorno.Arredondar(importaveis.Where(l => l.EhEstorno).Sum(l => l.Valor));
+        var liquido = DinheiroEstorno.Arredondar(compras - estornos);
         var estornosEmCredito = estornos > 0;
         return new TotaisImportacaoFaturaCsvTela(
             compras,
