@@ -1,4 +1,3 @@
-using System.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Maui.ApplicationModel;
 using OrcaFacil.Core.Data;
@@ -7,14 +6,6 @@ using OrcaFacil.Services.Interfaces;
 using Serilog;
 
 namespace OrcaFacil.Services;
-
-public enum FaseInicializacao
-{
-    Pendente,
-    EmAndamento,
-    Pronta,
-    Falhou
-}
 
 /// <summary>
 /// Roda migração, perfil e lembretes fora da thread principal.
@@ -84,7 +75,7 @@ public sealed class InicializacaoApp
         catch (Exception ex)
         {
             var passo = ex is FalhaInicializacaoException falha ? falha.Passo : "inicialização";
-            var resumo = Resumir(ex);
+            var resumo = FalhasInicializacao.Resumir(ex);
             try
             {
                 Log.Error(
@@ -130,7 +121,7 @@ public sealed class InicializacaoApp
         {
             await PassoAsync("lembretes", ReagendarNaThreadPrincipalAsync).ConfigureAwait(false);
         }
-        catch (Exception ex) when (!EhFalhaDeDados(ex))
+        catch (Exception ex) when (!FalhasInicializacao.ImpedeAbertura(ex))
         {
             Log.Error(
                 ex,
@@ -193,36 +184,6 @@ public sealed class InicializacaoApp
         }
     }
 
-    private static bool EhFalhaDeDados(Exception ex)
-    {
-        for (var atual = ex; atual is not null; atual = atual.InnerException)
-        {
-            if (atual is DbException or DbUpdateException)
-                return true;
-        }
-
-        return false;
-    }
-
-    internal static string Resumir(Exception ex)
-    {
-        var mensagens = new List<string>();
-        for (var atual = ex; atual is not null && mensagens.Count < 3; atual = atual.InnerException)
-        {
-            if (string.IsNullOrWhiteSpace(atual.Message))
-                continue;
-
-            var texto = atual.Message.Trim();
-            if (mensagens.Count > 0 && string.Equals(mensagens[^1], texto, StringComparison.Ordinal))
-                continue;
-
-            mensagens.Add(texto);
-        }
-
-        var resumo = mensagens.Count == 0 ? ex.GetType().Name : string.Join(" — ", mensagens);
-        const int limite = 500;
-        return resumo.Length <= limite ? resumo : resumo[..limite] + "…";
-    }
 }
 
 public sealed class FalhaInicializacaoException : Exception

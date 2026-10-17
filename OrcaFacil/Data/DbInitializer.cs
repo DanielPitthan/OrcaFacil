@@ -9,13 +9,29 @@ public static class DbInitializer
     public static async Task InitializeAsync(IDbContextFactory<AppDbContext> factory)
     {
         await using var context = await factory.CreateDbContextAsync();
-        var resultado = await PreparoBanco.MigrarEVerificarAsync(context);
+        var resultado = await PreparoBanco.MigrarEVerificarAsync(
+            context,
+            new OpcoesPreparoBanco { VersaoAplicativo = VersaoAplicativo() });
         Registrar(resultado);
         if (resultado.ExigeRecuperacao)
             throw new IntegridadeBancoException(resultado);
 
-        if (!await context.MembrosFamilia.AnyAsync())
+        var haMembro = await context.MembrosFamilia.AnyAsync();
+        if (PoliticaSeed.DevePopular(resultado, haMembro))
             await SeedData.PopularAsync(context);
+    }
+
+    private static string VersaoAplicativo()
+    {
+        try
+        {
+            return AppInfo.VersionString;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine(ex);
+            return "desconhecida";
+        }
     }
 
     private static void Registrar(ResultadoPreparoBanco resultado)
@@ -23,6 +39,13 @@ public static class DbInitializer
         var relatorio = resultado.Relatorio;
         try
         {
+            if (resultado.CaminhoBackup is not null)
+            {
+                Log.Information(
+                    "Backup consistente antes da migração, sem apagar os anteriores: {Backup}.",
+                    resultado.CaminhoBackup);
+            }
+
             if (!resultado.ExigeRecuperacao)
             {
                 Log.Information(

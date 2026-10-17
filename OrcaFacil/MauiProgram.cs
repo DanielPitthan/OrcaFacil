@@ -29,38 +29,17 @@ public static class MauiProgram
         CultureInfo.DefaultThreadCurrentCulture = culturaPtBr;
         CultureInfo.DefaultThreadCurrentUICulture = culturaPtBr;
 
+        // O log de arquivo precisa existir antes das notificações e da migração.
+        // Uma falha aqui não pode derrubar a abertura: o logger fica só em memória.
+        ConfigurarLogEmArquivo();
+
         var builder = MauiApp.CreateBuilder();
-        builder
-            .UseMauiApp<App>()
-            .UseLocalNotification(config =>
-            {
-#if ANDROID
-                // No Android o som é definido pelo canal; por isso há um canal com som e outro silencioso.
-                config.AddAndroid(android =>
-                {
-                    android.AddChannel(new AndroidNotificationChannelRequest
-                    {
-                        Id = NotificationSchedulerService.CanalComSom,
-                        Name = "Despesas",
-                        Description = "Lembretes de despesas a vencer e vencidas",
-                        Importance = AndroidImportance.High
-                    });
-                    android.AddChannel(new AndroidNotificationChannelRequest
-                    {
-                        Id = NotificationSchedulerService.CanalSilencioso,
-                        Name = "Despesas (silencioso)",
-                        Description = "Lembretes de despesas sem som",
-                        Importance = AndroidImportance.Low,
-                        EnableSound = false,
-                        EnableVibration = false
-                    });
-                });
-#endif
-            })
-            .ConfigureFonts(fonts =>
-            {
-                fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
-            });
+        builder.UseMauiApp<App>();
+        ConfigurarNotificacoes(builder);
+        builder.ConfigureFonts(fonts =>
+        {
+            fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
+        });
 
         builder.Services.AddMauiBlazorWebView();
         builder.Services.AddMudServices();
@@ -80,13 +59,14 @@ public static class MauiProgram
         builder.Services.AddBlazorWebViewDeveloperTools();
 #endif
 
-        // Logging — Serilog gravando em arquivo local (AppDataDirectory), além do output de debug.
-        var logPath = Path.Combine(FileSystem.AppDataDirectory, "logs", "orcafacil-.log");
-        Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Debug()
-            .WriteTo.File(logPath, rollingInterval: RollingInterval.Day, retainedFileCountLimit: 14)
-            .CreateLogger();
-        builder.Logging.AddSerilog(Log.Logger, dispose: true);
+        try
+        {
+            builder.Logging.AddSerilog(Log.Logger, dispose: true);
+        }
+        catch (Exception ex)
+        {
+            RegistrarFalhaDeLog(ex, "Falha ao ligar o Serilog ao host. A abertura segue.");
+        }
 #if DEBUG
         builder.Logging.AddDebug();
 #endif
@@ -147,5 +127,79 @@ public static class MauiProgram
         app.Services.GetRequiredService<InicializacaoApp>().IniciarSemBloquear();
 
         return app;
+    }
+
+    private static void ConfigurarLogEmArquivo()
+    {
+        try
+        {
+            var logPath = Path.Combine(FileSystem.AppDataDirectory, "logs", "orcafacil-.log");
+            Log.Logger = new LoggerConfiguration()
+                .MinimumLevel.Debug()
+                .WriteTo.File(logPath, rollingInterval: RollingInterval.Day, retainedFileCountLimit: 14)
+                .CreateLogger();
+        }
+        catch (Exception ex)
+        {
+            Log.Logger = new LoggerConfiguration().CreateLogger();
+            RegistrarFalhaDeLog(ex, "Não foi possível gravar o log em arquivo. A abertura segue sem esse arquivo.");
+        }
+    }
+
+    private static void ConfigurarNotificacoes(MauiAppBuilder builder)
+    {
+        try
+        {
+            builder.UseLocalNotification(config =>
+            {
+#if ANDROID
+                // No Android o som é definido pelo canal; por isso há um canal com som e outro silencioso.
+                config.AddAndroid(android =>
+                {
+                    try
+                    {
+                        android.AddChannel(new AndroidNotificationChannelRequest
+                        {
+                            Id = NotificationSchedulerService.CanalComSom,
+                            Name = "Despesas",
+                            Description = "Lembretes de despesas a vencer e vencidas",
+                            Importance = AndroidImportance.High
+                        });
+                        android.AddChannel(new AndroidNotificationChannelRequest
+                        {
+                            Id = NotificationSchedulerService.CanalSilencioso,
+                            Name = "Despesas (silencioso)",
+                            Description = "Lembretes de despesas sem som",
+                            Importance = AndroidImportance.Low,
+                            EnableSound = false,
+                            EnableVibration = false
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        RegistrarFalhaDeLog(
+                            ex,
+                            "Falha ao registrar os canais de notificação Android. A abertura segue sem esses canais.");
+                    }
+                });
+#endif
+            });
+        }
+        catch (Exception ex)
+        {
+            RegistrarFalhaDeLog(ex, "Falha ao configurar as notificações locais. A abertura segue sem elas.");
+        }
+    }
+
+    private static void RegistrarFalhaDeLog(Exception ex, string mensagem)
+    {
+        try
+        {
+            Log.Error(ex, mensagem);
+        }
+        catch (Exception logEx)
+        {
+            System.Diagnostics.Debug.WriteLine(logEx);
+        }
     }
 }
