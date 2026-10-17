@@ -272,6 +272,10 @@ namespace OrcaFacil.Core.Data.Migrations
                     b.Property<bool>("EhEstorno")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("HashImportacao")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Natureza")
                         .HasColumnType("INTEGER");
 

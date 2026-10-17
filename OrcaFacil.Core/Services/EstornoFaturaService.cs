@@ -32,33 +32,10 @@ public class EstornoFaturaService
         await using var transacaoEf = await context.Database.BeginTransactionAsync(cancellationToken);
 
         var fatura = await CarregarAsync(context, faturaId, cancellationToken);
-        await GarantirMesAbertoAsync(context, fatura, cancellationToken);
+        await ExigirMesAbertoAsync(context, fatura, cancellationToken);
         await GarantirCategoriaAsync(context, categoriaId, cancellationToken);
 
-        var novoTotal = fatura.Valor - valor;
-        var ordem = fatura.Itens.Count == 0 ? 0 : fatura.Itens.Max(i => i.Ordem) + 1;
-        var item = new ItemLancamento
-        {
-            Descricao = descricao?.Trim() ?? string.Empty,
-            Descritivo = ItensFaturaInclusao.NormalizarDescritivo(descritivo),
-            Valor = valor,
-            EhEstorno = true,
-            Natureza = NaturezaItemLancamento.Avulsa,
-            CategoriaId = categoriaId,
-            Ordem = ordem
-        };
-
-        var itens = fatura.Itens.Append(item).ToList();
-        ItensFaturaRegras.Validar(
-            novoTotal,
-            fatura.CategoriaId,
-            fatura.Categoria?.PermiteItensFatura == true,
-            fatura.Tipo,
-            itens);
-
-        fatura.Valor = novoTotal;
-        fatura.AtualizadoEm = DateTime.UtcNow;
-        fatura.Itens.Add(item);
+        var item = Aplicar(fatura, valor, descricao, categoriaId, descritivo);
 
         await context.SaveChangesAsync(cancellationToken);
         await transacaoEf.CommitAsync(cancellationToken);
@@ -80,7 +57,7 @@ public class EstornoFaturaService
         await using var transacaoEf = await context.Database.BeginTransactionAsync(cancellationToken);
 
         var fatura = await CarregarAsync(context, faturaId, cancellationToken);
-        await GarantirMesAbertoAsync(context, fatura, cancellationToken);
+        await ExigirMesAbertoAsync(context, fatura, cancellationToken);
         await GarantirCategoriaAsync(context, categoriaId, cancellationToken);
 
         var item = fatura.Itens.FirstOrDefault(i => i.Id == itemId)
@@ -118,7 +95,7 @@ public class EstornoFaturaService
         await using var transacaoEf = await context.Database.BeginTransactionAsync(cancellationToken);
 
         var fatura = await CarregarAsync(context, faturaId, cancellationToken);
-        await GarantirMesAbertoAsync(context, fatura, cancellationToken);
+        await ExigirMesAbertoAsync(context, fatura, cancellationToken);
 
         var item = fatura.Itens.FirstOrDefault(i => i.Id == itemId)
             ?? throw new InvalidOperationException("Item não encontrado.");
@@ -144,15 +121,74 @@ public class EstornoFaturaService
             .FirstOrDefaultAsync(t => t.Id == faturaId, cancellationToken)
             ?? throw new InvalidOperationException("Lançamento não encontrado.");
 
-    private static async Task GarantirMesAbertoAsync(
+    /// <summary>2 casas decimais. No meio do caminho, afasta de zero.</summary>
+    public static decimal Arredondar(decimal valor)
+        => Math.Round(valor, 2, MidpointRounding.AwayFromZero);
+
+    /// <summary>
+    /// Inclui um estorno avulso na fatura já carregada e abate a magnitude no total.
+    /// Não abre transação e não grava: quem chama confirma ou desfaz.
+    /// Com <paramref name="arredondar"/>, a magnitude e o total líquido ficam com 2 casas.
+    /// </summary>
+    public ItemLancamento Aplicar(
+        Transacao fatura,
+        decimal valor,
+        string descricao,
+        int categoriaId,
+        string? descritivo,
+        string? hashImportacao = null,
+        bool arredondar = false)
+    {
+        ArgumentNullException.ThrowIfNull(fatura);
+
+        var magnitude = arredondar ? Arredondar(valor) : valor;
+        var novoTotal = arredondar ? Arredondar(fatura.Valor - magnitude) : fatura.Valor - magnitude;
+        var ordem = fatura.Itens.Count == 0 ? 0 : fatura.Itens.Max(i => i.Ordem) + 1;
+        var item = new ItemLancamento
+        {
+            Descricao = descricao?.Trim() ?? string.Empty,
+            Descritivo = ItensFaturaInclusao.NormalizarDescritivo(descritivo),
+            Valor = magnitude,
+            EhEstorno = true,
+            Natureza = NaturezaItemLancamento.Avulsa,
+            CategoriaId = categoriaId,
+            Ordem = ordem,
+            HashImportacao = string.IsNullOrWhiteSpace(hashImportacao) ? null : hashImportacao.Trim()
+        };
+
+        var itens = fatura.Itens.Append(item).ToList();
+        ItensFaturaRegras.Validar(
+            novoTotal,
+            fatura.CategoriaId,
+            fatura.Categoria?.PermiteItensFatura == true,
+            fatura.Tipo,
+            itens);
+
+        fatura.Valor = novoTotal;
+        fatura.AtualizadoEm = DateTime.UtcNow;
+        fatura.Itens.Add(item);
+        return item;
+    }
+
+    public static async Task<bool> MesEstaFechadoAsync(
         AppDbContext context,
         Transacao fatura,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken = default)
     {
-        var mesFechado = await context.FechamentosPeriodo.AnyAsync(
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(fatura);
+
+        return await context.FechamentosPeriodo.AnyAsync(
             f => f.Mes == fatura.Data.Month && f.Ano == fatura.Data.Year && f.Fechado,
             cancellationToken);
-        if (mesFechado)
+    }
+
+    public static async Task ExigirMesAbertoAsync(
+        AppDbContext context,
+        Transacao fatura,
+        CancellationToken cancellationToken = default)
+    {
+        if (await MesEstaFechadoAsync(context, fatura, cancellationToken))
             throw new InvalidOperationException(ItensFaturaRegras.MensagemMesFechado(fatura.Data));
     }
 

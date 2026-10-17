@@ -78,7 +78,8 @@ public static class FaturaCsv
     }
 
     /// <summary>
-    /// Identificação estável da linha já normalizada, para a checagem de duplicata nas próximas entregas.
+    /// Identificação estável da linha já normalizada. A importação compara este hash
+    /// com os itens da fatura para não gravar a mesma linha duas vezes.
     /// A hora não entra. O valor é a magnitude positiva; o estorno entra à parte.
     /// </summary>
     public static string CalcularHash(
