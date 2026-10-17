@@ -38,7 +38,9 @@ public sealed record PreviaImportacaoFaturaCsv(
     IReadOnlyList<FaturaCsv.ErroLinha> Erros,
     decimal TotalCompras,
     decimal TotalEstornos,
-    decimal TotalLiquido);
+    decimal TotalLiquido,
+    decimal TotalFatura = 0m,
+    decimal SomaItensAtual = 0m);
 
 /// <summary>O que a confirmação gravou. Totais são das linhas novas, já arredondados.</summary>
 public sealed record ResultadoImportacaoFaturaCsv(
@@ -199,10 +201,12 @@ public class ImportacaoFaturaCsvService
 
     private static PreviaImportacaoFaturaCsv MontarPrevia(Transacao fatura, bool mesFechado, FaturaCsv.Leitura leitura)
     {
+        var totalFatura = fatura.Valor;
+        var somaItens = fatura.Itens.Sum(ItensFaturaRegras.ValorAssinado);
         if (!leitura.ArquivoAceito)
         {
             return new PreviaImportacaoFaturaCsv(
-                false, leitura.ErroArquivo, mesFechado, [], [], 0, 0, 0);
+                false, leitura.ErroArquivo, mesFechado, [], [], 0, 0, 0, totalFatura, somaItens);
         }
 
         var hashes = ColetarHashes(fatura);
@@ -237,7 +241,9 @@ public class ImportacaoFaturaCsvService
             leitura.Erros,
             compras,
             estornos,
-            DinheiroEstorno.Arredondar(compras - estornos));
+            DinheiroEstorno.Arredondar(compras - estornos),
+            totalFatura,
+            somaItens);
     }
 
     private static List<FaturaCsv.Linha> Selecionar(

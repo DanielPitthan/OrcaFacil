@@ -1,0 +1,218 @@
+.of-import-cabeca {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    min-height: var(--of-touch);
+}
+
+.of-import {
+    min-width: 0;
+    color: var(--of-text);
+    font-variant-numeric: tabular-nums;
+    background: var(--of-background);
+}
+
+.of-import-miolo {
+    padding: var(--of-space-page) var(--of-space-page) 0;
+    min-width: 0;
+}
+
+.of-import-bloco + .of-import-bloco {
+    margin-top: var(--of-space-section);
+}
+
+.of-import-status,
+.of-import-nome,
+.of-import-selecao {
+    margin: 8px 0 0;
+    color: var(--of-text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.4;
+}
+
+.of-import-selecao {
+    margin: 0;
+    padding: 8px 16px 0;
+}
+
+.of-import-arquivo {
+    display: flex;
+    flex-direction: column;
+    padding: 12px 16px 16px;
+}
+
+.of-import-arquivo ::deep .of-import-botao {
+    width: 100%;
+    min-height: var(--of-touch);
+    border-radius: var(--of-radius-control);
+}
+
+.of-import-arquivo ::deep .of-import-botao + .of-import-botao {
+    margin-top: 12px;
+}
+
+.of-import-erros,
+.of-import-linhas {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.of-import-erros li,
+.of-import-linha {
+    display: flex;
+    align-items: center;
+    min-height: var(--of-row-height);
+    padding: 8px 16px;
+    border-top: 1px solid var(--of-border);
+    min-width: 0;
+}
+
+.of-import-erros li {
+    flex-direction: column;
+    align-items: flex-start;
+    color: var(--of-error);
+}
+
+.of-import-erro-onde {
+    font-weight: 600;
+    font-size: 0.8125rem;
+    line-height: 1.3;
+}
+
+.of-import-erro-msg,
+.of-import-falha,
+.of-import-bloqueio {
+    overflow-wrap: anywhere;
+    line-height: 1.4;
+}
+
+.of-import-erro-msg {
+    margin-top: 2px;
+}
+
+.of-import-falha {
+    margin: 0;
+    color: var(--of-error);
+}
+
+.of-import-bloqueio {
+    margin: 0;
+    padding: 8px 16px 0;
+    font-size: 0.8125rem;
+}
+
+.of-import-bloqueio-erro {
+    color: var(--of-error);
+}
+
+.of-import-bloqueio-aviso {
+    color: var(--of-warning);
+}
+
+.of-import-bloqueio-neutro {
+    color: var(--of-text-secondary);
+}
+
+.of-import-linha {
+    padding: 0 8px 0 0;
+}
+
+.of-import-linha-botao {
+    display: flex;
+    align-items: center;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: var(--of-touch);
+    margin: 0;
+    padding: 8px 8px 8px 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+}
+
+.of-import-linha-botao:focus-visible {
+    outline: 2px solid var(--of-primary);
+    outline-offset: -2px;
+}
+
+.of-import-linha-botao:disabled {
+    opacity: 0.6;
+}
+
+.of-import-duplicata {
+    box-shadow: inset 3px 0 0 var(--of-warning);
+}
+
+.of-import-check {
+    flex: 0 0 auto;
+}
+
+.of-import-check ::deep .mud-input-control {
+    margin: 0;
+}
+
+.of-import-icone {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 auto;
+    border-radius: var(--of-radius-chip);
+    background: var(--of-chip-bg);
+    font-size: 1.15rem;
+}
+
+.of-import-texto {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1 1 auto;
+    margin-left: 12px;
+}
+
+.of-import-titulo {
+    color: var(--of-text);
+    font-weight: 600;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.of-import-sub {
+    margin-top: 2px;
+    color: var(--of-text-muted);
+    font-size: 12px;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.of-import-tag {
+    display: inline-block;
+    align-self: flex-start;
+    margin-top: 4px;
+    padding: 2px 8px;
+    border: 1px solid var(--of-warning);
+    border-radius: var(--of-radius-pill);
+    color: var(--of-text);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+.of-import-valor {
+    margin-left: 12px;
+    color: var(--of-text);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.of-import-credito {
+    color: var(--of-success);
+}

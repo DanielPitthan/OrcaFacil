@@ -125,6 +125,7 @@ public static class EstornoFaturaRascunho
         item.TotalParcelas = null;
         item.CategoriaId = gravado.CategoriaId;
         item.Ordem = gravado.Ordem;
+        item.HashImportacao = gravado.HashImportacao;
     }
 
     public static void EspelharExclusao(TransacaoFormModel fatura, ItemLancamentoFormModel item)
@@ -146,7 +147,8 @@ public static class EstornoFaturaRascunho
         ParcelaAtual = item.ParcelaAtual,
         TotalParcelas = item.TotalParcelas,
         CategoriaId = item.CategoriaId,
-        Ordem = item.Ordem
+        Ordem = item.Ordem,
+        HashImportacao = item.HashImportacao
     };
 
     /// <summary>Texto do sheet: o descritivo, ou a descrição antiga quando ela não é o nome da categoria.</summary>

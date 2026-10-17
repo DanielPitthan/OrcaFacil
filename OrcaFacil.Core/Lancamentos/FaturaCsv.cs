@@ -46,13 +46,29 @@ public static class FaturaCsv
         public bool ArquivoAceito => ErroArquivo is null;
     }
 
+    /// <summary>
+    /// Lê o fluxo até o fim e só então aplica o limite de 1 MB.
+    /// Parar no meio e interpretar o prefixo importaria um arquivo cortado sem avisar.
+    /// </summary>
+    public static async Task<byte[]> LerArquivoAsync(Stream fluxo, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(fluxo);
+
+        using var memoria = new MemoryStream();
+        await fluxo.CopyToAsync(memoria, cancellationToken).ConfigureAwait(false);
+        if (memoria.Length > FaturaCsvLayout.TamanhoMaximoBytes)
+            throw new InvalidOperationException(FaturaCsvLayout.MensagemArquivoGrande);
+
+        return memoria.ToArray();
+    }
+
     public static Leitura Ler(byte[] arquivo, IReadOnlyList<Categoria> categorias)
     {
         ArgumentNullException.ThrowIfNull(arquivo);
         ArgumentNullException.ThrowIfNull(categorias);
 
         if (arquivo.Length > FaturaCsvLayout.TamanhoMaximoBytes)
-            return Leitura.Recusar("O arquivo passa de 1 MB. Nada foi importado.");
+            return Leitura.Recusar(FaturaCsvLayout.MensagemArquivoGrande);
 
         if (!TentarDecodificar(arquivo, out var texto, out var erroCodificacao))
             return Leitura.Recusar(erroCodificacao!);

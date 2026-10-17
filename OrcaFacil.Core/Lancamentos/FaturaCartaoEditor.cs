@@ -162,6 +162,39 @@ public static class FaturaCartaoEditor
     /// Mesma regra de <see cref="ItensFaturaRegras.Validar"/>, a partir do rascunho da tela.
     /// A cesta e o salvamento da fatura passam pela regra de itens; esta entrada cobre o editor.
     /// </summary>
+    /// <summary>
+    /// Converte o rascunho da tela nos itens que a regravação persiste.
+    /// A ordem segue a posição na lista, como o salvamento da fatura.
+    /// O hash da importação volta junto; sem ele, salvar a fatura apaga a deduplicação.
+    /// </summary>
+    public static List<ItemLancamento> MapearItens(IReadOnlyList<ItemLancamentoFormModel> itens)
+    {
+        ArgumentNullException.ThrowIfNull(itens);
+        var entidades = new List<ItemLancamento>(itens.Count);
+        for (var indice = 0; indice < itens.Count; indice++)
+            entidades.Add(MapearItem(itens[indice], indice));
+
+        return entidades;
+    }
+
+    public static ItemLancamento MapearItem(ItemLancamentoFormModel item, int ordem)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        return new ItemLancamento
+        {
+            Descricao = item.Descricao?.Trim() ?? string.Empty,
+            Descritivo = ItensFaturaInclusao.NormalizarDescritivo(item.Descritivo),
+            Valor = item.Valor,
+            EhEstorno = item.EhEstorno,
+            Natureza = item.Natureza,
+            ParcelaAtual = item.Natureza == NaturezaItemLancamento.Parcelada ? item.ParcelaAtual : null,
+            TotalParcelas = item.Natureza == NaturezaItemLancamento.Parcelada ? item.TotalParcelas : null,
+            CategoriaId = item.CategoriaId,
+            Ordem = ordem,
+            HashImportacao = string.IsNullOrWhiteSpace(item.HashImportacao) ? null : item.HashImportacao.Trim()
+        };
+    }
+
     public static void ValidarItens(
         decimal total,
         int categoriaFaturaId,
