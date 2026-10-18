@@ -187,6 +187,21 @@ public class ClassificacaoBancoVivoTests
 
         Assert.True(relatorio.Integro);
         Assert.Equal(SituacaoBancoVivo.Integro, ClassificacaoBancoVivo.Classificar(LeituraBancoVivo.Lida(relatorio)));
+
+        var haMembro = await ctx.MembrosFamilia.AnyAsync();
+        Assert.False(haMembro);
+        Assert.Equal(
+            SituacaoBancoVivo.SemPerfil,
+            ClassificacaoBancoVivo.AplicarPoliticaSeed(SituacaoBancoVivo.Integro, relatorio, haMembro));
+        Assert.Equal(
+            SituacaoBancoVivo.Integro,
+            ClassificacaoBancoVivo.AplicarPoliticaSeed(SituacaoBancoVivo.Integro, relatorio, haMembro: true));
+        Assert.Equal(
+            SituacaoBancoVivo.Vazio,
+            ClassificacaoBancoVivo.AplicarPoliticaSeed(SituacaoBancoVivo.Vazio, relatorio, haMembro: false));
+        Assert.Equal(
+            SituacaoBancoVivo.Inconsistente,
+            ClassificacaoBancoVivo.AplicarPoliticaSeed(SituacaoBancoVivo.Inconsistente, relatorio, haMembro: false));
     }
 
     [Fact]

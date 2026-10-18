@@ -20,9 +20,10 @@ public interface IProvedorSenhaEspelho
 /// A leitura descriptografa para um temporário, valida e apaga esse temporário antes de voltar.
 /// Não copia o espelho por cima do banco vivo, não apaga o espelho e não semeia.
 /// Restauração que falha continua sendo decisão do <see cref="CoordenadorArmazenamento"/>:
-/// esta classe não implementa <see cref="IRestauracaoEspelho"/>, <see cref="IPreservacaoBancoVivo"/>
-/// nem <see cref="IMigracaoBancoVivo"/>. Banco vivo vazio e arquivo ilegível são situações do banco,
-/// não desta leitura. O coordenador exige <see cref="OpcoesPreparoBanco"/> e a preservação à parte.
+/// esta classe não implementa <see cref="IRestauracaoEspelho"/>, <see cref="IPreservacaoBancoVivo"/>,
+/// <see cref="IMigracaoBancoVivo"/> nem <see cref="IPresencaPerfil"/>. Banco vivo vazio, arquivo ilegível
+/// e schema íntegro sem membro são situações do banco, não desta leitura. O coordenador exige
+/// <see cref="OpcoesPreparoBanco"/>, a preservação e a presença de perfil à parte.
 /// </remarks>
 public sealed class EspelhoArquivo : IEspelhoDados
 {

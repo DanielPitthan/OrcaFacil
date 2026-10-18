@@ -34,32 +34,37 @@ public class MatrizDecisaoArmazenamentoTests
             }
         }
 
-        Assert.Equal(35, coerentes);
-        Assert.Equal(35, MatrizDecisaoArmazenamento.Tabela.Count);
+        Assert.Equal(40, coerentes);
+        Assert.Equal(40, MatrizDecisaoArmazenamento.Tabela.Count);
     }
 
     [Fact]
-    public void Semear_SoQuandoNaoHaBancoNemEspelho()
+    public void Semear_QuandoNaoHaDadoUtilizavel_OuQuandoOSchemaNaoTemPerfil()
     {
         var semeaduras = MatrizDecisaoArmazenamento.Tabela
             .Where(linha => linha.Acao == AcaoArmazenamento.Semear)
             .OrderBy(linha => linha.BancoVivo)
             .ToList();
 
-        Assert.Equal(2, semeaduras.Count);
-        Assert.All(semeaduras, linha => Assert.Equal(SituacaoEspelho.Ausente, linha.Espelho));
+        Assert.Equal(7, semeaduras.Count);
         Assert.Contains(semeaduras, linha => linha.BancoVivo == SituacaoBancoVivo.Ausente);
         Assert.Contains(semeaduras, linha => linha.BancoVivo == SituacaoBancoVivo.Vazio);
+        Assert.Equal(5, semeaduras.Count(linha => linha.BancoVivo == SituacaoBancoVivo.SemPerfil));
 
         foreach (var linha in MatrizDecisaoArmazenamento.Tabela)
         {
             var semDadoESemEspelho = linha.Espelho == SituacaoEspelho.Ausente
                 && linha.BancoVivo is SituacaoBancoVivo.Ausente or SituacaoBancoVivo.Vazio;
-            if (semDadoESemEspelho)
+            var schemaSemPerfil = linha.BancoVivo == SituacaoBancoVivo.SemPerfil;
+            if (semDadoESemEspelho || schemaSemPerfil)
                 Assert.Equal(AcaoArmazenamento.Semear, linha.Acao);
             else
                 Assert.NotEqual(AcaoArmazenamento.Semear, linha.Acao);
         }
+
+        Assert.All(
+            semeaduras.Where(linha => linha.BancoVivo is SituacaoBancoVivo.Ausente or SituacaoBancoVivo.Vazio),
+            linha => Assert.Equal(SituacaoEspelho.Ausente, linha.Espelho));
     }
 
     [Fact]
@@ -70,6 +75,7 @@ public class MatrizDecisaoArmazenamentoTests
             var esperada = linha.BancoVivo switch
             {
                 SituacaoBancoVivo.Integro => AcaoArmazenamento.UsarBancoVivo,
+                SituacaoBancoVivo.SemPerfil => AcaoArmazenamento.Semear,
                 SituacaoBancoVivo.Desatualizado => AcaoArmazenamento.MigrarBancoVivo,
                 SituacaoBancoVivo.ParcialAddCartoes => AcaoArmazenamento.MigrarBancoVivo,
                 SituacaoBancoVivo.SchemaMaisNovoQueOApp => AcaoArmazenamento.PedirAtualizacaoDoApp,
@@ -85,7 +91,7 @@ public class MatrizDecisaoArmazenamentoTests
         Assert.Equal(8, MatrizDecisaoArmazenamento.Tabela.Count(linha => linha.Acao == AcaoArmazenamento.PedirAtualizacaoDoApp));
         Assert.Equal(6, MatrizDecisaoArmazenamento.Tabela.Count(linha => linha.Acao == AcaoArmazenamento.RestaurarDoEspelho));
         Assert.Equal(4, MatrizDecisaoArmazenamento.Tabela.Count(linha => linha.Acao == AcaoArmazenamento.TelaDeRecuperacao));
-        Assert.Equal(2, MatrizDecisaoArmazenamento.Tabela.Count(linha => linha.Acao == AcaoArmazenamento.Semear));
+        Assert.Equal(7, MatrizDecisaoArmazenamento.Tabela.Count(linha => linha.Acao == AcaoArmazenamento.Semear));
     }
 
     [Fact]
@@ -136,6 +142,7 @@ public class MatrizDecisaoArmazenamentoTests
     private static AcaoArmazenamento AcaoEsperada(EstadoObservadoArmazenamento estado) => estado.BancoVivo switch
     {
         SituacaoBancoVivo.Integro => AcaoArmazenamento.UsarBancoVivo,
+        SituacaoBancoVivo.SemPerfil => AcaoArmazenamento.Semear,
         SituacaoBancoVivo.Desatualizado => AcaoArmazenamento.MigrarBancoVivo,
         SituacaoBancoVivo.SchemaMaisNovoQueOApp => AcaoArmazenamento.PedirAtualizacaoDoApp,
         SituacaoBancoVivo.ParcialAddCartoes => AcaoArmazenamento.MigrarBancoVivo,
