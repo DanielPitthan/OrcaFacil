@@ -21,8 +21,9 @@ public static class EstornoFaturaRascunho
         bool mesFechado)
     {
         GarantirMesAberto(fatura, mesFechado);
+        pedido = pedido with { Valor = DinheiroEstorno.Arredondar(pedido.Valor) };
         var item = CriarItem(fatura.Itens, pedido, nomeCategoria);
-        var novoTotal = fatura.Valor - pedido.Valor;
+        var novoTotal = DinheiroEstorno.Arredondar(fatura.Valor - pedido.Valor);
         var previstos = fatura.Itens.Append(item).ToList();
         FaturaCartaoEditor.ValidarItens(
             novoTotal, fatura.CategoriaId, permiteItens: true, fatura.Tipo, previstos);
@@ -43,6 +44,7 @@ public static class EstornoFaturaRascunho
             throw new InvalidOperationException("Só um estorno pode ser editado por este caminho.");
 
         GarantirMesAberto(fatura, mesFechado);
+        pedido = pedido with { Valor = DinheiroEstorno.Arredondar(pedido.Valor) };
         ExigirItem(pedido);
 
         var descritivo = ItensFaturaInclusao.NormalizarDescritivo(pedido.Descritivo);
@@ -63,7 +65,7 @@ public static class EstornoFaturaRascunho
         item.ParcelaAtual = null;
         item.TotalParcelas = null;
 
-        var novoTotal = fatura.Valor + valorAnterior - pedido.Valor;
+        var novoTotal = DinheiroEstorno.Arredondar(fatura.Valor + valorAnterior - pedido.Valor);
         try
         {
             FaturaCartaoEditor.ValidarItens(
@@ -97,7 +99,7 @@ public static class EstornoFaturaRascunho
         if (!fatura.Itens.Contains(item))
             throw new InvalidOperationException("Item não encontrado.");
 
-        fatura.Valor += item.Valor;
+        fatura.Valor = DinheiroEstorno.Arredondar(fatura.Valor + item.Valor);
         fatura.Itens.Remove(item);
     }
 
@@ -106,13 +108,13 @@ public static class EstornoFaturaRascunho
     {
         var item = ParaFormulario(gravado);
         item.Ordem = ItensFaturaInclusao.ProximaOrdem(fatura.Itens);
-        fatura.Valor -= gravado.Valor;
+        fatura.Valor = DinheiroEstorno.Arredondar(fatura.Valor - gravado.Valor);
         fatura.Itens.Add(item);
     }
 
     public static void EspelharEdicao(TransacaoFormModel fatura, ItemLancamentoFormModel item, ItemLancamento gravado)
     {
-        fatura.Valor += item.Valor - gravado.Valor;
+        fatura.Valor = DinheiroEstorno.Arredondar(fatura.Valor + item.Valor - gravado.Valor);
         item.Id = gravado.Id;
         item.Descricao = gravado.Descricao;
         item.Descritivo = gravado.Descritivo;
@@ -128,7 +130,7 @@ public static class EstornoFaturaRascunho
     public static void EspelharExclusao(TransacaoFormModel fatura, ItemLancamentoFormModel item)
     {
         if (item.EhEstorno)
-            fatura.Valor += item.Valor;
+            fatura.Valor = DinheiroEstorno.Arredondar(fatura.Valor + item.Valor);
 
         fatura.Itens.Remove(item);
     }

@@ -47,6 +47,7 @@
 </ItemSheet>
 
 @code {
+    private readonly ToqueUnico _confirmacao = new();
     private bool _visivel;
     private bool _listaCompleta;
     private decimal _valor;
@@ -117,31 +118,41 @@
 
     private async Task ConfirmarAsync(ItemLancamentoFormModel _)
     {
-        var erro = FaturaCartaoEditor.ValidarItem(
-            _categoriaId, _valor, NaturezaItemLancamento.Avulsa, null, null, ehEstorno: true);
-        if (erro is not null)
-        {
-            _erro = erro;
+        if (!_confirmacao.Entrar())
             return;
-        }
 
         try
         {
-            ItensFaturaInclusao.NormalizarDescritivo(_descritivo);
-        }
-        catch (InvalidOperationException ex)
-        {
-            _erro = ex.Message;
-            return;
-        }
+            var erro = FaturaCartaoEditor.ValidarItem(
+                _categoriaId, _valor, NaturezaItemLancamento.Avulsa, null, null, ehEstorno: true);
+            if (erro is not null)
+            {
+                _erro = erro;
+                return;
+            }
 
-        try
-        {
-            await OnConfirmar.InvokeAsync(new PedidoEstorno(_valor, _categoriaId, _descritivo));
+            try
+            {
+                ItensFaturaInclusao.NormalizarDescritivo(_descritivo);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _erro = ex.Message;
+                return;
+            }
+
+            try
+            {
+                await OnConfirmar.InvokeAsync(new PedidoEstorno(_valor, _categoriaId, _descritivo));
+            }
+            catch (InvalidOperationException ex)
+            {
+                _erro = ex.Message;
+            }
         }
-        catch (InvalidOperationException ex)
+        finally
         {
-            _erro = ex.Message;
+            _confirmacao.Sair();
         }
     }
 }
