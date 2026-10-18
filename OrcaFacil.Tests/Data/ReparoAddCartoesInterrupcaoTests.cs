@@ -1,4 +1,5 @@
 using System.Data;
+using System.Reflection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -11,6 +12,8 @@ namespace OrcaFacil.Tests.Data;
 /// Cada comando da migration AddCartoes é um ponto em que o processo pode morrer.
 /// O EF confirma o lote antes do DROP/RENAME e de novo antes do histórico; os
 /// testes também param entre um comando e o outro, com cada um já gravado.
+/// O reparo em si faz DROP e RENAME na mesma transação: se ele morre no DROP,
+/// a troca desfaz. Cópias com outro conteúdo não são apagadas.
 /// </summary>
 public class ReparoAddCartoesInterrupcaoTests : IClassFixture<ReparoAddCartoesInterrupcaoTests.BancoAntesDeAddCartoes>
 {
@@ -112,6 +115,343 @@ public class ReparoAddCartoesInterrupcaoTests : IClassFixture<ReparoAddCartoesIn
             Assert.Equal(0L, await EscalarAsync(conferir, "SELECT COUNT(*) FROM RecargasCartao"));
         else
             Assert.Equal("80.00", await EscalarTextoAsync(conferir, "SELECT Valor FROM RecargasCartao"));
+    }
+
+    [Fact]
+    public async Task CopiaComMenosLinhas_NaoApagaNenhumLado()
+    {
+        using var banco = _origem.Copiar();
+        await using (var ctx = banco.CriarContexto())
+        {
+            await AplicarComandosAsync(ctx, IndiceApos("INSERT INTO \"ef_temp_Transacoes\""));
+            await ExecutarAsync(ctx, "DELETE FROM ef_temp_Transacoes WHERE Descricao = 'Ônibus'");
+        }
+
+        await ExigirQueBloqueiaAsync(banco, "Transacoes", "Nenhuma das duas foi apagada");
+
+        await using var conferir = banco.CriarContexto();
+        Assert.Equal(2L, await EscalarAsync(conferir, "SELECT COUNT(*) FROM Transacoes"));
+        Assert.Equal(1L, await EscalarAsync(conferir, "SELECT COUNT(*) FROM ef_temp_Transacoes"));
+        Assert.Equal(1L, await EscalarAsync(conferir, "SELECT COUNT(*) FROM ComprasCesta"));
+        Assert.Equal(1L, await EscalarAsync(conferir, "SELECT COUNT(*) FROM ef_temp_ComprasCesta"));
+        Assert.Equal("Hortifruti", await EscalarTextoAsync(conferir, "SELECT Observacao FROM Transacoes WHERE Descricao = 'Mercado'"));
+        Assert.Equal("Ônibus", await EscalarTextoAsync(conferir, "SELECT Descricao FROM Transacoes WHERE Descricao = 'Ônibus'"));
+        Assert.Equal(0L, await HistoricoAddCartoesAsync(conferir));
+    }
+
+    [Fact]
+    public async Task MesmaContagemComConteudoDiferente_NaoApagaNenhumLado()
+    {
+        using var banco = _origem.Copiar();
+        await using (var ctx = banco.CriarContexto())
+        {
+            await AplicarComandosAsync(ctx, IndiceApos("INSERT INTO \"ef_temp_Transacoes\""));
+            await ExecutarAsync(ctx, "UPDATE ef_temp_Transacoes SET Observacao = 'Trocado' WHERE Descricao = 'Mercado'");
+        }
+
+        await ExigirQueBloqueiaAsync(banco, "Transacoes", "Nenhuma das duas foi apagada");
+
+        await using var conferir = banco.CriarContexto();
+        Assert.Equal(
+            await EscalarAsync(conferir, "SELECT COUNT(*) FROM Transacoes"),
+            await EscalarAsync(conferir, "SELECT COUNT(*) FROM ef_temp_Transacoes"));
+        Assert.Equal("Hortifruti", await EscalarTextoAsync(conferir, "SELECT Observacao FROM Transacoes WHERE Descricao = 'Mercado'"));
+        Assert.Equal("Trocado", await EscalarTextoAsync(conferir, "SELECT Observacao FROM ef_temp_Transacoes WHERE Descricao = 'Mercado'"));
+        Assert.Equal(1L, await EscalarAsync(conferir, "SELECT COUNT(*) FROM ComprasCesta"));
+        Assert.Equal(1L, await EscalarAsync(conferir, "SELECT COUNT(*) FROM ef_temp_ComprasCesta"));
+        Assert.Equal(0L, await HistoricoAddCartoesAsync(conferir));
+    }
+
+    [Fact]
+    public async Task OriginalReconstruida_CopiaComMesmoTamanhoEOutroConteudo_NaoApagaACopia()
+    {
+        using var banco = _origem.Copiar();
+        await using (var ctx = banco.CriarContexto())
+        {
+            await AplicarComandosAsync(ctx, IndiceApos("RENAME TO \"Transacoes\""));
+            await ExecutarAsync(ctx, "CREATE TABLE ef_temp_Transacoes AS SELECT * FROM Transacoes");
+            await ExecutarAsync(ctx, "UPDATE ef_temp_Transacoes SET Observacao = 'Outro' WHERE Descricao = 'Mercado'");
+        }
+
+        await ExigirQueBloqueiaAsync(banco, "Transacoes", "A cópia não foi apagada");
+
+        await using var conferir = banco.CriarContexto();
+        Assert.Equal("Hortifruti", await EscalarTextoAsync(conferir, "SELECT Observacao FROM Transacoes WHERE Descricao = 'Mercado'"));
+        Assert.Equal("Outro", await EscalarTextoAsync(conferir, "SELECT Observacao FROM ef_temp_Transacoes WHERE Descricao = 'Mercado'"));
+        Assert.Equal(
+            await EscalarAsync(conferir, "SELECT COUNT(*) FROM Transacoes"),
+            await EscalarAsync(conferir, "SELECT COUNT(*) FROM ef_temp_Transacoes"));
+        Assert.Contains("FK_Transacoes_Cartoes_CartaoId", await SqlTabelaAsync(conferir, "Transacoes"));
+        Assert.Equal(0L, await HistoricoAddCartoesAsync(conferir));
+    }
+
+    [Fact]
+    public async Task OriginalReconstruida_CopiaRedundante_ApagaSoACopiaEConclui()
+    {
+        using var banco = _origem.Copiar();
+        await using (var ctx = banco.CriarContexto())
+        {
+            await AplicarComandosAsync(ctx, IndiceApos("RENAME TO \"Transacoes\""));
+            await ExecutarAsync(ctx, "CREATE TABLE ef_temp_Transacoes AS SELECT * FROM Transacoes");
+            await ExecutarAsync(ctx, "DELETE FROM ef_temp_Transacoes WHERE Descricao = 'Ônibus'");
+        }
+
+        await using (var ctx = banco.CriarContexto())
+        {
+            await PreparoBanco.ExigirIntegroAsync(ctx);
+            await PreparoBanco.ExigirIntegroAsync(ctx);
+        }
+
+        await using var conferir = banco.CriarContexto();
+        Assert.Equal(0L, await EscalarAsync(conferir, "SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'ef_temp_%'"));
+        Assert.Equal(2L, await EscalarAsync(conferir, "SELECT COUNT(*) FROM Transacoes"));
+        Assert.Equal("Hortifruti", await EscalarTextoAsync(conferir, "SELECT Observacao FROM Transacoes WHERE Descricao = 'Mercado'"));
+        Assert.Equal("Ônibus", await EscalarTextoAsync(conferir, "SELECT Descricao FROM Transacoes WHERE Descricao = 'Ônibus'"));
+        Assert.Contains(Cartoes, (await VerificadorIntegridadeBanco.VerificarAsync(conferir)).MigrationsNoHistorico);
+        Assert.True((await VerificadorIntegridadeBanco.VerificarAsync(conferir)).Integro);
+    }
+
+    [Fact]
+    public async Task ReparoMorreNoDrop_DesfazATroca_ERetryConcluiComBackup()
+    {
+        var pasta = Path.Combine(Path.GetTempPath(), $"orcafacil-morte-drop-{Guid.NewGuid():N}");
+        var caminho = PrepararCopia(pasta);
+        try
+        {
+            await using (var ctx = Abrir(caminho))
+                await AplicarComandosAsync(ctx, IndiceApos("INSERT INTO \"ef_temp_Transacoes\""));
+
+            string? derrubada = null;
+            ResultadoPreparoBanco resultado;
+            try
+            {
+                ReconciliadorAddCartoes.DepoisDoDropAntesDoRename = (tabela, _) =>
+                {
+                    derrubada = tabela;
+                    return ValueTask.FromException(new InvalidOperationException("morte no DROP"));
+                };
+
+                await using var ctx = Abrir(caminho);
+                resultado = await PreparoBanco.MigrarEVerificarAsync(
+                    ctx,
+                    new OpcoesPreparoBanco { VersaoAplicativo = "9.9.9-teste" });
+            }
+            finally
+            {
+                ReconciliadorAddCartoes.DepoisDoDropAntesDoRename = null;
+            }
+
+            Assert.Equal("ComprasCesta", derrubada);
+            Assert.True(resultado.ExigeRecuperacao);
+            Assert.NotNull(resultado.Aviso);
+            Assert.Contains("arquivo do banco não foi substituído", resultado.Aviso);
+            Assert.DoesNotContain("banco não foi apagado", resultado.Aviso);
+            Assert.NotNull(resultado.CaminhoBackup);
+            Assert.True(File.Exists(resultado.CaminhoBackup));
+
+            await using (var ctx = Abrir(caminho))
+            {
+                Assert.Equal(1L, await EscalarAsync(ctx, "SELECT COUNT(*) FROM ComprasCesta"));
+                Assert.Equal(1L, await EscalarAsync(ctx, "SELECT COUNT(*) FROM ef_temp_ComprasCesta"));
+                Assert.Equal(2L, await EscalarAsync(ctx, "SELECT COUNT(*) FROM Transacoes"));
+                Assert.Equal(2L, await EscalarAsync(ctx, "SELECT COUNT(*) FROM ef_temp_Transacoes"));
+                Assert.Equal("42.50", await EscalarTextoAsync(ctx, "SELECT Valor FROM Transacoes WHERE Descricao = 'Mercado'"));
+                Assert.Equal(0L, await HistoricoAddCartoesAsync(ctx));
+            }
+
+            await using (var backup = new SqliteConnection($"Data Source={resultado.CaminhoBackup}"))
+            {
+                await backup.OpenAsync();
+                Assert.Equal("Daniel", await EscalarConexaoAsync(backup, "SELECT Nome FROM MembrosFamilia"));
+                Assert.Equal("42.50", await EscalarConexaoAsync(backup, "SELECT Valor FROM Transacoes WHERE Descricao = 'Mercado'"));
+                Assert.Equal("1", await EscalarConexaoAsync(backup, "SELECT COUNT(*) FROM ComprasCesta"));
+            }
+
+            await using (var ctx = Abrir(caminho))
+                await PreparoBanco.ExigirIntegroAsync(ctx);
+
+            await using var conferir = Abrir(caminho);
+            var relatorio = await VerificadorIntegridadeBanco.VerificarAsync(conferir);
+            Assert.True(relatorio.Integro, relatorio.Resumo);
+            Assert.Contains(Cartoes, relatorio.MigrationsNoHistorico);
+            Assert.Equal(0L, await EscalarAsync(conferir, "SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'ef_temp_%'"));
+            Assert.Equal("Daniel", await EscalarTextoAsync(conferir, "SELECT Nome FROM MembrosFamilia"));
+            Assert.Equal("42.50", await EscalarTextoAsync(conferir, "SELECT Valor FROM Transacoes WHERE Descricao = 'Mercado'"));
+            Assert.Equal("150.00", await EscalarTextoAsync(conferir, "SELECT ValorBeneficio FROM ComprasCesta"));
+        }
+        finally
+        {
+            ApagarPasta(pasta);
+        }
+    }
+
+    [Fact]
+    public async Task MorteEntreDropERename_EmModoWal_RetryConclui_EBackupLeWal()
+    {
+        var pasta = Path.Combine(Path.GetTempPath(), $"orcafacil-wal-{Guid.NewGuid():N}");
+        var caminho = PrepararCopia(pasta);
+        try
+        {
+            await using var segurando = new SqliteConnection($"Data Source={caminho}");
+            await segurando.OpenAsync();
+            await ExecutarConexaoAsync(segurando, "PRAGMA journal_mode = WAL");
+            await ExecutarConexaoAsync(segurando, "PRAGMA wal_autocheckpoint = 0");
+            var comandos = ComandosAddCartoes();
+            var ateODrop = IndiceApos("DROP TABLE \"ComprasCesta\"");
+            for (var i = 0; i < ateODrop; i++)
+                await ExecutarConexaoAsync(segurando, comandos[i]);
+
+            await ExecutarConexaoAsync(segurando, "BEGIN");
+            Assert.Equal("2", await EscalarConexaoAsync(segurando, "SELECT COUNT(*) FROM Transacoes"));
+            Assert.Equal("wal", await EscalarConexaoAsync(segurando, "PRAGMA journal_mode"));
+            Assert.True(File.Exists(caminho + "-wal") || File.Exists(caminho + "-shm"), "O journal WAL não deixou -wal nem -shm.");
+
+            ResultadoPreparoBanco resultado;
+            await using (var ctx = Abrir(caminho))
+            {
+                resultado = await PreparoBanco.MigrarEVerificarAsync(
+                    ctx,
+                    new OpcoesPreparoBanco { VersaoAplicativo = "9.9.9-teste" });
+            }
+
+            Assert.False(resultado.ExigeRecuperacao, resultado.Aviso ?? resultado.FalhaMigrate?.Message);
+            Assert.NotNull(resultado.CaminhoBackup);
+            Assert.True(File.Exists(resultado.CaminhoBackup));
+            Assert.True(File.Exists(caminho + "-wal") || File.Exists(caminho + "-shm"));
+
+            await using (var backup = new SqliteConnection($"Data Source={resultado.CaminhoBackup}"))
+            {
+                await backup.OpenAsync();
+                Assert.Equal("Daniel", await EscalarConexaoAsync(backup, "SELECT Nome FROM MembrosFamilia"));
+                Assert.Equal("42.50", await EscalarConexaoAsync(backup, "SELECT Valor FROM Transacoes WHERE Descricao = 'Mercado'"));
+                Assert.Equal("0", await EscalarConexaoAsync(backup, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'ComprasCesta'"));
+                Assert.Equal("150.00", await EscalarConexaoAsync(backup, "SELECT ValorBeneficio FROM ef_temp_ComprasCesta"));
+            }
+
+            await using var conferir = Abrir(caminho);
+            var relatorio = await VerificadorIntegridadeBanco.VerificarAsync(conferir);
+            Assert.True(relatorio.Integro, relatorio.Resumo);
+            Assert.Contains(Cartoes, relatorio.MigrationsNoHistorico);
+            Assert.Equal(0L, await EscalarAsync(conferir, "SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'ef_temp_%'"));
+            Assert.Equal("150.00", await EscalarTextoAsync(conferir, "SELECT ValorBeneficio FROM ComprasCesta"));
+            Assert.Equal("Daniel", await EscalarTextoAsync(conferir, "SELECT Nome FROM MembrosFamilia"));
+            Assert.Equal("42.50", await EscalarTextoAsync(conferir, "SELECT Valor FROM Transacoes WHERE Descricao = 'Mercado'"));
+
+            await ExecutarConexaoAsync(segurando, "ROLLBACK");
+        }
+        finally
+        {
+            ApagarPasta(pasta);
+        }
+    }
+
+    [Fact]
+    public async Task HistoricoSemProductVersion_GravaVersaoLidaDoEf()
+    {
+        using var banco = _origem.Copiar();
+        await using (var ctx = banco.CriarContexto())
+        {
+            await AplicarComandosAsync(ctx, 1);
+            await ExecutarAsync(ctx, "UPDATE __EFMigrationsHistory SET ProductVersion = ''");
+        }
+
+        await using (var ctx = banco.CriarContexto())
+            await PreparoBanco.ExigirIntegroAsync(ctx);
+
+        await using var conferir = banco.CriarContexto();
+        var gravada = await EscalarTextoAsync(
+            conferir,
+            "SELECT ProductVersion FROM __EFMigrationsHistory WHERE MigrationId = $id",
+            ("$id", Cartoes));
+        Assert.Equal(VersaoEsperadaDoEf(), gravada);
+        Assert.DoesNotContain("+", gravada);
+        Assert.Matches(@"^\d+\.\d+\.\d+", gravada);
+    }
+
+    private string PrepararCopia(string pasta)
+    {
+        Directory.CreateDirectory(pasta);
+        using var semente = _origem.Copiar();
+        var caminho = Path.Combine(pasta, "orcafacil.db");
+        File.Copy(semente.Caminho, caminho);
+        return caminho;
+    }
+
+    private static AppDbContext Abrir(string caminho)
+    {
+        var opcoes = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite($"Data Source={caminho}")
+            .Options;
+        return new AppDbContext(opcoes);
+    }
+
+    private static void ApagarPasta(string pasta)
+    {
+        SqliteConnection.ClearAllPools();
+        if (Directory.Exists(pasta))
+            Directory.Delete(pasta, recursive: true);
+    }
+
+    private static async Task ExigirQueBloqueiaAsync(BancoCopiado banco, string tabela, string trecho)
+    {
+        await using var ctx = banco.CriarContexto();
+        var excecao = await Assert.ThrowsAsync<IntegridadeBancoException>(() => PreparoBanco.ExigirIntegroAsync(ctx));
+        var deNovo = await Assert.ThrowsAsync<IntegridadeBancoException>(() => PreparoBanco.ExigirIntegroAsync(ctx));
+        Assert.Contains(tabela, excecao.Message);
+        Assert.Contains(trecho, excecao.Message);
+        Assert.DoesNotContain("banco não foi apagado", excecao.Message);
+        Assert.Contains("arquivo do banco não foi substituído", excecao.Message);
+        Assert.Equal(excecao.Message, deNovo.Message);
+    }
+
+    private static int IndiceApos(string trecho)
+    {
+        var comandos = ComandosAddCartoes();
+        var indice = comandos.FindIndex(comando => comando.Contains(trecho, StringComparison.Ordinal));
+        if (indice < 0)
+            throw new InvalidOperationException("Comando não encontrado: " + trecho);
+
+        return indice + 1;
+    }
+
+    private static Task ExecutarAsync(AppDbContext ctx, string sql) =>
+        ctx.Database.ExecuteSqlRawAsync(sql);
+
+    private static Task<long> HistoricoAddCartoesAsync(AppDbContext ctx) =>
+        EscalarAsync(ctx, "SELECT COUNT(*) FROM __EFMigrationsHistory WHERE MigrationId = $id", ("$id", Cartoes));
+
+    private static async Task ExecutarConexaoAsync(SqliteConnection conexao, string sql)
+    {
+        await using var comando = conexao.CreateCommand();
+        comando.CommandText = sql;
+        await comando.ExecuteNonQueryAsync();
+    }
+
+    private static async Task<string> EscalarConexaoAsync(SqliteConnection conexao, string sql)
+    {
+        await using var comando = conexao.CreateCommand();
+        comando.CommandText = sql;
+        var valor = await comando.ExecuteScalarAsync();
+        return valor is null or DBNull ? "" : Convert.ToString(valor, System.Globalization.CultureInfo.InvariantCulture) ?? "";
+    }
+
+    private static string VersaoEsperadaDoEf()
+    {
+        var informacional = typeof(DbContext).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+        if (!string.IsNullOrWhiteSpace(informacional))
+        {
+            var mais = informacional.IndexOf('+', StringComparison.Ordinal);
+            var versao = mais >= 0 ? informacional[..mais] : informacional;
+            if (!string.IsNullOrWhiteSpace(versao))
+                return versao;
+        }
+
+        var numero = typeof(DbContext).Assembly.GetName().Version;
+        if (numero is not null)
+            return $"{numero.Major}.{numero.Minor}.{numero.Build}";
+
+        throw new InvalidOperationException("Não foi possível ler a versão do EF no teste.");
     }
 
     private static async Task AplicarComandosAsync(AppDbContext ctx, int quantidade)
@@ -379,6 +719,8 @@ public class ReparoAddCartoesInterrupcaoTests : IClassFixture<ReparoAddCartoesIn
         private readonly string _caminho;
 
         public BancoCopiado(string caminho) => _caminho = caminho;
+
+        public string Caminho => _caminho;
 
         public AppDbContext CriarContexto()
         {

@@ -1,6 +1,7 @@
 using System.Data;
 using System.Data.Common;
 using System.Globalization;
+using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -10,14 +11,29 @@ namespace OrcaFacil.Core.Data;
 /// <summary>
 /// A migration AddCartoes reconstrói Transacoes e ComprasCesta no SQLite.
 /// O <c>PRAGMA foreign_keys</c> não cabe numa transação, então o EF confirma o
-/// que já rodou antes de cada pragma. Se o processo morre no meio — inclusive
-/// depois do DROP, entre o DROP e o RENAME, ou antes de recriar os índices e
-/// gravar o histórico — a tentativa seguinte conclui a partir do que ficou,
-/// sem apagar a única cópia dos lançamentos e sem semear.
+/// que já rodou antes de cada pragma. Se o processo morre no meio, a tentativa
+/// seguinte conclui a partir do que ficou. O DROP e o RENAME de cada tabela
+/// entram na mesma transação: morrer entre os dois desfaz a troca. Uma cópia
+/// ef_temp só é apagada quando o conteúdo prova que ela é redundante.
 /// </summary>
 public static class ReconciliadorAddCartoes
 {
     public const string MigrationId = "20261015194450_AddCartoes";
+
+    internal const string AvisoArquivoPreservado =
+        "O arquivo do banco não foi substituído. Se uma tabela já tinha sido removida, a cópia ef_temp foi mantida.";
+
+    private static readonly AsyncLocal<Func<string, CancellationToken, ValueTask>?> GanchoDepoisDoDrop = new();
+
+    /// <summary>
+    /// Teste: corre depois do DROP e antes do RENAME, ainda dentro da transação.
+    /// Lançar daqui desfaz a troca. Não vale fora do fluxo de teste.
+    /// </summary>
+    internal static Func<string, CancellationToken, ValueTask>? DepoisDoDropAntesDoRename
+    {
+        get => GanchoDepoisDoDrop.Value;
+        set => GanchoDepoisDoDrop.Value = value;
+    }
 
     private static readonly (string Tabela, string Coluna, string Destino)[] ColunasNovas =
     [
@@ -36,17 +52,6 @@ public static class ReconciliadorAddCartoes
         "IX_Cartoes_Nome",
         "IX_RecargasCartao_CartaoId_Data"
     ];
-
-    private static readonly Dictionary<string, string[]> FksDaReconstrucao = new(StringComparer.Ordinal)
-    {
-        ["Transacoes"] = ["FK_Transacoes_Cartoes_CartaoId"],
-        ["ComprasCesta"] =
-        [
-            "FK_ComprasCesta_Cartoes_CartaoBeneficioId",
-            "FK_ComprasCesta_Cartoes_CartaoCreditoId",
-            "FK_ComprasCesta_ItensLancamento_ItemFaturaId"
-        ]
-    };
 
     private static readonly Lazy<IReadOnlyList<ComandoSql>> ComandosLazy = new(CriarComandos);
 
@@ -73,8 +78,14 @@ public static class ReconciliadorAddCartoes
             if (!await EstaCompletaAsync(context, comandos, cancellationToken))
             {
                 return Bloqueio(
-                    "A migration AddCartoes parou no meio e não foi possível concluir o que faltava. O que já estava gravado não foi apagado.");
+                    "A migration AddCartoes parou no meio e não foi possível concluir o que faltava. " + AvisoArquivoPreservado);
             }
+        }
+
+        if (await HaVinculoQuebradoAsync(context, cancellationToken))
+        {
+            return Bloqueio(
+                "A migration AddCartoes montou a estrutura, mas o PRAGMA foreign_key_check achou vínculo quebrado. O histórico não foi gravado. " + AvisoArquivoPreservado);
         }
 
         await InserirHistoricoAsync(context, cancellationToken);
@@ -106,6 +117,7 @@ public static class ReconciliadorAddCartoes
         IReadOnlyList<ComandoSql> comandos,
         CancellationToken cancellationToken)
     {
+        var fks = MapaFks(comandos);
         foreach (var tabela in TabelasReconstruidas(comandos))
         {
             var temp = "ef_temp_" + tabela;
@@ -113,23 +125,28 @@ public static class ReconciliadorAddCartoes
             var copia = await TabelaExisteAsync(context, temp, cancellationToken);
             if (!original && !copia)
             {
-                return $"A migration AddCartoes parou no meio e a tabela {tabela} não está no banco nem na cópia ef_temp. Nada foi apagado.";
+                return $"A migration AddCartoes parou no meio e a tabela {tabela} não está no banco nem na cópia ef_temp. {AvisoArquivoPreservado}";
             }
 
             if (!original || !copia)
                 continue;
 
-            var linhasOriginais = await ContagemTabelaAsync(context, tabela, cancellationToken);
-            var linhasCopia = await ContagemTabelaAsync(context, temp, cancellationToken);
-            var reconstruida = await ReconstruidaAsync(context, tabela, cancellationToken);
-            if (!reconstruida && linhasCopia > 0 && linhasCopia != linhasOriginais)
+            var comparacao = await CompararAsync(context, tabela, temp, cancellationToken);
+            if (!comparacao.Comparavel)
             {
-                return $"A migration AddCartoes parou no meio da cópia de {tabela}: a tabela e a cópia ef_temp têm quantidades diferentes de linhas. Nada foi apagado.";
+                return $"A migration AddCartoes parou no meio da cópia de {tabela}: não deu para comparar o conteúdo das duas tabelas. Nenhuma das duas foi apagada. {AvisoArquivoPreservado}";
             }
 
-            if (reconstruida && linhasCopia > linhasOriginais)
+            var reconstruida = await ReconstruidaAsync(context, tabela, fks, cancellationToken);
+            var linhasCopia = await ContagemTabelaAsync(context, temp, cancellationToken);
+            if (reconstruida && !comparacao.CopiaRedundante)
             {
-                return $"A migration AddCartoes parou no meio da cópia de {tabela}: a cópia ef_temp tem mais linhas do que a tabela já reconstruída. Nada foi apagado.";
+                return $"A migration AddCartoes parou no meio da cópia de {tabela}: a tabela já reconstruída e a cópia ef_temp não conferem. A cópia não foi apagada. {AvisoArquivoPreservado}";
+            }
+
+            if (!reconstruida && linhasCopia > 0 && !comparacao.Identicas)
+            {
+                return $"A migration AddCartoes parou no meio da cópia de {tabela}: a tabela e a cópia ef_temp não têm o mesmo conteúdo. Nenhuma das duas foi apagada. {AvisoArquivoPreservado}";
             }
         }
 
@@ -138,7 +155,7 @@ public static class ReconciliadorAddCartoes
             if (!await TabelaExisteAsync(context, tabela, cancellationToken))
                 continue;
 
-            if (await ReconstruidaAsync(context, tabela, cancellationToken))
+            if (await ReconstruidaAsync(context, tabela, fks, cancellationToken))
                 continue;
 
             if (await CopiaJaFeitaAsync(context, tabela, cancellationToken))
@@ -152,10 +169,10 @@ public static class ReconciliadorAddCartoes
             var estadoTabela = cartoes ? "a tabela Cartoes não está pronta" : "a tabela Cartoes não existe";
             if (destino == "Cartoes")
             {
-                return $"A migration AddCartoes parou no meio: a coluna {tabela}.{coluna} existe e {estadoTabela}. Há valores nessa coluna, então ela não foi removida e a migração não foi repetida, para não perder o vínculo nem falhar de novo com coluna duplicada. O banco não foi apagado.";
+                return $"A migration AddCartoes parou no meio: a coluna {tabela}.{coluna} existe e {estadoTabela}. Há valores nessa coluna, então ela não foi removida e a migração não foi repetida, para não perder o vínculo nem falhar de novo com coluna duplicada. {AvisoArquivoPreservado}";
             }
 
-            return $"A migration AddCartoes parou no meio: a coluna {tabela}.{coluna} tem valores e a tabela {destino} não cobre esses vínculos. A coluna não foi removida e a migração não foi repetida. O banco não foi apagado.";
+            return $"A migration AddCartoes parou no meio: a coluna {tabela}.{coluna} tem valores e a tabela {destino} não cobre esses vínculos. A coluna não foi removida e a migração não foi repetida. {AvisoArquivoPreservado}";
         }
 
         return null;
@@ -169,8 +186,11 @@ public static class ReconciliadorAddCartoes
 
         var linhasOriginais = await ContagemTabelaAsync(context, tabela, cancellationToken);
         var linhasCopia = await ContagemTabelaAsync(context, temp, cancellationToken);
-        return (linhasCopia == linhasOriginais && linhasCopia > 0)
-            || (linhasOriginais == 0 && linhasCopia == 0);
+        if (linhasOriginais == 0 && linhasCopia == 0)
+            return true;
+
+        var comparacao = await CompararAsync(context, tabela, temp, cancellationToken);
+        return comparacao.Identicas;
     }
 
     private static async Task ConcluirParaFrenteAsync(
@@ -183,58 +203,153 @@ public static class ReconciliadorAddCartoes
         if (abriuAqui)
             await conexao.OpenAsync(cancellationToken);
 
-        var chavesDesligadas = false;
+        var fks = MapaFks(comandos);
+        var jaTrocadas = new HashSet<int>();
         try
         {
-            foreach (var tabela in TabelasReconstruidas(comandos))
+            for (var i = 0; i < comandos.Count; i++)
             {
-                if (!await ReconstruidaAsync(conexao, null, tabela, cancellationToken))
+                if (jaTrocadas.Contains(i))
                     continue;
 
-                var temp = "ef_temp_" + tabela;
-                if (!await TabelaExisteAsync(conexao, null, temp, cancellationToken))
-                    continue;
-
-                var linhasOriginais = await ContagemAsync(conexao, null, tabela, cancellationToken);
-                var linhasCopia = await ContagemAsync(conexao, null, temp, cancellationToken);
-                if (linhasCopia > linhasOriginais)
-                    continue;
-
-                await ExecutarAsync(conexao, null, "PRAGMA foreign_keys = OFF", cancellationToken);
-                chavesDesligadas = true;
-                await ExecutarAsync(conexao, null, $"DROP TABLE \"{temp}\"", cancellationToken);
-                await ExecutarAsync(conexao, null, "PRAGMA foreign_keys = ON", cancellationToken);
-                chavesDesligadas = false;
-            }
-
-            foreach (var comando in comandos)
-            {
+                var comando = comandos[i];
                 if (comando.Tipo == TipoComando.Pragma)
+                    continue;
+
+                if (comando.Tipo == TipoComando.ApagarTabela)
                 {
-                    await ExecutarAsync(conexao, null, comando.Sql, cancellationToken);
-                    chavesDesligadas = comando.Sql.Contains("= 0", StringComparison.Ordinal);
+                    if (await DevePularAsync(conexao, comando, fks, cancellationToken))
+                        continue;
+
+                    var renomear = IndiceDoRename(comandos, comando.Tabela, i);
+                    if (renomear < 0)
+                        throw new InvalidOperationException($"A migration AddCartoes apaga {comando.Tabela} sem o RENAME da cópia.");
+
+                    await TrocarNaMesmaTransacaoAsync(conexao, comando, comandos[renomear], cancellationToken);
+                    jaTrocadas.Add(renomear);
                     continue;
                 }
 
-                if (await DevePularAsync(conexao, comando, cancellationToken))
+                if (comando.Tipo == TipoComando.RenomearTemporaria
+                    && await DeveDescartarCopiaRedundanteAsync(conexao, comando, fks, cancellationToken))
+                {
+                    await DescartarCopiaAsync(conexao, comando.Tabela, cancellationToken);
+                    continue;
+                }
+
+                if (await DevePularAsync(conexao, comando, fks, cancellationToken))
                     continue;
 
                 await ExecutarAsync(conexao, null, comando.Sql, cancellationToken);
-                if (comando.Tipo == TipoComando.ApagarTabela)
-                    chavesDesligadas = true;
             }
         }
         finally
         {
-            if (chavesDesligadas)
-                await ExecutarAsync(conexao, null, "PRAGMA foreign_keys = ON", cancellationToken);
-
+            await ExecutarAsync(conexao, null, "PRAGMA foreign_keys = ON", cancellationToken);
             if (abriuAqui)
                 await conexao.CloseAsync();
         }
     }
 
-    private static async Task<bool> DevePularAsync(DbConnection conexao, ComandoSql comando, CancellationToken cancellationToken)
+    private static int IndiceDoRename(IReadOnlyList<ComandoSql> comandos, string tabela, int aPartirDe)
+    {
+        var temp = "ef_temp_" + tabela;
+        for (var i = aPartirDe + 1; i < comandos.Count; i++)
+        {
+            var comando = comandos[i];
+            if (comando.Tipo == TipoComando.RenomearTemporaria && comando.Tabela == temp && comando.Extra == tabela)
+                return i;
+        }
+
+        return -1;
+    }
+
+    private static async Task<bool> DeveDescartarCopiaRedundanteAsync(
+        DbConnection conexao,
+        ComandoSql renomear,
+        IReadOnlyDictionary<string, string[]> fks,
+        CancellationToken cancellationToken)
+    {
+        var temporaria = renomear.Tabela;
+        var destino = renomear.Extra!;
+        if (!await TabelaExisteAsync(conexao, null, temporaria, cancellationToken)
+            || !await TabelaExisteAsync(conexao, null, destino, cancellationToken))
+            return false;
+
+        if (!await ReconstruidaAsync(conexao, destino, fks, cancellationToken))
+            return false;
+
+        var comparacao = await CompararAsync(conexao, destino, temporaria, cancellationToken);
+        if (!comparacao.CopiaRedundante)
+            throw new InvalidOperationException(
+                $"A cópia {temporaria} e a tabela {destino} não conferem. O RENAME não rodou e a cópia não foi apagada.");
+
+        return true;
+    }
+
+    private static async Task DescartarCopiaAsync(DbConnection conexao, string temporaria, CancellationToken cancellationToken)
+    {
+        ExigirIdentificador(temporaria);
+        await ExecutarAsync(conexao, null, "PRAGMA foreign_keys = OFF", cancellationToken);
+        try
+        {
+            await ExecutarAsync(conexao, null, $"DROP TABLE \"{temporaria}\"", cancellationToken);
+        }
+        finally
+        {
+            await ExecutarAsync(conexao, null, "PRAGMA foreign_keys = ON", cancellationToken);
+        }
+    }
+
+    private static async Task TrocarNaMesmaTransacaoAsync(
+        DbConnection conexao,
+        ComandoSql drop,
+        ComandoSql renomear,
+        CancellationToken cancellationToken)
+    {
+        await ExecutarAsync(conexao, null, "PRAGMA foreign_keys = OFF", cancellationToken);
+        try
+        {
+            var transacao = await conexao.BeginTransactionAsync(cancellationToken);
+            try
+            {
+                await ExecutarAsync(conexao, transacao, drop.Sql, cancellationToken);
+                var gancho = DepoisDoDropAntesDoRename;
+                if (gancho is not null)
+                    await gancho(drop.Tabela, cancellationToken);
+
+                await ExecutarAsync(conexao, transacao, renomear.Sql, cancellationToken);
+                await transacao.CommitAsync(cancellationToken);
+            }
+            catch
+            {
+                try
+                {
+                    await transacao.RollbackAsync(cancellationToken);
+                }
+                catch (Exception)
+                {
+                    // A transação já pode ter sido desfeita pelo SQLite.
+                }
+
+                throw;
+            }
+            finally
+            {
+                await transacao.DisposeAsync();
+            }
+        }
+        finally
+        {
+            await ExecutarAsync(conexao, null, "PRAGMA foreign_keys = ON", cancellationToken);
+        }
+    }
+
+    private static async Task<bool> DevePularAsync(
+        DbConnection conexao,
+        ComandoSql comando,
+        IReadOnlyDictionary<string, string[]> fks,
+        CancellationToken cancellationToken)
     {
         switch (comando.Tipo)
         {
@@ -251,7 +366,7 @@ public static class ReconciliadorAddCartoes
                 if (comando.Tabela.StartsWith("ef_temp_", StringComparison.Ordinal))
                 {
                     var original = comando.Tabela["ef_temp_".Length..];
-                    if (await ReconstruidaAsync(conexao, null, original, cancellationToken))
+                    if (await ReconstruidaAsync(conexao, original, fks, cancellationToken))
                         return true;
                 }
 
@@ -264,26 +379,47 @@ public static class ReconciliadorAddCartoes
                 return !await TabelaExisteAsync(conexao, null, comando.Tabela, cancellationToken);
 
             case TipoComando.CopiarParaTemporaria:
+            {
                 if (!await TabelaExisteAsync(conexao, null, comando.Tabela, cancellationToken)
                     || !await TabelaExisteAsync(conexao, null, comando.Extra!, cancellationToken))
                     return true;
 
                 var naCopia = await ContagemAsync(conexao, null, comando.Tabela, cancellationToken);
                 var naOrigem = await ContagemAsync(conexao, null, comando.Extra!, cancellationToken);
-                if (naCopia == naOrigem)
+                if (naCopia == 0 && naOrigem == 0)
                     return true;
 
-                if (naCopia != 0)
-                    throw new InvalidOperationException(
-                        $"A cópia {comando.Tabela} e {comando.Extra} têm quantidades diferentes de linhas. A cópia não foi refeita.");
+                var original = comando.Extra!;
+                if (await ReconstruidaAsync(conexao, original, fks, cancellationToken))
+                {
+                    if (naCopia == 0)
+                        return true;
 
-                return false;
+                    var copiaDaReconstruida = await CompararAsync(conexao, original, comando.Tabela, cancellationToken);
+                    if (copiaDaReconstruida.CopiaRedundante)
+                        return true;
+
+                    throw new InvalidOperationException(
+                        $"A cópia {comando.Tabela} e a tabela {original} não conferem. A cópia não foi refeita nem apagada.");
+                }
+
+                if (naCopia == 0)
+                    return false;
+
+                var jaCopiada = await CompararAsync(conexao, original, comando.Tabela, cancellationToken);
+                if (jaCopiada.Identicas)
+                    return true;
+
+                throw new InvalidOperationException(
+                    $"A cópia {comando.Tabela} e {original} não têm o mesmo conteúdo. A cópia não foi refeita.");
+            }
 
             case TipoComando.ApagarTabela:
+            {
                 if (!await TabelaExisteAsync(conexao, null, comando.Tabela, cancellationToken))
                     return true;
 
-                if (await ReconstruidaAsync(conexao, null, comando.Tabela, cancellationToken))
+                if (await ReconstruidaAsync(conexao, comando.Tabela, fks, cancellationToken))
                     return true;
 
                 var temp = "ef_temp_" + comando.Tabela;
@@ -291,13 +427,13 @@ public static class ReconciliadorAddCartoes
                     throw new InvalidOperationException(
                         $"A tabela {comando.Tabela} seria apagada sem a cópia ef_temp. O DROP não rodou.");
 
-                var linhasTabela = await ContagemAsync(conexao, null, comando.Tabela, cancellationToken);
-                var linhasTemp = await ContagemAsync(conexao, null, temp, cancellationToken);
-                if (linhasTabela != linhasTemp)
+                var podeApagar = await CompararAsync(conexao, comando.Tabela, temp, cancellationToken);
+                if (!podeApagar.Identicas)
                     throw new InvalidOperationException(
-                        $"A tabela {comando.Tabela} e a cópia ef_temp têm quantidades diferentes de linhas. O DROP não rodou.");
+                        $"A tabela {comando.Tabela} e a cópia ef_temp não têm o mesmo conteúdo. O DROP não rodou.");
 
                 return false;
+            }
 
             case TipoComando.RenomearTemporaria:
                 var temporaria = comando.Tabela;
@@ -350,11 +486,21 @@ public static class ReconciliadorAddCartoes
             }
         }
 
-        return await ReconstruidaAsync(context, "Transacoes", cancellationToken)
-            && await ReconstruidaAsync(context, "ComprasCesta", cancellationToken);
+        var fks = MapaFks(comandos);
+        foreach (var tabela in fks.Keys)
+        {
+            if (!await ReconstruidaAsync(context, tabela, fks, cancellationToken))
+                return false;
+        }
+
+        return fks.Count > 0;
     }
 
-    private static async Task<bool> ReconstruidaAsync(AppDbContext context, string tabela, CancellationToken cancellationToken)
+    private static async Task<bool> ReconstruidaAsync(
+        AppDbContext context,
+        string tabela,
+        IReadOnlyDictionary<string, string[]> fks,
+        CancellationToken cancellationToken)
     {
         var conexao = context.Database.GetDbConnection();
         var abriuAqui = conexao.State != ConnectionState.Open;
@@ -363,7 +509,7 @@ public static class ReconciliadorAddCartoes
 
         try
         {
-            return await ReconstruidaAsync(conexao, null, tabela, cancellationToken);
+            return await ReconstruidaAsync(conexao, tabela, fks, cancellationToken);
         }
         finally
         {
@@ -374,20 +520,191 @@ public static class ReconciliadorAddCartoes
 
     private static async Task<bool> ReconstruidaAsync(
         DbConnection conexao,
-        DbTransaction? transacao,
         string tabela,
+        IReadOnlyDictionary<string, string[]> fks,
         CancellationToken cancellationToken)
     {
-        if (!FksDaReconstrucao.TryGetValue(tabela, out var fks))
+        if (!fks.TryGetValue(tabela, out var esperadas) || esperadas is not { Length: > 0 })
             return false;
 
         var sql = await LerEscalarAsync(
             conexao,
-            transacao,
+            null,
             "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = $n",
             cancellationToken,
             ("$n", tabela));
-        return sql is not null && fks.All(fk => sql.Contains(fk, StringComparison.Ordinal));
+        return sql is not null && esperadas.All(fk => sql.Contains(fk, StringComparison.Ordinal));
+    }
+
+    private static Dictionary<string, string[]> MapaFks(IReadOnlyList<ComandoSql> comandos)
+    {
+        var mapa = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        foreach (var comando in comandos)
+        {
+            if (comando.Tipo != TipoComando.CriarTabela || !comando.Tabela.StartsWith("ef_temp_", StringComparison.Ordinal))
+                continue;
+
+            var original = comando.Tabela["ef_temp_".Length..];
+            mapa[original] = ExtrairFks(comando.Sql);
+        }
+
+        return mapa;
+    }
+
+    private static string[] ExtrairFks(string sql)
+    {
+        var nomes = new List<string>();
+        const string marca = "CONSTRAINT \"";
+        var indice = 0;
+        while (true)
+        {
+            var pos = sql.IndexOf(marca, indice, StringComparison.Ordinal);
+            if (pos < 0)
+                break;
+
+            var nome = LerCitado(sql, pos + "CONSTRAINT ".Length);
+            var inicioCorpo = pos + marca.Length + nome.Length;
+            var proximo = sql.IndexOf(marca, inicioCorpo, StringComparison.Ordinal);
+            var corpo = proximo < 0 ? sql[inicioCorpo..] : sql[inicioCorpo..proximo];
+            if (corpo.Contains("FOREIGN KEY", StringComparison.Ordinal))
+                nomes.Add(nome);
+
+            indice = inicioCorpo;
+        }
+
+        return nomes.ToArray();
+    }
+
+    private readonly record struct ComparacaoTabelas(bool Comparavel, bool Identicas, bool CopiaRedundante);
+
+    private static async Task<ComparacaoTabelas> CompararAsync(
+        AppDbContext context,
+        string original,
+        string copia,
+        CancellationToken cancellationToken)
+    {
+        var conexao = context.Database.GetDbConnection();
+        var abriuAqui = conexao.State != ConnectionState.Open;
+        if (abriuAqui)
+            await conexao.OpenAsync(cancellationToken);
+
+        try
+        {
+            return await CompararAsync(conexao, original, copia, cancellationToken);
+        }
+        finally
+        {
+            if (abriuAqui)
+                await conexao.CloseAsync();
+        }
+    }
+
+    private static async Task<ComparacaoTabelas> CompararAsync(
+        DbConnection conexao,
+        string original,
+        string copia,
+        CancellationToken cancellationToken)
+    {
+        var colunasOriginais = await ColunasAsync(conexao, original, cancellationToken);
+        var colunasCopia = await ColunasAsync(conexao, copia, cancellationToken);
+        if (!colunasOriginais.Contains("Id") || !colunasCopia.Contains("Id"))
+            return new ComparacaoTabelas(false, false, false);
+
+        var comuns = colunasOriginais.Intersect(colunasCopia, StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
+        var soNaCopia = colunasCopia.Except(colunasOriginais, StringComparer.Ordinal).ToList();
+        var soNaOriginal = colunasOriginais.Except(colunasCopia, StringComparer.Ordinal).ToList();
+        var divergentes = await ContarDivergentesAsync(conexao, original, copia, comuns, cancellationToken);
+        var idsSoNaCopia = await ContarIdsSemParAsync(conexao, copia, original, cancellationToken);
+        var idsSoNaOriginal = await ContarIdsSemParAsync(conexao, original, copia, cancellationToken);
+        var extraComValor = await ColunaExtraComValorAsync(conexao, copia, soNaCopia, cancellationToken);
+        var identicas = soNaCopia.Count == 0
+            && soNaOriginal.Count == 0
+            && divergentes == 0
+            && idsSoNaCopia == 0
+            && idsSoNaOriginal == 0
+            && await ContagemAsync(conexao, null, original, cancellationToken) == await ContagemAsync(conexao, null, copia, cancellationToken);
+        var redundante = idsSoNaCopia == 0 && divergentes == 0 && !extraComValor;
+        return new ComparacaoTabelas(true, identicas, redundante);
+    }
+
+    private static async Task<List<string>> ColunasAsync(DbConnection conexao, string tabela, CancellationToken cancellationToken)
+    {
+        var colunas = new List<string>();
+        await using var comando = conexao.CreateCommand();
+        comando.CommandText = "SELECT name FROM pragma_table_info($t) ORDER BY name";
+        Adicionar(comando, "$t", tabela);
+        await using var leitor = await comando.ExecuteReaderAsync(cancellationToken);
+        while (await leitor.ReadAsync(cancellationToken))
+            colunas.Add(leitor.GetString(0));
+
+        return colunas;
+    }
+
+    private static async Task<long> ContarDivergentesAsync(
+        DbConnection conexao,
+        string original,
+        string copia,
+        IReadOnlyList<string> colunas,
+        CancellationToken cancellationToken)
+    {
+        foreach (var coluna in colunas)
+            ExigirIdentificador(coluna);
+
+        ExigirIdentificador(original);
+        ExigirIdentificador(copia);
+        var iguais = string.Join(" AND ", colunas.Select(coluna => $"o.\"{coluna}\" IS c.\"{coluna}\""));
+        var sql = $"""
+            SELECT COUNT(*)
+            FROM "{copia}" AS c
+            INNER JOIN "{original}" AS o ON c."Id" = o."Id"
+            WHERE NOT ({iguais})
+            """;
+        var texto = await LerEscalarAsync(conexao, null, sql, cancellationToken);
+        return long.TryParse(texto, NumberStyles.Integer, CultureInfo.InvariantCulture, out var valor) ? valor : 0;
+    }
+
+    private static async Task<long> ContarIdsSemParAsync(
+        DbConnection conexao,
+        string origem,
+        string destino,
+        CancellationToken cancellationToken)
+    {
+        ExigirIdentificador(origem);
+        ExigirIdentificador(destino);
+        var texto = await LerEscalarAsync(
+            conexao,
+            null,
+            $"SELECT COUNT(*) FROM \"{origem}\" WHERE \"Id\" NOT IN (SELECT \"Id\" FROM \"{destino}\")",
+            cancellationToken);
+        return long.TryParse(texto, NumberStyles.Integer, CultureInfo.InvariantCulture, out var valor) ? valor : 0;
+    }
+
+    private static async Task<bool> ColunaExtraComValorAsync(
+        DbConnection conexao,
+        string tabela,
+        IReadOnlyList<string> colunas,
+        CancellationToken cancellationToken)
+    {
+        ExigirIdentificador(tabela);
+        foreach (var coluna in colunas)
+        {
+            ExigirIdentificador(coluna);
+            var texto = await LerEscalarAsync(
+                conexao,
+                null,
+                $"SELECT COUNT(*) FROM \"{tabela}\" WHERE \"{coluna}\" IS NOT NULL",
+                cancellationToken);
+            if (long.TryParse(texto, NumberStyles.Integer, CultureInfo.InvariantCulture, out var valor) && valor > 0)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static async Task<bool> HaVinculoQuebradoAsync(AppDbContext context, CancellationToken cancellationToken)
+    {
+        var total = await EscalarAsync(context, "SELECT COUNT(*) FROM pragma_foreign_key_check", cancellationToken);
+        return total > 0;
     }
 
     private static IEnumerable<string> TabelasReconstruidas(IReadOnlyList<ComandoSql> comandos) =>
@@ -504,6 +821,25 @@ public static class ReconciliadorAddCartoes
         return linha.Length <= 80 ? linha : linha[..80];
     }
 
+    private static string VersaoDoEf()
+    {
+        var informacional = typeof(DbContext).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+        if (!string.IsNullOrWhiteSpace(informacional))
+        {
+            var mais = informacional.IndexOf('+', StringComparison.Ordinal);
+            var versao = mais >= 0 ? informacional[..mais] : informacional;
+            if (!string.IsNullOrWhiteSpace(versao))
+                return versao;
+        }
+
+        var numero = typeof(DbContext).Assembly.GetName().Version;
+        if (numero is not null)
+            return $"{numero.Major}.{numero.Minor}.{numero.Build}";
+
+        throw new InvalidOperationException("Não foi possível ler a versão do EF para o histórico.");
+    }
+
     private static async Task InserirHistoricoAsync(AppDbContext context, CancellationToken cancellationToken)
     {
         var versao = await LerEscalarAsync(
@@ -511,7 +847,7 @@ public static class ReconciliadorAddCartoes
             "SELECT ProductVersion FROM __EFMigrationsHistory ORDER BY MigrationId DESC LIMIT 1",
             cancellationToken);
         if (string.IsNullOrWhiteSpace(versao))
-            versao = "10.0.11";
+            versao = VersaoDoEf();
 
         var conexao = context.Database.GetDbConnection();
         var abriuAqui = conexao.State != ConnectionState.Open;
