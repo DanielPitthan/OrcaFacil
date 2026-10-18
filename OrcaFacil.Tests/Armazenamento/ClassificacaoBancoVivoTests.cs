@@ -34,6 +34,8 @@ public class ClassificacaoBancoVivoTests
     {
         var relatorio = new RelatorioIntegridadeBanco
         {
+            TabelasExistentes = ["MembrosFamilia", "__EFMigrationsHistory"],
+            MigrationsNoHistorico = ["20260826112311_InitialCreate"],
             MigrationsAusentesNoHistorico = ["20261016011256_AddDescritivoItemFatura"],
             ColunasFaltando = ["ItensLancamento.Descritivo"]
         };
@@ -49,6 +51,20 @@ public class ClassificacaoBancoVivoTests
         {
             MigrationsPelaMetade = ["20261015194450_AddCartoes"],
             MigrationsAusentesNoHistorico = ["20261015194450_AddCartoes", "20261016182243_AddEhEstornoItemFatura"]
+        };
+
+        Assert.Equal(SituacaoBancoVivo.ParcialAddCartoes, ClassificacaoBancoVivo.Classificar(LeituraBancoVivo.Lida(relatorio)));
+        Assert.NotEqual(SituacaoBancoVivo.Desatualizado, ClassificacaoBancoVivo.Classificar(LeituraBancoVivo.Lida(relatorio)));
+    }
+
+    [Fact]
+    public void OutraMigrationPelaMetade_ContinuaInconsistente()
+    {
+        var relatorio = new RelatorioIntegridadeBanco
+        {
+            TabelasExistentes = ["Transacoes"],
+            MigrationsNoHistorico = ["20261013195343_AddPagamentoCompraCesta"],
+            MigrationsPelaMetade = ["20261016182243_AddEhEstornoItemFatura"]
         };
 
         Assert.Equal(SituacaoBancoVivo.Inconsistente, ClassificacaoBancoVivo.Classificar(LeituraBancoVivo.Lida(relatorio)));
@@ -86,10 +102,50 @@ public class ClassificacaoBancoVivoTests
     {
         var relatorio = new RelatorioIntegridadeBanco
         {
+            TabelasExistentes = ["MembrosFamilia"],
+            MigrationsNoHistorico = ["20260826112311_InitialCreate"],
             ColunasFaltando = ["MembrosFamilia.FotoPath"]
         };
 
         Assert.Equal(SituacaoBancoVivo.Inconsistente, ClassificacaoBancoVivo.Classificar(LeituraBancoVivo.Lida(relatorio)));
+    }
+
+    [Fact]
+    public void SqliteVazio_EVazio_ENaoDesatualizado()
+    {
+        var relatorio = new RelatorioIntegridadeBanco
+        {
+            TabelasFaltando = ["MembrosFamilia", "__EFMigrationsHistory"],
+            MigrationsAusentesNoHistorico = ["20260826112311_InitialCreate"]
+        };
+
+        Assert.Empty(relatorio.TabelasExistentes);
+        Assert.Empty(relatorio.MigrationsNoHistorico);
+        var situacao = ClassificacaoBancoVivo.Classificar(LeituraBancoVivo.Lida(relatorio));
+        Assert.Equal(SituacaoBancoVivo.Vazio, situacao);
+        Assert.NotEqual(SituacaoBancoVivo.Desatualizado, situacao);
+    }
+
+    [Fact]
+    public void RelatorioDeArquivoIlegivel_EInconsistente_NuncaDesatualizadoNemVazio()
+    {
+        var comFlag = new RelatorioIntegridadeBanco
+        {
+            ArquivoIlegivel = true,
+            TabelasFaltando = ["MembrosFamilia"],
+            MigrationsAusentesNoHistorico = ["20260826112311_InitialCreate"]
+        };
+        var soMarcador = new RelatorioIntegridadeBanco
+        {
+            TabelasFaltando = ["(arquivo ilegível)"],
+            MigrationsAusentesNoHistorico = ["(histórico ilegível)"]
+        };
+
+        Assert.Equal(SituacaoBancoVivo.Inconsistente, ClassificacaoBancoVivo.Classificar(LeituraBancoVivo.Lida(comFlag)));
+        Assert.Equal(SituacaoBancoVivo.Inconsistente, ClassificacaoBancoVivo.Classificar(LeituraBancoVivo.Lida(soMarcador)));
+        Assert.Equal(SituacaoBancoVivo.Inconsistente, ClassificacaoBancoVivo.Classificar(LeituraBancoVivo.Lida(RelatorioIntegridadeBanco.IlegivelMinimo)));
+        Assert.NotEqual(SituacaoBancoVivo.Desatualizado, ClassificacaoBancoVivo.Classificar(LeituraBancoVivo.Lida(comFlag)));
+        Assert.NotEqual(SituacaoBancoVivo.Vazio, ClassificacaoBancoVivo.Classificar(LeituraBancoVivo.Lida(comFlag)));
     }
 
     [Fact]
@@ -112,6 +168,9 @@ public class ClassificacaoBancoVivoTests
         Assert.Contains("MigrationsPelaMetade", fonte, StringComparison.Ordinal);
         Assert.Contains("MigrationsNoHistoricoComObjetoFaltando", fonte, StringComparison.Ordinal);
         Assert.Contains("MigrationsAusentesNoHistorico", fonte, StringComparison.Ordinal);
+        Assert.Contains("SituacaoBancoVivo.Vazio", fonte, StringComparison.Ordinal);
+        Assert.Contains("MarcaArquivoIlegivel", fonte, StringComparison.Ordinal);
+        Assert.Contains("ReconciliadorAddCartoes.MigrationId", fonte, StringComparison.Ordinal);
         Assert.DoesNotContain("sqlite_master", fonte, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("MigrateAsync", fonte, StringComparison.Ordinal);
         Assert.DoesNotContain("ExecuteSql", fonte, StringComparison.Ordinal);
@@ -172,6 +231,53 @@ public class ClassificacaoBancoVivoTests
 
         Assert.Contains("20990101000000_Futura", relatorio.MigrationsDesconhecidasNoHistorico);
         Assert.Equal(SituacaoBancoVivo.SchemaMaisNovoQueOApp, ClassificacaoBancoVivo.Classificar(LeituraBancoVivo.Lida(relatorio)));
+    }
+
+    [Fact]
+    public async Task Verificador_SqliteVazio_ClassificaComoVazio()
+    {
+        using var banco = new BancoTemporario();
+        await using var ctx = banco.CriarContexto();
+
+        var relatorio = await VerificadorIntegridadeBanco.VerificarAsync(ctx);
+
+        Assert.Empty(relatorio.TabelasExistentes);
+        Assert.Empty(relatorio.MigrationsNoHistorico);
+        Assert.NotEmpty(relatorio.MigrationsAusentesNoHistorico);
+        Assert.False(relatorio.ArquivoIlegivel);
+        var situacao = ClassificacaoBancoVivo.Classificar(LeituraBancoVivo.Lida(relatorio));
+        Assert.Equal(SituacaoBancoVivo.Vazio, situacao);
+        Assert.NotEqual(SituacaoBancoVivo.Desatualizado, situacao);
+    }
+
+    [Fact]
+    public async Task Verificador_RelatorioIlegivel_ClassificaComoInconsistente()
+    {
+        using var banco = new BancoTemporario();
+        await using var ctx = banco.CriarContexto();
+
+        var relatorio = VerificadorIntegridadeBanco.RelatorioIlegivel(ctx);
+
+        Assert.True(relatorio.ArquivoIlegivel);
+        Assert.NotEmpty(relatorio.MigrationsAusentesNoHistorico);
+        var situacao = ClassificacaoBancoVivo.Classificar(LeituraBancoVivo.Lida(relatorio));
+        Assert.Equal(SituacaoBancoVivo.Inconsistente, situacao);
+        Assert.NotEqual(SituacaoBancoVivo.Desatualizado, situacao);
+        Assert.NotEqual(SituacaoBancoVivo.Vazio, situacao);
+    }
+
+    [Fact]
+    public async Task Verificador_AddCartoesPelaMetade_ClassificaComoParcial()
+    {
+        using var banco = new BancoTemporario();
+        await using var ctx = banco.CriarContexto();
+        await ctx.Database.MigrateAsync("20261013195343_AddPagamentoCompraCesta");
+        await ctx.Database.ExecuteSqlRawAsync("ALTER TABLE Transacoes ADD COLUMN CartaoId INTEGER NULL");
+
+        var relatorio = await VerificadorIntegridadeBanco.VerificarAsync(ctx);
+
+        Assert.Contains(ReconciliadorAddCartoes.MigrationId, relatorio.MigrationsPelaMetade);
+        Assert.Equal(SituacaoBancoVivo.ParcialAddCartoes, ClassificacaoBancoVivo.Classificar(LeituraBancoVivo.Lida(relatorio)));
     }
 
     private static string EncontrarRaiz()

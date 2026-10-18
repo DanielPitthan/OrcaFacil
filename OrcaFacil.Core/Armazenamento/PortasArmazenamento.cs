@@ -90,16 +90,48 @@ public sealed record ResultadoRestauracao(bool Sucesso, string? MotivoFalha)
 }
 
 /// <summary>
-/// Migração do banco vivo. A implementação chama <see cref="PreparoBanco.MigrarEVerificarAsync"/>.
+/// Copia o banco vivo para outro arquivo antes de substituí-lo.
+/// Falha não apaga o original nem o espelho.
 /// </summary>
-public interface IMigracaoBancoVivo
+public interface IPreservacaoBancoVivo
 {
-    Task<ResultadoPreparoBanco> MigrarEVerificarAsync(CancellationToken cancellationToken = default);
+    Task<ResultadoPreservacao> PreservarAsync(CancellationToken cancellationToken = default);
+}
+
+public sealed record ResultadoPreservacao(bool Sucesso, string? Caminho, string? MotivoFalha)
+{
+    public static ResultadoPreservacao Ok(string caminho)
+    {
+        if (string.IsNullOrWhiteSpace(caminho))
+            throw new ArgumentException("Informe o caminho da cópia.", nameof(caminho));
+
+        return new ResultadoPreservacao(true, caminho, null);
+    }
+
+    public static ResultadoPreservacao Falha(string motivo)
+    {
+        if (string.IsNullOrWhiteSpace(motivo))
+            throw new ArgumentException("Informe o motivo da falha.", nameof(motivo));
+
+        return new ResultadoPreservacao(false, null, motivo);
+    }
 }
 
 /// <summary>
-/// Dados iniciais de uma instalação nova. O coordenador só chama quando a matriz escolhe
-/// <see cref="AcaoArmazenamento.Semear"/>. Restauração que falha não chega aqui.
+/// Migração do banco vivo. A implementação chama PreparoBanco.MigrarEVerificarAsync
+/// com as <see cref="OpcoesPreparoBanco"/> recebidas. Sem opções o backup do #16 não roda.
+/// </summary>
+public interface IMigracaoBancoVivo
+{
+    Task<ResultadoPreparoBanco> MigrarEVerificarAsync(
+        OpcoesPreparoBanco opcoes,
+        CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// Dados iniciais depois que o schema já existe. O coordenador cria o schema
+/// com <see cref="IMigracaoBancoVivo"/> e só então chama este método.
+/// Restauração que falha não chega aqui.
 /// </summary>
 public interface ISemeaduraDados
 {

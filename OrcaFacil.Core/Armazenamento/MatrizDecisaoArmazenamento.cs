@@ -18,12 +18,14 @@ public sealed record DecisaoArmazenamento(AcaoArmazenamento Acao, string Motivo)
 /// A lista <see cref="Tabela"/> é a decisão. Cada combinação coerente de banco vivo,
 /// espelho e schema do espelho aparece uma vez.
 ///
-/// Banco vivo íntegro, desatualizado ou mais novo que o app não depende do espelho:
-/// usar, migrar no lugar, ou pedir atualização. Copiar o espelho por cima desses
-/// casos jogaria fora o arquivo que o usuário está usando.
+/// Banco vivo íntegro, desatualizado, parcial de AddCartoes ou mais novo que o app
+/// não depende do espelho: usar, migrar no lugar, ou pedir atualização. Copiar o
+/// espelho por cima desses casos jogaria fora o arquivo que o usuário está usando.
+/// O parcial de AddCartoes migra para passar em <see cref="OrcaFacil.Core.Data.ReconciliadorAddCartoes"/>.
 ///
-/// Semear só existe na célula "banco ausente e espelho ausente". Espelho presente,
-/// mesmo corrompido, não é instalação nova.
+/// Semear existe quando não há dado utilizável e não há espelho: banco ausente, ou
+/// SQLite vazio. Espelho presente, mesmo corrompido, não semeia. SQLite vazio com
+/// espelho legível restaura; com espelho corrompido abre a recuperação.
 ///
 /// Schema do espelho mais novo que o app, quando o banco vivo não dá para usar,
 /// pede atualização. Não restaura esse arquivo e não semeia no lugar.
@@ -74,6 +76,7 @@ public static class MatrizDecisaoArmazenamento
     {
         const string usar = "O banco vivo está íntegro. Ele é a fonte desta execução; o espelho não o substitui.";
         const string migrar = "O banco vivo é de um schema anterior e segue coerente. A migração ocorre nele; o espelho não é copiado por cima.";
+        const string parcial = "A migration AddCartoes está pela metade. A migração passa pelo reconciliador; o espelho não é copiado por cima.";
         const string bancoMaisNovo = "O banco vivo foi gravado por uma versão mais nova do app. Pare e peça a atualização; não restaure o espelho por cima.";
 
         LinhaMatrizArmazenamento L(
@@ -97,6 +100,12 @@ public static class MatrizDecisaoArmazenamento
             L(SituacaoBancoVivo.Desatualizado, SituacaoEspelho.Legivel, ComparacaoSchemaEspelho.EspelhoMaisAntigo, AcaoArmazenamento.MigrarBancoVivo, migrar),
             L(SituacaoBancoVivo.Desatualizado, SituacaoEspelho.Legivel, ComparacaoSchemaEspelho.EspelhoMaisNovo, AcaoArmazenamento.MigrarBancoVivo, migrar),
 
+            L(SituacaoBancoVivo.ParcialAddCartoes, SituacaoEspelho.Ausente, ComparacaoSchemaEspelho.SemEspelho, AcaoArmazenamento.MigrarBancoVivo, parcial),
+            L(SituacaoBancoVivo.ParcialAddCartoes, SituacaoEspelho.Corrompido, ComparacaoSchemaEspelho.NaoAplicavel, AcaoArmazenamento.MigrarBancoVivo, parcial),
+            L(SituacaoBancoVivo.ParcialAddCartoes, SituacaoEspelho.Legivel, ComparacaoSchemaEspelho.Igual, AcaoArmazenamento.MigrarBancoVivo, parcial),
+            L(SituacaoBancoVivo.ParcialAddCartoes, SituacaoEspelho.Legivel, ComparacaoSchemaEspelho.EspelhoMaisAntigo, AcaoArmazenamento.MigrarBancoVivo, parcial),
+            L(SituacaoBancoVivo.ParcialAddCartoes, SituacaoEspelho.Legivel, ComparacaoSchemaEspelho.EspelhoMaisNovo, AcaoArmazenamento.MigrarBancoVivo, parcial),
+
             L(SituacaoBancoVivo.SchemaMaisNovoQueOApp, SituacaoEspelho.Ausente, ComparacaoSchemaEspelho.SemEspelho, AcaoArmazenamento.PedirAtualizacaoDoApp, bancoMaisNovo),
             L(SituacaoBancoVivo.SchemaMaisNovoQueOApp, SituacaoEspelho.Corrompido, ComparacaoSchemaEspelho.NaoAplicavel, AcaoArmazenamento.PedirAtualizacaoDoApp, bancoMaisNovo),
             L(SituacaoBancoVivo.SchemaMaisNovoQueOApp, SituacaoEspelho.Legivel, ComparacaoSchemaEspelho.Igual, AcaoArmazenamento.PedirAtualizacaoDoApp, bancoMaisNovo),
@@ -113,6 +122,17 @@ public static class MatrizDecisaoArmazenamento
                 "Não há banco vivo. O espelho é legível e o schema é anterior: restaurar."),
             L(SituacaoBancoVivo.Ausente, SituacaoEspelho.Legivel, ComparacaoSchemaEspelho.EspelhoMaisNovo, AcaoArmazenamento.PedirAtualizacaoDoApp,
                 "Não há banco vivo e o espelho é de uma versão mais nova do app. Pare e peça a atualização; não semeie."),
+
+            L(SituacaoBancoVivo.Vazio, SituacaoEspelho.Ausente, ComparacaoSchemaEspelho.SemEspelho, AcaoArmazenamento.Semear,
+                "O arquivo do banco existe e está vazio, e não há espelho. Crie o schema e semeie."),
+            L(SituacaoBancoVivo.Vazio, SituacaoEspelho.Corrompido, ComparacaoSchemaEspelho.NaoAplicavel, AcaoArmazenamento.TelaDeRecuperacao,
+                "O banco está vazio e o espelho está corrompido. Abra a recuperação; não semeie."),
+            L(SituacaoBancoVivo.Vazio, SituacaoEspelho.Legivel, ComparacaoSchemaEspelho.Igual, AcaoArmazenamento.RestaurarDoEspelho,
+                "O banco está vazio. O espelho é legível e o schema é o desta versão: restaurar."),
+            L(SituacaoBancoVivo.Vazio, SituacaoEspelho.Legivel, ComparacaoSchemaEspelho.EspelhoMaisAntigo, AcaoArmazenamento.RestaurarDoEspelho,
+                "O banco está vazio. O espelho é legível e o schema é anterior: restaurar e migrar em seguida."),
+            L(SituacaoBancoVivo.Vazio, SituacaoEspelho.Legivel, ComparacaoSchemaEspelho.EspelhoMaisNovo, AcaoArmazenamento.PedirAtualizacaoDoApp,
+                "O banco está vazio e o espelho é de uma versão mais nova do app. Pare e peça a atualização; não semeie."),
 
             L(SituacaoBancoVivo.Inconsistente, SituacaoEspelho.Ausente, ComparacaoSchemaEspelho.SemEspelho, AcaoArmazenamento.TelaDeRecuperacao,
                 "O banco vivo está inconsistente e não há espelho. Abra a recuperação; não semeie e não apague."),

@@ -34,8 +34,8 @@ public class MatrizDecisaoArmazenamentoTests
             }
         }
 
-        Assert.Equal(25, coerentes);
-        Assert.Equal(25, MatrizDecisaoArmazenamento.Tabela.Count);
+        Assert.Equal(35, coerentes);
+        Assert.Equal(35, MatrizDecisaoArmazenamento.Tabela.Count);
     }
 
     [Fact]
@@ -43,18 +43,21 @@ public class MatrizDecisaoArmazenamentoTests
     {
         var semeaduras = MatrizDecisaoArmazenamento.Tabela
             .Where(linha => linha.Acao == AcaoArmazenamento.Semear)
+            .OrderBy(linha => linha.BancoVivo)
             .ToList();
 
-        var unica = Assert.Single(semeaduras);
-        Assert.Equal(SituacaoBancoVivo.Ausente, unica.BancoVivo);
-        Assert.Equal(SituacaoEspelho.Ausente, unica.Espelho);
-        Assert.Equal(ComparacaoSchemaEspelho.SemEspelho, unica.SchemaEspelho);
+        Assert.Equal(2, semeaduras.Count);
+        Assert.All(semeaduras, linha => Assert.Equal(SituacaoEspelho.Ausente, linha.Espelho));
+        Assert.Contains(semeaduras, linha => linha.BancoVivo == SituacaoBancoVivo.Ausente);
+        Assert.Contains(semeaduras, linha => linha.BancoVivo == SituacaoBancoVivo.Vazio);
 
         foreach (var linha in MatrizDecisaoArmazenamento.Tabela)
         {
-            var instalacaoNova = linha.BancoVivo == SituacaoBancoVivo.Ausente
-                && linha.Espelho == SituacaoEspelho.Ausente;
-            if (!instalacaoNova)
+            var semDadoESemEspelho = linha.Espelho == SituacaoEspelho.Ausente
+                && linha.BancoVivo is SituacaoBancoVivo.Ausente or SituacaoBancoVivo.Vazio;
+            if (semDadoESemEspelho)
+                Assert.Equal(AcaoArmazenamento.Semear, linha.Acao);
+            else
                 Assert.NotEqual(AcaoArmazenamento.Semear, linha.Acao);
         }
     }
@@ -68,6 +71,7 @@ public class MatrizDecisaoArmazenamentoTests
             {
                 SituacaoBancoVivo.Integro => AcaoArmazenamento.UsarBancoVivo,
                 SituacaoBancoVivo.Desatualizado => AcaoArmazenamento.MigrarBancoVivo,
+                SituacaoBancoVivo.ParcialAddCartoes => AcaoArmazenamento.MigrarBancoVivo,
                 SituacaoBancoVivo.SchemaMaisNovoQueOApp => AcaoArmazenamento.PedirAtualizacaoDoApp,
                 _ => (AcaoArmazenamento?)null
             };
@@ -77,16 +81,17 @@ public class MatrizDecisaoArmazenamentoTests
         }
 
         Assert.Equal(5, MatrizDecisaoArmazenamento.Tabela.Count(linha => linha.Acao == AcaoArmazenamento.UsarBancoVivo));
-        Assert.Equal(5, MatrizDecisaoArmazenamento.Tabela.Count(linha => linha.Acao == AcaoArmazenamento.MigrarBancoVivo));
-        Assert.Equal(7, MatrizDecisaoArmazenamento.Tabela.Count(linha => linha.Acao == AcaoArmazenamento.PedirAtualizacaoDoApp));
-        Assert.Equal(4, MatrizDecisaoArmazenamento.Tabela.Count(linha => linha.Acao == AcaoArmazenamento.RestaurarDoEspelho));
-        Assert.Equal(3, MatrizDecisaoArmazenamento.Tabela.Count(linha => linha.Acao == AcaoArmazenamento.TelaDeRecuperacao));
+        Assert.Equal(10, MatrizDecisaoArmazenamento.Tabela.Count(linha => linha.Acao == AcaoArmazenamento.MigrarBancoVivo));
+        Assert.Equal(8, MatrizDecisaoArmazenamento.Tabela.Count(linha => linha.Acao == AcaoArmazenamento.PedirAtualizacaoDoApp));
+        Assert.Equal(6, MatrizDecisaoArmazenamento.Tabela.Count(linha => linha.Acao == AcaoArmazenamento.RestaurarDoEspelho));
+        Assert.Equal(4, MatrizDecisaoArmazenamento.Tabela.Count(linha => linha.Acao == AcaoArmazenamento.TelaDeRecuperacao));
+        Assert.Equal(2, MatrizDecisaoArmazenamento.Tabela.Count(linha => linha.Acao == AcaoArmazenamento.Semear));
     }
 
     [Fact]
     public void EspelhoMaisNovo_ComBancoInutilizavel_PedeAtualizacao_ENaoRestaura()
     {
-        foreach (var banco in new[] { SituacaoBancoVivo.Ausente, SituacaoBancoVivo.Inconsistente })
+        foreach (var banco in new[] { SituacaoBancoVivo.Ausente, SituacaoBancoVivo.Vazio, SituacaoBancoVivo.Inconsistente })
         {
             var estado = new EstadoObservadoArmazenamento(
                 banco,
@@ -133,7 +138,8 @@ public class MatrizDecisaoArmazenamentoTests
         SituacaoBancoVivo.Integro => AcaoArmazenamento.UsarBancoVivo,
         SituacaoBancoVivo.Desatualizado => AcaoArmazenamento.MigrarBancoVivo,
         SituacaoBancoVivo.SchemaMaisNovoQueOApp => AcaoArmazenamento.PedirAtualizacaoDoApp,
-        SituacaoBancoVivo.Ausente => estado.Espelho switch
+        SituacaoBancoVivo.ParcialAddCartoes => AcaoArmazenamento.MigrarBancoVivo,
+        SituacaoBancoVivo.Ausente or SituacaoBancoVivo.Vazio => estado.Espelho switch
         {
             SituacaoEspelho.Ausente => AcaoArmazenamento.Semear,
             SituacaoEspelho.Corrompido => AcaoArmazenamento.TelaDeRecuperacao,
