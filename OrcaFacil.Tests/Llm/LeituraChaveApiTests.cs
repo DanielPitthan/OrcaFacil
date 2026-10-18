@@ -38,7 +38,7 @@ public class LeituraChaveApiTests
     {
         var valor = await LeituraChaveApi.LerAsync(
             _ => throw new CryptographicException("ilegível"),
-            () => throw new IOException("não apagou"));
+            () => throw new IOException("não apagou " + Salva));
 
         Assert.Null(valor);
     }
@@ -70,7 +70,11 @@ public class LeituraChaveApiTests
                 cts.Cancel();
                 return Task.FromResult<string?>(Salva);
             },
-            () => apagou++,
+            () =>
+            {
+                apagou++;
+                return false;
+            },
             cts.Token));
 
         Assert.IsAssignableFrom<OperationCanceledException>(excecao);
@@ -89,7 +93,11 @@ public class LeituraChaveApiTests
                 cts.Cancel();
                 throw new InvalidOperationException("keystore");
             },
-            () => apagou++,
+            () =>
+            {
+                apagou++;
+                return false;
+            },
             cts.Token));
 
         Assert.IsAssignableFrom<OperationCanceledException>(excecao);
@@ -103,7 +111,11 @@ public class LeituraChaveApiTests
 
         var excecao = await Record.ExceptionAsync(() => LeituraChaveApi.LerAsync(
             _ => throw new OperationCanceledException(),
-            () => apagou++));
+            () =>
+            {
+                apagou++;
+                return false;
+            }));
 
         Assert.IsAssignableFrom<OperationCanceledException>(excecao);
         Assert.Equal(0, apagou);
@@ -241,10 +253,11 @@ public class LeituraChaveApiTests
             return Task.CompletedTask;
         }
 
-        public void RemoverTudo()
+        public bool RemoverTudo()
         {
             Remocoes++;
             Chave = null;
+            return true;
         }
     }
 

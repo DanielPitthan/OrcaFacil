@@ -79,8 +79,8 @@ public class PreferenciasTemaTests
         memoria.Definir("Config.NotificacoesAtivas", "false");
 
         IRedefinicaoPreferencias redefinicao = preferencias;
-        redefinicao.Redefinir();
 
+        Assert.True(redefinicao.Redefinir());
         Assert.Equal(1, cofre.Remocoes);
         Assert.Null(cofre.Chave);
         Assert.Equal("Escuro", memoria.ValorOuNulo(PreferenciasTema.Chave));
@@ -186,10 +186,11 @@ public class PreferenciasTemaTests
             return Task.CompletedTask;
         }
 
-        public void RemoverTudo()
+        public bool RemoverTudo()
         {
             Remocoes++;
             Chave = null;
+            return true;
         }
     }
 }

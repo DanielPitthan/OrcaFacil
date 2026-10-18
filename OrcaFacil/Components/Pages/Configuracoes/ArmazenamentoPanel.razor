@@ -87,21 +87,33 @@
     {
         var dialog = await DialogService.ShowAsync<LimpezaDadosDialog>("Limpar dados",
             new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true });
-        var resultado = await dialog.Result;
+        var escolha = await dialog.Result;
 
-        if (resultado is not { Canceled: false, Data: TipoLimpezaDados tipo } || tipo == TipoLimpezaDados.Nenhum)
+        if (escolha is not { Canceled: false, Data: TipoLimpezaDados tipo } || tipo == TipoLimpezaDados.Nenhum)
             return;
 
         _limpando = true;
         try
         {
-            await ArmazenamentoService.LimparAsync(tipo);
-            Snackbar.Add(tipo.HasFlag(TipoLimpezaDados.Tudo) ? "Aplicação zerada" : "Dados removidos", Severity.Success);
+            var resultado = await ArmazenamentoService.LimparAsync(tipo);
+            if (resultado.ChavePermaneceu)
+            {
+                Snackbar.Add(resultado.Mensagem, Severity.Error, opcoes =>
+                {
+                    opcoes.RequireInteraction = true;
+                    opcoes.SnackbarTypeClass = "of-snack-chave";
+                });
+            }
+            else
+            {
+                Snackbar.Add(resultado.Mensagem, Severity.Success);
+            }
+
             await CarregarAsync();
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            Snackbar.Add($"Falha ao limpar dados: {ex.Message}", Severity.Error);
+            Snackbar.Add("Falha ao limpar dados.", Severity.Error);
         }
         finally
         {

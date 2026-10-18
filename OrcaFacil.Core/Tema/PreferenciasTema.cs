@@ -12,7 +12,11 @@ namespace OrcaFacil.Core.Tema;
 /// </summary>
 public interface IRedefinicaoPreferencias
 {
-    void Redefinir();
+    /// <summary>
+    /// <c>true</c> quando não havia cofre ou a chave foi apagada.
+    /// <c>false</c> quando o cofre falhou. Tema e URI do espelho já foram devolvidos.
+    /// </summary>
+    bool Redefinir();
 }
 
 /// <summary>
@@ -40,7 +44,7 @@ public sealed class PreferenciasTema : IRedefinicaoPreferencias
         set => _preferencias.Definir(Chave, MapeamentoTema.ParaTexto(value));
     }
 
-    public void Redefinir()
+    public bool Redefinir()
     {
         var preservar = _preferencias.Contem(Chave);
         var texto = preservar ? _preferencias.Obter(Chave, MapeamentoTema.TextoAutomatico) : null;
@@ -52,7 +56,17 @@ public sealed class PreferenciasTema : IRedefinicaoPreferencias
         if (preservarPasta)
             _preferencias.Definir(UriEscolhaPasta.ChavePreferencia, uriPasta ?? "");
 
-        // Depois de devolver tema e pasta: uma falha do cofre não desfaz essa preservação.
-        _cofre?.RemoverTudo();
+        // Tema e pasta já voltaram. A falha do cofre não desfaz isso e não derruba a limpeza.
+        if (_cofre is null)
+            return true;
+
+        try
+        {
+            return _cofre.RemoverTudo();
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 }

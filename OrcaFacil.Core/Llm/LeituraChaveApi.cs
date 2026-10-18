@@ -10,7 +10,7 @@ public static class LeituraChaveApi
 {
     public static async Task<string?> LerAsync(
         Func<CancellationToken, Task<string?>> ler,
-        Action removerTudo,
+        Func<bool> removerTudo,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(ler);
@@ -53,11 +53,11 @@ public static class LeituraChaveApi
         return valor.Contains('\0') || valor.Contains('\r') || valor.Contains('\n');
     }
 
-    private static void Esquecer(Action removerTudo)
+    private static void Esquecer(Func<bool> removerTudo)
     {
         try
         {
-            removerTudo();
+            _ = removerTudo();
         }
         catch (OperationCanceledException)
         {

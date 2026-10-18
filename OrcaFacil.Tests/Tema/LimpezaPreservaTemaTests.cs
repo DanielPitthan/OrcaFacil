@@ -94,17 +94,26 @@ public class LimpezaPreservaTemaTests
         var armazenamento = File.ReadAllText(Path.Combine(raiz, "OrcaFacil", "Services", "ArmazenamentoService.cs"));
         var preferencias = File.ReadAllText(Path.Combine(raiz, "OrcaFacil.Core", "Tema", "PreferenciasTema.cs"));
 
-        Assert.Contains("public void Redefinir() => _tema.Redefinir();", configuracao, StringComparison.Ordinal);
+        Assert.Contains("public bool Redefinir() => _tema.Redefinir();", configuracao, StringComparison.Ordinal);
         Assert.DoesNotContain("Preferences.Default.Clear", configuracao, StringComparison.Ordinal);
         Assert.DoesNotContain("LimpezaDePreferencias", configuracao, StringComparison.Ordinal);
         Assert.Contains("PreferenciasTema tema", configuracao, StringComparison.Ordinal);
         Assert.Contains("_tema = tema;", configuracao, StringComparison.Ordinal);
 
-        Assert.Contains("_configuracao.Redefinir();", armazenamento, StringComparison.Ordinal);
+        Assert.Contains("var chaveApagada = _configuracao.Redefinir();", armazenamento, StringComparison.Ordinal);
+        Assert.Contains("ResultadoLimpeza.Total(chaveApagada)", armazenamento, StringComparison.Ordinal);
+        Assert.Contains("resultado.TextoRegistro", armazenamento, StringComparison.Ordinal);
+        Assert.DoesNotContain("Aplicação zerada (todos os dados removidos)", armazenamento, StringComparison.Ordinal);
         Assert.DoesNotContain("Preferences.Default.Clear", armazenamento, StringComparison.Ordinal);
 
         Assert.Contains("class PreferenciasTema : IRedefinicaoPreferencias", preferencias, StringComparison.Ordinal);
-        Assert.Contains("void Redefinir();", preferencias, StringComparison.Ordinal);
+        Assert.Contains("bool Redefinir();", preferencias, StringComparison.Ordinal);
+
+        var painel = File.ReadAllText(Path.Combine(raiz, "OrcaFacil", "Components", "Pages", "Configuracoes", "ArmazenamentoPanel.razor"));
+        Assert.Contains("resultado.Mensagem", painel, StringComparison.Ordinal);
+        Assert.Contains("resultado.ChavePermaneceu", painel, StringComparison.Ordinal);
+        Assert.Contains("of-snack-chave", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"Aplicação zerada\"", painel, StringComparison.Ordinal);
     }
 
     /// <summary>

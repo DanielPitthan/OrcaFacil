@@ -29,11 +29,13 @@ public sealed class CofreChaveApiSecureStorage : ICofreChaveApi
     /// <summary>
     /// <c>Preferences.Clear</c> não toca neste arquivo.
     /// <c>Remove</c> tira a chave; <c>RemoveAll</c> limpa o cofre quando o arquivo está ilegível.
+    /// As duas precisam concluir. Uma falha devolve <c>false</c> e não leva a exceção para a tela.
     /// </summary>
-    public void RemoverTudo()
+    public bool RemoverTudo()
     {
-        Executar(static () => { _ = SecureStorage.Default.Remove(ChaveArmazenamento); });
-        Executar(static () => SecureStorage.Default.RemoveAll());
+        var removeOk = Tentar(static () => { _ = SecureStorage.Default.Remove(ChaveArmazenamento); });
+        var removeAllOk = Tentar(static () => SecureStorage.Default.RemoveAll());
+        return removeOk && removeAllOk;
     }
 
     private static Task<string?> LerDoSecureStorage(CancellationToken cancellationToken)
@@ -42,19 +44,17 @@ public sealed class CofreChaveApiSecureStorage : ICofreChaveApi
         return SecureStorage.Default.GetAsync(ChaveArmazenamento);
     }
 
-    private static void Executar(Action acao)
+    private static bool Tentar(Action acao)
     {
         try
         {
             acao();
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
+            return true;
         }
         catch (Exception)
         {
-            // Sem log: a exceção do cofre pode carregar detalhe da chave.
+            // Sem log e sem devolver a exceção: ela pode carregar detalhe da chave.
+            return false;
         }
     }
 }

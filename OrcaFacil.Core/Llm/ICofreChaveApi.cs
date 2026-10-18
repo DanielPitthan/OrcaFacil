@@ -17,6 +17,8 @@ public interface ICofreChaveApi
 
     /// <summary>
     /// Apaga a chave. No app, chama <c>SecureStorage.Remove</c> e <c>RemoveAll</c>.
+    /// <c>true</c> quando as duas chamadas concluíram. <c>false</c> quando alguma falhou
+    /// e a chave pode ter permanecido. Não devolve a chave nem o texto da exceção.
     /// </summary>
-    void RemoverTudo();
+    bool RemoverTudo();
 }
