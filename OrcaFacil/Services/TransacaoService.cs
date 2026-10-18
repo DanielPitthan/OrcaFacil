@@ -149,18 +149,7 @@ public class TransacaoService : ITransacaoService
 
     private async Task<List<ItemLancamento>> MapearItensAsync(TransacaoFormModel dto, Categoria categoria)
     {
-        var itens = dto.Itens.Select((item, indice) => new ItemLancamento
-        {
-            Descricao = item.Descricao?.Trim() ?? string.Empty,
-            Descritivo = ItensFaturaInclusao.NormalizarDescritivo(item.Descritivo),
-            Valor = item.Valor,
-            EhEstorno = item.EhEstorno,
-            Natureza = item.Natureza,
-            ParcelaAtual = item.Natureza == NaturezaItemLancamento.Parcelada ? item.ParcelaAtual : null,
-            TotalParcelas = item.Natureza == NaturezaItemLancamento.Parcelada ? item.TotalParcelas : null,
-            CategoriaId = item.CategoriaId,
-            Ordem = indice
-        }).ToList();
+        var itens = FaturaCartaoEditor.MapearItens(dto.Itens);
 
         ItensFaturaRegras.Validar(dto.Valor, dto.CategoriaId, categoria.PermiteItensFatura, dto.Tipo, itens);
 

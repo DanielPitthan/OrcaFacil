@@ -361,22 +361,7 @@ else
                 _modelo.Observacao = transacao.Observacao;
                 _modelo.CategoriaId = transacao.CategoriaId;
                 _modelo.CartaoId = transacao.CartaoId;
-                _modelo.Itens = transacao.Itens
-                    .OrderBy(i => i.Ordem)
-                    .Select(i => new ItemLancamentoFormModel
-                    {
-                        Id = i.Id,
-                        Descricao = i.Descricao,
-                        Descritivo = i.Descritivo,
-                        Valor = i.Valor,
-                        EhEstorno = i.EhEstorno,
-                        Natureza = i.Natureza,
-                        ParcelaAtual = i.ParcelaAtual,
-                        TotalParcelas = i.TotalParcelas,
-                        CategoriaId = i.CategoriaId,
-                        Ordem = i.Ordem
-                    })
-                    .ToList();
+                _modelo.Itens = ImportacaoFaturaCsvApresentacao.CopiarItens(transacao.Itens);
                 _data = transacao.Data;
                 _dataOriginal = transacao.Data;
                 _periodoOriginalFechado = await FechamentoService.EstaFechadoAsync(transacao.Data.Month, transacao.Data.Year);

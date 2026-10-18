@@ -5,5 +5,5 @@ namespace OrcaFacil.Services.Interfaces;
 public interface ICsvExportService
 {
     Task<string> GerarCsvAsync(IEnumerable<Transacao> transacoes);
-    Task CompartilharAsync(string caminhoArquivo);
+    Task CompartilharAsync(string caminhoArquivo, string? titulo = null);
 }
