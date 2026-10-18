@@ -5,8 +5,8 @@ using System.Text;
 namespace OrcaFacil.Core.Llm;
 
 /// <summary>
-/// Cliente de <c>POST {base}/v1/messages</c>. A chave entra só no header de cada pedido.
-/// Não grava chave, header, corpo, imagem nem caminho.
+/// Cliente de <c>POST {base}/v1/messages</c>. A chave entra só no header de cada pedido HTTPS.
+/// Não segue redirect, não grava chave, header, corpo, imagem nem caminho.
 /// </summary>
 public sealed class ClienteMensagens
 {
@@ -14,8 +14,17 @@ public sealed class ClienteMensagens
     public const string CabecalhoChave = "x-api-key";
     public const string CabecalhoVersao = "anthropic-version";
 
+    /// <summary>Binário da imagem. A API corta em 5 MB.</summary>
+    public const int TamanhoMaximoImagem = 5 * 1024 * 1024;
+
+    /// <summary>JSON da resposta. Acima disso o corpo é descartado sem ser lido por inteiro.</summary>
+    public const int TamanhoMaximoCorpo = 1024 * 1024;
+
     /// <summary>Prazo próprio da leitura, maior que o timeout de 15 s do cliente de notícias.</summary>
     public static readonly TimeSpan TempoLimite = TimeSpan.FromSeconds(60);
+
+    /// <summary>Teto de <c>Retry-After</c>. Um valor maior é reduzido a este prazo.</summary>
+    public static readonly TimeSpan RetryAfterMaximo = TimeSpan.FromMinutes(5);
 
     private static readonly CultureInfo Invariante = CultureInfo.InvariantCulture;
 
@@ -31,7 +40,41 @@ public sealed class ClienteMensagens
 
         _tempoLimite = limite;
         _http = http;
-        _http.Timeout = limite;
+    }
+
+    /// <summary>Handler sem redirect automático. O prazo de 60 s fica no token da chamada, não aqui.</summary>
+    public static SocketsHttpHandler CriarHandler() => new()
+    {
+        AllowAutoRedirect = false
+    };
+
+    /// <summary>
+    /// Cliente cujo transporte é <see cref="CriarHandler"/>.
+    /// <see cref="HttpClient.Timeout"/> fica infinito para o token da chamada ser o único prazo.
+    /// </summary>
+    public static HttpClient CriarHttpClient() => new(CriarHandler(), disposeHandler: true)
+    {
+        Timeout = Timeout.InfiniteTimeSpan
+    };
+
+    /// <summary>Tamanho do binário estimado pelo base64, sem alocar a imagem.</summary>
+    public static bool ImagemCabe(string? imagemBase64)
+    {
+        if (string.IsNullOrEmpty(imagemBase64))
+            return false;
+
+        var comprimento = imagemBase64.Length;
+        if ((comprimento & 3) != 0)
+            return false;
+
+        var padding = 0;
+        if (imagemBase64[comprimento - 1] == '=')
+            padding++;
+        if (comprimento > 1 && imagemBase64[comprimento - 2] == '=')
+            padding++;
+
+        var bytes = (comprimento / 4L) * 3L - padding;
+        return bytes > 0 && bytes <= TamanhoMaximoImagem;
     }
 
     public async Task<ResultadoMensagem> LerComprovanteAsync(
@@ -42,14 +85,19 @@ public sealed class ClienteMensagens
         string? imagemBase64,
         CancellationToken cancellationToken = default)
     {
-        if (PedidoMensagem.CriarUri(urlBase) is not Uri uri)
+        if (PedidoMensagem.CriarUri(urlBase) is not Uri uri || uri.Scheme != Uri.UriSchemeHttps)
             return ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoPedidoInvalido);
 
         if (string.IsNullOrWhiteSpace(chave) || chave.Contains('\r') || chave.Contains('\n'))
             return ResultadoMensagem.Falha(TipoResultadoMensagem.NaoAutorizado, ResultadoMensagem.TextoNaoAutorizado);
 
-        if (string.IsNullOrWhiteSpace(modelo) || string.IsNullOrWhiteSpace(tipoMidia) || string.IsNullOrWhiteSpace(imagemBase64))
+        if (string.IsNullOrWhiteSpace(modelo) ||
+            string.IsNullOrWhiteSpace(tipoMidia) ||
+            string.IsNullOrWhiteSpace(imagemBase64) ||
+            !ImagemCabe(imagemBase64))
+        {
             return ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoPedidoInvalido);
+        }
 
         using var limite = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         limite.CancelAfter(_tempoLimite);
@@ -67,6 +115,9 @@ public sealed class ClienteMensagens
             pedido.Content = new StringContent(json, Encoding.UTF8, "application/json");
 
             using var resposta = await _http.SendAsync(pedido, HttpCompletionOption.ResponseHeadersRead, limite.Token);
+            if (EhRedirecionamento(resposta.StatusCode))
+                return ResultadoMensagem.Falha(TipoResultadoMensagem.Falha, ResultadoMensagem.TextoFalha);
+
             if (resposta.StatusCode == HttpStatusCode.OK)
                 return await LerCorpoAsync(resposta, limite.Token);
 
@@ -102,16 +153,50 @@ public sealed class ClienteMensagens
         }
     }
 
+    private static bool EhRedirecionamento(HttpStatusCode status)
+    {
+        var codigo = (int)status;
+        return codigo is >= 300 and < 400;
+    }
+
     private static async Task<ResultadoMensagem> LerCorpoAsync(HttpResponseMessage resposta, CancellationToken cancellationToken)
     {
-        var corpo = resposta.Content is null
-            ? string.Empty
-            : await resposta.Content.ReadAsStringAsync(cancellationToken);
+        var corpo = await LerTextoLimitadoAsync(resposta.Content, cancellationToken);
+        if (corpo is null)
+            return ResultadoMensagem.Falha(TipoResultadoMensagem.RespostaInvalida, ResultadoMensagem.TextoRespostaInvalida);
 
         var comprovante = LeitorRespostaComprovante.Ler(corpo);
         return comprovante is null
             ? ResultadoMensagem.Falha(TipoResultadoMensagem.RespostaInvalida, ResultadoMensagem.TextoRespostaInvalida)
             : ResultadoMensagem.Ok(comprovante);
+    }
+
+    private static async Task<string?> LerTextoLimitadoAsync(HttpContent? content, CancellationToken cancellationToken)
+    {
+        if (content is null)
+            return string.Empty;
+
+        if (content.Headers.ContentLength is long anunciado && anunciado > TamanhoMaximoCorpo)
+            return null;
+
+        await using var fluxo = await content.ReadAsStreamAsync(cancellationToken);
+        using var memoria = new MemoryStream();
+        var buffer = new byte[8192];
+        long total = 0;
+        while (true)
+        {
+            var lidos = await fluxo.ReadAsync(buffer.AsMemory(), cancellationToken);
+            if (lidos == 0)
+                break;
+
+            total += lidos;
+            if (total > TamanhoMaximoCorpo)
+                return null;
+
+            memoria.Write(buffer, 0, lidos);
+        }
+
+        return Encoding.UTF8.GetString(memoria.GetBuffer(), 0, (int)memoria.Length);
     }
 
     private static ResultadoMensagem MapearStatus(HttpResponseMessage resposta)
@@ -144,8 +229,8 @@ public sealed class ClienteMensagens
             if (segundos < 0)
                 return null;
 
-            var teto = (long)TimeSpan.MaxValue.TotalSeconds;
-            return segundos >= teto ? TimeSpan.MaxValue : TimeSpan.FromSeconds(segundos);
+            var teto = (long)RetryAfterMaximo.TotalSeconds;
+            return segundos >= teto ? RetryAfterMaximo : TimeSpan.FromSeconds(segundos);
         }
 
         if (!DateTimeOffset.TryParse(
@@ -158,6 +243,9 @@ public sealed class ClienteMensagens
         }
 
         var delta = quando - DateTimeOffset.UtcNow;
-        return delta < TimeSpan.Zero ? TimeSpan.Zero : delta;
+        if (delta < TimeSpan.Zero)
+            return TimeSpan.Zero;
+
+        return delta > RetryAfterMaximo ? RetryAfterMaximo : delta;
     }
 }

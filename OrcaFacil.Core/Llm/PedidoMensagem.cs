@@ -100,7 +100,7 @@ public static class PedidoMensagem
         if (!Uri.TryCreate(urlBase.Trim(), UriKind.Absolute, out var uri))
             return null;
 
-        if (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp)
+        if (uri.Scheme != Uri.UriSchemeHttps)
             return null;
 
         if (!string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using OrcaFacil.Core.Llm;
@@ -221,7 +222,7 @@ public class ClienteMensagensTests
     }
 
     [Fact]
-    public async Task PrazoProprio_SubstituiTimeoutDe15Segundos()
+    public async Task PrazoProprio_CancelaPeloTokenSemAlterarTimeoutDoCliente()
     {
         var captura = new CapturaHandler(async (_, token) =>
         {
@@ -234,13 +235,13 @@ public class ClienteMensagensTests
         var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
 
         Assert.Equal(TipoResultadoMensagem.Timeout, resultado.Tipo);
-        Assert.Equal(TimeSpan.FromMilliseconds(200), http.Timeout);
+        Assert.Equal(TimeSpan.FromSeconds(15), http.Timeout);
         Assert.Equal(TimeSpan.FromSeconds(60), ClienteMensagens.TempoLimite);
         Assert.True(ClienteMensagens.TempoLimite > TimeSpan.FromSeconds(15));
     }
 
     [Fact]
-    public void Construtor_AplicaTimeoutProprioMaiorQue15Segundos()
+    public void Construtor_NaoSobrescreveTimeoutDoHttpClientRecebido()
     {
         using var http = new HttpClient(new CapturaHandler(_ => Resposta(HttpStatusCode.OK, "{}")))
         {
@@ -249,8 +250,19 @@ public class ClienteMensagensTests
 
         _ = new ClienteMensagens(http);
 
-        Assert.Equal(ClienteMensagens.TempoLimite, http.Timeout);
-        Assert.True(http.Timeout > TimeSpan.FromSeconds(15));
+        Assert.Equal(TimeSpan.FromSeconds(15), http.Timeout);
+        Assert.True(ClienteMensagens.TempoLimite > http.Timeout);
+    }
+
+    [Fact]
+    public void CriarHandler_DesligaRedirectENaoUsaTimeoutDe60Segundos()
+    {
+        using var handler = ClienteMensagens.CriarHandler();
+        using var http = ClienteMensagens.CriarHttpClient();
+
+        Assert.False(handler.AllowAutoRedirect);
+        Assert.Equal(Timeout.InfiniteTimeSpan, http.Timeout);
+        Assert.NotEqual(ClienteMensagens.TempoLimite, http.Timeout);
     }
 
     [Fact]
@@ -339,6 +351,228 @@ public class ClienteMensagensTests
         Assert.Equal(TipoResultadoMensagem.NaoAutorizado, vazia.Tipo);
         Assert.Equal(TipoResultadoMensagem.NaoAutorizado, injetada.Tipo);
         Assert.DoesNotContain("X-Extra", injetada.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("http://api.anthropic.com")]
+    [InlineData("http://api.anthropic.com/")]
+    [InlineData("http://127.0.0.1/v1/messages")]
+    [InlineData("HTTP://api.anthropic.com")]
+    [InlineData("http://user:segredo@api.anthropic.com")]
+    public async Task Http_RecusadoAntesDeEnviarAChave(string url)
+    {
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, CorpoValido()));
+        using var http = new HttpClient(captura);
+        var cliente = new ClienteMensagens(http);
+
+        var resultado = await cliente.LerComprovanteAsync(url, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
+
+        Assert.Equal(0, captura.Chamadas);
+        Assert.Empty(captura.Chaves);
+        Assert.Equal(TipoResultadoMensagem.PedidoInvalido, resultado.Tipo);
+        Assert.DoesNotContain(Chave, resultado.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain("segredo", resultado.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain("http", resultado.Mensagem, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(302)]
+    [InlineData(307)]
+    public async Task Redirect_NaoReenviaChaveNemAceita200DaOutraOrigem(int status)
+    {
+        const string outra = "https://evil.test/coletor";
+        var captura = new CapturaHandler(pedido =>
+        {
+            if (pedido.RequestUri?.Host == "evil.test")
+                return Resposta(HttpStatusCode.OK, CorpoValido());
+
+            var resposta = Resposta((HttpStatusCode)status, CorpoValido());
+            resposta.Headers.Location = new Uri(outra);
+            resposta.Content = new ConteudoQueFalhaSeLido();
+            return resposta;
+        });
+        using var http = new HttpClient(captura);
+        var cliente = new ClienteMensagens(http);
+
+        var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
+
+        Assert.Equal(1, captura.Chamadas);
+        Assert.Equal("https://api.anthropic.com/v1/messages", Assert.Single(captura.Uris));
+        Assert.Equal(Chave, Assert.Single(captura.Chaves));
+        Assert.DoesNotContain(captura.Uris, uri => uri.Contains("evil.test", StringComparison.Ordinal));
+        Assert.Equal(TipoResultadoMensagem.Falha, resultado.Tipo);
+        Assert.Equal(ResultadoMensagem.TextoFalha, resultado.Mensagem);
+        Assert.Null(resultado.Comprovante);
+        Assert.False(resultado.Sucesso);
+        Assert.DoesNotContain("evil.test", resultado.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain(Chave, resultado.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain(Imagem, resultado.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(302)]
+    [InlineData(307)]
+    public async Task CriarHandler_NaoSegueRedirectParaOutraOrigem(int status)
+    {
+        var portaOrigem = PortaLivre();
+        var portaOutra = PortaLivre();
+        var outraOrigem = 0;
+        using var origem = Escutar(portaOrigem, ctx =>
+        {
+            ctx.Response.StatusCode = status;
+            ctx.Response.Headers["Location"] = $"http://127.0.0.1:{portaOutra}/coletor";
+            ctx.Response.ContentLength64 = 0;
+        });
+        using var outra = Escutar(portaOutra, ctx =>
+        {
+            Interlocked.Increment(ref outraOrigem);
+            ctx.Response.StatusCode = 200;
+            ctx.Response.ContentLength64 = 2;
+        });
+
+        using var handler = ClienteMensagens.CriarHandler();
+        using var invocador = new HttpMessageInvoker(handler, disposeHandler: false);
+        using var pedido = new HttpRequestMessage(HttpMethod.Post, $"http://127.0.0.1:{portaOrigem}/v1/messages");
+        pedido.Headers.ExpectContinue = false;
+        pedido.Headers.TryAddWithoutValidation(ClienteMensagens.CabecalhoChave, Chave);
+        pedido.Content = new StringContent("foto-secreta", Encoding.UTF8, "application/json");
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        using var resposta = await invocador.SendAsync(pedido, cts.Token);
+
+        Assert.Equal(status, (int)resposta.StatusCode);
+        Assert.Equal(0, outraOrigem);
+        Assert.False(handler.AllowAutoRedirect);
+    }
+
+    [Fact]
+    public void Imagem_TetoEh5Mb()
+    {
+        Assert.Equal(5 * 1024 * 1024, ClienteMensagens.TamanhoMaximoImagem);
+        Assert.True(ClienteMensagens.ImagemCabe(Base64De(ClienteMensagens.TamanhoMaximoImagem)));
+        Assert.False(ClienteMensagens.ImagemCabe(Base64De(ClienteMensagens.TamanhoMaximoImagem + 1)));
+    }
+
+    [Fact]
+    public async Task ImagemAcimaDe5Mb_NaoEnviaChave()
+    {
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, CorpoValido()));
+        using var http = new HttpClient(captura);
+        var cliente = new ClienteMensagens(http);
+        var imagem = Base64De(ClienteMensagens.TamanhoMaximoImagem + 1);
+
+        var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, imagem);
+
+        Assert.Equal(0, captura.Chamadas);
+        Assert.Empty(captura.Chaves);
+        Assert.Equal(TipoResultadoMensagem.PedidoInvalido, resultado.Tipo);
+        Assert.DoesNotContain(Chave, resultado.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain("AAAA", resultado.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CorpoAnunciadoAcimaDoTeto_NaoELidoNemViraComprovante()
+    {
+        var captura = new CapturaHandler(_ =>
+        {
+            var resposta = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ConteudoQueFalhaSeLido { Comprimento = ClienteMensagens.TamanhoMaximoCorpo + 1 }
+            };
+            return resposta;
+        });
+        using var http = new HttpClient(captura);
+        var cliente = new ClienteMensagens(http);
+
+        var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
+
+        Assert.Equal(TipoResultadoMensagem.RespostaInvalida, resultado.Tipo);
+        Assert.Equal(ResultadoMensagem.TextoRespostaInvalida, resultado.Mensagem);
+        Assert.Null(resultado.Comprovante);
+        Assert.DoesNotContain("corpo-secreto", resultado.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task CorpoSemTamanhoAcimaDoTeto_NaoViraComprovante()
+    {
+        var captura = new CapturaHandler(_ =>
+        {
+            var dados = new byte[ClienteMensagens.TamanhoMaximoCorpo + 1];
+            Encoding.UTF8.GetBytes("corpo-secreto").CopyTo(dados, 0);
+            var resposta = new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StreamContent(new FluxoSemBusca(new MemoryStream(dados)))
+            };
+            return resposta;
+        });
+        using var http = new HttpClient(captura);
+        var cliente = new ClienteMensagens(http);
+
+        var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
+
+        Assert.Equal(TipoResultadoMensagem.RespostaInvalida, resultado.Tipo);
+        Assert.Null(resultado.Comprovante);
+        Assert.DoesNotContain("corpo-secreto", resultado.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Limite_RetryAfterLongoFicaEmAlgunsMinutos()
+    {
+        var captura = new CapturaHandler(_ =>
+        {
+            var resposta = Resposta((HttpStatusCode)429, "nao-ler");
+            resposta.Headers.TryAddWithoutValidation("Retry-After", "86400");
+            return resposta;
+        });
+        using var http = new HttpClient(captura);
+        var cliente = new ClienteMensagens(http);
+
+        var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
+
+        Assert.Equal(TipoResultadoMensagem.Limite, resultado.Tipo);
+        Assert.Equal(TimeSpan.FromMinutes(5), ClienteMensagens.RetryAfterMaximo);
+        Assert.Equal(ClienteMensagens.RetryAfterMaximo, resultado.RetryAfter);
+        Assert.DoesNotContain("86400", resultado.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Limite_RetryAfterEmDataDistanteFicaNoTeto()
+    {
+        var quando = DateTimeOffset.UtcNow.AddDays(2);
+        var captura = new CapturaHandler(_ =>
+        {
+            var resposta = Resposta((HttpStatusCode)429, "nao-ler");
+            resposta.Headers.TryAddWithoutValidation("Retry-After", quando.ToString("r", CultureInfo.InvariantCulture));
+            return resposta;
+        });
+        using var http = new HttpClient(captura);
+        var cliente = new ClienteMensagens(http);
+
+        var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
+
+        Assert.Equal(ClienteMensagens.RetryAfterMaximo, resultado.RetryAfter);
+    }
+
+    [Theory]
+    [InlineData(500)]
+    [InlineData(502)]
+    [InlineData(503)]
+    public async Task ErroDoServidor_ViraFalhaSemEcoarCorpoNemRepetir(int status)
+    {
+        var captura = new CapturaHandler(_ => Resposta((HttpStatusCode)status, "corpo-secreto " + Chave + " " + Imagem));
+        using var http = new HttpClient(captura);
+        var cliente = new ClienteMensagens(http);
+
+        var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
+
+        Assert.Equal(1, captura.Chamadas);
+        Assert.Equal(TipoResultadoMensagem.Falha, resultado.Tipo);
+        Assert.Equal(ResultadoMensagem.TextoFalha, resultado.Mensagem);
+        Assert.Null(resultado.RetryAfter);
+        Assert.Null(resultado.Comprovante);
+        Assert.DoesNotContain("corpo-secreto", resultado.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain(Chave, resultado.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain(Imagem, resultado.Mensagem, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -431,6 +665,7 @@ public class ClienteMensagensTests
         public string? TipoConteudo { get; private set; }
         public string Corpo { get; private set; } = string.Empty;
         public List<string?> Chaves { get; } = [];
+        public List<string> Uris { get; } = [];
 
         protected override async Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request,
@@ -439,6 +674,7 @@ public class ClienteMensagensTests
             Chamadas++;
             Metodo = request.Method.Method;
             Uri = request.RequestUri?.AbsoluteUri ?? string.Empty;
+            Uris.Add(Uri);
             Chave = request.Headers.TryGetValues(ClienteMensagens.CabecalhoChave, out var chaves)
                 ? chaves.Single()
                 : null;
@@ -452,6 +688,123 @@ public class ClienteMensagensTests
                 : await request.Content.ReadAsStringAsync(cancellationToken);
 
             return await _responder(request, cancellationToken);
+        }
+    }
+
+    private static string Base64De(int bytes)
+    {
+        var resto = bytes % 3;
+        var chars = ((bytes + 2) / 3) * 4;
+        var texto = new string('A', chars);
+        if (resto == 1)
+            return string.Concat(texto.AsSpan(0, chars - 2), "==");
+        if (resto == 2)
+            return string.Concat(texto.AsSpan(0, chars - 1), "=");
+        return texto;
+    }
+
+    private static int PortaLivre()
+    {
+        var tcp = new TcpListener(IPAddress.Loopback, 0);
+        tcp.Start();
+        var porta = ((IPEndPoint)tcp.LocalEndpoint).Port;
+        tcp.Stop();
+        return porta;
+    }
+
+    private static HttpListener Escutar(int porta, Action<HttpListenerContext> responder)
+    {
+        var escuta = new HttpListener();
+        escuta.Prefixes.Add($"http://127.0.0.1:{porta}/");
+        escuta.Start();
+        _ = Task.Run(async () =>
+        {
+            while (escuta.IsListening)
+            {
+                HttpListenerContext contexto;
+                try
+                {
+                    contexto = await escuta.GetContextAsync();
+                }
+                catch (HttpListenerException)
+                {
+                    break;
+                }
+                catch (ObjectDisposedException)
+                {
+                    break;
+                }
+
+                try
+                {
+                    await contexto.Request.InputStream.CopyToAsync(Stream.Null);
+                    responder(contexto);
+                }
+                finally
+                {
+                    contexto.Response.Close();
+                }
+            }
+        });
+        return escuta;
+    }
+
+    private sealed class FluxoSemBusca : Stream
+    {
+        private readonly Stream _interno;
+
+        public FluxoSemBusca(Stream interno) => _interno = interno;
+
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override int Read(byte[] buffer, int offset, int count) => _interno.Read(buffer, offset, count);
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+            _interno.ReadAsync(buffer, cancellationToken);
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+                _interno.Dispose();
+            base.Dispose(disposing);
+        }
+    }
+
+    private sealed class ConteudoQueFalhaSeLido : HttpContent
+    {
+        public long? Comprimento { get; init; }
+
+        protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context) =>
+            throw new InvalidOperationException("corpo-secreto");
+
+        protected override bool TryComputeLength(out long length)
+        {
+            if (Comprimento is long valor)
+            {
+                length = valor;
+                return true;
+            }
+
+            length = 0;
+            return false;
         }
     }
 }
