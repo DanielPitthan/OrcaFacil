@@ -1,3 +1,5 @@
+using OrcaFacil.Core.Data;
+
 namespace OrcaFacil.Core.Armazenamento.Espelho;
 
 /// <summary>
@@ -18,7 +20,9 @@ public interface IProvedorSenhaEspelho
 /// A leitura descriptografa para um temporário, valida e apaga esse temporário antes de voltar.
 /// Não copia o espelho por cima do banco vivo, não apaga o espelho e não semeia.
 /// Restauração que falha continua sendo decisão do <see cref="CoordenadorArmazenamento"/>:
-/// esta classe não implementa <see cref="IRestauracaoEspelho"/>.
+/// esta classe não implementa <see cref="IRestauracaoEspelho"/>, <see cref="IPreservacaoBancoVivo"/>
+/// nem <see cref="IMigracaoBancoVivo"/>. Banco vivo vazio e arquivo ilegível são situações do banco,
+/// não desta leitura. O coordenador exige <see cref="OpcoesPreparoBanco"/> e a preservação à parte.
 /// </remarks>
 public sealed class EspelhoArquivo : IEspelhoDados
 {

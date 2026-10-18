@@ -9,6 +9,8 @@ namespace OrcaFacil.Core.Armazenamento.Espelho;
 /// na ordem do identificador. O histórico só vira esse número quando é um prefixo contíguo.
 /// Um furo ou um id desconhecido não é o schema atual: o número de um app mais novo vem do
 /// cabeçalho autenticado do espelho, não de um recálculo local.
+/// Histórico vazio devolve 0, o mesmo caso que a classificação chama de
+/// <see cref="SituacaoBancoVivo.Vazio"/> quando também não há tabelas. Esse 0 não é schema publicável.
 /// </summary>
 public sealed class VersaoSchemaAplicacao : IVersaoSchemaApp
 {
@@ -32,9 +34,11 @@ public sealed class VersaoSchemaAplicacao : IVersaoSchemaApp
     public IReadOnlyList<string> Migrations => _migrations;
 
     /// <summary>
-    /// 0 se o histórico está vazio. A quantidade de migrations quando a lista é exatamente
+    /// 0 se o histórico está vazio (SQLite sem migrations: situação <see cref="SituacaoBancoVivo.Vazio"/>
+    /// quando o relatório também não tem tabelas). A quantidade de migrations quando a lista é exatamente
     /// o prefixo contíguo das migrations conhecidas, na mesma ordem. Null se falta uma no meio,
     /// se a ordem não é esse prefixo, ou se há id que este app não conhece.
+    /// AddCartoes pela metade não entra neste número: a classificação usa o relatório, não este cálculo.
     /// </summary>
     public int? Calcular(IReadOnlyList<string> historico)
     {
