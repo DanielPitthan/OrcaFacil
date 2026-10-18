@@ -66,6 +66,33 @@ public static class VerificadorIntegridadeBanco
         };
     }
 
+    /// <summary>
+    /// Relatório quando o arquivo não pôde ser lido. Não abre o SQLite.
+    /// Lista o que o model espera como falta, porque nada pôde ser confirmado.
+    /// </summary>
+    public static RelatorioIntegridadeBanco RelatorioIlegivel(AppDbContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        try
+        {
+            var esperado = EsperadoPeloModelo(context);
+            var migrations = context.Database.GetMigrations().ToList();
+            return new RelatorioIntegridadeBanco
+            {
+                ArquivoIlegivel = true,
+                TabelasFaltando = esperado.Tabelas.Order(StringComparer.Ordinal).ToList(),
+                ColunasFaltando = esperado.Colunas.Order(StringComparer.Ordinal).ToList(),
+                IndicesFaltando = esperado.Indices.Order(StringComparer.Ordinal).ToList(),
+                MigrationsAusentesNoHistorico = migrations
+            };
+        }
+        catch (Exception)
+        {
+            return RelatorioIntegridadeBanco.IlegivelMinimo;
+        }
+    }
+
     private static Esperado EsperadoPeloModelo(AppDbContext context)
     {
         var esperado = new Esperado();
@@ -259,6 +286,21 @@ public static class VerificadorIntegridadeBanco
 
 public sealed class RelatorioIntegridadeBanco
 {
+    public static RelatorioIntegridadeBanco IlegivelMinimo { get; } = new()
+    {
+        ArquivoIlegivel = true,
+        TabelasFaltando = ["(arquivo ilegível)"],
+        ColunasFaltando = ["(arquivo ilegível)"],
+        IndicesFaltando = ["(arquivo ilegível)"],
+        MigrationsAusentesNoHistorico = ["(histórico ilegível)"]
+    };
+
+    /// <summary>
+    /// O arquivo não pôde ser lido. O relatório lista faltas porque nada foi confirmado;
+    /// isso não é um banco vazio nem um schema antigo.
+    /// </summary>
+    public bool ArquivoIlegivel { get; init; }
+
     public IReadOnlyList<string> TabelasExistentes { get; init; } = [];
     public IReadOnlyList<string> TabelasFaltando { get; init; } = [];
     public IReadOnlyList<string> ColunasFaltando { get; init; } = [];
@@ -270,7 +312,8 @@ public sealed class RelatorioIntegridadeBanco
     public IReadOnlyList<string> MigrationsNoHistoricoComObjetoFaltando { get; init; } = [];
 
     public bool Integro =>
-        TabelasFaltando.Count == 0
+        !ArquivoIlegivel
+        && TabelasFaltando.Count == 0
         && ColunasFaltando.Count == 0
         && IndicesFaltando.Count == 0
         && MigrationsAusentesNoHistorico.Count == 0

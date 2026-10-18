@@ -12,7 +12,10 @@ public enum AcaoArmazenamento
     /// <summary>Copia o espelho para o banco interno. Se a cópia falhar, nada é semeado e nada é apagado.</summary>
     RestaurarDoEspelho,
 
-    /// <summary>Instalação nova de verdade: não existe banco vivo e não existe espelho.</summary>
+    /// <summary>
+    /// Não há dado utilizável e não há espelho: arquivo ausente, ou SQLite vazio.
+    /// O coordenador cria o schema e só então semeia.
+    /// </summary>
     Semear,
 
     /// <summary>O schema encontrado é mais novo que este app. Para e pede atualização.</summary>
@@ -28,8 +31,19 @@ public enum AcaoArmazenamento
 public enum SituacaoBancoVivo
 {
     Ausente,
+
+    /// <summary>O arquivo existe, foi lido e não tem tabela do app nem histórico. Reinstalação com SQLite vazio.</summary>
+    Vazio,
+
     Integro,
     Desatualizado,
+
+    /// <summary>
+    /// A migration AddCartoes está pela metade. A migração passa por
+    /// <see cref="OrcaFacil.Core.Data.ReconciliadorAddCartoes"/> antes de repetir o Migrate.
+    /// </summary>
+    ParcialAddCartoes,
+
     Inconsistente,
     SchemaMaisNovoQueOApp
 }

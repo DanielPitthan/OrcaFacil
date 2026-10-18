@@ -20,7 +20,8 @@ public class CoordenadorArmazenamentoTests
 
                     var ambiente = AmbienteFalso.Observando(estado);
                     var resultado = await ambiente.Criar().PrepararAsync();
-                    var instalacaoNova = banco == SituacaoBancoVivo.Ausente && espelho == SituacaoEspelho.Ausente;
+                    var semDadosSemEspelho = espelho == SituacaoEspelho.Ausente
+                        && banco is SituacaoBancoVivo.Ausente or SituacaoBancoVivo.Vazio;
 
                     Assert.Equal(estado, resultado.Estado);
                     Assert.Equal(MatrizDecisaoArmazenamento.Decidir(estado).Acao, resultado.Acao);
@@ -28,13 +29,18 @@ public class CoordenadorArmazenamentoTests
                     Assert.Null(resultado.Falha);
                     Assert.Equal(0, ambiente.RemocoesBanco);
                     Assert.Equal(0, ambiente.RemocoesEspelho);
+                    Assert.Equal(0, ambiente.Preservacoes);
                     Assert.DoesNotContain("remover-banco", ambiente.Chamadas);
                     Assert.DoesNotContain("remover-espelho", ambiente.Chamadas);
+                    Assert.DoesNotContain("preservar", ambiente.Chamadas);
 
-                    if (instalacaoNova)
+                    if (semDadosSemEspelho)
                     {
                         Assert.Equal(AcaoArmazenamento.Semear, resultado.Acao);
                         Assert.Equal(1, ambiente.Semeaduras);
+                        var indiceMigrar = ambiente.Chamadas.IndexOf("migrar");
+                        var indiceSemear = ambiente.Chamadas.IndexOf("semear");
+                        Assert.True(indiceMigrar >= 0 && indiceSemear > indiceMigrar);
                     }
                     else
                     {
@@ -43,8 +49,16 @@ public class CoordenadorArmazenamentoTests
                         Assert.DoesNotContain("semear", ambiente.Chamadas);
                     }
 
+                    var deveMigrar = resultado.Acao == AcaoArmazenamento.MigrarBancoVivo
+                        || resultado.Acao == AcaoArmazenamento.Semear
+                        || (resultado.Acao == AcaoArmazenamento.RestaurarDoEspelho
+                            && schema == ComparacaoSchemaEspelho.EspelhoMaisAntigo);
                     Assert.Equal(resultado.Acao == AcaoArmazenamento.RestaurarDoEspelho ? 1 : 0, ambiente.Restauracoes);
-                    Assert.Equal(resultado.Acao == AcaoArmazenamento.MigrarBancoVivo ? 1 : 0, ambiente.Migracoes);
+                    Assert.Equal(deveMigrar ? 1 : 0, ambiente.Migracoes);
+                    if (deveMigrar)
+                        Assert.Same(ambiente.Opcoes, ambiente.OpcoesRecebidas);
+                    else
+                        Assert.Null(ambiente.OpcoesRecebidas);
                     Assert.Equal(banco == SituacaoBancoVivo.Ausente ? 0 : 1, ambiente.Verificacoes);
                     Assert.Equal(espelho == SituacaoEspelho.Ausente ? 0 : 1, ambiente.LeiturasEspelho);
                     var bancoDeveExistir = ambiente.BancoExistia
@@ -110,6 +124,131 @@ public class CoordenadorArmazenamentoTests
         Assert.Equal(0, ambiente.RemocoesBanco);
         Assert.Equal(0, ambiente.RemocoesEspelho);
         Assert.Equal(0, ambiente.Semeaduras);
+        Assert.Equal(1, ambiente.Migracoes);
+        Assert.Same(ambiente.Opcoes, ambiente.OpcoesRecebidas);
+        Assert.Equal(
+            ["versao", "banco.existe", "espelho.existe", "espelho.ler", "restaurar", "migrar"],
+            ambiente.Chamadas);
+    }
+
+    [Fact]
+    public async Task RestauracaoDeSchemaIgual_NaoMigraDepois()
+    {
+        var ambiente = AmbienteFalso.Observando(new EstadoObservadoArmazenamento(
+            SituacaoBancoVivo.Ausente,
+            SituacaoEspelho.Legivel,
+            ComparacaoSchemaEspelho.Igual));
+
+        var resultado = await ambiente.Criar().PrepararAsync();
+
+        Assert.Equal(AcaoArmazenamento.RestaurarDoEspelho, resultado.Acao);
+        Assert.Equal(0, ambiente.Migracoes);
+        Assert.Equal(0, ambiente.Semeaduras);
+        Assert.Null(ambiente.OpcoesRecebidas);
+    }
+
+    [Fact]
+    public async Task MigracaoDepoisDoEspelhoAntigo_QueFalha_NaoSemeia_ENaoApaga()
+    {
+        var ambiente = AmbienteFalso.Observando(new EstadoObservadoArmazenamento(
+            SituacaoBancoVivo.Vazio,
+            SituacaoEspelho.Legivel,
+            ComparacaoSchemaEspelho.EspelhoMaisAntigo));
+        ambiente.ResultadoMigracao = new ResultadoPreparoBanco(
+            new InvalidOperationException("migrate depois da cópia"),
+            new RelatorioIntegridadeBanco { MigrationsAusentesNoHistorico = ["pendente"] });
+
+        var resultado = await ambiente.Criar().PrepararAsync();
+
+        Assert.Equal(AcaoArmazenamento.TelaDeRecuperacao, resultado.Acao);
+        Assert.Equal(AcaoArmazenamento.RestaurarDoEspelho, resultado.AcaoPlanejada);
+        Assert.Equal(1, ambiente.Restauracoes);
+        Assert.Equal(1, ambiente.Migracoes);
+        Assert.Equal(0, ambiente.Semeaduras);
+        Assert.Equal(0, ambiente.RemocoesBanco);
+        Assert.Equal(0, ambiente.RemocoesEspelho);
+        Assert.True(ambiente.BancoExiste);
+        Assert.True(ambiente.EspelhoExiste);
+        Assert.Contains("apag", resultado.Motivo, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("seme", resultado.Motivo, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task BancoVazioComEspelhoLegivel_Restaura_ENaoMigraOArquivoVazio()
+    {
+        var ambiente = AmbienteFalso.Observando(new EstadoObservadoArmazenamento(
+            SituacaoBancoVivo.Vazio,
+            SituacaoEspelho.Legivel,
+            ComparacaoSchemaEspelho.Igual));
+
+        var resultado = await ambiente.Criar().PrepararAsync();
+
+        Assert.Equal(AcaoArmazenamento.RestaurarDoEspelho, resultado.Acao);
+        Assert.Equal(SituacaoBancoVivo.Vazio, resultado.Estado!.BancoVivo);
+        Assert.Equal(0, ambiente.Migracoes);
+        Assert.Equal(0, ambiente.Semeaduras);
+        Assert.Equal(
+            ["versao", "banco.existe", "banco.verificar", "espelho.existe", "espelho.ler", "restaurar"],
+            ambiente.Chamadas);
+    }
+
+    [Fact]
+    public async Task BancoVazioSemEspelho_CriaSchemaAntesDeSemear()
+    {
+        var ambiente = AmbienteFalso.Observando(new EstadoObservadoArmazenamento(
+            SituacaoBancoVivo.Vazio,
+            SituacaoEspelho.Ausente,
+            ComparacaoSchemaEspelho.SemEspelho));
+
+        var resultado = await ambiente.Criar().PrepararAsync();
+
+        Assert.Equal(AcaoArmazenamento.Semear, resultado.Acao);
+        Assert.Equal(1, ambiente.Migracoes);
+        Assert.Equal(1, ambiente.Semeaduras);
+        Assert.Same(ambiente.Opcoes, ambiente.OpcoesRecebidas);
+        Assert.Equal(
+            ["versao", "banco.existe", "banco.verificar", "espelho.existe", "migrar", "semear"],
+            ambiente.Chamadas);
+    }
+
+    [Fact]
+    public async Task SchemaDaSemeaduraQueFalha_NaoSemeia_ENaoApaga()
+    {
+        var ambiente = AmbienteFalso.Observando(new EstadoObservadoArmazenamento(
+            SituacaoBancoVivo.Ausente,
+            SituacaoEspelho.Ausente,
+            ComparacaoSchemaEspelho.SemEspelho));
+        ambiente.ResultadoMigracao = new ResultadoPreparoBanco(
+            new InvalidOperationException("não criou o schema"),
+            new RelatorioIntegridadeBanco { TabelasFaltando = ["MembrosFamilia"] });
+
+        var resultado = await ambiente.Criar().PrepararAsync();
+
+        Assert.Equal(AcaoArmazenamento.TelaDeRecuperacao, resultado.Acao);
+        Assert.Equal(AcaoArmazenamento.Semear, resultado.AcaoPlanejada);
+        Assert.Equal(1, ambiente.Migracoes);
+        Assert.Equal(0, ambiente.Semeaduras);
+        Assert.Equal(0, ambiente.RemocoesBanco);
+        Assert.Equal(0, ambiente.RemocoesEspelho);
+        Assert.Same(ambiente.Opcoes, ambiente.OpcoesRecebidas);
+    }
+
+    [Fact]
+    public async Task AddCartoesPelaMetade_MigraComOpcoes_ENaoRestauraPorCima()
+    {
+        var ambiente = AmbienteFalso.Observando(new EstadoObservadoArmazenamento(
+            SituacaoBancoVivo.ParcialAddCartoes,
+            SituacaoEspelho.Legivel,
+            ComparacaoSchemaEspelho.Igual));
+
+        var resultado = await ambiente.Criar().PrepararAsync();
+
+        Assert.Equal(AcaoArmazenamento.MigrarBancoVivo, resultado.Acao);
+        Assert.Equal(1, ambiente.Migracoes);
+        Assert.Equal(0, ambiente.Restauracoes);
+        Assert.Equal(0, ambiente.Semeaduras);
+        Assert.Same(ambiente.Opcoes, ambiente.OpcoesRecebidas);
+        Assert.Contains(ReconciliadorAddCartoes.MigrationId, ambiente.Relatorio.MigrationsPelaMetade);
     }
 
     [Fact]
@@ -275,12 +414,108 @@ public class CoordenadorArmazenamentoTests
 
         Assert.Equal(AcaoArmazenamento.RestaurarDoEspelho, resultado.Acao);
         Assert.Equal(SituacaoBancoVivo.Inconsistente, resultado.Estado!.BancoVivo);
+        Assert.Equal(1, ambiente.Preservacoes);
         Assert.Equal(
-            ["versao", "banco.existe", "banco.verificar", "espelho.existe", "espelho.ler", "restaurar"],
+            ["versao", "banco.existe", "banco.verificar", "espelho.existe", "espelho.ler", "preservar", "restaurar"],
             ambiente.Chamadas);
         Assert.Equal(0, ambiente.RemocoesBanco);
         Assert.Equal(0, ambiente.RemocoesEspelho);
         Assert.Equal(0, ambiente.Semeaduras);
+        Assert.True(ambiente.BancoExiste);
+        Assert.True(ambiente.EspelhoExiste);
+    }
+
+    [Fact]
+    public async Task BancoIlegivel_PreservacaoQueFalha_NaoRestaura_NaoSemeia_NaoApaga()
+    {
+        var ambiente = AmbienteFalso.Observando(new EstadoObservadoArmazenamento(
+            SituacaoBancoVivo.Inconsistente,
+            SituacaoEspelho.Legivel,
+            ComparacaoSchemaEspelho.Igual));
+        ambiente.Relatorio = new RelatorioIntegridadeBanco
+        {
+            ArquivoIlegivel = true,
+            TabelasFaltando = ["MembrosFamilia"],
+            MigrationsAusentesNoHistorico = ["20260826112311_InitialCreate"]
+        };
+        ambiente.PreservacaoSucesso = false;
+
+        var resultado = await ambiente.Criar().PrepararAsync();
+
+        Assert.Equal(AcaoArmazenamento.TelaDeRecuperacao, resultado.Acao);
+        Assert.Equal(AcaoArmazenamento.RestaurarDoEspelho, resultado.AcaoPlanejada);
+        Assert.Equal(1, ambiente.Preservacoes);
+        Assert.Equal(0, ambiente.Restauracoes);
+        Assert.Equal(0, ambiente.Semeaduras);
+        Assert.Equal(0, ambiente.Migracoes);
+        Assert.Equal(0, ambiente.RemocoesBanco);
+        Assert.Equal(0, ambiente.RemocoesEspelho);
+        Assert.True(ambiente.BancoExiste);
+        Assert.True(ambiente.EspelhoExiste);
+        Assert.Contains("apag", resultado.Motivo, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("seme", resultado.Motivo, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task PrepararELimpar_NaoCorremJuntos()
+    {
+        var ambiente = AmbienteFalso.Observando(new EstadoObservadoArmazenamento(
+            SituacaoBancoVivo.Integro,
+            SituacaoEspelho.Ausente,
+            ComparacaoSchemaEspelho.SemEspelho));
+        ambiente.SegurarVerificacao = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var coordenador = ambiente.Criar();
+
+        var preparar = coordenador.PrepararAsync();
+        await ambiente.VerificacaoEntrou.Task;
+        var limpar = coordenador.LimparTudoAsync(PedidoLimparTudo.Explicito);
+
+        var vazou = await Task.WhenAny(ambiente.RemocaoEntrou.Task, Task.Delay(200));
+        Assert.NotSame(ambiente.RemocaoEntrou.Task, vazou);
+        Assert.Equal(0, ambiente.RemocoesBanco);
+
+        ambiente.SegurarVerificacao.SetResult(true);
+        await preparar;
+        await limpar;
+        Assert.Equal(1, ambiente.RemocoesBanco);
+        Assert.Equal(1, ambiente.RemocoesEspelho);
+    }
+
+    [Fact]
+    public async Task LimparSeguraPreparar_AteSoltarOBanco()
+    {
+        var ambiente = AmbienteFalso.Observando(new EstadoObservadoArmazenamento(
+            SituacaoBancoVivo.Integro,
+            SituacaoEspelho.Ausente,
+            ComparacaoSchemaEspelho.SemEspelho));
+        ambiente.SegurarRemocaoBanco = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var coordenador = ambiente.Criar();
+
+        var limpar = coordenador.LimparTudoAsync(PedidoLimparTudo.Explicito);
+        await ambiente.RemocaoEntrou.Task;
+        var preparar = coordenador.PrepararAsync();
+
+        var vazou = await Task.WhenAny(ambiente.VerificacaoEntrou.Task, Task.Delay(200));
+        Assert.NotSame(ambiente.VerificacaoEntrou.Task, vazou);
+        Assert.Equal(0, ambiente.Verificacoes);
+
+        ambiente.SegurarRemocaoBanco.SetResult(true);
+        await limpar;
+        await preparar;
+        Assert.Equal(0, ambiente.Verificacoes);
+        Assert.Equal(1, ambiente.Migracoes);
+        Assert.Equal(1, ambiente.Semeaduras);
+    }
+
+    [Fact]
+    public void Construtor_RecusaOpcoesNulas()
+    {
+        var ambiente = AmbienteFalso.Observando(new EstadoObservadoArmazenamento(
+            SituacaoBancoVivo.Ausente,
+            SituacaoEspelho.Ausente,
+            ComparacaoSchemaEspelho.SemEspelho));
+
+        Assert.Throws<ArgumentNullException>(() => ambiente.CriarSemOpcoes());
     }
 
     [Fact]
@@ -475,6 +710,22 @@ public class CoordenadorArmazenamentoTests
 
         public int RemocoesEspelho { get; private set; }
 
+        public int Preservacoes { get; private set; }
+
+        public OpcoesPreparoBanco Opcoes { get; } = new() { VersaoAplicativo = "1.2.3" };
+
+        public OpcoesPreparoBanco? OpcoesRecebidas { get; private set; }
+
+        public bool PreservacaoSucesso { get; set; } = true;
+
+        public TaskCompletionSource<bool>? SegurarVerificacao { get; set; }
+
+        public TaskCompletionSource<bool> VerificacaoEntrou { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TaskCompletionSource<bool>? SegurarRemocaoBanco { get; set; }
+
+        public TaskCompletionSource<bool> RemocaoEntrou { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
         public static AmbienteFalso Observando(EstadoObservadoArmazenamento estado)
         {
             var ambiente = new AmbienteFalso();
@@ -487,28 +738,53 @@ public class CoordenadorArmazenamentoTests
                     ambiente.BancoExiste = true;
                     ambiente.Relatorio = new RelatorioIntegridadeBanco();
                     break;
+                case SituacaoBancoVivo.Vazio:
+                    ambiente.BancoExiste = true;
+                    ambiente.Relatorio = new RelatorioIntegridadeBanco
+                    {
+                        TabelasFaltando = ["MembrosFamilia", "__EFMigrationsHistory"],
+                        MigrationsAusentesNoHistorico = ["20260826112311_InitialCreate"]
+                    };
+                    break;
                 case SituacaoBancoVivo.Desatualizado:
                     ambiente.BancoExiste = true;
                     ambiente.Relatorio = new RelatorioIntegridadeBanco
                     {
-                        MigrationsAusentesNoHistorico = ["20261016011256_AddDescritivoItemFatura"]
+                        TabelasExistentes = ["MembrosFamilia", "__EFMigrationsHistory"],
+                        MigrationsNoHistorico = ["20260826112311_InitialCreate"],
+                        MigrationsAusentesNoHistorico = ["20261016011256_AddDescritivoItemFatura"],
+                        ColunasFaltando = ["ItensLancamento.Descritivo"]
+                    };
+                    break;
+                case SituacaoBancoVivo.ParcialAddCartoes:
+                    ambiente.BancoExiste = true;
+                    ambiente.Relatorio = new RelatorioIntegridadeBanco
+                    {
+                        TabelasExistentes = ["Transacoes"],
+                        MigrationsNoHistorico = ["20261013195343_AddPagamentoCompraCesta"],
+                        MigrationsPelaMetade = [ReconciliadorAddCartoes.MigrationId],
+                        MigrationsAusentesNoHistorico = [ReconciliadorAddCartoes.MigrationId]
                     };
                     break;
                 case SituacaoBancoVivo.Inconsistente:
                     ambiente.BancoExiste = true;
                     ambiente.Relatorio = new RelatorioIntegridadeBanco
                     {
-                        MigrationsPelaMetade = ["20261015194450_AddCartoes"],
-                        MigrationsAusentesNoHistorico = ["20261015194450_AddCartoes"]
+                        TabelasExistentes = ["Transacoes", "MembrosFamilia"],
+                        MigrationsNoHistorico = ["20261013195343_AddPagamentoCompraCesta"],
+                        MigrationsPelaMetade = ["20261016182243_AddEhEstornoItemFatura"],
+                        MigrationsAusentesNoHistorico = ["20261016182243_AddEhEstornoItemFatura"]
                     };
                     break;
                 case SituacaoBancoVivo.SchemaMaisNovoQueOApp:
                     ambiente.BancoExiste = true;
                     ambiente.Relatorio = new RelatorioIntegridadeBanco
                     {
+                        TabelasExistentes = ["MembrosFamilia", "__EFMigrationsHistory"],
+                        MigrationsNoHistorico = ["20260826112311_InitialCreate", "20990101000000_Futura"],
                         MigrationsDesconhecidasNoHistorico = ["20990101000000_Futura"],
                         MigrationsAusentesNoHistorico = ["20261016182243_AddEhEstornoItemFatura"],
-                        MigrationsPelaMetade = ["20261015194450_AddCartoes"]
+                        MigrationsPelaMetade = [ReconciliadorAddCartoes.MigrationId]
                     };
                     break;
                 default:
@@ -544,7 +820,10 @@ public class CoordenadorArmazenamentoTests
         }
 
         public CoordenadorArmazenamento Criar()
-            => new(new Sonda(this), new Espelho(this), new Versao(this), new Restauracao(this), new Migracao(this), new Semeadura(this), new Limpeza(this));
+            => new(new Sonda(this), new Espelho(this), new Versao(this), new Restauracao(this), new Migracao(this), new Semeadura(this), new Limpeza(this), Opcoes, new Preservacao(this));
+
+        public CoordenadorArmazenamento CriarSemOpcoes()
+            => new(new Sonda(this), new Espelho(this), new Versao(this), new Restauracao(this), new Migracao(this), new Semeadura(this), new Limpeza(this), null!, new Preservacao(this));
 
         private sealed class Sonda(AmbienteFalso ambiente) : ISondaBancoVivo
         {
@@ -554,14 +833,17 @@ public class CoordenadorArmazenamentoTests
                 return ambiente.BancoExiste;
             }
 
-            public Task<RelatorioIntegridadeBanco> VerificarAsync(CancellationToken cancellationToken = default)
+            public async Task<RelatorioIntegridadeBanco> VerificarAsync(CancellationToken cancellationToken = default)
             {
                 ambiente.Chamadas.Add("banco.verificar");
                 ambiente.Verificacoes++;
+                ambiente.VerificacaoEntrou.TrySetResult(true);
                 cancellationToken.ThrowIfCancellationRequested();
+                if (ambiente.SegurarVerificacao is not null)
+                    await ambiente.SegurarVerificacao.Task.WaitAsync(cancellationToken);
                 if (ambiente.FalhaAoVerificar is not null)
                     throw ambiente.FalhaAoVerificar;
-                return Task.FromResult(ambiente.Relatorio);
+                return ambiente.Relatorio;
             }
         }
 
@@ -613,14 +895,32 @@ public class CoordenadorArmazenamentoTests
 
         private sealed class Migracao(AmbienteFalso ambiente) : IMigracaoBancoVivo
         {
-            public Task<ResultadoPreparoBanco> MigrarEVerificarAsync(CancellationToken cancellationToken = default)
+            public Task<ResultadoPreparoBanco> MigrarEVerificarAsync(
+                OpcoesPreparoBanco opcoes,
+                CancellationToken cancellationToken = default)
             {
+                ArgumentNullException.ThrowIfNull(opcoes);
                 ambiente.Chamadas.Add("migrar");
                 ambiente.Migracoes++;
+                ambiente.OpcoesRecebidas = opcoes;
                 cancellationToken.ThrowIfCancellationRequested();
                 if (ambiente.MigracaoLanca)
                     throw new InvalidOperationException("migração interrompida");
                 return Task.FromResult(ambiente.ResultadoMigracao);
+            }
+        }
+
+        private sealed class Preservacao(AmbienteFalso ambiente) : IPreservacaoBancoVivo
+        {
+            public Task<ResultadoPreservacao> PreservarAsync(CancellationToken cancellationToken = default)
+            {
+                ambiente.Chamadas.Add("preservar");
+                ambiente.Preservacoes++;
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!ambiente.PreservacaoSucesso)
+                    return Task.FromResult(ResultadoPreservacao.Falha("não foi possível copiar o banco ilegível"));
+
+                return Task.FromResult(ResultadoPreservacao.Ok("copia-preservada.db"));
             }
         }
 
@@ -640,15 +940,17 @@ public class CoordenadorArmazenamentoTests
 
         private sealed class Limpeza(AmbienteFalso ambiente) : ILimpezaTotalDados
         {
-            public Task RemoverBancoVivoAsync(CancellationToken cancellationToken = default)
+            public async Task RemoverBancoVivoAsync(CancellationToken cancellationToken = default)
             {
                 ambiente.Chamadas.Add("remover-banco");
                 ambiente.RemocoesBanco++;
+                ambiente.RemocaoEntrou.TrySetResult(true);
                 cancellationToken.ThrowIfCancellationRequested();
+                if (ambiente.SegurarRemocaoBanco is not null)
+                    await ambiente.SegurarRemocaoBanco.Task.WaitAsync(cancellationToken);
                 if (ambiente.RemocaoBancoLanca)
                     throw new IOException("banco preso");
                 ambiente.BancoExiste = false;
-                return Task.CompletedTask;
             }
 
             public Task RemoverEspelhoAsync(CancellationToken cancellationToken = default)
