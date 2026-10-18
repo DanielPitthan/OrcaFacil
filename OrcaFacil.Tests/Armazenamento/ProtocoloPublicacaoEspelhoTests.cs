@@ -451,6 +451,7 @@ public class EspelhoNaPastaUsuarioTests
         var limpeza = new LimpezaContada();
         var preservacao = new PreservacaoContada();
         var restauracao = new RestauracaoContada();
+        var perfil = new PerfilQueNaoRoda();
         var coordenador = new CoordenadorArmazenamento(
             new SondaAusente(),
             new EspelhoNaPastaUsuario(volume, new LeitorFalso(), new AreaFalsa()),
@@ -460,7 +461,8 @@ public class EspelhoNaPastaUsuarioTests
             semeadura,
             limpeza,
             new OpcoesPreparoBanco { VersaoAplicativo = "1.0-teste" },
-            preservacao);
+            preservacao,
+            perfil);
 
         var resultado = await coordenador.PrepararAsync();
 
@@ -471,6 +473,7 @@ public class EspelhoNaPastaUsuarioTests
         Assert.Equal(0, migracao.Chamadas);
         Assert.Equal(0, restauracao.Chamadas);
         Assert.Equal(0, preservacao.Chamadas);
+        Assert.Equal(0, perfil.Chamadas);
         Assert.Equal(0, limpeza.RemocoesBanco);
         Assert.Equal(0, limpeza.RemocoesEspelho);
         Assert.Empty(volume.Apagados);
@@ -550,6 +553,17 @@ public class EspelhoNaPastaUsuarioTests
             ArgumentNullException.ThrowIfNull(opcoes);
             Chamadas++;
             throw new InvalidOperationException("não devia migrar");
+        }
+    }
+
+    private sealed class PerfilQueNaoRoda : IPresencaPerfil
+    {
+        public int Chamadas { get; private set; }
+
+        public Task<bool> HaMembroAsync(CancellationToken cancellationToken = default)
+        {
+            Chamadas++;
+            return Task.FromResult(false);
         }
     }
 

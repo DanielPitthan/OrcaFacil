@@ -16,10 +16,15 @@ namespace OrcaFacil.Services.Espelho;
 /// </summary>
 /// <remarks>
 /// O <see cref="CoordenadorArmazenamento"/> não entra neste registro. Quando o PR da tela
-/// o montar, o construtor exige nove argumentos: as sete portas anteriores mais
-/// <see cref="OpcoesPreparoBanco"/> (com <see cref="OpcoesPreparoBanco.VersaoAplicativo"/>)
-/// e <see cref="IPreservacaoBancoVivo"/>. <see cref="IMigracaoBancoVivo.MigrarEVerificarAsync"/>
-/// recebe essas opções. <see cref="EspelhoNaPastaUsuario"/> só implementa <see cref="IEspelhoDados"/>.
+/// o montar, o construtor exige dez argumentos, nesta ordem: sonda, espelho, versão,
+/// restauração, migração, semeadura, limpeza, <see cref="OpcoesPreparoBanco"/>
+/// (com <see cref="OpcoesPreparoBanco.VersaoAplicativo"/>), <see cref="IPreservacaoBancoVivo"/>
+/// e <see cref="IPresencaPerfil"/>. Null lança <see cref="ArgumentNullException"/>.
+/// <see cref="IMigracaoBancoVivo.MigrarEVerificarAsync"/> recebe as opções.
+/// <see cref="IPresencaPerfil.HaMembroAsync"/> só é consultada com schema íntegro;
+/// <see cref="ClassificacaoBancoVivo.AplicarPoliticaSeed"/> pode virar
+/// <see cref="SituacaoBancoVivo.SemPerfil"/>. <see cref="EspelhoNaPastaUsuario"/> só implementa
+/// <see cref="IEspelhoDados"/> e não é <see cref="IPresencaPerfil"/>.
 /// </remarks>
 public static class RegistroServicosPastaEspelho
 {
