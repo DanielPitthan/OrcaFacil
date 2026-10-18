@@ -5,10 +5,11 @@ using System.Text;
 namespace OrcaFacil.Core.Llm;
 
 /// <summary>
-/// Cliente de <c>POST {base}/v1/messages</c>. A chave entra só no header de cada pedido HTTPS.
-/// Não segue redirect, não grava chave, header, corpo, imagem nem caminho.
+/// Cliente de <c>POST {base}/v1/messages</c>. A produção nasce em <see cref="Criar"/>,
+/// com redirect desligado. A chave entra só no header de cada pedido HTTPS.
+/// Não grava chave, header, corpo, imagem nem caminho.
 /// </summary>
-public sealed class ClienteMensagens
+public sealed class ClienteMensagens : IDisposable
 {
     public const string VersaoAnthropic = "2023-06-01";
     public const string CabecalhoChave = "x-api-key";
@@ -30,32 +31,66 @@ public sealed class ClienteMensagens
 
     private readonly HttpClient _http;
     private readonly TimeSpan _tempoLimite;
+    private readonly bool _permiteHttp;
 
-    public ClienteMensagens(HttpClient http, TimeSpan? tempoLimite = null)
+    /// <summary>
+    /// Ponto de teste. Http só entra com <paramref name="permiteHttp"/>.
+    /// O redirect é desligado aqui, mesmo que o handler recebido o siga.
+    /// A produção usa <see cref="Criar"/>, que não aceita um cliente de fora.
+    /// </summary>
+    internal ClienteMensagens(HttpMessageHandler transporte, TimeSpan? tempoLimite = null, bool permiteHttp = false)
     {
-        ArgumentNullException.ThrowIfNull(http);
+        ArgumentNullException.ThrowIfNull(transporte);
         var limite = tempoLimite ?? TempoLimite;
         if (limite <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(tempoLimite));
 
+        ImpedirRedirect(transporte);
         _tempoLimite = limite;
-        _http = http;
+        _permiteHttp = permiteHttp;
+        _http = new HttpClient(transporte, disposeHandler: true)
+        {
+            Timeout = Timeout.InfiniteTimeSpan
+        };
     }
 
+    /// <summary>Cliente de produção: HTTPS, sem redirect, prazo só no token da chamada.</summary>
+    public static ClienteMensagens Criar(TimeSpan? tempoLimite = null) =>
+        new(CriarHandler(), tempoLimite, permiteHttp: false);
+
     /// <summary>Handler sem redirect automático. O prazo de 60 s fica no token da chamada, não aqui.</summary>
-    public static SocketsHttpHandler CriarHandler() => new()
+    public static SocketsHttpHandler CriarHandler()
     {
-        AllowAutoRedirect = false
-    };
+        var handler = new SocketsHttpHandler();
+        ImpedirRedirect(handler);
+        return handler;
+    }
 
     /// <summary>
-    /// Cliente cujo transporte é <see cref="CriarHandler"/>.
+    /// Transporte de <see cref="CriarHandler"/>.
     /// <see cref="HttpClient.Timeout"/> fica infinito para o token da chamada ser o único prazo.
     /// </summary>
     public static HttpClient CriarHttpClient() => new(CriarHandler(), disposeHandler: true)
     {
         Timeout = Timeout.InfiniteTimeSpan
     };
+
+    internal TimeSpan TimeoutDoTransporte => _http.Timeout;
+
+    public void Dispose() => _http.Dispose();
+
+    private static void ImpedirRedirect(HttpMessageHandler transporte)
+    {
+        switch (transporte)
+        {
+            case SocketsHttpHandler sockets:
+                sockets.AllowAutoRedirect = false;
+                break;
+            case HttpClientHandler http:
+                http.AllowAutoRedirect = false;
+                break;
+        }
+    }
 
     /// <summary>Tamanho do binário estimado pelo base64, sem alocar a imagem.</summary>
     public static bool ImagemCabe(string? imagemBase64)
@@ -85,8 +120,11 @@ public sealed class ClienteMensagens
         string? imagemBase64,
         CancellationToken cancellationToken = default)
     {
-        if (PedidoMensagem.CriarUri(urlBase) is not Uri uri || uri.Scheme != Uri.UriSchemeHttps)
+        if (PedidoMensagem.CriarUri(urlBase, _permiteHttp) is not Uri uri ||
+            (uri.Scheme != Uri.UriSchemeHttps && !_permiteHttp))
+        {
             return ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoPedidoInvalido);
+        }
 
         if (string.IsNullOrWhiteSpace(chave) || chave.Contains('\r') || chave.Contains('\n'))
             return ResultadoMensagem.Falha(TipoResultadoMensagem.NaoAutorizado, ResultadoMensagem.TextoNaoAutorizado);
@@ -105,6 +143,7 @@ public sealed class ClienteMensagens
         try
         {
             using var pedido = new HttpRequestMessage(HttpMethod.Post, uri);
+            pedido.Headers.ExpectContinue = false;
             if (!pedido.Headers.TryAddWithoutValidation(CabecalhoChave, chave) ||
                 !pedido.Headers.TryAddWithoutValidation(CabecalhoVersao, VersaoAnthropic))
             {

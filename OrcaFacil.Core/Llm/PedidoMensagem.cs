@@ -92,7 +92,9 @@ public static class PedidoMensagem
         }
         """;
 
-    public static Uri? CriarUri(string? urlBase)
+    public static Uri? CriarUri(string? urlBase) => CriarUri(urlBase, permitirHttp: false);
+
+    internal static Uri? CriarUri(string? urlBase, bool permitirHttp)
     {
         if (string.IsNullOrWhiteSpace(urlBase))
             return null;
@@ -100,7 +102,7 @@ public static class PedidoMensagem
         if (!Uri.TryCreate(urlBase.Trim(), UriKind.Absolute, out var uri))
             return null;
 
-        if (uri.Scheme != Uri.UriSchemeHttps)
+        if (uri.Scheme != Uri.UriSchemeHttps && !(permitirHttp && uri.Scheme == Uri.UriSchemeHttp))
             return null;
 
         if (!string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query) || !string.IsNullOrEmpty(uri.Fragment))
