@@ -125,7 +125,10 @@ public static class ClassificadorFalhaPastaEspelho
         if (sinal.DocumentoEncontrado == false)
             return CodigoFalhaPastaEspelho.PastaApagada;
 
-        if (Contem(texto, "FileNotFoundException") || Contem(texto, "No such file") || Contem(texto, "ENOENT") || Contem(texto, "StaleDataException"))
+        if (Contem(texto, "FileNotFoundException") || Contem(texto, "No such file"))
+            return CodigoFalhaPastaEspelho.ArquivoAusente;
+
+        if (Contem(texto, "ENOENT") || Contem(texto, "StaleDataException"))
             return CodigoFalhaPastaEspelho.PastaApagada;
 
         return CodigoFalhaPastaEspelho.Indisponivel;
@@ -154,7 +157,11 @@ public static partial class TextoClassificavelPasta
 
 public sealed record DiagnosticoPastaEspelho
 {
-    public DiagnosticoPastaEspelho(CodigoFalhaPastaEspelho codigo, bool arquivoNoNomeFinal)
+    public DiagnosticoPastaEspelho(
+        CodigoFalhaPastaEspelho codigo,
+        bool arquivoNoNomeFinal,
+        bool residuoDesteApp = false,
+        string? nomeReserva = null)
     {
         if (codigo == CodigoFalhaPastaEspelho.PublicadoComResiduo)
             throw new ArgumentException("PublicadoComResiduo é resultado de publicação, não diagnóstico da pasta.");
@@ -162,13 +169,29 @@ public sealed record DiagnosticoPastaEspelho
         if (arquivoNoNomeFinal && codigo != CodigoFalhaPastaEspelho.Nenhuma)
             throw new ArgumentException("Só dá para afirmar que o arquivo está na pasta quando o acesso foi livre.");
 
+        if (nomeReserva is not null && (nomeReserva.Length == 0 || nomeReserva.IndexOfAny(['/', '\\']) >= 0))
+            throw new ArgumentException("A reserva precisa ser um nome de exibição deste app.", nameof(nomeReserva));
+
+        if (nomeReserva is not null)
+            residuoDesteApp = true;
+
         Codigo = codigo;
         ArquivoNoNomeFinal = arquivoNoNomeFinal;
+        ResiduoDesteApp = residuoDesteApp;
+        NomeReserva = nomeReserva;
     }
 
     public CodigoFalhaPastaEspelho Codigo { get; }
 
     public bool ArquivoNoNomeFinal { get; }
+
+    /// <summary>
+    /// Há temporário ou reserva deste app. Sem o nome definitivo, isso não é instalação nova.
+    /// </summary>
+    public bool ResiduoDesteApp { get; }
+
+    /// <summary>Nome da reserva que a leitura pode copiar. A cópia não apaga o arquivo da pasta.</summary>
+    public string? NomeReserva { get; }
 
     public bool AcessoLivre => Codigo == CodigoFalhaPastaEspelho.Nenhuma;
 }
@@ -227,16 +250,20 @@ public sealed record ResultadoRenomeacaoVolume
     public ResultadoRenomeacaoVolume(
         CodigoFalhaPastaEspelho codigo,
         bool destinoJaExistia = false,
-        bool ambosNomesVisiveis = false)
+        bool ambosNomesVisiveis = false,
+        bool trocaEfetuada = false)
     {
-        if (codigo == CodigoFalhaPastaEspelho.Nenhuma && (destinoJaExistia || ambosNomesVisiveis))
-            throw new ArgumentException("Renomeação concluída não tem destino prévio nem origem restante.");
+        if (codigo == CodigoFalhaPastaEspelho.Nenhuma && (destinoJaExistia || ambosNomesVisiveis || trocaEfetuada))
+            throw new ArgumentException("Renomeação concluída não carrega falha nem origem restante.");
         if (destinoJaExistia && ambosNomesVisiveis)
             throw new ArgumentException("Destino prévio e cópia sem exclusão são observações diferentes.");
+        if (trocaEfetuada && (destinoJaExistia || ambosNomesVisiveis))
+            throw new ArgumentException("Troca efetuada significa que a origem já saiu do nome antigo.");
 
         Codigo = codigo;
         DestinoJaExistia = destinoJaExistia;
         AmbosNomesVisiveis = ambosNomesVisiveis;
+        TrocaEfetuada = trocaEfetuada;
     }
 
     public CodigoFalhaPastaEspelho Codigo { get; }
@@ -249,12 +276,21 @@ public sealed record ResultadoRenomeacaoVolume
     /// </summary>
     public bool AmbosNomesVisiveis { get; }
 
+    /// <summary>
+    /// O rename já moveu a origem e mesmo assim a chamada falhou.
+    /// Quem chama não apaga o destino nem o temporário.
+    /// </summary>
+    public bool TrocaEfetuada { get; }
+
     public bool Sucesso => Codigo == CodigoFalhaPastaEspelho.Nenhuma;
 
     public static ResultadoRenomeacaoVolume Ok() => new(CodigoFalhaPastaEspelho.Nenhuma);
 
     public static ResultadoRenomeacaoVolume CopiaSemExcluirOrigem()
         => new(CodigoFalhaPastaEspelho.ProvedorSemTroca, ambosNomesVisiveis: true);
+
+    public static ResultadoRenomeacaoVolume FalhaAposEfetuar(CodigoFalhaPastaEspelho codigo)
+        => new(codigo, trocaEfetuada: true);
 
     public static ResultadoRenomeacaoVolume Falha(CodigoFalhaPastaEspelho codigo, bool destinoJaExistia = false)
         => new(codigo, destinoJaExistia);

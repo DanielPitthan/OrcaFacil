@@ -10,18 +10,17 @@ namespace OrcaFacil.Platforms.Android.Espelho;
 
 /// <summary>
 /// Pasta do espelho via SAF (<c>DocumentsContract</c> / <c>ContentResolver</c>).
-/// A troca é temporário e depois rename. Se o provedor não anuncia
-/// <see cref="DocumentContractFlags.SupportsRename"/>, a publicação para e o
-/// arquivo anterior fica no nome definitivo — não há cópia por cima.
+/// A troca é temporário e depois rename. Flag de rename ausente não impede a
+/// tentativa: o resultado da chamada é que decide.
 /// </summary>
 /// <remarks>
 /// Provedores como o Drive podem anunciar rename e ainda assim implementá-lo como
 /// cópia mais exclusão, sem atomicidade. A pós-condição de troca confirmada exige
 /// o destino visível e a origem ausente. Se os dois nomes continuam visíveis, este
 /// volume não apaga nenhum dos dois: o protocolo publica com resíduo e a reserva
-/// do arquivo anterior só sai numa troca confirmada. Fora isso, o único delete é o
-/// temporário criado nesta operação, pelo URI que o próprio <c>createDocument</c> devolveu.
-/// A URI da pasta não entra em mensagem nem em log.
+/// do arquivo anterior só sai numa troca confirmada. Se <c>createDocument</c> devolve
+/// outro nome, esse URI não é apagado: pode ser o espelho que já estava na pasta.
+/// Cancelamento também não apaga o que já foi criado. A URI da pasta não entra em mensagem nem em log.
 /// </remarks>
 public sealed class VolumePastaEspelhoAndroid : IVolumePastaEspelho
 {
@@ -51,11 +50,15 @@ public sealed class VolumePastaEspelhoAndroid : IVolumePastaEspelho
             if (pasta is null || !DocumentoVisivel(resolver, pasta))
                 return new DiagnosticoPastaEspelho(CodigoFalhaPastaEspelho.PastaApagada, false);
 
-            var busca = Buscar(resolver, arvore, treeId, NomeArquivo);
-            if (busca.Falha is CodigoFalhaPastaEspelho falha)
+            var varredura = InspecionarFilhos(resolver, arvore, treeId, NomeArquivo);
+            if (varredura.Falha is CodigoFalhaPastaEspelho falha)
                 return new DiagnosticoPastaEspelho(falha, false);
 
-            return new DiagnosticoPastaEspelho(CodigoFalhaPastaEspelho.Nenhuma, busca.Quantidade > 0);
+            return new DiagnosticoPastaEspelho(
+                CodigoFalhaPastaEspelho.Nenhuma,
+                varredura.ArquivoFinal,
+                varredura.Residuo,
+                varredura.ArquivoFinal ? null : varredura.NomeReserva);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -87,9 +90,10 @@ public sealed class VolumePastaEspelhoAndroid : IVolumePastaEspelho
         if (!TentarAbrir(out var resolver, out var arvore, out var codigo))
             return Task.FromResult(ResultadoRenomeacaoVolume.Falha(codigo));
 
+        string? treeId = null;
         try
         {
-            var treeId = DocumentsContract.GetTreeDocumentId(arvore);
+            treeId = DocumentsContract.GetTreeDocumentId(arvore);
             if (string.IsNullOrEmpty(treeId))
                 return Task.FromResult(ResultadoRenomeacaoVolume.Falha(CodigoFalhaPastaEspelho.PastaApagada));
 
@@ -107,29 +111,13 @@ public sealed class VolumePastaEspelhoAndroid : IVolumePastaEspelho
             if (origem.Quantidade != 1)
                 return Task.FromResult(ResultadoRenomeacaoVolume.Falha(CodigoFalhaPastaEspelho.Indisponivel));
 
-            if (origem.Flags is DocumentContractFlags flags && !flags.HasFlag(DocumentContractFlags.SupportsRename))
-                return Task.FromResult(ResultadoRenomeacaoVolume.Falha(CodigoFalhaPastaEspelho.ProvedorSemTroca));
-
             var renomeado = DocumentsContract.RenameDocument(resolver, origem.Uri, nomeNovo);
             if (renomeado is null)
-                return Task.FromResult(ResultadoRenomeacaoVolume.Falha(CodigoFalhaPastaEspelho.ProvedorSemTroca));
+                return Task.FromResult(AvaliarDepoisDoRename(resolver, arvore, treeId, nomeAtual, nomeNovo)
+                    ?? ResultadoRenomeacaoVolume.Falha(CodigoFalhaPastaEspelho.ProvedorSemTroca));
 
-            var origemDepois = Buscar(resolver, arvore, treeId, nomeAtual);
-            var destinoDepois = Buscar(resolver, arvore, treeId, nomeNovo);
-            if (origemDepois.Falha is CodigoFalhaPastaEspelho falhaPosOrigem)
-                return Task.FromResult(ResultadoRenomeacaoVolume.Falha(falhaPosOrigem));
-            if (destinoDepois.Falha is CodigoFalhaPastaEspelho falhaPosDestino)
-                return Task.FromResult(ResultadoRenomeacaoVolume.Falha(falhaPosDestino));
-
-            if (destinoDepois.Quantidade == 1 && origemDepois.Quantidade == 0)
-                return Task.FromResult(ResultadoRenomeacaoVolume.Ok());
-
-            // Os dois nomes visíveis: o rename virou cópia e a origem ficou.
-            // Não apagar nenhum dos dois. O protocolo é quem decide o resíduo.
-            if (destinoDepois.Quantidade > 0 && origemDepois.Quantidade > 0)
-                return Task.FromResult(ResultadoRenomeacaoVolume.CopiaSemExcluirOrigem());
-
-            return Task.FromResult(ResultadoRenomeacaoVolume.Falha(CodigoFalhaPastaEspelho.TrocaNaoConfirmada));
+            return Task.FromResult(AvaliarDepoisDoRename(resolver, arvore, treeId, nomeAtual, nomeNovo)
+                ?? ResultadoRenomeacaoVolume.Falha(CodigoFalhaPastaEspelho.TrocaNaoConfirmada));
         }
         catch (OperationCanceledException)
         {
@@ -137,6 +125,13 @@ public sealed class VolumePastaEspelhoAndroid : IVolumePastaEspelho
         }
         catch (Exception ex)
         {
+            if (!string.IsNullOrEmpty(treeId))
+            {
+                var depois = AvaliarDepoisDoRename(resolver, arvore, treeId, nomeAtual, nomeNovo);
+                if (depois is not null)
+                    return Task.FromResult(depois);
+            }
+
             return Task.FromResult(ResultadoRenomeacaoVolume.Falha(Classificar(ex, resolver, arvore, null)));
         }
     }
@@ -189,7 +184,9 @@ public sealed class VolumePastaEspelhoAndroid : IVolumePastaEspelho
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!string.Equals(nome, NomeArquivo, StringComparison.Ordinal))
+        var podeLer = string.Equals(nome, NomeArquivo, StringComparison.Ordinal)
+            || NomeTemporarioEspelho.EhReservaDesteApp(nome, NomeArquivo);
+        if (!podeLer)
             return ResultadoOperacaoPasta.Falha(CodigoFalhaPastaEspelho.NomeRecusado);
 
         if (!TentarAbrir(out var resolver, out var arvore, out var codigo))
@@ -271,14 +268,14 @@ public sealed class VolumePastaEspelhoAndroid : IVolumePastaEspelho
 
             if (!NomeConfere(resolver, criado, nomeTemporario))
             {
-                DescartarDocumentoCriadoAgora(resolver, criado);
+                // O URI pode ser o espelho que já existia. Na dúvida, não apagar.
                 return ResultadoOperacaoPasta.Falha(CodigoFalhaPastaEspelho.ProvedorSemTroca);
             }
 
             var saida = resolver.OpenOutputStream(criado);
             if (saida is null)
             {
-                DescartarDocumentoCriadoAgora(resolver, criado);
+                DescartarSeForOTemporario(resolver, criado, nomeTemporario);
                 return ResultadoOperacaoPasta.Falha(CodigoFalhaPastaEspelho.FalhaDeEscrita);
             }
 
@@ -300,14 +297,12 @@ public sealed class VolumePastaEspelhoAndroid : IVolumePastaEspelho
         }
         catch (OperationCanceledException)
         {
-            if (criado is not null)
-                DescartarDocumentoCriadoAgora(resolver, criado);
             throw;
         }
         catch (Exception ex)
         {
             if (criado is not null)
-                DescartarDocumentoCriadoAgora(resolver, criado);
+                DescartarSeForOTemporario(resolver, criado, nomeTemporario);
 
             return ResultadoOperacaoPasta.Falha(Classificar(ex, resolver, arvore, null));
         }
@@ -359,8 +354,11 @@ public sealed class VolumePastaEspelhoAndroid : IVolumePastaEspelho
         }
     }
 
-    private static void DescartarDocumentoCriadoAgora(ContentResolver resolver, AndroidUri uri)
+    private static void DescartarSeForOTemporario(ContentResolver resolver, AndroidUri uri, string nomeTemporario)
     {
+        if (!NomeConfere(resolver, uri, nomeTemporario))
+            return;
+
         try
         {
             DocumentsContract.DeleteDocument(resolver, uri);
@@ -368,6 +366,104 @@ public sealed class VolumePastaEspelhoAndroid : IVolumePastaEspelho
         catch (Exception)
         {
         }
+    }
+
+    private static ResultadoRenomeacaoVolume? AvaliarDepoisDoRename(
+        ContentResolver resolver,
+        AndroidUri arvore,
+        string treeId,
+        string nomeAtual,
+        string nomeNovo)
+    {
+        var origemDepois = Buscar(resolver, arvore, treeId, nomeAtual);
+        var destinoDepois = Buscar(resolver, arvore, treeId, nomeNovo);
+        if (origemDepois.Falha is not null || destinoDepois.Falha is not null)
+            return null;
+
+        if (destinoDepois.Quantidade == 1 && origemDepois.Quantidade == 0)
+            return ResultadoRenomeacaoVolume.Ok();
+
+        if (destinoDepois.Quantidade > 0 && origemDepois.Quantidade > 0)
+            return ResultadoRenomeacaoVolume.CopiaSemExcluirOrigem();
+
+        if (destinoDepois.Quantidade > 0 && origemDepois.Quantidade == 0)
+            return ResultadoRenomeacaoVolume.FalhaAposEfetuar(CodigoFalhaPastaEspelho.TrocaNaoConfirmada);
+
+        return null;
+    }
+
+    private static Varredura InspecionarFilhos(
+        ContentResolver resolver,
+        AndroidUri arvore,
+        string treeId,
+        string nomeFinal)
+    {
+        ICursor? cursor = null;
+        try
+        {
+            var filhos = DocumentsContract.BuildChildDocumentsUriUsingTree(arvore, treeId);
+            if (filhos is null)
+                return Varredura.ComFalha(CodigoFalhaPastaEspelho.PastaApagada);
+
+            cursor = resolver.Query(
+                filhos,
+                [DocumentsContract.Document.ColumnDisplayName],
+                null,
+                null,
+                null);
+            if (cursor is null)
+                return Varredura.ComFalha(CodigoFalhaPastaEspelho.PastaApagada);
+
+            var indiceNome = cursor.GetColumnIndex(DocumentsContract.Document.ColumnDisplayName);
+            if (indiceNome < 0)
+                return Varredura.ComFalha(CodigoFalhaPastaEspelho.Indisponivel);
+
+            var arquivoFinal = false;
+            var residuo = false;
+            string? nomeReserva = null;
+            while (cursor.MoveToNext())
+            {
+                if (cursor.IsNull(indiceNome))
+                    continue;
+
+                var exibicao = cursor.GetString(indiceNome);
+                if (string.Equals(exibicao, nomeFinal, StringComparison.Ordinal))
+                {
+                    arquivoFinal = true;
+                    continue;
+                }
+
+                if (NomeTemporarioEspelho.EhReservaDesteApp(exibicao, nomeFinal))
+                {
+                    residuo = true;
+                    nomeReserva ??= exibicao;
+                    continue;
+                }
+
+                if (NomeTemporarioEspelho.EhTemporarioDesteApp(exibicao, nomeFinal))
+                    residuo = true;
+            }
+
+            return new Varredura(null, arquivoFinal, residuo, nomeReserva);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return Varredura.ComFalha(ClassificarBusca(ex));
+        }
+        finally
+        {
+            cursor?.Close();
+            cursor?.Dispose();
+        }
+    }
+
+    private readonly record struct Varredura(
+        CodigoFalhaPastaEspelho? Falha,
+        bool ArquivoFinal,
+        bool Residuo,
+        string? NomeReserva)
+    {
+        public static Varredura ComFalha(CodigoFalhaPastaEspelho codigo) => new(codigo, false, false, null);
     }
 
     private bool TentarAbrir(out ContentResolver resolver, out AndroidUri arvore, out CodigoFalhaPastaEspelho codigo)
