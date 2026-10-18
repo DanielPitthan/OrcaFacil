@@ -4,9 +4,10 @@ namespace OrcaFacil.Core.Armazenamento.Espelho.Pasta;
 
 /// <summary>
 /// Traduz o diagnóstico da pasta para o que o coordenador já sabe fazer.
-/// Pasta não escolhida, ou pasta livre sem arquivo, é espelho ausente.
-/// Permissão revogada, pasta apagada, falta de espaço ou indisponibilidade
-/// contam como espelho presente e ilegível, para a matriz não semear no lugar.
+/// Pasta não escolhida, ou pasta livre sem arquivo deste app, é espelho ausente.
+/// Reserva ou temporário deste app sem o nome definitivo conta como presente e ilegível:
+/// a matriz abre a recuperação e não semeia. Permissão revogada, pasta apagada,
+/// falta de espaço ou indisponibilidade também não parecem instalação nova.
 /// </summary>
 public static class MapeamentoLeituraPastaEspelho
 {
@@ -14,7 +15,7 @@ public static class MapeamentoLeituraPastaEspelho
     {
         ArgumentNullException.ThrowIfNull(diagnostico);
         if (diagnostico.AcessoLivre)
-            return diagnostico.ArquivoNoNomeFinal;
+            return diagnostico.ArquivoNoNomeFinal || diagnostico.ResiduoDesteApp;
 
         return diagnostico.Codigo != CodigoFalhaPastaEspelho.PastaNaoEscolhida;
     }
@@ -83,12 +84,44 @@ public sealed class EspelhoNaPastaUsuario : IEspelhoDados
             return bloqueio;
 
         if (!diagnostico.ArquivoNoNomeFinal)
-            return LeituraEspelho.Ilegivel(MensagensPastaEspelho.Para(CodigoFalhaPastaEspelho.ArquivoAusente));
+        {
+            if (diagnostico.ResiduoDesteApp)
+            {
+                if (diagnostico.NomeReserva is not null)
+                    await TentarLerReservaSemApagarAsync(diagnostico.NomeReserva, cancellationToken);
 
+                return LeituraEspelho.Ilegivel(
+                    MensagensPastaEspelho.Para(CodigoFalhaPastaEspelho.EspelhoPreservadoForaDoNome));
+            }
+
+            return LeituraEspelho.Ilegivel(MensagensPastaEspelho.Para(CodigoFalhaPastaEspelho.ArquivoAusente));
+        }
+
+        return await LerNomeAsync(_volume.NomeArquivo, cancellationToken);
+    }
+
+    private async Task TentarLerReservaSemApagarAsync(string nomeReserva, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await LerNomeAsync(nomeReserva, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            // A reserva fica na pasta. A leitura do coordenador continua ilegível.
+        }
+    }
+
+    private async Task<LeituraEspelho> LerNomeAsync(string nome, CancellationToken cancellationToken)
+    {
         var local = _area.CriarArquivo();
         try
         {
-            var copia = await _volume.CopiarParaLocalAsync(_volume.NomeArquivo, local, cancellationToken);
+            var copia = await _volume.CopiarParaLocalAsync(nome, local, cancellationToken);
             if (!copia.Sucesso)
                 return LeituraEspelho.Ilegivel(copia.Mensagem);
 

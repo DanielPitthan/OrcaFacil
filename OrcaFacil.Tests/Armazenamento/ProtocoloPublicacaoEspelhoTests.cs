@@ -158,6 +158,90 @@ public class ProtocoloPublicacaoEspelhoTests
     }
 
     [Fact]
+    public async Task ParqueJaRenomeadoEFalha_NaoApaga_EReservaFicaVisivel()
+    {
+        var volume = new VolumeMemoria { EfetuarParqueEFalhar = true };
+        volume.Arquivos[volume.NomeArquivo] = [4, 4];
+        var protocolo = Protocolo(volume);
+
+        var resultado = await protocolo.PublicarAsync(Arquivo([8]));
+
+        Assert.Equal(CodigoFalhaPastaEspelho.TrocaNaoConfirmada, resultado.Codigo);
+        Assert.False(resultado.Sucesso);
+        Assert.Empty(volume.Apagados);
+        Assert.False(volume.Arquivos.ContainsKey(volume.NomeArquivo));
+        var reserva = Assert.Single(volume.Arquivos.Keys, nome => NomeTemporarioEspelho.EhReservaDesteApp(nome, volume.NomeArquivo));
+        Assert.Equal(new byte[] { 4, 4 }, volume.Arquivos[reserva]);
+        var temporario = Assert.Single(volume.Arquivos.Keys, nome => NomeTemporarioEspelho.EhTemporarioDesteApp(nome, volume.NomeArquivo));
+        Assert.Equal(new byte[] { 8 }, volume.Arquivos[temporario]);
+        Assert.True(MapeamentoLeituraPastaEspelho.ExisteParaOCoordenador(volume.Consultar()));
+        Assert.Equal(new byte[] { 9 }, volume.Arquivos["foto.jpg"]);
+    }
+
+    [Fact]
+    public async Task PromocaoJaRenomeadaEFalha_MantemDefinitivoNovoEReserva()
+    {
+        var volume = new VolumeMemoria { EfetuarPromocaoEFalhar = true };
+        volume.Arquivos[volume.NomeArquivo] = [1, 1];
+        var protocolo = Protocolo(volume);
+
+        var resultado = await protocolo.PublicarAsync(Arquivo([6, 6]));
+
+        Assert.Equal(CodigoFalhaPastaEspelho.TrocaNaoConfirmada, resultado.Codigo);
+        Assert.Empty(volume.Apagados);
+        Assert.Equal(new byte[] { 6, 6 }, volume.Arquivos[volume.NomeArquivo]);
+        var reserva = Assert.Single(volume.Arquivos.Keys, nome => NomeTemporarioEspelho.EhReservaDesteApp(nome, volume.NomeArquivo));
+        Assert.Equal(new byte[] { 1, 1 }, volume.Arquivos[reserva]);
+        Assert.Equal(new byte[] { 9 }, volume.Arquivos["foto.jpg"]);
+    }
+
+    [Fact]
+    public async Task CancelarDepoisDoParque_NaoApagaNada()
+    {
+        var volume = new VolumeMemoria();
+        volume.Arquivos[volume.NomeArquivo] = [2, 2];
+        var cts = new CancellationTokenSource();
+        volume.DepoisDoParque = () => cts.Cancel();
+        var protocolo = Protocolo(volume);
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => protocolo.PublicarAsync(Arquivo([3]), cts.Token));
+
+        Assert.Empty(volume.Apagados);
+        Assert.False(volume.Arquivos.ContainsKey(volume.NomeArquivo));
+        var reserva = Assert.Single(volume.Arquivos.Keys, nome => NomeTemporarioEspelho.EhReservaDesteApp(nome, volume.NomeArquivo));
+        Assert.Equal(new byte[] { 2, 2 }, volume.Arquivos[reserva]);
+        Assert.Contains(volume.Arquivos.Keys, nome => NomeTemporarioEspelho.EhTemporarioDesteApp(nome, volume.NomeArquivo));
+        Assert.True(MapeamentoLeituraPastaEspelho.ExisteParaOCoordenador(volume.Consultar()));
+        Assert.Equal(new byte[] { 9 }, volume.Arquivos["foto.jpg"]);
+    }
+
+    [Fact]
+    public async Task Publicacoes_NaoConcorrem()
+    {
+        var volume = new VolumeMemoria();
+        var segurar = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        volume.SegurarCriacao = segurar;
+        var protocolo = Protocolo(volume);
+
+        var primeira = protocolo.PublicarAsync(Arquivo([1, 2]));
+        await volume.CriacaoEntrou.Task;
+
+        var segunda = protocolo.PublicarAsync(Arquivo([3, 4]));
+        await Task.Yield();
+        Assert.Equal(1, volume.CriacoesIniciadas);
+        Assert.Equal(1, volume.Consultas);
+        Assert.False(segunda.IsCompleted);
+
+        segurar.TrySetResult(true);
+        await primeira;
+        await segunda;
+
+        Assert.Equal(2, volume.CriacoesIniciadas);
+        Assert.Equal(new byte[] { 3, 4 }, volume.Arquivos[volume.NomeArquivo]);
+        Assert.Equal(new byte[] { 9 }, volume.Arquivos["foto.jpg"]);
+    }
+
+    [Fact]
     public async Task RenameViraCopia_NaoApagaNada_EDefinitivoTemOsBytesNovos()
     {
         var volume = new VolumeMemoria { PromocaoViraCopia = true };
@@ -272,11 +356,25 @@ internal sealed class VolumeMemoria : IVolumePastaEspelho
 
         public bool FalharParque { get; set; }
 
+        public bool EfetuarParqueEFalhar { get; set; }
+
         public bool ParqueViraCopia { get; set; }
 
         public bool PromocaoViraCopia { get; set; }
 
         public bool FalharPromocao { get; set; }
+
+        public bool EfetuarPromocaoEFalhar { get; set; }
+
+        public Action? DepoisDoParque { get; set; }
+
+        public TaskCompletionSource<bool>? SegurarCriacao { get; set; }
+
+        public TaskCompletionSource<bool> CriacaoEntrou { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public int CriacoesIniciadas { get; private set; }
+
+        public int Consultas { get; private set; }
 
         public bool FalharVolta { get; set; }
 
@@ -292,23 +390,50 @@ internal sealed class VolumeMemoria : IVolumePastaEspelho
 
         public DiagnosticoPastaEspelho Consultar()
         {
+            Consultas++;
             if (EstourarConsulta)
                 throw new InvalidOperationException("consulta da pasta");
 
             if (Acesso != CodigoFalhaPastaEspelho.Nenhuma)
                 return new DiagnosticoPastaEspelho(Acesso, false);
 
-            return new DiagnosticoPastaEspelho(CodigoFalhaPastaEspelho.Nenhuma, Arquivos.ContainsKey(NomeArquivo));
+            var final = Arquivos.ContainsKey(NomeArquivo);
+            string? reserva = null;
+            var residuo = false;
+            foreach (var nome in Arquivos.Keys)
+            {
+                if (NomeTemporarioEspelho.EhReservaDesteApp(nome, NomeArquivo))
+                {
+                    residuo = true;
+                    reserva ??= nome;
+                }
+                else if (NomeTemporarioEspelho.EhTemporarioDesteApp(nome, NomeArquivo))
+                {
+                    residuo = true;
+                }
+            }
+
+            return new DiagnosticoPastaEspelho(
+                CodigoFalhaPastaEspelho.Nenhuma,
+                final,
+                residuo,
+                final ? null : reserva);
         }
 
-        public Task<ResultadoOperacaoPasta> CriarTemporarioAsync(
+        public async Task<ResultadoOperacaoPasta> CriarTemporarioAsync(
             string nomeTemporario,
             string arquivoOrigemLocal,
             CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var recusa = RegrasPastaEspelho.ImpedirCriacao(NomeArquivo, nomeTemporario);
             if (recusa is CodigoFalhaPastaEspelho codigo)
-                return Task.FromResult(ResultadoOperacaoPasta.Falha(codigo));
+                return ResultadoOperacaoPasta.Falha(codigo);
+
+            CriacoesIniciadas++;
+            CriacaoEntrou.TrySetResult(true);
+            if (SegurarCriacao is not null)
+                await SegurarCriacao.Task.WaitAsync(cancellationToken);
 
             if (ExcecaoAoCriar is not null)
                 throw ExcecaoAoCriar;
@@ -318,11 +443,11 @@ internal sealed class VolumeMemoria : IVolumePastaEspelho
                 if (DeixarParcialAoFalharCriacao)
                     Arquivos[nomeTemporario] = [0];
 
-                return Task.FromResult(ResultadoOperacaoPasta.Falha(falha));
+                return ResultadoOperacaoPasta.Falha(falha);
             }
 
             Arquivos[nomeTemporario] = File.ReadAllBytes(arquivoOrigemLocal);
-            return Task.FromResult(ResultadoOperacaoPasta.Ok());
+            return ResultadoOperacaoPasta.Ok();
         }
 
         public Task<ResultadoRenomeacaoVolume> RenomearAsync(
@@ -330,6 +455,7 @@ internal sealed class VolumeMemoria : IVolumePastaEspelho
             string nomeNovo,
             CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!RegrasPastaEspelho.PodeRenomear(NomeArquivo, nomeAtual, nomeNovo))
                 return Task.FromResult(ResultadoRenomeacaoVolume.Falha(CodigoFalhaPastaEspelho.NomeRecusado));
 
@@ -344,10 +470,14 @@ internal sealed class VolumeMemoria : IVolumePastaEspelho
                 return Task.FromResult(ResultadoRenomeacaoVolume.Falha(CodigoFalhaPastaEspelho.TrocaNaoConfirmada));
             if (parque && FalharParque)
                 return Task.FromResult(ResultadoRenomeacaoVolume.Falha(CodigoFalhaPastaEspelho.ProvedorSemTroca));
+            if (parque && EfetuarParqueEFalhar)
+                return MoverEFalhar(nomeAtual, nomeNovo);
             if ((parque && ParqueViraCopia) || (promocao && PromocaoViraCopia))
                 return CopiarSemExcluirOrigem(nomeAtual, nomeNovo);
             if (promocao && FalharPromocao)
                 return Task.FromResult(ResultadoRenomeacaoVolume.Falha(CodigoFalhaPastaEspelho.ProvedorSemTroca));
+            if (promocao && EfetuarPromocaoEFalhar)
+                return MoverEFalhar(nomeAtual, nomeNovo);
             if (volta && FalharVolta)
                 return Task.FromResult(ResultadoRenomeacaoVolume.Falha(CodigoFalhaPastaEspelho.ProvedorSemTroca));
 
@@ -356,7 +486,20 @@ internal sealed class VolumeMemoria : IVolumePastaEspelho
 
             Arquivos.Remove(nomeAtual);
             Arquivos[nomeNovo] = bytes;
+            if (parque)
+                DepoisDoParque?.Invoke();
+
             return Task.FromResult(ResultadoRenomeacaoVolume.Ok());
+        }
+
+        private Task<ResultadoRenomeacaoVolume> MoverEFalhar(string nomeAtual, string nomeNovo)
+        {
+            if (!Arquivos.TryGetValue(nomeAtual, out var bytes))
+                return Task.FromResult(ResultadoRenomeacaoVolume.Falha(CodigoFalhaPastaEspelho.ArquivoAusente));
+
+            Arquivos.Remove(nomeAtual);
+            Arquivos[nomeNovo] = bytes.ToArray();
+            return Task.FromResult(ResultadoRenomeacaoVolume.FalhaAposEfetuar(CodigoFalhaPastaEspelho.TrocaNaoConfirmada));
         }
 
         private Task<ResultadoRenomeacaoVolume> CopiarSemExcluirOrigem(string nomeAtual, string nomeNovo)
@@ -405,6 +548,12 @@ internal sealed class VolumeMemoria : IVolumePastaEspelho
             string caminhoLocal,
             CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            var podeLer = string.Equals(nome, NomeArquivo, StringComparison.Ordinal)
+                || NomeTemporarioEspelho.EhReservaDesteApp(nome, NomeArquivo);
+            if (!podeLer)
+                return Task.FromResult(ResultadoOperacaoPasta.Falha(CodigoFalhaPastaEspelho.NomeRecusado));
+
             if (!Arquivos.TryGetValue(nome, out var bytes))
                 return Task.FromResult(ResultadoOperacaoPasta.Falha(CodigoFalhaPastaEspelho.ArquivoAusente));
 
@@ -478,6 +627,56 @@ public class EspelhoNaPastaUsuarioTests
         Assert.Equal(0, limpeza.RemocoesEspelho);
         Assert.Empty(volume.Apagados);
         Assert.Equal(new byte[] { 9 }, volume.Arquivos["foto.jpg"]);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task PastaSoComReservaOuTemporario_NaoSemeiaNemApaga(bool reserva)
+    {
+        var volume = new VolumeMemoria();
+        var nome = reserva
+            ? NomeTemporarioEspelho.CriarReserva(volume.NomeArquivo, Guid.NewGuid())
+            : NomeTemporarioEspelho.Criar(volume.NomeArquivo, Guid.NewGuid());
+        volume.Arquivos[nome] = [5, 5, 5];
+        var semeadura = new SemeaduraContada();
+        var migracao = new MigracaoQueNaoRoda();
+        var limpeza = new LimpezaContada();
+        var preservacao = new PreservacaoContada();
+        var restauracao = new RestauracaoContada();
+        var perfil = new PerfilQueNaoRoda();
+        var leitor = new LeitorFalso();
+        var espelho = new EspelhoNaPastaUsuario(volume, leitor, new AreaFalsa());
+        var coordenador = new CoordenadorArmazenamento(
+            new SondaAusente(),
+            espelho,
+            new VersaoFixa(),
+            restauracao,
+            migracao,
+            semeadura,
+            limpeza,
+            new OpcoesPreparoBanco { VersaoAplicativo = "1.0-teste" },
+            preservacao,
+            perfil);
+
+        Assert.True(espelho.Existe());
+        var resultado = await coordenador.PrepararAsync();
+
+        Assert.Equal(AcaoArmazenamento.TelaDeRecuperacao, resultado.Acao);
+        Assert.Equal(SituacaoBancoVivo.Ausente, resultado.Estado!.BancoVivo);
+        Assert.Equal(SituacaoEspelho.Corrompido, resultado.Estado.Espelho);
+        Assert.Equal(0, semeadura.Chamadas);
+        Assert.Equal(0, migracao.Chamadas);
+        Assert.Equal(0, restauracao.Chamadas);
+        Assert.Equal(0, preservacao.Chamadas);
+        Assert.Equal(0, perfil.Chamadas);
+        Assert.Equal(0, limpeza.RemocoesBanco);
+        Assert.Equal(0, limpeza.RemocoesEspelho);
+        Assert.Empty(volume.Apagados);
+        Assert.Equal(new byte[] { 5, 5, 5 }, volume.Arquivos[nome]);
+        Assert.Equal(new byte[] { 9 }, volume.Arquivos["foto.jpg"]);
+        if (reserva)
+            Assert.Equal(1, leitor.Chamadas);
     }
 
     [Fact]

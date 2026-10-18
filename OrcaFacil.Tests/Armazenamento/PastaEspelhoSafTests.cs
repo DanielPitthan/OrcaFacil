@@ -120,8 +120,16 @@ public class ClassificadorFalhaPastaEspelhoTests
             ClassificadorFalhaPastaEspelho.Classificar(new SinalFalhaPasta("IOException", "No space left on device (ENOSPC)", true, true)));
 
         Assert.Equal(
-            CodigoFalhaPastaEspelho.PastaApagada,
+            CodigoFalhaPastaEspelho.ArquivoAusente,
             ClassificadorFalhaPastaEspelho.Classificar(new SinalFalhaPasta("FileNotFoundException", "No such file or directory", true, null)));
+        Assert.DoesNotContain(
+            "apagada",
+            MensagensPastaEspelho.Para(CodigoFalhaPastaEspelho.ArquivoAusente),
+            StringComparison.OrdinalIgnoreCase);
+
+        Assert.Equal(
+            CodigoFalhaPastaEspelho.PastaApagada,
+            ClassificadorFalhaPastaEspelho.Classificar(new SinalFalhaPasta("StaleDataException", "ENOENT", true, null)));
 
         Assert.Equal(
             CodigoFalhaPastaEspelho.PastaApagada,
@@ -199,6 +207,8 @@ public class MapeamentoLeituraPastaEspelhoTests
             new DiagnosticoPastaEspelho(CodigoFalhaPastaEspelho.Nenhuma, false)));
         Assert.True(MapeamentoLeituraPastaEspelho.ExisteParaOCoordenador(
             new DiagnosticoPastaEspelho(CodigoFalhaPastaEspelho.Nenhuma, true)));
+        Assert.True(MapeamentoLeituraPastaEspelho.ExisteParaOCoordenador(
+            new DiagnosticoPastaEspelho(CodigoFalhaPastaEspelho.Nenhuma, false, residuoDesteApp: true)));
 
         foreach (var codigo in Enum.GetValues<CodigoFalhaPastaEspelho>())
         {
