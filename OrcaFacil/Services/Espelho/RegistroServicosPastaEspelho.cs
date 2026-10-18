@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using OrcaFacil.Core.Armazenamento;
 using OrcaFacil.Core.Armazenamento.Espelho;
 using OrcaFacil.Core.Armazenamento.Espelho.Pasta;
+using OrcaFacil.Core.Data;
 #if ANDROID
 using OrcaFacil.Platforms.Android.Espelho;
 #endif
@@ -13,6 +14,13 @@ namespace OrcaFacil.Services.Espelho;
 /// <c>InicializacaoApp</c> não depende destes serviços e o startup segue como estava.
 /// A tela que chama o seletor fica para o PR seguinte.
 /// </summary>
+/// <remarks>
+/// O <see cref="CoordenadorArmazenamento"/> não entra neste registro. Quando o PR da tela
+/// o montar, o construtor exige nove argumentos: as sete portas anteriores mais
+/// <see cref="OpcoesPreparoBanco"/> (com <see cref="OpcoesPreparoBanco.VersaoAplicativo"/>)
+/// e <see cref="IPreservacaoBancoVivo"/>. <see cref="IMigracaoBancoVivo.MigrarEVerificarAsync"/>
+/// recebe essas opções. <see cref="EspelhoNaPastaUsuario"/> só implementa <see cref="IEspelhoDados"/>.
+/// </remarks>
 public static class RegistroServicosPastaEspelho
 {
     public static void Registrar(IServiceCollection services)

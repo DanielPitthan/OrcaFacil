@@ -373,20 +373,32 @@ public class EspelhoNaPastaUsuarioTests
     {
         var volume = new VolumeMemoria { Acesso = codigo };
         var semeadura = new SemeaduraContada();
+        var migracao = new MigracaoQueNaoRoda();
+        var limpeza = new LimpezaContada();
+        var preservacao = new PreservacaoContada();
+        var restauracao = new RestauracaoContada();
         var coordenador = new CoordenadorArmazenamento(
             new SondaAusente(),
             new EspelhoNaPastaUsuario(volume, new LeitorFalso(), new AreaFalsa()),
             new VersaoFixa(),
-            new RestauracaoQueNaoRoda(),
-            new MigracaoQueNaoRoda(),
+            restauracao,
+            migracao,
             semeadura,
-            new LimpezaQueNaoRoda());
+            limpeza,
+            new OpcoesPreparoBanco { VersaoAplicativo = "1.0-teste" },
+            preservacao);
 
         var resultado = await coordenador.PrepararAsync();
 
-        Assert.NotEqual(AcaoArmazenamento.Semear, resultado.Acao);
         Assert.Equal(AcaoArmazenamento.TelaDeRecuperacao, resultado.Acao);
+        Assert.Equal(SituacaoBancoVivo.Ausente, resultado.Estado!.BancoVivo);
+        Assert.Equal(SituacaoEspelho.Corrompido, resultado.Estado.Espelho);
         Assert.Equal(0, semeadura.Chamadas);
+        Assert.Equal(0, migracao.Chamadas);
+        Assert.Equal(0, restauracao.Chamadas);
+        Assert.Equal(0, preservacao.Chamadas);
+        Assert.Equal(0, limpeza.RemocoesBanco);
+        Assert.Equal(0, limpeza.RemocoesEspelho);
         Assert.Empty(volume.Apagados);
         Assert.Equal(new byte[] { 9 }, volume.Arquivos["foto.jpg"]);
     }
@@ -442,16 +454,40 @@ public class EspelhoNaPastaUsuarioTests
         public int Atual => 1;
     }
 
-    private sealed class RestauracaoQueNaoRoda : IRestauracaoEspelho
+    private sealed class RestauracaoContada : IRestauracaoEspelho
     {
+        public int Chamadas { get; private set; }
+
         public Task<ResultadoRestauracao> RestaurarAsync(CancellationToken cancellationToken = default)
-            => throw new InvalidOperationException("não devia restaurar");
+        {
+            Chamadas++;
+            return Task.FromResult(ResultadoRestauracao.Falha("não devia restaurar"));
+        }
     }
 
     private sealed class MigracaoQueNaoRoda : IMigracaoBancoVivo
     {
-        public Task<ResultadoPreparoBanco> MigrarEVerificarAsync(CancellationToken cancellationToken = default)
-            => throw new InvalidOperationException("não devia migrar");
+        public int Chamadas { get; private set; }
+
+        public Task<ResultadoPreparoBanco> MigrarEVerificarAsync(
+            OpcoesPreparoBanco opcoes,
+            CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(opcoes);
+            Chamadas++;
+            throw new InvalidOperationException("não devia migrar");
+        }
+    }
+
+    private sealed class PreservacaoContada : IPreservacaoBancoVivo
+    {
+        public int Chamadas { get; private set; }
+
+        public Task<ResultadoPreservacao> PreservarAsync(CancellationToken cancellationToken = default)
+        {
+            Chamadas++;
+            return Task.FromResult(ResultadoPreservacao.Falha("não devia preservar"));
+        }
     }
 
     private sealed class SemeaduraContada : ISemeaduraDados
@@ -465,13 +501,23 @@ public class EspelhoNaPastaUsuarioTests
         }
     }
 
-    private sealed class LimpezaQueNaoRoda : ILimpezaTotalDados
+    private sealed class LimpezaContada : ILimpezaTotalDados
     {
+        public int RemocoesBanco { get; private set; }
+
+        public int RemocoesEspelho { get; private set; }
+
         public Task RemoverBancoVivoAsync(CancellationToken cancellationToken = default)
-            => throw new InvalidOperationException("não devia apagar o banco");
+        {
+            RemocoesBanco++;
+            return Task.CompletedTask;
+        }
 
         public Task RemoverEspelhoAsync(CancellationToken cancellationToken = default)
-            => throw new InvalidOperationException("não devia apagar o espelho");
+        {
+            RemocoesEspelho++;
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class LeitorFalso : ILeitorEspelhoLocal
