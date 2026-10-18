@@ -38,4 +38,21 @@ public static class RegrasPastaEspelho
         => NomeTemporarioEspelho.EhNomeDesteApp(nomeAtual, nomeFinal)
             && NomeTemporarioEspelho.EhNomeDesteApp(nomeNovo, nomeFinal)
             && !string.Equals(nomeAtual, nomeNovo, StringComparison.Ordinal);
+
+    /// <summary>
+    /// <c>DocumentsContract.Document.FLAG_SUPPORTS_RENAME</c> (1 &lt;&lt; 6).
+    /// </summary>
+    public const int FlagSupportsRename = 1 << 6;
+
+    /// <summary>
+    /// <c>ColumnFlags</c> nula ou sem o bit de rename recusa a troca antes de
+    /// <c>RenameDocument</c>.
+    /// </summary>
+    public static CodigoFalhaPastaEspelho? ImpedirRenameSemFlag(int? columnFlags)
+    {
+        if (columnFlags is null || (columnFlags.Value & FlagSupportsRename) == 0)
+            return CodigoFalhaPastaEspelho.ProvedorSemTroca;
+
+        return null;
+    }
 }

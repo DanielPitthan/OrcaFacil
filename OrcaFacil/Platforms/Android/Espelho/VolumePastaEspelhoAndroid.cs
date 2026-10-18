@@ -10,8 +10,8 @@ namespace OrcaFacil.Platforms.Android.Espelho;
 
 /// <summary>
 /// Pasta do espelho via SAF (<c>DocumentsContract</c> / <c>ContentResolver</c>).
-/// A troca é temporário e depois rename. Flag de rename ausente não impede a
-/// tentativa: o resultado da chamada é que decide.
+/// A troca é temporário e depois rename. <c>ColumnFlags</c> nula ou sem
+/// <c>SupportsRename</c> recusa com <c>ProvedorSemTroca</c> antes de <c>RenameDocument</c>.
 /// </summary>
 /// <remarks>
 /// Provedores como o Drive podem anunciar rename e ainda assim implementá-lo como
@@ -110,6 +110,10 @@ public sealed class VolumePastaEspelhoAndroid : IVolumePastaEspelho
                 return Task.FromResult(ResultadoRenomeacaoVolume.Falha(CodigoFalhaPastaEspelho.ArquivoAusente));
             if (origem.Quantidade != 1)
                 return Task.FromResult(ResultadoRenomeacaoVolume.Falha(CodigoFalhaPastaEspelho.Indisponivel));
+
+            if (RegrasPastaEspelho.ImpedirRenameSemFlag(origem.Flags is { } flagsDocumento ? (int)flagsDocumento : null)
+                is CodigoFalhaPastaEspelho semRename)
+                return Task.FromResult(ResultadoRenomeacaoVolume.Falha(semRename));
 
             var renomeado = DocumentsContract.RenameDocument(resolver, origem.Uri, nomeNovo);
             if (renomeado is null)

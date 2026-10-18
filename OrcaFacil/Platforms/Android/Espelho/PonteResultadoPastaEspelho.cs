@@ -7,6 +7,7 @@ namespace OrcaFacil.Platforms.Android.Espelho;
 
 /// <summary>
 /// Liga <c>ACTION_OPEN_DOCUMENT_TREE</c> ao <see cref="MainActivity.OnActivityResult"/>.
+/// Token já cancelado recusa antes de ocupar <c>_pendente</c> e antes de abrir a activity.
 /// A URI só segue na entrega em memória; este tipo não grava log.
 /// </summary>
 internal static class PonteResultadoPastaEspelho
@@ -21,6 +22,17 @@ internal static class PonteResultadoPastaEspelho
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(activity);
+        return AberturaSeletorPasta.ExecutarSeNaoCanceladoAsync(
+            cancellationToken,
+            () => SolicitarComPedidoAsync(activity, uriInicial, cancellationToken),
+            EntregaPickerPasta.Cancelada());
+    }
+
+    private static Task<EntregaPickerPasta> SolicitarComPedidoAsync(
+        Activity activity,
+        string? uriInicial,
+        CancellationToken cancellationToken)
+    {
         var tcs = new TaskCompletionSource<EntregaPickerPasta>(TaskCreationOptions.RunContinuationsAsynchronously);
         if (Interlocked.CompareExchange(ref _pendente, tcs, null) is not null)
             return Task.FromResult(EntregaPickerPasta.Ocupada());

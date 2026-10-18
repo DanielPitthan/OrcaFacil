@@ -102,6 +102,125 @@ public class RegrasPastaEspelhoTests
         Assert.False(RegrasPastaEspelho.PodeRenomear(Final, Final, "foto.jpg"));
         Assert.False(RegrasPastaEspelho.PodeRenomear(Final, Final, Final));
     }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(0)]
+    [InlineData(4)]
+    [InlineData(6)]
+    public void ColumnFlagsNulaOuSemSupportsRename_RecusaAntesDoRename(int? flags)
+    {
+        Assert.Equal(
+            CodigoFalhaPastaEspelho.ProvedorSemTroca,
+            RegrasPastaEspelho.ImpedirRenameSemFlag(flags));
+    }
+
+    [Theory]
+    [InlineData(RegrasPastaEspelho.FlagSupportsRename)]
+    [InlineData(RegrasPastaEspelho.FlagSupportsRename | 4)]
+    public void ColumnFlagsComSupportsRename_PermiteChamarRename(int flags)
+    {
+        Assert.Null(RegrasPastaEspelho.ImpedirRenameSemFlag(flags));
+        Assert.Equal(64, RegrasPastaEspelho.FlagSupportsRename);
+    }
+}
+
+public class AberturaSeletorPastaTests
+{
+    [Fact]
+    public async Task TokenJaCancelado_NaoOcupaOPedidoNemAbreAActivity()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+        var abriu = 0;
+
+        var resultado = await AberturaSeletorPasta.ExecutarSeNaoCanceladoAsync(
+            cts.Token,
+            () =>
+            {
+                abriu++;
+                return Task.FromResult("aberta");
+            },
+            "recusada");
+
+        Assert.Equal("recusada", resultado);
+        Assert.Equal(0, abriu);
+    }
+
+    [Fact]
+    public async Task TokenAtivo_AbreOSeletor()
+    {
+        var abriu = 0;
+
+        var resultado = await AberturaSeletorPasta.ExecutarSeNaoCanceladoAsync(
+            CancellationToken.None,
+            () =>
+            {
+                abriu++;
+                return Task.FromResult("aberta");
+            },
+            "recusada");
+
+        Assert.Equal("aberta", resultado);
+        Assert.Equal(1, abriu);
+    }
+
+    [Fact]
+    public void Volume_ConsultaAFlagAntesDeRenameDocument()
+    {
+        var fonte = File.ReadAllText(Path.Combine(
+            RaizDoRepositorio(),
+            "OrcaFacil",
+            "Platforms",
+            "Android",
+            "Espelho",
+            "VolumePastaEspelhoAndroid.cs"));
+        var inicio = fonte.IndexOf("RenomearAsync(", StringComparison.Ordinal);
+        var fim = fonte.IndexOf("DescartarTemporarioAsync(", inicio, StringComparison.Ordinal);
+        var metodo = fonte[inicio..fim];
+        var regra = metodo.IndexOf("ImpedirRenameSemFlag", StringComparison.Ordinal);
+        var rename = metodo.IndexOf("RenameDocument", StringComparison.Ordinal);
+
+        Assert.True(regra >= 0 && rename > regra);
+    }
+
+    [Fact]
+    public void Ponte_RecusaOTokenCanceladoAntesDeOcuparEDeAbrir()
+    {
+        var fonte = File.ReadAllText(Path.Combine(
+            RaizDoRepositorio(),
+            "OrcaFacil",
+            "Platforms",
+            "Android",
+            "Espelho",
+            "PonteResultadoPastaEspelho.cs"));
+        var inicio = fonte.IndexOf("SolicitarAsync(", StringComparison.Ordinal);
+        var pedido = fonte.IndexOf("SolicitarComPedidoAsync(", inicio + 1, StringComparison.Ordinal);
+        var entregar = fonte.IndexOf("TentarEntregar(", pedido, StringComparison.Ordinal);
+        var solicitar = fonte[inicio..pedido];
+        var corpo = fonte[pedido..entregar];
+
+        Assert.Contains("ExecutarSeNaoCanceladoAsync", solicitar, StringComparison.Ordinal);
+        Assert.DoesNotContain("CompareExchange", solicitar, StringComparison.Ordinal);
+        Assert.DoesNotContain("StartActivityForResult", solicitar, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Register(", solicitar, StringComparison.Ordinal);
+        Assert.Contains("CompareExchange(ref _pendente", corpo, StringComparison.Ordinal);
+        Assert.Contains("StartActivityForResult", corpo, StringComparison.Ordinal);
+    }
+
+    private static string RaizDoRepositorio()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "OrcaFacil.Core", "Armazenamento", "Espelho", "Pasta", "RegrasPastaEspelho.cs")))
+                return dir.FullName;
+
+            dir = dir.Parent;
+        }
+
+        throw new InvalidOperationException("Raiz do repositório não encontrada a partir de " + AppContext.BaseDirectory);
+    }
 }
 
 public class ClassificadorFalhaPastaEspelhoTests
