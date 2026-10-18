@@ -25,7 +25,7 @@ public static class VerificadorIntegridadeBanco
         var real = await LerEsquemaAsync(context, cancellationToken);
         var esperado = EsperadoPeloModelo(context);
         var conhecidas = context.Database.GetMigrations().ToList();
-        var objetosPorMigration = ObjetosPorMigration();
+        var objetosPorMigration = EfeitosPorMigration();
 
         var tabelasFaltando = esperado.Tabelas.Except(real.Tabelas, StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
         var colunasFaltando = esperado.Colunas.Except(real.Colunas, StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
@@ -38,14 +38,26 @@ public static class VerificadorIntegridadeBanco
 
         var pelaMetade = new List<string>();
         var historicoIncompleto = new List<string>();
+        var posicao = new Dictionary<string, int>(conhecidas.Count, StringComparer.Ordinal);
+        for (var i = 0; i < conhecidas.Count; i++)
+            posicao[conhecidas[i]] = i;
+
         foreach (var id in conhecidas)
         {
-            if (!objetosPorMigration.TryGetValue(id, out var objetos) || objetos.Criados.Count == 0)
+            if (!objetosPorMigration.TryGetValue(id, out var efeitos) || efeitos.Criados.Count == 0)
                 continue;
 
-            var removidosDepois = RemovidosPorMigrationPosterior(id, noHistorico, objetosPorMigration);
-            var presentes = objetos.Criados.Count(objeto => real.Contem(objeto) || removidosDepois.Contains(objeto));
-            var faltando = objetos.Criados.Count - presentes;
+            // Índice ou coluna trocados por uma migration posterior deixam de ser exigidos
+            // quando essa migration já está no histórico. Sem isso, AddItensFatura pareceria
+            // pela metade depois de AddIndiceHashImportacaoItemFatura dropar IX_ItensLancamento_TransacaoId.
+            var exigidos = efeitos.Criados
+                .Where(objeto => !RemovidoPorMigrationPosterior(id, objeto, conhecidas, posicao, objetosPorMigration, noHistorico))
+                .ToList();
+            if (exigidos.Count == 0)
+                continue;
+
+            var presentes = exigidos.Count(objeto => real.Contem(objeto));
+            var faltando = exigidos.Count - presentes;
             if (presentes > 0 && faltando > 0)
                 pelaMetade.Add(id);
 
@@ -201,32 +213,32 @@ public static class VerificadorIntegridadeBanco
         return itens;
     }
 
-    /// <summary>
-    /// Objeto criado por uma migration antiga e removido por uma posterior que já está no histórico
-    /// não conta como falta. O índice de <c>TransacaoId</c> some quando entra o índice com hash.
-    /// </summary>
-    private static HashSet<ObjetoSchema> RemovidosPorMigrationPosterior(
+    private static bool RemovidoPorMigrationPosterior(
         string id,
-        HashSet<string> noHistorico,
-        Dictionary<string, ObjetosMigration> objetosPorMigration)
+        ObjetoSchema objeto,
+        List<string> conhecidas,
+        Dictionary<string, int> posicao,
+        Dictionary<string, EfeitosMigration> efeitos,
+        HashSet<string> noHistorico)
     {
-        var removidos = new HashSet<ObjetoSchema>();
-        foreach (var (posterior, objetos) in objetosPorMigration)
+        var inicio = posicao[id];
+        for (var i = inicio + 1; i < conhecidas.Count; i++)
         {
-            if (string.CompareOrdinal(posterior, id) <= 0 || !noHistorico.Contains(posterior))
+            var posterior = conhecidas[i];
+            if (!noHistorico.Contains(posterior))
                 continue;
 
-            foreach (var objeto in objetos.Removidos)
-                removidos.Add(objeto);
+            if (efeitos.TryGetValue(posterior, out var efeito) && efeito.Remove(objeto))
+                return true;
         }
 
-        return removidos;
+        return false;
     }
 
-    private static Dictionary<string, ObjetosMigration> ObjetosPorMigration()
+    private static Dictionary<string, EfeitosMigration> EfeitosPorMigration()
     {
         var metodoUp = typeof(Migration).GetMethod("Up", BindingFlags.Instance | BindingFlags.NonPublic);
-        var mapa = new Dictionary<string, ObjetosMigration>(StringComparer.Ordinal);
+        var mapa = new Dictionary<string, EfeitosMigration>(StringComparer.Ordinal);
         if (metodoUp is null)
             return mapa;
 
@@ -241,44 +253,59 @@ public static class VerificadorIntegridadeBanco
             var builder = new MigrationBuilder("Microsoft.EntityFrameworkCore.Sqlite");
             metodoUp.Invoke(migration, [builder]);
 
-            var objetos = new ObjetosMigration();
+            var efeitos = new EfeitosMigration();
             foreach (var operacao in builder.Operations)
             {
                 switch (operacao)
                 {
                     case CreateTableOperation criar:
-                        objetos.Criados.Add(new ObjetoSchema(TipoObjeto.Tabela, criar.Name, null));
+                        efeitos.Criados.Add(new ObjetoSchema(TipoObjeto.Tabela, criar.Name, null));
                         foreach (var coluna in criar.Columns)
-                            objetos.Criados.Add(new ObjetoSchema(TipoObjeto.Coluna, criar.Name, coluna.Name));
+                            efeitos.Criados.Add(new ObjetoSchema(TipoObjeto.Coluna, criar.Name, coluna.Name));
                         break;
                     case AddColumnOperation coluna:
-                        objetos.Criados.Add(new ObjetoSchema(TipoObjeto.Coluna, coluna.Table, coluna.Name));
+                        efeitos.Criados.Add(new ObjetoSchema(TipoObjeto.Coluna, coluna.Table, coluna.Name));
                         break;
-                    case CreateIndexOperation indice when indice.Name is not null:
-                        objetos.Criados.Add(new ObjetoSchema(TipoObjeto.Indice, indice.Table, indice.Name));
+                    case CreateIndexOperation indice when indice.Name is not null && indice.Table is not null:
+                        efeitos.Criados.Add(new ObjetoSchema(TipoObjeto.Indice, indice.Table, indice.Name));
                         break;
                     case DropTableOperation tabela:
-                        objetos.Removidos.Add(new ObjetoSchema(TipoObjeto.Tabela, tabela.Name, null));
+                        efeitos.RegistrarRemocao(new ObjetoSchema(TipoObjeto.Tabela, tabela.Name, null));
                         break;
                     case DropColumnOperation coluna:
-                        objetos.Removidos.Add(new ObjetoSchema(TipoObjeto.Coluna, coluna.Table, coluna.Name));
+                        efeitos.RegistrarRemocao(new ObjetoSchema(TipoObjeto.Coluna, coluna.Table, coluna.Name));
                         break;
                     case DropIndexOperation indice when indice.Name is not null:
-                        objetos.Removidos.Add(new ObjetoSchema(TipoObjeto.Indice, indice.Table ?? "", indice.Name));
+                        efeitos.RegistrarRemocao(new ObjetoSchema(TipoObjeto.Indice, indice.Table ?? "", indice.Name));
                         break;
                 }
             }
 
-            mapa[id] = objetos;
+            efeitos.Criados.RemoveAll(efeitos.Remove);
+            mapa[id] = efeitos;
         }
 
         return mapa;
     }
 
-    private sealed class ObjetosMigration
+    private sealed class EfeitosMigration
     {
         public List<ObjetoSchema> Criados { get; } = [];
-        public List<ObjetoSchema> Removidos { get; } = [];
+
+        private readonly HashSet<ObjetoSchema> _removidos = [];
+
+        private readonly HashSet<string> _tabelasRemovidas = new(StringComparer.Ordinal);
+
+        public void RegistrarRemocao(ObjetoSchema objeto)
+        {
+            _removidos.Add(objeto);
+            if (objeto.Tipo == TipoObjeto.Tabela)
+                _tabelasRemovidas.Add(objeto.Tabela);
+        }
+
+        public bool Remove(ObjetoSchema objeto) =>
+            _removidos.Contains(objeto)
+            || (objeto.Tipo != TipoObjeto.Tabela && _tabelasRemovidas.Contains(objeto.Tabela));
     }
 
     private enum TipoObjeto

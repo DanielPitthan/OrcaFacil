@@ -46,13 +46,41 @@ public static class FaturaCsv
         public bool ArquivoAceito => ErroArquivo is null;
     }
 
+    /// <summary>
+    /// Lê no máximo 1 MB + 1 byte. O byte a mais só revela que o arquivo passou do limite.
+    /// Nesse caso a leitura para, o começo não é interpretado e o restante do fluxo fica intacto.
+    /// </summary>
+    public static async Task<byte[]> LerArquivoAsync(Stream fluxo, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(fluxo);
+
+        var maximo = FaturaCsvLayout.TamanhoMaximoBytes;
+        var buffer = new byte[maximo + 1];
+        var lidos = 0;
+        while (lidos < buffer.Length)
+        {
+            var n = await fluxo.ReadAsync(buffer.AsMemory(lidos, buffer.Length - lidos), cancellationToken).ConfigureAwait(false);
+            if (n == 0)
+                break;
+
+            lidos += n;
+        }
+
+        if (lidos > maximo)
+            throw new InvalidOperationException(FaturaCsvLayout.MensagemArquivoGrande);
+
+        var arquivo = new byte[lidos];
+        buffer.AsSpan(0, lidos).CopyTo(arquivo);
+        return arquivo;
+    }
+
     public static Leitura Ler(byte[] arquivo, IReadOnlyList<Categoria> categorias)
     {
         ArgumentNullException.ThrowIfNull(arquivo);
         ArgumentNullException.ThrowIfNull(categorias);
 
         if (arquivo.Length > FaturaCsvLayout.TamanhoMaximoBytes)
-            return Leitura.Recusar("O arquivo passa de 1 MB. Nada foi importado.");
+            return Leitura.Recusar(FaturaCsvLayout.MensagemArquivoGrande);
 
         if (!TentarDecodificar(arquivo, out var texto, out var erroCodificacao))
             return Leitura.Recusar(erroCodificacao!);

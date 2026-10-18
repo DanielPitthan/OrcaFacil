@@ -2,6 +2,8 @@
 @using OrcaFacil.Core.Lancamentos
 @using OrcaFacil.Core.Services
 @inject EstornoFaturaService EstornoService
+@inject ITransacaoService TransacaoService
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
 <div class="of-fatura">
@@ -76,7 +78,8 @@
                       Titulo="TituloItem" Subtitulo="SubtituloItem" Valor="ValorItem" Icone="IconeItem" Cor="CorItem"
                       EhCredito="EhCreditoItem" ChaveItem="ChaveItem"
                       OnEditar="EditarItem" OnRemover="RemoverItem" OnAdicionar="AbrirNovo"
-                      OnEstorno="AbrirEstornoNovo" EstornoDesabilitado="@PeriodoBloqueado" TextoEstorno="Estorno" />
+                      OnEstorno="AbrirEstornoNovo" EstornoDesabilitado="@PeriodoBloqueado" TextoEstorno="Estorno"
+                      OnImportar="AbrirImportacaoAsync" TextoImportar="@ImportacaoFaturaCsvApresentacao.TextoAcao" />
         </FormSection>
         </div>
 
@@ -381,6 +384,45 @@
         {
             Snackbar.Add(ex.Message, Severity.Warning);
         }
+    }
+
+    private async Task AbrirImportacaoAsync()
+    {
+        var parametros = new DialogParameters<ImportacaoFaturaCsvDialog>
+        {
+            { x => x.FaturaId, Modelo.Id },
+            { x => x.PeriodoBloqueado, PeriodoBloqueado },
+            { x => x.PodeLerArquivo, Modelo.Id is not null && Modelo.Itens.All(i => i.Id is not null) },
+            { x => x.Categorias, Categorias }
+        };
+        var dialog = await DialogService.ShowAsync<ImportacaoFaturaCsvDialog>(
+            ImportacaoFaturaCsvApresentacao.Titulo,
+            parametros,
+            new DialogOptions
+            {
+                FullScreen = true,
+                FullWidth = true,
+                CloseButton = false,
+                CloseOnEscapeKey = true
+            });
+        var resultado = await dialog.Result;
+        if (resultado is not { Canceled: false, Data: string resumo })
+            return;
+
+        await RecarregarFaturaImportadaAsync();
+        Snackbar.Add(resumo, Severity.Success);
+    }
+
+    private async Task RecarregarFaturaImportadaAsync()
+    {
+        if (Modelo.Id is not int id)
+            return;
+
+        var transacao = await TransacaoService.ObterAsync(id);
+        if (transacao is null)
+            return;
+
+        ImportacaoFaturaCsvApresentacao.AplicarNaFatura(Modelo, transacao.Valor, transacao.Itens);
     }
 
     private void AbrirEstornoNovo()

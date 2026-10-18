@@ -450,10 +450,111 @@ public class FaturaCsvTests
         var leitura = FaturaCsv.Ler(grande, Categorias);
 
         Assert.False(leitura.ArquivoAceito);
-        Assert.Contains("1 MB", leitura.ErroArquivo);
-        Assert.Contains("Nada foi importado", leitura.ErroArquivo);
+        Assert.Equal(FaturaCsvLayout.MensagemArquivoGrande, leitura.ErroArquivo);
         Assert.Empty(leitura.Linhas);
         Assert.Empty(leitura.Erros);
+    }
+
+    [Fact]
+    public async Task LerArquivoAsync_ParaNoMegaMaisUmByteERecusaSemLerOResto()
+    {
+        var extra = 8;
+        var fluxo = new FluxoEmPedacos(FaturaCsvLayout.TamanhoMaximoBytes + extra, pedaco: 1024);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => FaturaCsv.LerArquivoAsync(fluxo));
+
+        Assert.Equal(FaturaCsvLayout.MensagemArquivoGrande, ex.Message);
+        Assert.Equal(FaturaCsvLayout.TamanhoMaximoBytes + 1, fluxo.Lidos);
+        Assert.Equal(extra - 1, fluxo.Tamanho - fluxo.Lidos);
+
+        var sobra = fluxo.Read(new byte[extra], 0, extra);
+        Assert.Equal(extra - 1, sobra);
+        Assert.Equal(fluxo.Tamanho, fluxo.Lidos);
+    }
+
+    [Fact]
+    public async Task LerArquivoAsync_ExatamenteUmByteAcima_RecusaSemDevolverPrefixo()
+    {
+        var fluxo = new FluxoEmPedacos(FaturaCsvLayout.TamanhoMaximoBytes + 1, pedaco: 64 * 1024);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => FaturaCsv.LerArquivoAsync(fluxo));
+
+        Assert.Equal(FaturaCsvLayout.MensagemArquivoGrande, ex.Message);
+        Assert.Equal(fluxo.Tamanho, fluxo.Lidos);
+        Assert.Equal(0, fluxo.Read(new byte[1], 0, 1));
+    }
+
+    [Fact]
+    public async Task LerArquivoAsync_NoLimite_DevolveOsBytesInteiros()
+    {
+        var dados = new byte[FaturaCsvLayout.TamanhoMaximoBytes];
+        dados[0] = 0xEF;
+        dados[^1] = 0x0A;
+        var fluxo = new FluxoEmPedacos(dados, pedaco: 4096);
+
+        var lidos = await FaturaCsv.LerArquivoAsync(fluxo);
+
+        Assert.Equal(dados, lidos);
+        Assert.Equal(dados.Length, fluxo.Lidos);
+    }
+
+    private sealed class FluxoEmPedacos : Stream
+    {
+        private readonly byte[] _dados;
+        private readonly int _pedaco;
+        private int _posicao;
+
+        public FluxoEmPedacos(int tamanho, int pedaco)
+            : this(new byte[tamanho], pedaco)
+        {
+        }
+
+        public FluxoEmPedacos(byte[] dados, int pedaco)
+        {
+            _dados = dados;
+            _pedaco = pedaco;
+        }
+
+        public int Tamanho => _dados.Length;
+
+        public int Lidos { get; private set; }
+
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            var restante = _dados.Length - _posicao;
+            if (restante <= 0)
+                return 0;
+
+            var n = Math.Min(count, Math.Min(restante, _pedaco));
+            Array.Copy(_dados, _posicao, buffer, offset, n);
+            _posicao += n;
+            Lidos += n;
+            return n;
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     private static FaturaCsv.Leitura Ler(string texto, params Categoria[] categorias)

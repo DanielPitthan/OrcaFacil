@@ -21,7 +21,8 @@ public class MigracaoUpgradeTests
     private const string Cartoes = "20261015194450_AddCartoes";
     private const string Descritivo = "20261016011256_AddDescritivoItemFatura";
     private const string Estorno = "20261016182243_AddEhEstornoItemFatura";
-    private const string IndiceHash = "20261017172616_AddIndiceHashImportacaoItemFatura";
+    private const string HashImportacao = "20261017164213_AddHashImportacaoItemFatura";
+    private const string IndiceHashImportacao = "20261017172616_AddIndiceHashImportacaoItemFatura";
 
     [Fact]
     public async Task BancoAntigo_MigraAteOAtual_PreservaDadosEAplicaDefaults()
@@ -87,6 +88,7 @@ public class MigracaoUpgradeTests
             var colunasItem = await ColunasAsync(ctx, "ItensLancamento");
             Assert.DoesNotContain("Descritivo", colunasItem);
             Assert.DoesNotContain("EhEstorno", colunasItem);
+            Assert.DoesNotContain("HashImportacao", colunasItem);
         }
 
         await using (var ctx = banco.CriarContexto())
@@ -131,8 +133,9 @@ public class MigracaoUpgradeTests
             Assert.Equal(42.50m, item.Valor);
             Assert.Equal("Hortifruti", item.Descritivo);
             Assert.False(item.EhEstorno);
+            Assert.Null(item.HashImportacao);
 
-            Assert.Equal(IndiceHash, (await ctx.Database.GetAppliedMigrationsAsync()).Last());
+            Assert.Equal(IndiceHashImportacao, (await ctx.Database.GetAppliedMigrationsAsync()).Last());
             Assert.True(File.Exists(banco.Caminho));
             Assert.True(new FileInfo(banco.Caminho).Length > 0);
         }
@@ -147,8 +150,8 @@ public class MigracaoUpgradeTests
         var ids = ctx.Database.GetMigrations().ToList();
         Assert.Equal(ids.OrderBy(id => id, StringComparer.Ordinal).ToList(), ids);
         Assert.Equal(Inicial, ids[0]);
-        Assert.Equal(IndiceHash, ids[^1]);
-        Assert.Contains(ids, id => id.Contains("HashImportacao", StringComparison.Ordinal));
+        Assert.Contains(HashImportacao, ids);
+        Assert.Equal(IndiceHashImportacao, ids[^1]);
 
         for (var i = 1; i < ids.Count; i++)
         {
