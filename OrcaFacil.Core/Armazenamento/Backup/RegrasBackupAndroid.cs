@@ -21,13 +21,21 @@ namespace OrcaFacil.Core.Armazenamento.Backup;
 /// não criar um segundo XML de backup.
 ///
 /// Temporário e reserva da publicação (<c>orcafacil.espelho.{guid}.tmp</c> e
-/// <c>orcafacil.espelho.reserva.{guid}</c>) não têm caminho fixo, e o Android
-/// não aceita curinga. Ficam de fora porque não estão em <see cref="Inclusoes"/>
-/// e, se caírem dentro de uma pasta incluída, <see cref="DeveIncluir"/> recusa o nome.
+/// <c>orcafacil.espelho.reserva.{guid}</c>) não têm caminho fixo. O atributo
+/// <c>path</c> não aceita curinga nem expressão regular, então
+/// <c>perfil/foto-*.jpg</c> não é uma regra válida. A foto é
+/// <c>foto-</c> mais <c>yyyyMMddHHmmss</c> mais <c>.jpg</c>, um nome novo a cada
+/// gravação: não dá para enumerar o arquivo. O include é a pasta <c>perfil</c> inteira.
+/// Hoje o app só grava esse JPEG ali.
+///
+/// <see cref="DeveIncluir"/> ainda recusa temporário, reserva, <c>orcafacil-espelho</c>
+/// e <c>orcafacil-snapshot-*</c> mesmo dentro de <c>perfil</c>. Isso não vai para o XML.
+/// <see cref="CopiadoPeloXml"/> é o que o sistema faz: a pasta entra inteira, e um
+/// resíduo com esses nomes dentro dela é copiado. Na raiz de <c>getFilesDir()</c>
+/// esses nomes continuam de fora, porque não há include que os alcance.
 /// A pasta do usuário (SAF) nem entra no domínio do app. O cache
-/// (<c>getCacheDir()</c>, inclusive <c>orcafacil-espelho</c> e o snapshot
-/// <c>orcafacil-snapshot-*</c>) o sistema já não copia; a exclusão da pasta
-/// <c>orcafacil-espelho</c> cobre o caso de ela aparecer em <c>getFilesDir()</c>.
+/// (<c>getCacheDir()</c>) o sistema já não copia; a exclusão da pasta
+/// <c>orcafacil-espelho</c> cobre o caso de ela aparecer na raiz de <c>getFilesDir()</c>.
 ///
 /// Logs e a pasta <c>backups</c> (cópias de migração, sem descarte) ficam de fora
 /// para não estourar a cota de 25 MB da nuvem, que cancela o backup inteiro.
@@ -78,15 +86,36 @@ public static class RegrasBackupAndroid
 
     public static IReadOnlyList<RegraBackupAndroid> Exclusoes { get; } = CriarExclusoes();
 
+    /// <summary>
+    /// Política do Core: a tabela do XML, e ainda recusa resíduo do espelho.
+    /// A recusa extra não está no XML. Para o que o Android copia, use <see cref="CopiadoPeloXml"/>.
+    /// </summary>
     public static bool DeveIncluir(string dominio, string caminhoRelativo)
     {
         if (!TentarNormalizar(caminhoRelativo, out var caminho))
             return false;
 
-        if (Exclusoes.Any(regra => regra.Casa(dominio, caminho)))
+        if (EhResiduoDeEspelho(caminho))
             return false;
 
-        if (EhResiduoDeEspelho(caminho))
+        return CopiadoPeloXmlNormalizado(dominio, caminho);
+    }
+
+    /// <summary>
+    /// O que os XML copiam: <see cref="Inclusoes"/> menos <see cref="Exclusoes"/>.
+    /// Não aplica a recusa de resíduo do espelho. A pasta <c>perfil</c> entra inteira.
+    /// </summary>
+    public static bool CopiadoPeloXml(string dominio, string caminhoRelativo)
+    {
+        if (!TentarNormalizar(caminhoRelativo, out var caminho))
+            return false;
+
+        return CopiadoPeloXmlNormalizado(dominio, caminho);
+    }
+
+    private static bool CopiadoPeloXmlNormalizado(string dominio, string caminho)
+    {
+        if (Exclusoes.Any(regra => regra.Casa(dominio, caminho)))
             return false;
 
         return Inclusoes.Any(regra => regra.Casa(dominio, caminho));
@@ -134,6 +163,10 @@ public static class RegrasBackupAndroid
         return new RegraBackupAndroid(dominio, caminho, diretorio);
     }
 
+    /// <summary>
+    /// Nomes que o Core recusa e que o XML não consegue nomear.
+    /// Dentro de <c>perfil</c>, <see cref="CopiadoPeloXml"/> continua verdadeiro.
+    /// </summary>
     private static bool EhResiduoDeEspelho(string caminho)
     {
         var partes = caminho.Split('/');

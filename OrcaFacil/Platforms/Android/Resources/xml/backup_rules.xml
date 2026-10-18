@@ -10,6 +10,11 @@
     <include domain="file" path="orcafacil.db-wal" />
     <include domain="file" path="orcafacil.db-shm" />
     <include domain="file" path="orcafacil.db-journal" />
+    <!--
+      Pasta inteira. path não aceita curinga: perfil/foto-*.jpg não vale.
+      O app só grava foto-yyyyMMddHHmmss.jpg aqui. Temporário e reserva do
+      espelho que caírem nesta pasta são copiados; isso não dá para excluir no XML.
+    -->
     <include domain="file" path="perfil" />
     <include domain="sharedpref" path="com.pitthan.orcafacil_preferences.xml" />
     <exclude domain="sharedpref" path="com.pitthan.orcafacil.microsoft.maui.essentials.preferences.xml" />

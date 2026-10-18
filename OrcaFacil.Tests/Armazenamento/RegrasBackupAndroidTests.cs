@@ -76,20 +76,45 @@ public class RegrasBackupAndroidTests
         Assert.False(RegrasBackupAndroid.DeveIncluir(
             RegrasBackupAndroid.DominioArquivo,
             "perfil/orcafacil-espelho/0123456789abcdef0123456789abcdef.bin"));
+        Assert.True(RegrasBackupAndroid.CopiadoPeloXml(
+            RegrasBackupAndroid.DominioArquivo,
+            "perfil/orcafacil-espelho/0123456789abcdef0123456789abcdef.bin"));
     }
 
     [Fact]
-    public void TemporarioEReservaDoEspelho_NaoEntram_NemDentroDaPastaDeFotos()
+    public void TemporarioEReserva_NaRaizFicamDeFora_EDentroDePerfilOXmlAindaCopia()
     {
         var id = Guid.Parse("0123456789abcdef0123456789abcdef");
         var temporario = NomeTemporarioEspelho.Criar(FormatoEspelho.NomeArquivoSugerido, id);
         var reserva = NomeTemporarioEspelho.CriarReserva(FormatoEspelho.NomeArquivoSugerido, id);
+        var foto = "perfil/foto-20261017120000.jpg";
 
         Assert.False(RegrasBackupAndroid.DeveIncluir(RegrasBackupAndroid.DominioArquivo, temporario));
+        Assert.False(RegrasBackupAndroid.CopiadoPeloXml(RegrasBackupAndroid.DominioArquivo, temporario));
         Assert.False(RegrasBackupAndroid.DeveIncluir(RegrasBackupAndroid.DominioArquivo, reserva));
-        Assert.False(RegrasBackupAndroid.DeveIncluir(RegrasBackupAndroid.DominioArquivo, "perfil/" + temporario));
-        Assert.False(RegrasBackupAndroid.DeveIncluir(RegrasBackupAndroid.DominioArquivo, "perfil/" + reserva));
+        Assert.False(RegrasBackupAndroid.CopiadoPeloXml(RegrasBackupAndroid.DominioArquivo, reserva));
         Assert.False(RegrasBackupAndroid.DeveIncluir(RegrasBackupAndroid.DominioArquivo, FormatoEspelho.NomeArquivoSugerido));
+        Assert.False(RegrasBackupAndroid.CopiadoPeloXml(RegrasBackupAndroid.DominioArquivo, FormatoEspelho.NomeArquivoSugerido));
+
+        var perfil = Assert.Single(
+            RegrasBackupAndroid.Inclusoes,
+            regra => regra.Caminho == RegrasBackupAndroid.PastaFotos);
+        Assert.Equal(RegrasBackupAndroid.DominioArquivo, perfil.Dominio);
+        Assert.True(perfil.Diretorio);
+        Assert.DoesNotContain(
+            RegrasBackupAndroid.Inclusoes,
+            regra => regra.Caminho.Contains("foto-", StringComparison.Ordinal) || regra.Caminho.Contains('*'));
+
+        Assert.True(RegrasBackupAndroid.DeveIncluir(RegrasBackupAndroid.DominioArquivo, foto));
+        Assert.True(RegrasBackupAndroid.CopiadoPeloXml(RegrasBackupAndroid.DominioArquivo, foto));
+
+        Assert.False(RegrasBackupAndroid.DeveIncluir(RegrasBackupAndroid.DominioArquivo, "perfil/" + temporario));
+        Assert.True(RegrasBackupAndroid.CopiadoPeloXml(RegrasBackupAndroid.DominioArquivo, "perfil/" + temporario));
+        Assert.False(RegrasBackupAndroid.DeveIncluir(RegrasBackupAndroid.DominioArquivo, "perfil/" + reserva));
+        Assert.True(RegrasBackupAndroid.CopiadoPeloXml(RegrasBackupAndroid.DominioArquivo, "perfil/" + reserva));
+        Assert.DoesNotContain(
+            RegrasBackupAndroid.Exclusoes,
+            regra => regra.Casa(RegrasBackupAndroid.DominioArquivo, "perfil/" + temporario));
     }
 
     [Fact]
@@ -104,6 +129,12 @@ public class RegrasBackupAndroidTests
         Assert.False(RegrasBackupAndroid.DeveIncluir(
             RegrasBackupAndroid.DominioArquivo,
             "perfil/orcafacil-snapshot-abc/snapshot.db"));
+        Assert.True(RegrasBackupAndroid.CopiadoPeloXml(
+            RegrasBackupAndroid.DominioArquivo,
+            "perfil/orcafacil-snapshot-abc/snapshot.db"));
+        Assert.False(RegrasBackupAndroid.CopiadoPeloXml(
+            RegrasBackupAndroid.DominioArquivo,
+            "orcafacil-snapshot-abc/snapshot.db"));
     }
 
     [Theory]
@@ -204,6 +235,7 @@ public class RegrasBackupAndroidTests
         Assert.Contains("<ApplicationId>com.pitthan.orcafacil</ApplicationId>", csproj, StringComparison.Ordinal);
         Assert.Contains("private const string NomeArquivo = \"orcafacil.db\";", banco, StringComparison.Ordinal);
         Assert.Contains("FileSystem.AppDataDirectory, \"perfil\"", fotos, StringComparison.Ordinal);
+        Assert.Contains("foto-{DateTime.Now:yyyyMMddHHmmss}.jpg", fotos, StringComparison.Ordinal);
         Assert.Contains("FileSystem.AppDataDirectory, \"logs\"", inicio, StringComparison.Ordinal);
         Assert.Contains("\"backups\"", backup, StringComparison.Ordinal);
         Assert.Contains("orcafacil-snapshot-", snapshot, StringComparison.Ordinal);
