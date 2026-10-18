@@ -64,7 +64,7 @@ public static class PreparoBanco
                 relatorioFalha,
                 backup,
                 falhaLeitura is null
-                    ? "Não foi possível reconciliar a migration AddCartoes. A migração não foi repetida e o banco não foi apagado."
+                    ? "Não foi possível reconciliar a migration AddCartoes. A migração não foi repetida. " + ReconciliadorAddCartoes.AvisoArquivoPreservado
                     : AvisoArquivoIlegivel);
         }
 
