@@ -1,0 +1,91 @@
+.of-ia {
+    display: flex;
+    flex-direction: column;
+    gap: var(--of-space-section);
+    min-width: 0;
+    color: var(--of-text);
+    padding-bottom: var(--of-space-page);
+}
+
+.of-secao-bloco {
+    padding: 12px 16px;
+}
+
+.of-apoio {
+    margin: 0;
+    color: var(--of-text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.4;
+}
+
+.of-ia-chips {
+    display: flex;
+    flex-wrap: wrap;
+    margin: -4px;
+}
+
+.of-ia-chips ::deep .mud-chip {
+    margin: 4px;
+    border-radius: var(--of-radius-pill);
+    min-height: var(--of-touch);
+}
+
+.of-ia-chips ::deep .mud-chip:not(.mud-chip-selected) {
+    background: var(--of-chip-bg);
+    color: var(--of-text);
+}
+
+/* O outlined selecionado do MudBlazor 9.9 pinta :hover, :focus-visible e :active
+   com rgba(primary, 0.12). Esse fundo some com o texto escuro. Os quatro estados
+   ficam no primário sólido. Claro: #1E2A33 sobre #659ECD = 5,11:1.
+   Escuro: #0B1220 sobre #6EA8FE = 7,75:1. */
+:global(html.of-tema-claro) .of-ia-chips ::deep .mud-chip.mud-chip-outlined.mud-chip-color-primary.mud-chip-selected,
+:global(html.of-tema-claro) .of-ia-chips ::deep .mud-chip.mud-chip-outlined.mud-chip-color-primary.mud-chip-selected:hover,
+:global(html.of-tema-claro) .of-ia-chips ::deep .mud-chip.mud-chip-outlined.mud-chip-color-primary.mud-chip-selected:focus-visible,
+:global(html.of-tema-claro) .of-ia-chips ::deep .mud-chip.mud-chip-outlined.mud-chip-color-primary.mud-chip-selected:active {
+    background-color: #659ECD;
+    color: #1E2A33;
+}
+
+:global(html.of-tema-escuro) .of-ia-chips ::deep .mud-chip.mud-chip-outlined.mud-chip-color-primary.mud-chip-selected,
+:global(html.of-tema-escuro) .of-ia-chips ::deep .mud-chip.mud-chip-outlined.mud-chip-color-primary.mud-chip-selected:hover,
+:global(html.of-tema-escuro) .of-ia-chips ::deep .mud-chip.mud-chip-outlined.mud-chip-color-primary.mud-chip-selected:focus-visible,
+:global(html.of-tema-escuro) .of-ia-chips ::deep .mud-chip.mud-chip-outlined.mud-chip-color-primary.mud-chip-selected:active {
+    background-color: #6EA8FE;
+    color: #0B1220;
+}
+
+.of-ia-aviso,
+.of-ia-ok,
+.of-ia-erro {
+    margin: 0;
+    padding: 12px 16px;
+    border: 1px solid var(--of-border);
+    border-radius: var(--of-radius-control);
+    background: var(--of-surface);
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+.of-ia-aviso {
+    color: var(--of-text);
+}
+
+.of-ia-ok {
+    color: var(--of-resultado-ok);
+}
+
+.of-ia-erro {
+    color: var(--of-resultado-erro);
+}
+
+.of-ia-acoes {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.of-ia-acoes ::deep .mud-button-root {
+    min-height: var(--of-touch);
+}

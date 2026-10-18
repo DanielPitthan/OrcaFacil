@@ -1,0 +1,229 @@
+@using OrcaFacil.Core.Llm
+@implements IDisposable
+@inject IConfiguracaoService Configuracao
+@inject ICofreChaveApi CofreChave
+@inject ClienteMensagens Cliente
+@inject ISnackbar Snackbar
+
+<div class="of-ia">
+    <FormSection Titulo="Provedor">
+        <div class="of-secao-bloco">
+            <MudChipSet T="ProvedorIa?" SelectedValue="_provedor" SelectedValueChanged="EscolherProvedor"
+                        SelectionMode="SelectionMode.SingleSelection" CheckMark="false" Class="of-ia-chips">
+                @foreach (var provedor in ChipsInteligencia.Provedores)
+                {
+                    <MudChip T="ProvedorIa?" Value="provedor" Text="@ChipsInteligencia.Texto(provedor)"
+                             Color="Color.Primary" Variant="Variant.Outlined"
+                             UserAttributes="@AtributosChip(provedor)" />
+                }
+            </MudChipSet>
+        </div>
+    </FormSection>
+
+    <FormSection Titulo="Conexão">
+        <FormRow Icone="@Icons.Material.Outlined.Link" Rotulo="URL da API">
+            <MudTextField T="string" @bind-Value="_url" Immediate="true" Variant="Variant.Text" Margin="Margin.Dense"
+                          Placeholder="https://api.anthropic.com" />
+        </FormRow>
+        <FormRow Icone="@Icons.Material.Outlined.Memory" Rotulo="Modelo">
+            <MudTextField T="string" @bind-Value="_modelo" Immediate="true" Variant="Variant.Text" Margin="Margin.Dense" />
+        </FormRow>
+        @if (RotuloModelo is not null)
+        {
+            <div class="of-secao-bloco">
+                <p class="of-apoio">@RotuloModelo</p>
+            </div>
+        }
+        <FormRow Icone="@Icons.Material.Outlined.VpnKey" Rotulo="Chave">
+            <MudTextField T="string" @bind-Value="_chaveDigitada" InputType="InputType.Password"
+                          Immediate="true" Variant="Variant.Text" Margin="Margin.Dense"
+                          Placeholder="@PlaceholderChave" UserAttributes="@AtributosChave" />
+        </FormRow>
+        @if (_temChave && string.IsNullOrEmpty(_chaveDigitada))
+        {
+            <div class="of-secao-bloco">
+                <p class="of-apoio">Uma chave já está salva neste aparelho. Digite outra só para substituir.</p>
+            </div>
+        }
+    </FormSection>
+
+    <p class="of-ia-aviso">A foto do comprovante sai do aparelho para o provedor da URL.</p>
+
+    @if (!string.IsNullOrEmpty(_resultadoTeste))
+    {
+        <p class="@ClasseResultado" role="status">@_resultadoTeste</p>
+    }
+
+    <div class="of-ia-acoes">
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="TestarAsync" Disabled="_ocupado">
+            @(_ocupado && _testando ? "Testando…" : "Testar conexão")
+        </MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SalvarAsync" Disabled="_ocupado">
+            Salvar
+        </MudButton>
+    </div>
+</div>
+
+@code {
+    private readonly CancellationTokenSource _cancelamento = new();
+
+    private static readonly Dictionary<string, object?> AtributosChave = new()
+    {
+        ["autocomplete"] = "off",
+        ["autocapitalize"] = "off",
+        ["spellcheck"] = "false",
+        ["aria-label"] = "Chave da API"
+    };
+
+    private ProvedorIa? _provedor;
+    private string _url = "";
+    private string _modelo = "";
+    private string _chaveDigitada = "";
+    private bool _temChave;
+    private bool _ocupado;
+    private bool _testando;
+    private string? _resultadoTeste;
+    private bool _testeOk;
+
+    private string? RotuloModelo => ChipsInteligencia.RotuloDoModelo(_modelo);
+
+    private string PlaceholderChave => _temChave ? "Chave já salva neste aparelho" : "";
+
+    private string ClasseResultado => _testeOk ? "of-ia-ok" : "of-ia-erro";
+
+    private Dictionary<string, object?> AtributosChip(ProvedorIa provedor) => new()
+    {
+        ["aria-pressed"] = _provedor == provedor ? "true" : "false"
+    };
+
+    public void Dispose() => _cancelamento.Cancel();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _url = Configuracao.UrlInteligencia;
+        _modelo = Configuracao.ModeloInteligencia;
+        _provedor = Configuracao.ProvedorInteligencia;
+        try
+        {
+            var salva = await CofreChave.LerAsync();
+            _temChave = !string.IsNullOrWhiteSpace(salva);
+        }
+        catch (Exception)
+        {
+            _temChave = false;
+        }
+    }
+
+    private void EscolherProvedor(ProvedorIa? provedor)
+    {
+        if (provedor is not ProvedorIa escolhido)
+            return;
+
+        _provedor = escolhido;
+        var ajuste = ChipsInteligencia.Padrao(escolhido);
+        _url = ajuste.Url ?? "";
+        _modelo = ajuste.Modelo ?? "";
+    }
+
+    private async Task SalvarAsync()
+    {
+        if (_ocupado)
+            return;
+
+        _ocupado = true;
+        _testando = false;
+        try
+        {
+            Configuracao.UrlInteligencia = _url.Trim();
+            Configuracao.ModeloInteligencia = _modelo.Trim();
+            Configuracao.ProvedorInteligencia = _provedor;
+            _url = Configuracao.UrlInteligencia;
+            _modelo = Configuracao.ModeloInteligencia;
+
+            if (!string.IsNullOrWhiteSpace(_chaveDigitada))
+            {
+                var nova = _chaveDigitada.Trim();
+                if (nova.Contains('\r') || nova.Contains('\n'))
+                {
+                    Snackbar.Add(ResultadoMensagem.TextoPedidoInvalido, Severity.Error);
+                    return;
+                }
+
+                await CofreChave.GuardarAsync(nova);
+                _temChave = true;
+                _chaveDigitada = "";
+            }
+
+            Snackbar.Add("Configurações salvas", Severity.Success);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Não foi possível salvar a chave neste aparelho.", Severity.Error);
+        }
+        finally
+        {
+            _ocupado = false;
+        }
+    }
+
+    private async Task TestarAsync()
+    {
+        if (_ocupado)
+            return;
+
+        _ocupado = true;
+        _testando = true;
+        _resultadoTeste = null;
+        string? chave = null;
+        try
+        {
+            chave = await ResolverChaveAsync(_cancelamento.Token);
+            var resultado = await Cliente.TestarConexaoAsync(_url, chave, _modelo, _cancelamento.Token);
+            MostrarTeste(resultado, chave);
+        }
+        catch (OperationCanceledException) when (_cancelamento.IsCancellationRequested)
+        {
+        }
+        catch (OperationCanceledException)
+        {
+            MostrarTeste(
+                ResultadoMensagem.Falha(TipoResultadoMensagem.Timeout, ResultadoMensagem.TextoTimeout),
+                chave);
+        }
+        catch (Exception)
+        {
+            MostrarTeste(
+                ResultadoMensagem.Falha(TipoResultadoMensagem.Falha, ResultadoMensagem.TextoFalha),
+                chave);
+        }
+        finally
+        {
+            _ocupado = false;
+            _testando = false;
+        }
+    }
+
+    private async Task<string?> ResolverChaveAsync(CancellationToken cancellationToken = default)
+    {
+        if (!string.IsNullOrWhiteSpace(_chaveDigitada))
+            return _chaveDigitada.Trim();
+
+        try
+        {
+            var salva = await CofreChave.LerAsync(cancellationToken);
+            return string.IsNullOrWhiteSpace(salva) ? null : salva.Trim();
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    private void MostrarTeste(ResultadoMensagem resultado, string? chave)
+    {
+        var texto = ClienteMensagens.TextoExibicao(resultado, chave);
+        _testeOk = resultado.Sucesso;
+        _resultadoTeste = texto;
+        Snackbar.Add(texto, resultado.Sucesso ? Severity.Success : Severity.Error);
+    }
+}

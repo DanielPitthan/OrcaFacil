@@ -1,4 +1,5 @@
 using OrcaFacil.Core.Enums;
+using OrcaFacil.Core.Llm;
 using OrcaFacil.Core.Tema;
 using OrcaFacil.Services.Interfaces;
 
@@ -48,6 +49,30 @@ public class ConfiguracaoService : IConfiguracaoService
     {
         get => _tema.Tema;
         set => _tema.Tema = value;
+    }
+
+    public string UrlInteligencia
+    {
+        get => Preferences.Default.Get(ChipsInteligencia.ChaveUrl, "");
+        set => Preferences.Default.Set(ChipsInteligencia.ChaveUrl, value ?? "");
+    }
+
+    public string ModeloInteligencia
+    {
+        get => Preferences.Default.Get(ChipsInteligencia.ChaveModelo, "");
+        set => Preferences.Default.Set(ChipsInteligencia.ChaveModelo, value ?? "");
+    }
+
+    public ProvedorIa? ProvedorInteligencia
+    {
+        get => ChipsInteligencia.Interpretar(Preferences.Default.Get(ChipsInteligencia.ChaveProvedor, ""));
+        set
+        {
+            if (value is null)
+                Preferences.Default.Remove(ChipsInteligencia.ChaveProvedor);
+            else
+                Preferences.Default.Set(ChipsInteligencia.ChaveProvedor, ChipsInteligencia.Texto(value.Value));
+        }
     }
 
     public void Redefinir() => _tema.Redefinir();

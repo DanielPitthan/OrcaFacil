@@ -112,7 +112,7 @@ public sealed class ClienteMensagens : IDisposable
         return bytes > 0 && bytes <= TamanhoMaximoImagem;
     }
 
-    public async Task<ResultadoMensagem> LerComprovanteAsync(
+    public Task<ResultadoMensagem> LerComprovanteAsync(
         string? urlBase,
         string? chave,
         string? modelo,
@@ -120,23 +120,131 @@ public sealed class ClienteMensagens : IDisposable
         string? imagemBase64,
         CancellationToken cancellationToken = default)
     {
-        if (PedidoMensagem.CriarUri(urlBase, _permiteHttp) is not Uri uri ||
-            (uri.Scheme != Uri.UriSchemeHttps && !_permiteHttp))
-        {
-            return ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoPedidoInvalido);
-        }
-
-        if (string.IsNullOrWhiteSpace(chave) || chave.Contains('\r') || chave.Contains('\n'))
-            return ResultadoMensagem.Falha(TipoResultadoMensagem.NaoAutorizado, ResultadoMensagem.TextoNaoAutorizado);
+        var preparo = PrepararChamada(urlBase, chave);
+        if (preparo.Falha is not null)
+            return Task.FromResult(preparo.Falha);
 
         if (string.IsNullOrWhiteSpace(modelo) ||
             string.IsNullOrWhiteSpace(tipoMidia) ||
             string.IsNullOrWhiteSpace(imagemBase64) ||
             !ImagemCabe(imagemBase64))
         {
-            return ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoPedidoInvalido);
+            return Task.FromResult(
+                ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoPedidoInvalido));
         }
 
+        var json = PedidoMensagem.Montar(modelo.Trim(), tipoMidia.Trim(), imagemBase64);
+        return EnviarAsync(preparo.Uri, preparo.Chave, json, interpretarComprovante: true, cancellationToken);
+    }
+
+    /// <summary>
+    /// Chamada mínima, sem foto. O cliente de produção nasce em <see cref="Criar"/>.
+    /// </summary>
+    public Task<ResultadoMensagem> TestarConexaoAsync(
+        string? urlBase,
+        string? chave,
+        string? modelo,
+        CancellationToken cancellationToken = default)
+    {
+        if (DiagnosticoTeste(urlBase, chave, modelo) is ResultadoMensagem local)
+            return Task.FromResult(local);
+
+        var preparo = PrepararChamada(urlBase, chave);
+        if (preparo.Falha is not null)
+            return Task.FromResult(preparo.Falha);
+
+        var json = PedidoMensagem.MontarTesteConexao(modelo!);
+        return EnviarAsync(preparo.Uri, preparo.Chave, json, interpretarComprovante: false, cancellationToken);
+    }
+
+    /// <summary>
+    /// Texto fixo para a tela. Frase conhecida não é trocada quando a chave é curta
+    /// e aparece dentro dela. Mensagem fora dessas frases, se carregar a chave, vira falha genérica.
+    /// </summary>
+    public static string TextoExibicao(ResultadoMensagem resultado, string? segredo)
+    {
+        ArgumentNullException.ThrowIfNull(resultado);
+        var texto = resultado.Sucesso
+            ? ResultadoMensagem.TextoConexaoOk
+            : (string.IsNullOrEmpty(resultado.Mensagem) ? ResultadoMensagem.TextoFalha : resultado.Mensagem);
+
+        if (FraseFixa(texto) || string.IsNullOrWhiteSpace(segredo))
+            return texto;
+
+        if (texto.Contains(segredo, StringComparison.Ordinal))
+            return ResultadoMensagem.TextoFalha;
+
+        return texto;
+    }
+
+    private static bool FraseFixa(string texto) => texto is
+        ResultadoMensagem.TextoConexaoOk or
+        ResultadoMensagem.TextoNaoAutorizado or
+        ResultadoMensagem.TextoLimite or
+        ResultadoMensagem.TextoSobrecarga or
+        ResultadoMensagem.TextoTimeout or
+        ResultadoMensagem.TextoPedidoInvalido or
+        ResultadoMensagem.TextoChaveNaoInformada or
+        ResultadoMensagem.TextoUrlNaoInformada or
+        ResultadoMensagem.TextoModeloNaoInformado or
+        ResultadoMensagem.TextoUrlInvalida or
+        ResultadoMensagem.TextoRespostaInvalida or
+        ResultadoMensagem.TextoSemRede or
+        ResultadoMensagem.TextoFalha;
+
+    /// <summary>
+    /// Falhas locais do teste, antes da rede. Cada uma tem frase própria,
+    /// diferente do 401, da falta de rede e do prazo.
+    /// </summary>
+    private static ResultadoMensagem? DiagnosticoTeste(string? urlBase, string? chave, string? modelo)
+    {
+        if (string.IsNullOrWhiteSpace(urlBase))
+            return ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoUrlNaoInformada);
+
+        if (PedidoMensagem.CriarUri(urlBase) is null)
+            return ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoUrlInvalida);
+
+        if (string.IsNullOrWhiteSpace(chave))
+            return ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoChaveNaoInformada);
+
+        if (string.IsNullOrWhiteSpace(modelo))
+            return ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoModeloNaoInformado);
+
+        return null;
+    }
+
+    private readonly record struct PreparoChamada(Uri Uri, string Chave, ResultadoMensagem? Falha)
+    {
+        public static PreparoChamada Recusa(ResultadoMensagem falha) => new(null!, "", falha);
+
+        public override string ToString() => "PreparoChamada";
+    }
+
+    private PreparoChamada PrepararChamada(string? urlBase, string? chave)
+    {
+        if (PedidoMensagem.CriarUri(urlBase, _permiteHttp) is not Uri criada ||
+            (criada.Scheme != Uri.UriSchemeHttps && !_permiteHttp))
+        {
+            return PreparoChamada.Recusa(
+                ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoPedidoInvalido));
+        }
+
+        if (string.IsNullOrWhiteSpace(chave) || chave.Contains('\r') || chave.Contains('\n'))
+        {
+            return PreparoChamada.Recusa(
+                ResultadoMensagem.Falha(TipoResultadoMensagem.NaoAutorizado, ResultadoMensagem.TextoNaoAutorizado));
+        }
+
+        return new PreparoChamada(criada, chave, null);
+    }
+
+    private async Task<ResultadoMensagem> EnviarAsync(
+        Uri uri,
+        string chave,
+        string json,
+        bool interpretarComprovante,
+        CancellationToken cancellationToken)
+    {
         using var limite = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         limite.CancelAfter(_tempoLimite);
 
@@ -150,17 +258,21 @@ public sealed class ClienteMensagens : IDisposable
                 return ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoPedidoInvalido);
             }
 
-            var json = PedidoMensagem.Montar(modelo.Trim(), tipoMidia.Trim(), imagemBase64);
             pedido.Content = new StringContent(json, Encoding.UTF8, "application/json");
 
             using var resposta = await _http.SendAsync(pedido, HttpCompletionOption.ResponseHeadersRead, limite.Token);
             if (EhRedirecionamento(resposta.StatusCode))
                 return ResultadoMensagem.Falha(TipoResultadoMensagem.Falha, ResultadoMensagem.TextoFalha);
 
-            if (resposta.StatusCode == HttpStatusCode.OK)
-                return await LerCorpoAsync(resposta, limite.Token);
+            if (resposta.StatusCode != HttpStatusCode.OK)
+                return MapearStatus(resposta);
 
-            return MapearStatus(resposta);
+            // 200 do teste de conexão é sucesso sem ler o corpo: não é um comprovante,
+            // e o texto da resposta não entra na mensagem.
+            if (!interpretarComprovante)
+                return ResultadoMensagem.ConexaoOk();
+
+            return await LerCorpoAsync(resposta, limite.Token);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

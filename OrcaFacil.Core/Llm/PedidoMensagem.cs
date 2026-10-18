@@ -169,4 +169,29 @@ public static class PedidoMensagem
 
         return raiz.ToJsonString();
     }
+
+    /// <summary>
+    /// Pedido mínimo de <c>POST /v1/messages</c> para testar a conexão.
+    /// Sem imagem, sem ferramenta e sem a chave.
+    /// </summary>
+    public static string MontarTesteConexao(string modelo)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(modelo);
+
+        var raiz = new JsonObject
+        {
+            ["model"] = modelo.Trim(),
+            ["max_tokens"] = 1,
+            ["messages"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["role"] = "user",
+                    ["content"] = "ping"
+                }
+            }
+        };
+
+        return raiz.ToJsonString();
+    }
 }
