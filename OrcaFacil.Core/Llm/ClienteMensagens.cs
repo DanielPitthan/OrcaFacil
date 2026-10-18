@@ -112,7 +112,7 @@ public sealed class ClienteMensagens : IDisposable
         return bytes > 0 && bytes <= TamanhoMaximoImagem;
     }
 
-    public async Task<ResultadoMensagem> LerComprovanteAsync(
+    public Task<ResultadoMensagem> LerComprovanteAsync(
         string? urlBase,
         string? chave,
         string? modelo,
@@ -120,23 +120,92 @@ public sealed class ClienteMensagens : IDisposable
         string? imagemBase64,
         CancellationToken cancellationToken = default)
     {
-        if (PedidoMensagem.CriarUri(urlBase, _permiteHttp) is not Uri uri ||
-            (uri.Scheme != Uri.UriSchemeHttps && !_permiteHttp))
-        {
-            return ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoPedidoInvalido);
-        }
-
-        if (string.IsNullOrWhiteSpace(chave) || chave.Contains('\r') || chave.Contains('\n'))
-            return ResultadoMensagem.Falha(TipoResultadoMensagem.NaoAutorizado, ResultadoMensagem.TextoNaoAutorizado);
+        var preparo = PrepararChamada(urlBase, chave);
+        if (preparo.Falha is not null)
+            return Task.FromResult(preparo.Falha);
 
         if (string.IsNullOrWhiteSpace(modelo) ||
             string.IsNullOrWhiteSpace(tipoMidia) ||
             string.IsNullOrWhiteSpace(imagemBase64) ||
             !ImagemCabe(imagemBase64))
         {
-            return ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoPedidoInvalido);
+            return Task.FromResult(
+                ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoPedidoInvalido));
         }
 
+        var json = PedidoMensagem.Montar(modelo.Trim(), tipoMidia.Trim(), imagemBase64);
+        return EnviarAsync(preparo.Uri, preparo.Chave, json, interpretarComprovante: true, cancellationToken);
+    }
+
+    /// <summary>
+    /// Chamada mínima, sem foto. O cliente de produção nasce em <see cref="Criar"/>.
+    /// </summary>
+    public Task<ResultadoMensagem> TestarConexaoAsync(
+        string? urlBase,
+        string? chave,
+        string? modelo,
+        CancellationToken cancellationToken = default)
+    {
+        var preparo = PrepararChamada(urlBase, chave);
+        if (preparo.Falha is not null)
+            return Task.FromResult(preparo.Falha);
+
+        if (string.IsNullOrWhiteSpace(modelo))
+        {
+            return Task.FromResult(
+                ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoPedidoInvalido));
+        }
+
+        var json = PedidoMensagem.MontarTesteConexao(modelo);
+        return EnviarAsync(preparo.Uri, preparo.Chave, json, interpretarComprovante: false, cancellationToken);
+    }
+
+    /// <summary>
+    /// Texto fixo para a tela. Se a mensagem carregasse a chave, devolve a falha genérica.
+    /// </summary>
+    public static string TextoExibicao(ResultadoMensagem resultado, string? segredo)
+    {
+        ArgumentNullException.ThrowIfNull(resultado);
+        var texto = resultado.Sucesso
+            ? ResultadoMensagem.TextoConexaoOk
+            : (string.IsNullOrEmpty(resultado.Mensagem) ? ResultadoMensagem.TextoFalha : resultado.Mensagem);
+
+        if (!string.IsNullOrEmpty(segredo) && texto.Contains(segredo, StringComparison.Ordinal))
+            return ResultadoMensagem.TextoFalha;
+
+        return texto;
+    }
+
+    private readonly record struct PreparoChamada(Uri Uri, string Chave, ResultadoMensagem? Falha)
+    {
+        public static PreparoChamada Recusa(ResultadoMensagem falha) => new(null!, "", falha);
+    }
+
+    private PreparoChamada PrepararChamada(string? urlBase, string? chave)
+    {
+        if (PedidoMensagem.CriarUri(urlBase, _permiteHttp) is not Uri criada ||
+            (criada.Scheme != Uri.UriSchemeHttps && !_permiteHttp))
+        {
+            return PreparoChamada.Recusa(
+                ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoPedidoInvalido));
+        }
+
+        if (string.IsNullOrWhiteSpace(chave) || chave.Contains('\r') || chave.Contains('\n'))
+        {
+            return PreparoChamada.Recusa(
+                ResultadoMensagem.Falha(TipoResultadoMensagem.NaoAutorizado, ResultadoMensagem.TextoNaoAutorizado));
+        }
+
+        return new PreparoChamada(criada, chave, null);
+    }
+
+    private async Task<ResultadoMensagem> EnviarAsync(
+        Uri uri,
+        string chave,
+        string json,
+        bool interpretarComprovante,
+        CancellationToken cancellationToken)
+    {
         using var limite = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         limite.CancelAfter(_tempoLimite);
 
@@ -150,17 +219,18 @@ public sealed class ClienteMensagens : IDisposable
                 return ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoPedidoInvalido);
             }
 
-            var json = PedidoMensagem.Montar(modelo.Trim(), tipoMidia.Trim(), imagemBase64);
             pedido.Content = new StringContent(json, Encoding.UTF8, "application/json");
 
             using var resposta = await _http.SendAsync(pedido, HttpCompletionOption.ResponseHeadersRead, limite.Token);
             if (EhRedirecionamento(resposta.StatusCode))
                 return ResultadoMensagem.Falha(TipoResultadoMensagem.Falha, ResultadoMensagem.TextoFalha);
 
-            if (resposta.StatusCode == HttpStatusCode.OK)
-                return await LerCorpoAsync(resposta, limite.Token);
+            if (resposta.StatusCode != HttpStatusCode.OK)
+                return MapearStatus(resposta);
 
-            return MapearStatus(resposta);
+            return interpretarComprovante
+                ? await LerCorpoAsync(resposta, limite.Token)
+                : ResultadoMensagem.ConexaoOk();
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {

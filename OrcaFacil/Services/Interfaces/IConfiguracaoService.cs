@@ -1,4 +1,5 @@
 using OrcaFacil.Core.Enums;
+using OrcaFacil.Core.Llm;
 using OrcaFacil.Core.Tema;
 
 namespace OrcaFacil.Services.Interfaces;
@@ -19,6 +20,18 @@ public interface IConfiguracaoService
     /// </summary>
     TemaPreferido Tema { get; set; }
 
-    /// <summary>Remove as preferências gravadas e volta ao padrão. A chave <c>Config.Tema</c> é preservada.</summary>
+    /// <summary>URL da API. Chave <c>Config.Ia.Url</c>. A chave da API não fica em Preferences.</summary>
+    string UrlInteligencia { get; set; }
+
+    /// <summary>Modelo da API. Chave <c>Config.Ia.Modelo</c>.</summary>
+    string ModeloInteligencia { get; set; }
+
+    /// <summary>Chip escolhido. Chave <c>Config.Ia.Provedor</c>. Nulo quando nenhum foi salvo.</summary>
+    ProvedorIa? ProvedorInteligencia { get; set; }
+
+    /// <summary>
+    /// Remove as preferências gravadas e volta ao padrão. A chave <c>Config.Tema</c> é preservada.
+    /// A chave da API no SecureStorage não é removida aqui.
+    /// </summary>
     void Redefinir();
 }

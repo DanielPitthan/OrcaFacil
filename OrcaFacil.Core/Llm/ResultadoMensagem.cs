@@ -61,11 +61,15 @@ public sealed record ResultadoMensagem(
     public const string TextoRespostaInvalida = "A resposta veio fora do formato esperado.";
     public const string TextoSemRede = "Não foi possível conectar ao provedor.";
     public const string TextoFalha = "O provedor não concluiu a leitura.";
+    public const string TextoConexaoOk = "A conexão com o provedor foi estabelecida.";
 
     public bool Sucesso => Tipo == TipoResultadoMensagem.Ok;
 
     public static ResultadoMensagem Ok(ComprovanteLido comprovante) =>
         new(TipoResultadoMensagem.Ok, string.Empty, comprovante);
+
+    public static ResultadoMensagem ConexaoOk() =>
+        new(TipoResultadoMensagem.Ok, TextoConexaoOk);
 
     public static ResultadoMensagem Falha(
         TipoResultadoMensagem tipo,

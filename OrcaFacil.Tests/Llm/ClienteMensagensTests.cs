@@ -673,6 +673,121 @@ public class ClienteMensagensTests
     private static HttpResponseMessage Resposta(HttpStatusCode status, string corpo) =>
         new(status) { Content = new StringContent(corpo, Encoding.UTF8, "application/json") };
 
+    [Fact]
+    public async Task TesteDeConexao_MontaPedidoMinimoSemFotoNemChaveNoCorpo()
+    {
+        const string corpoResposta = "segredo-corpo " + Chave;
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, corpoResposta));
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.TestarConexaoAsync(Base + "/", Chave, "  " + PedidoMensagem.ModeloAnthropic + "  ");
+
+        Assert.True(resultado.Sucesso);
+        Assert.Equal(1, captura.Chamadas);
+        Assert.Equal("POST", captura.Metodo);
+        Assert.Equal("https://api.anthropic.com/v1/messages", captura.Uri);
+        Assert.Equal(Chave, captura.Chave);
+        Assert.Equal(ClienteMensagens.VersaoAnthropic, captura.Versao);
+        Assert.StartsWith("application/json", captura.TipoConteudo, StringComparison.Ordinal);
+        Assert.DoesNotContain(Chave, captura.Uri, StringComparison.Ordinal);
+        Assert.DoesNotContain(Chave, captura.Corpo, StringComparison.Ordinal);
+        Assert.Equal(ResultadoMensagem.TextoConexaoOk, resultado.Mensagem);
+        Assert.Equal(ResultadoMensagem.TextoConexaoOk, ClienteMensagens.TextoExibicao(resultado, Chave));
+        Assert.DoesNotContain(Chave, resultado.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(corpoResposta, resultado.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain(Chave, ClienteMensagens.TextoExibicao(resultado, Chave), StringComparison.Ordinal);
+        Assert.Null(resultado.Comprovante);
+
+        using var doc = JsonDocument.Parse(captura.Corpo);
+        var raiz = doc.RootElement;
+        Assert.Equal(PedidoMensagem.ModeloAnthropic, raiz.GetProperty("model").GetString());
+        Assert.Equal(1, raiz.GetProperty("max_tokens").GetInt32());
+        Assert.False(raiz.TryGetProperty("system", out _));
+        Assert.False(raiz.TryGetProperty("tools", out _));
+        Assert.False(raiz.TryGetProperty("tool_choice", out _));
+        AssertSemAmostragem(raiz);
+
+        var mensagem = Assert.Single(raiz.GetProperty("messages").EnumerateArray());
+        Assert.Equal("user", mensagem.GetProperty("role").GetString());
+        Assert.Equal("ping", mensagem.GetProperty("content").GetString());
+        Assert.DoesNotContain("image", captura.Corpo, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TesteDeConexao_401_MostraRecusaDaChaveSemRepetir()
+    {
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.Unauthorized, "corpo " + Chave));
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.TestarConexaoAsync(Base, Chave, PedidoMensagem.ModeloAnthropic);
+
+        Assert.Equal(1, captura.Chamadas);
+        Assert.Equal(TipoResultadoMensagem.NaoAutorizado, resultado.Tipo);
+        Assert.Equal(ResultadoMensagem.TextoNaoAutorizado, ClienteMensagens.TextoExibicao(resultado, Chave));
+        Assert.DoesNotContain(Chave, ClienteMensagens.TextoExibicao(resultado, Chave), StringComparison.Ordinal);
+        Assert.DoesNotContain(Chave, resultado.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TesteDeConexao_SemRede_NaoEcoaEnderecoNemChave()
+    {
+        var captura = new CapturaHandler(_ =>
+            throw new HttpRequestException("falha em " + Base + " com " + Chave));
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.TestarConexaoAsync(Base, Chave, PedidoMensagem.ModeloAnthropic);
+
+        Assert.Equal(TipoResultadoMensagem.SemRede, resultado.Tipo);
+        Assert.Equal(ResultadoMensagem.TextoSemRede, ClienteMensagens.TextoExibicao(resultado, Chave));
+        Assert.DoesNotContain(Chave, resultado.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain("anthropic", resultado.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TesteDeConexao_Timeout_UsaOTokenENaoAlteraOTimeoutDoCliente()
+    {
+        var captura = new CapturaHandler(async (_, token) =>
+        {
+            await Task.Delay(Timeout.Infinite, token);
+            return Resposta(HttpStatusCode.OK, "corpo " + Chave);
+        });
+        using var cliente = new ClienteMensagens(captura, TimeSpan.FromMilliseconds(200));
+
+        var resultado = await cliente.TestarConexaoAsync(Base, Chave, PedidoMensagem.ModeloAnthropic);
+
+        Assert.Equal(TipoResultadoMensagem.Timeout, resultado.Tipo);
+        Assert.Equal(ResultadoMensagem.TextoTimeout, ClienteMensagens.TextoExibicao(resultado, Chave));
+        Assert.Equal(Timeout.InfiniteTimeSpan, cliente.TimeoutDoTransporte);
+        Assert.DoesNotContain(Chave, resultado.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("http://api.anthropic.com")]
+    [InlineData("https://user:segredo@api.anthropic.com")]
+    public async Task TesteDeConexao_UrlInsegura_NaoChamaARede(string url)
+    {
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, "ok"));
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.TestarConexaoAsync(url, Chave, PedidoMensagem.ModeloAnthropic);
+
+        Assert.Equal(0, captura.Chamadas);
+        Assert.Equal(TipoResultadoMensagem.PedidoInvalido, resultado.Tipo);
+        Assert.DoesNotContain(Chave, resultado.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain("segredo", resultado.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TextoExibicao_DescartaMensagemQueCarregaAChave()
+    {
+        var sujo = new ResultadoMensagem(TipoResultadoMensagem.Falha, "falhou " + Chave);
+
+        var texto = ClienteMensagens.TextoExibicao(sujo, Chave);
+
+        Assert.Equal(ResultadoMensagem.TextoFalha, texto);
+        Assert.DoesNotContain(Chave, texto, StringComparison.Ordinal);
+    }
+
     private sealed class CapturaHandler : HttpMessageHandler
     {
         private readonly Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> _responder;
