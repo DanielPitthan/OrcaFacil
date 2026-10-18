@@ -18,8 +18,7 @@ public class ClienteMensagensTests
     public async Task Pedido_PostaMessagesComSystemImagemFerramentaEEscolhaFixa()
     {
         var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, CorpoValido()));
-        using var http = new HttpClient(captura);
-        var cliente = new ClienteMensagens(http);
+        using var cliente = new ClienteMensagens(captura);
 
         var resultado = await cliente.LerComprovanteAsync(
             Base + "/",
@@ -36,8 +35,6 @@ public class ClienteMensagensTests
         Assert.Equal("2023-06-01", captura.Versao);
         Assert.Equal(ClienteMensagens.VersaoAnthropic, captura.Versao);
         Assert.StartsWith("application/json", captura.TipoConteudo, StringComparison.Ordinal);
-        Assert.False(http.DefaultRequestHeaders.Contains(ClienteMensagens.CabecalhoChave));
-        Assert.False(http.DefaultRequestHeaders.Contains(ClienteMensagens.CabecalhoVersao));
         Assert.DoesNotContain(Chave, captura.Uri, StringComparison.Ordinal);
         Assert.DoesNotContain(Chave, captura.Corpo, StringComparison.Ordinal);
 
@@ -87,14 +84,13 @@ public class ClienteMensagensTests
     public async Task ChaveTrocaACadaPedido_ENaoFicaNoCliente()
     {
         var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, CorpoValido()));
-        using var http = new HttpClient(captura);
-        var cliente = new ClienteMensagens(http);
+        using var cliente = new ClienteMensagens(captura);
 
         await cliente.LerComprovanteAsync(Base, "chave-um", PedidoMensagem.ModeloAnthropic, Midia, Imagem);
         await cliente.LerComprovanteAsync(Base, "chave-dois", PedidoMensagem.ModeloAnthropic, Midia, Imagem);
 
         Assert.Equal(["chave-um", "chave-dois"], captura.Chaves);
-        Assert.False(http.DefaultRequestHeaders.Contains(ClienteMensagens.CabecalhoChave));
+        Assert.Equal(Timeout.InfiniteTimeSpan, cliente.TimeoutDoTransporte);
     }
 
     [Theory]
@@ -106,8 +102,7 @@ public class ClienteMensagensTests
     public async Task TraduzStatusHttp(int status, TipoResultadoMensagem tipo, string mensagem)
     {
         var captura = new CapturaHandler(_ => Resposta((HttpStatusCode)status, "corpo-secreto " + Chave + " " + Imagem));
-        using var http = new HttpClient(captura);
-        var cliente = new ClienteMensagens(http);
+        using var cliente = new ClienteMensagens(captura);
 
         var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
 
@@ -138,8 +133,7 @@ public class ClienteMensagensTests
             resposta.Headers.TryAddWithoutValidation("Retry-After", "5");
             return resposta;
         });
-        using var http = new HttpClient(captura);
-        var cliente = new ClienteMensagens(http);
+        using var cliente = new ClienteMensagens(captura);
 
         var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
 
@@ -157,8 +151,7 @@ public class ClienteMensagensTests
             resposta.Headers.TryAddWithoutValidation("Retry-After", "17");
             return resposta;
         });
-        using var http = new HttpClient(captura);
-        var cliente = new ClienteMensagens(http);
+        using var cliente = new ClienteMensagens(captura);
 
         var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
 
@@ -178,8 +171,7 @@ public class ClienteMensagensTests
             resposta.Headers.TryAddWithoutValidation("Retry-After", quando.ToString("r", CultureInfo.InvariantCulture));
             return resposta;
         });
-        using var http = new HttpClient(captura);
-        var cliente = new ClienteMensagens(http);
+        using var cliente = new ClienteMensagens(captura);
 
         var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
 
@@ -196,8 +188,7 @@ public class ClienteMensagensTests
             resposta.Headers.TryAddWithoutValidation("Retry-After", "logo");
             return resposta;
         });
-        using var http = new HttpClient(captura);
-        var cliente = new ClienteMensagens(http);
+        using var cliente = new ClienteMensagens(captura);
 
         var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
 
@@ -209,8 +200,7 @@ public class ClienteMensagensTests
     public async Task TimeoutDoTransporte_ViraTimeoutSemVazarDetalhe()
     {
         var captura = new CapturaHandler(_ => throw new TaskCanceledException("estourou " + Chave + " " + Base + " " + Imagem));
-        using var http = new HttpClient(captura);
-        var cliente = new ClienteMensagens(http);
+        using var cliente = new ClienteMensagens(captura);
 
         var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
 
@@ -229,29 +219,33 @@ public class ClienteMensagensTests
             await Task.Delay(Timeout.Infinite, token);
             return Resposta(HttpStatusCode.OK, CorpoValido());
         });
-        using var http = new HttpClient(captura) { Timeout = TimeSpan.FromSeconds(15) };
-        var cliente = new ClienteMensagens(http, TimeSpan.FromMilliseconds(200));
+        using var cliente = new ClienteMensagens(captura, TimeSpan.FromMilliseconds(200));
 
         var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
 
         Assert.Equal(TipoResultadoMensagem.Timeout, resultado.Tipo);
-        Assert.Equal(TimeSpan.FromSeconds(15), http.Timeout);
+        Assert.Equal(Timeout.InfiniteTimeSpan, cliente.TimeoutDoTransporte);
+        Assert.NotEqual(ClienteMensagens.TempoLimite, cliente.TimeoutDoTransporte);
         Assert.Equal(TimeSpan.FromSeconds(60), ClienteMensagens.TempoLimite);
         Assert.True(ClienteMensagens.TempoLimite > TimeSpan.FromSeconds(15));
     }
 
     [Fact]
-    public void Construtor_NaoSobrescreveTimeoutDoHttpClientRecebido()
+    public async Task Criar_RecusaHttpENaoUsaTimeoutDoHttpClient()
     {
-        using var http = new HttpClient(new CapturaHandler(_ => Resposta(HttpStatusCode.OK, "{}")))
-        {
-            Timeout = TimeSpan.FromSeconds(15)
-        };
+        using var cliente = ClienteMensagens.Criar();
 
-        _ = new ClienteMensagens(http);
+        var resultado = await cliente.LerComprovanteAsync(
+            "http://api.anthropic.com",
+            Chave,
+            PedidoMensagem.ModeloAnthropic,
+            Midia,
+            Imagem);
 
-        Assert.Equal(TimeSpan.FromSeconds(15), http.Timeout);
-        Assert.True(ClienteMensagens.TempoLimite > http.Timeout);
+        Assert.Equal(TipoResultadoMensagem.PedidoInvalido, resultado.Tipo);
+        Assert.Equal(Timeout.InfiniteTimeSpan, cliente.TimeoutDoTransporte);
+        Assert.DoesNotContain(Chave, resultado.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain("http", resultado.Mensagem, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -273,8 +267,7 @@ public class ClienteMensagensTests
             await Task.Delay(Timeout.Infinite, token);
             return Resposta(HttpStatusCode.OK, CorpoValido());
         });
-        using var http = new HttpClient(captura);
-        var cliente = new ClienteMensagens(http);
+        using var cliente = new ClienteMensagens(captura);
         using var cts = new CancellationTokenSource();
         var tarefa = cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem, cts.Token);
         cts.Cancel();
@@ -287,8 +280,7 @@ public class ClienteMensagensTests
     {
         const string corpo = "<html>segredo-corpo e " + Imagem + "</html>";
         var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, corpo));
-        using var http = new HttpClient(captura);
-        var cliente = new ClienteMensagens(http);
+        using var cliente = new ClienteMensagens(captura);
 
         var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
 
@@ -303,8 +295,7 @@ public class ClienteMensagensTests
     {
         var captura = new CapturaHandler(_ =>
             throw new HttpRequestException("falha em " + Base + "/v1/messages com " + Chave));
-        using var http = new HttpClient(captura);
-        var cliente = new ClienteMensagens(http);
+        using var cliente = new ClienteMensagens(captura);
 
         var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
 
@@ -325,8 +316,7 @@ public class ClienteMensagensTests
     public async Task UrlInvalida_NaoChamaARede(string url)
     {
         var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, CorpoValido()));
-        using var http = new HttpClient(captura);
-        var cliente = new ClienteMensagens(http);
+        using var cliente = new ClienteMensagens(captura);
 
         var resultado = await cliente.LerComprovanteAsync(url, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
 
@@ -341,8 +331,7 @@ public class ClienteMensagensTests
     public async Task ChaveVaziaOuComQuebraDeLinha_NaoChamaARede()
     {
         var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, CorpoValido()));
-        using var http = new HttpClient(captura);
-        var cliente = new ClienteMensagens(http);
+        using var cliente = new ClienteMensagens(captura);
 
         var vazia = await cliente.LerComprovanteAsync(Base, "  ", PedidoMensagem.ModeloAnthropic, Midia, Imagem);
         var injetada = await cliente.LerComprovanteAsync(Base, "chave\r\nX-Extra: 1", PedidoMensagem.ModeloAnthropic, Midia, Imagem);
@@ -362,8 +351,7 @@ public class ClienteMensagensTests
     public async Task Http_RecusadoAntesDeEnviarAChave(string url)
     {
         var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, CorpoValido()));
-        using var http = new HttpClient(captura);
-        var cliente = new ClienteMensagens(http);
+        using var cliente = new ClienteMensagens(captura);
 
         var resultado = await cliente.LerComprovanteAsync(url, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
 
@@ -391,8 +379,7 @@ public class ClienteMensagensTests
             resposta.Content = new ConteudoQueFalhaSeLido();
             return resposta;
         });
-        using var http = new HttpClient(captura);
-        var cliente = new ClienteMensagens(http);
+        using var cliente = new ClienteMensagens(captura);
 
         var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
 
@@ -445,6 +432,56 @@ public class ClienteMensagensTests
         Assert.False(handler.AllowAutoRedirect);
     }
 
+    [Theory]
+    [InlineData(301)]
+    [InlineData(302)]
+    [InlineData(307)]
+    [InlineData(308)]
+    public async Task RedirectReal_ChaveECorpoNaoChegamAoSegundoHost(int status)
+    {
+        var portaOrigem = PortaLivre();
+        var portaOutra = PortaLivre();
+        var visita = new VisitaRedirect();
+        using var origem = Escutar(portaOrigem, (ctx, _) =>
+        {
+            ctx.Response.StatusCode = status;
+            ctx.Response.Headers["Location"] = $"http://127.0.0.1:{portaOutra}/coletor";
+            ctx.Response.ContentLength64 = 0;
+        });
+        using var outra = Escutar(portaOutra, (ctx, corpo) =>
+        {
+            Interlocked.Increment(ref visita.Pedidos);
+            if (string.Equals(ctx.Request.Headers[ClienteMensagens.CabecalhoChave], Chave, StringComparison.Ordinal))
+                visita.ViuChave = true;
+            if (corpo.Contains(Imagem, StringComparison.Ordinal))
+                visita.ViuCorpo = true;
+
+            var bytes = Encoding.UTF8.GetBytes(CorpoValido());
+            ctx.Response.StatusCode = 200;
+            ctx.Response.ContentType = "application/json";
+            ctx.Response.ContentLength64 = bytes.Length;
+            ctx.Response.OutputStream.Write(bytes, 0, bytes.Length);
+        });
+
+        var transporte = new SocketsHttpHandler { AllowAutoRedirect = true };
+        using var cliente = new ClienteMensagens(transporte, TimeSpan.FromSeconds(5), permiteHttp: true);
+
+        var resultado = await cliente.LerComprovanteAsync(
+            $"http://127.0.0.1:{portaOrigem}",
+            Chave,
+            PedidoMensagem.ModeloAnthropic,
+            Midia,
+            Imagem);
+
+        Assert.Equal(TipoResultadoMensagem.Falha, resultado.Tipo);
+        Assert.False(resultado.Sucesso);
+        Assert.Null(resultado.Comprovante);
+        Assert.Equal(0, visita.Pedidos);
+        Assert.False(visita.ViuChave);
+        Assert.False(visita.ViuCorpo);
+        Assert.False(transporte.AllowAutoRedirect);
+    }
+
     [Fact]
     public void Imagem_TetoEh5Mb()
     {
@@ -457,8 +494,7 @@ public class ClienteMensagensTests
     public async Task ImagemAcimaDe5Mb_NaoEnviaChave()
     {
         var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, CorpoValido()));
-        using var http = new HttpClient(captura);
-        var cliente = new ClienteMensagens(http);
+        using var cliente = new ClienteMensagens(captura);
         var imagem = Base64De(ClienteMensagens.TamanhoMaximoImagem + 1);
 
         var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, imagem);
@@ -481,8 +517,7 @@ public class ClienteMensagensTests
             };
             return resposta;
         });
-        using var http = new HttpClient(captura);
-        var cliente = new ClienteMensagens(http);
+        using var cliente = new ClienteMensagens(captura);
 
         var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
 
@@ -505,8 +540,7 @@ public class ClienteMensagensTests
             };
             return resposta;
         });
-        using var http = new HttpClient(captura);
-        var cliente = new ClienteMensagens(http);
+        using var cliente = new ClienteMensagens(captura);
 
         var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
 
@@ -524,8 +558,7 @@ public class ClienteMensagensTests
             resposta.Headers.TryAddWithoutValidation("Retry-After", "86400");
             return resposta;
         });
-        using var http = new HttpClient(captura);
-        var cliente = new ClienteMensagens(http);
+        using var cliente = new ClienteMensagens(captura);
 
         var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
 
@@ -545,8 +578,7 @@ public class ClienteMensagensTests
             resposta.Headers.TryAddWithoutValidation("Retry-After", quando.ToString("r", CultureInfo.InvariantCulture));
             return resposta;
         });
-        using var http = new HttpClient(captura);
-        var cliente = new ClienteMensagens(http);
+        using var cliente = new ClienteMensagens(captura);
 
         var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
 
@@ -560,8 +592,7 @@ public class ClienteMensagensTests
     public async Task ErroDoServidor_ViraFalhaSemEcoarCorpoNemRepetir(int status)
     {
         var captura = new CapturaHandler(_ => Resposta((HttpStatusCode)status, "corpo-secreto " + Chave + " " + Imagem));
-        using var http = new HttpClient(captura);
-        var cliente = new ClienteMensagens(http);
+        using var cliente = new ClienteMensagens(captura);
 
         var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
 
@@ -579,8 +610,7 @@ public class ClienteMensagensTests
     public async Task GatewayComCaminho_PreservaOPrefixo()
     {
         var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, CorpoValido()));
-        using var http = new HttpClient(captura);
-        var cliente = new ClienteMensagens(http);
+        using var cliente = new ClienteMensagens(captura);
 
         await cliente.LerComprovanteAsync(
             "https://exemplo.test/gateway/",
@@ -712,7 +742,10 @@ public class ClienteMensagensTests
         return porta;
     }
 
-    private static HttpListener Escutar(int porta, Action<HttpListenerContext> responder)
+    private static HttpListener Escutar(int porta, Action<HttpListenerContext> responder) =>
+        Escutar(porta, (contexto, _) => responder(contexto));
+
+    private static HttpListener Escutar(int porta, Action<HttpListenerContext, string> responder)
     {
         var escuta = new HttpListener();
         escuta.Prefixes.Add($"http://127.0.0.1:{porta}/");
@@ -737,8 +770,8 @@ public class ClienteMensagensTests
 
                 try
                 {
-                    await contexto.Request.InputStream.CopyToAsync(Stream.Null);
-                    responder(contexto);
+                    var corpo = await LerPedidoAsync(contexto.Request);
+                    responder(contexto, corpo);
                 }
                 finally
                 {
@@ -747,6 +780,29 @@ public class ClienteMensagensTests
             }
         });
         return escuta;
+    }
+
+    private static async Task<string> LerPedidoAsync(HttpListenerRequest pedido)
+    {
+        using var memoria = new MemoryStream();
+        var buffer = new byte[4096];
+        while (memoria.Length < 65536)
+        {
+            var lidos = await pedido.InputStream.ReadAsync(buffer);
+            if (lidos == 0)
+                break;
+
+            memoria.Write(buffer, 0, lidos);
+        }
+
+        return Encoding.UTF8.GetString(memoria.GetBuffer(), 0, (int)memoria.Length);
+    }
+
+    private sealed class VisitaRedirect
+    {
+        public int Pedidos;
+        public bool ViuChave;
+        public bool ViuCorpo;
     }
 
     private sealed class FluxoSemBusca : Stream
