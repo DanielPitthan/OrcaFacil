@@ -1,4 +1,5 @@
 @using OrcaFacil.Core.Llm
+@implements IDisposable
 @inject IConfiguracaoService Configuracao
 @inject ICofreChaveApi CofreChave
 @inject ClienteMensagens Cliente
@@ -12,7 +13,8 @@
                 @foreach (var provedor in ChipsInteligencia.Provedores)
                 {
                     <MudChip T="ProvedorIa?" Value="provedor" Text="@ChipsInteligencia.Texto(provedor)"
-                             Color="Color.Primary" Variant="Variant.Outlined" />
+                             Color="Color.Primary" Variant="Variant.Outlined"
+                             UserAttributes="@AtributosChip(provedor)" />
                 }
             </MudChipSet>
         </div>
@@ -63,6 +65,8 @@
 </div>
 
 @code {
+    private readonly CancellationTokenSource _cancelamento = new();
+
     private static readonly Dictionary<string, object?> AtributosChave = new()
     {
         ["autocomplete"] = "off",
@@ -86,6 +90,13 @@
     private string PlaceholderChave => _temChave ? "Chave já salva neste aparelho" : "";
 
     private string ClasseResultado => _testeOk ? "of-ia-ok" : "of-ia-erro";
+
+    private Dictionary<string, object?> AtributosChip(ProvedorIa provedor) => new()
+    {
+        ["aria-pressed"] = _provedor == provedor ? "true" : "false"
+    };
+
+    public void Dispose() => _cancelamento.Cancel();
 
     protected override async Task OnInitializedAsync()
     {
@@ -166,9 +177,12 @@
         string? chave = null;
         try
         {
-            chave = await ResolverChaveAsync();
-            var resultado = await Cliente.TestarConexaoAsync(_url, chave, _modelo);
+            chave = await ResolverChaveAsync(_cancelamento.Token);
+            var resultado = await Cliente.TestarConexaoAsync(_url, chave, _modelo, _cancelamento.Token);
             MostrarTeste(resultado, chave);
+        }
+        catch (OperationCanceledException) when (_cancelamento.IsCancellationRequested)
+        {
         }
         catch (OperationCanceledException)
         {
@@ -189,14 +203,14 @@
         }
     }
 
-    private async Task<string?> ResolverChaveAsync()
+    private async Task<string?> ResolverChaveAsync(CancellationToken cancellationToken = default)
     {
         if (!string.IsNullOrWhiteSpace(_chaveDigitada))
             return _chaveDigitada.Trim();
 
         try
         {
-            var salva = await CofreChave.LerAsync();
+            var salva = await CofreChave.LerAsync(cancellationToken);
             return string.IsNullOrWhiteSpace(salva) ? null : salva.Trim();
         }
         catch (Exception)

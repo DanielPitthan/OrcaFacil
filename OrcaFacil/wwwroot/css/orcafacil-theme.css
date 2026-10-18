@@ -24,8 +24,6 @@
     /* Texto do resultado da conexão. No escuro, sobre a superfície #1B1F27: 7,45:1 e 5,32:1. */
     --of-resultado-ok: #4CC38A;
     --of-resultado-erro: #E07171;
-    /* Texto do chip selecionado sobre --of-primary do tema escuro (#6EA8FE): 7,75:1. */
-    --of-chip-selecionado-texto: #0B1220;
     /* A paleta do MudBlazor não tem um slot de saldo. O roxo claro é o token do tema escuro. */
     --of-saldo: #B69CFF;
     /*
@@ -69,8 +67,6 @@ html:not(.of-tema-claro):not(.of-tema-escuro) body {
     /* #6DA538 sobre #fff fica em 2,96:1 e #D64242 em 4,45:1. Estes valem só no texto do resultado. */
     --of-resultado-ok: #3A7014;
     --of-resultado-erro: #B4233A;
-    /* #1E2A33 sobre o primário claro #659ECD: 5,11:1. */
-    --of-chip-selecionado-texto: #1E2A33;
 }
 
 html.of-tema-claro,
