@@ -10,8 +10,8 @@ public interface IDestinoEspelho
 }
 
 /// <summary>
-/// Troca atômica no sistema de arquivos local. A pasta do usuário no Android (SAF) entra noutro PR;
-/// esta classe é a implementação de Core usada nos testes e em destinos que já tenham um caminho.
+/// Troca atômica no sistema de arquivos local. A pasta do usuário no Android usa
+/// <see cref="Pasta.DestinoEspelhoPasta"/>; esta classe cobre testes e destinos que já tenham caminho.
 /// </summary>
 /// <remarks>
 /// O temporário fica na mesma pasta do destino, então o rename é atômico no mesmo volume.
@@ -38,9 +38,7 @@ public sealed class DestinoEspelhoArquivo : IDestinoEspelho
             throw new IOException("Não foi possível publicar o espelho. O arquivo anterior foi mantido.");
 
         Directory.CreateDirectory(pasta);
-        var temporario = Path.Combine(
-            pasta,
-            "." + Path.GetFileName(_caminho) + "." + Guid.NewGuid().ToString("N") + ".tmp");
+        var temporario = Path.Combine(pasta, Pasta.NomeTemporarioEspelho.Criar(Path.GetFileName(_caminho), Guid.NewGuid()));
 
         try
         {
