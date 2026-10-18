@@ -10,6 +10,7 @@ using OrcaFacil.Core.Tema;
 using OrcaFacil.Data;
 using OrcaFacil.Components.Layout;
 using OrcaFacil.Services;
+using OrcaFacil.Services.Espelho;
 using OrcaFacil.Services.Interfaces;
 using Plugin.LocalNotification;
 #if ANDROID
@@ -115,6 +116,7 @@ public static class MauiProgram
         builder.Services.AddSingleton<IPerfilContext, PerfilContext>();
         builder.Services.AddSingleton<IFotoPerfilService, FotoPerfilService>();
         builder.Services.AddSingleton<IPreferenciasSimples, PreferenciasMaui>();
+        RegistroServicosPastaEspelho.Registrar(builder.Services);
         builder.Services.AddSingleton<PreferenciasTema>();
         builder.Services.AddSingleton<IConfiguracaoService, ConfiguracaoService>();
         builder.Services.AddSingleton<ITemaAppService, TemaAppService>();

@@ -93,6 +93,7 @@ public class VerificadorIntegridadeBancoTests
 
         Assert.False(relatorio.Integro);
         Assert.Equal(["ItensLancamento.HashImportacao"], relatorio.ColunasFaltando);
+        Assert.DoesNotContain("ItensLancamento.EhEstorno", relatorio.ColunasFaltando);
         Assert.Equal([IndiceHash], relatorio.IndicesFaltando);
         Assert.Equal([Estorno, HashImportacao, IndiceHashImportacao], relatorio.MigrationsAusentesNoHistorico);
         Assert.Empty(relatorio.MigrationsPelaMetade);

@@ -93,6 +93,7 @@ public static class VerificadorIntegridadeBanco
             var migrations = context.Database.GetMigrations().ToList();
             return new RelatorioIntegridadeBanco
             {
+                ArquivoIlegivel = true,
                 TabelasFaltando = esperado.Tabelas.Order(StringComparer.Ordinal).ToList(),
                 ColunasFaltando = esperado.Colunas.Order(StringComparer.Ordinal).ToList(),
                 IndicesFaltando = esperado.Indices.Order(StringComparer.Ordinal).ToList(),
@@ -274,8 +275,8 @@ public static class VerificadorIntegridadeBanco
                     case DropColumnOperation coluna:
                         efeitos.RegistrarRemocao(new ObjetoSchema(TipoObjeto.Coluna, coluna.Table, coluna.Name));
                         break;
-                    case DropIndexOperation indice when indice.Name is not null && indice.Table is not null:
-                        efeitos.RegistrarRemocao(new ObjetoSchema(TipoObjeto.Indice, indice.Table, indice.Name));
+                    case DropIndexOperation indice when indice.Name is not null:
+                        efeitos.RegistrarRemocao(new ObjetoSchema(TipoObjeto.Indice, indice.Table ?? "", indice.Name));
                         break;
                 }
             }
@@ -352,11 +353,18 @@ public sealed class RelatorioIntegridadeBanco
 {
     public static RelatorioIntegridadeBanco IlegivelMinimo { get; } = new()
     {
+        ArquivoIlegivel = true,
         TabelasFaltando = ["(arquivo ilegível)"],
         ColunasFaltando = ["(arquivo ilegível)"],
         IndicesFaltando = ["(arquivo ilegível)"],
         MigrationsAusentesNoHistorico = ["(histórico ilegível)"]
     };
+
+    /// <summary>
+    /// O arquivo não pôde ser lido. O relatório lista faltas porque nada foi confirmado;
+    /// isso não é um banco vazio nem um schema antigo.
+    /// </summary>
+    public bool ArquivoIlegivel { get; init; }
 
     public IReadOnlyList<string> TabelasExistentes { get; init; } = [];
     public IReadOnlyList<string> TabelasFaltando { get; init; } = [];
@@ -369,7 +377,8 @@ public sealed class RelatorioIntegridadeBanco
     public IReadOnlyList<string> MigrationsNoHistoricoComObjetoFaltando { get; init; } = [];
 
     public bool Integro =>
-        TabelasFaltando.Count == 0
+        !ArquivoIlegivel
+        && TabelasFaltando.Count == 0
         && ColunasFaltando.Count == 0
         && IndicesFaltando.Count == 0
         && MigrationsAusentesNoHistorico.Count == 0
