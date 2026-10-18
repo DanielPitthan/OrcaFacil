@@ -299,7 +299,9 @@ public static class ImportacaoFaturaCsvApresentacao
 
     /// <summary>
     /// A confirmação recusa o lote inteiro se a soma passar do total ou se o líquido ficar abaixo de R$ 0,01.
-    /// A prévia usa a mesma ordem: compra soma no teto; estorno abate o total e exige o mínimo.
+    /// O teto é o total gravado da fatura, o mesmo que a confirmação lê do banco.
+    /// O valor digitado na tela e ainda não salvo fica de fora.
+    /// Compra soma no teto; estorno abate o total e exige o mínimo.
     /// </summary>
     private static MensagemImportacaoFaturaCsv? LimiteDaFatura(
         decimal total,

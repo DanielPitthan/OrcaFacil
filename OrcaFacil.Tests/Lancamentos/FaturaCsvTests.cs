@@ -456,9 +456,26 @@ public class FaturaCsvTests
     }
 
     [Fact]
-    public async Task LerArquivoAsync_LeOFluxoInteiroAntesDeRecusarAcimaDeUmMega()
+    public async Task LerArquivoAsync_ParaNoMegaMaisUmByteERecusaSemLerOResto()
     {
-        var fluxo = new FluxoEmPedacos(FaturaCsvLayout.TamanhoMaximoBytes + 8, pedaco: 1024);
+        var extra = 8;
+        var fluxo = new FluxoEmPedacos(FaturaCsvLayout.TamanhoMaximoBytes + extra, pedaco: 1024);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => FaturaCsv.LerArquivoAsync(fluxo));
+
+        Assert.Equal(FaturaCsvLayout.MensagemArquivoGrande, ex.Message);
+        Assert.Equal(FaturaCsvLayout.TamanhoMaximoBytes + 1, fluxo.Lidos);
+        Assert.Equal(extra - 1, fluxo.Tamanho - fluxo.Lidos);
+
+        var sobra = fluxo.Read(new byte[extra], 0, extra);
+        Assert.Equal(extra - 1, sobra);
+        Assert.Equal(fluxo.Tamanho, fluxo.Lidos);
+    }
+
+    [Fact]
+    public async Task LerArquivoAsync_ExatamenteUmByteAcima_RecusaSemDevolverPrefixo()
+    {
+        var fluxo = new FluxoEmPedacos(FaturaCsvLayout.TamanhoMaximoBytes + 1, pedaco: 64 * 1024);
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => FaturaCsv.LerArquivoAsync(fluxo));
 

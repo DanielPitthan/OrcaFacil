@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.Entities;
@@ -456,6 +457,35 @@ public class ImportacaoFaturaCsvServiceTests : IDisposable
 
         Assert.Contains("Nada foi importado", ex.Message);
         Assert.Empty((await CarregarAsync(fatura.Id)).Itens);
+    }
+
+    [Fact]
+    public async Task PreverAsync_TetoUsaOTotalEfetivoGravado()
+    {
+        var fatura = await CriarFaturaAsync(100m);
+        await _service.ConfirmarAsync(fatura.Id, Arquivo("16/10/2026;Devolução;-40,00;Lazer;;;;"));
+        var gravada = await CarregarAsync(fatura.Id);
+        Assert.Equal(60m, gravada.Valor);
+
+        var texto = Arquivo("17/10/2026;Padaria;110,00;Alimentação;;;;");
+        var previa = await _service.PreverAsync(fatura.Id, texto);
+
+        Assert.Equal(60m, previa.TotalFatura);
+        Assert.Equal(-40m, previa.SomaItensAtual);
+
+        var vista = ImportacaoFaturaCsvApresentacao.Montar(
+            previa,
+            ImportacaoFaturaCsvApresentacao.SelecaoInicial(previa),
+            CultureInfo.GetCultureInfo("pt-BR"));
+
+        Assert.False(vista.PodeConfirmar);
+        Assert.Equal(ItensFaturaRegras.MensagemSomaAcimaDoTotal, vista.Bloqueio!.Texto);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.ConfirmarAsync(fatura.Id, texto));
+        Assert.Equal(ItensFaturaRegras.MensagemSomaAcimaDoTotal, ex.Message);
+        var depois = await CarregarAsync(fatura.Id);
+        Assert.Equal(60m, depois.Valor);
+        Assert.Single(depois.Itens);
     }
 
     [Fact]

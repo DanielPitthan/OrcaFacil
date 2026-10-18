@@ -47,19 +47,31 @@ public static class FaturaCsv
     }
 
     /// <summary>
-    /// Lê o fluxo até o fim e só então aplica o limite de 1 MB.
-    /// Parar no meio e interpretar o prefixo importaria um arquivo cortado sem avisar.
+    /// Lê no máximo 1 MB + 1 byte. O byte a mais só revela que o arquivo passou do limite.
+    /// Nesse caso a leitura para, o começo não é interpretado e o restante do fluxo fica intacto.
     /// </summary>
     public static async Task<byte[]> LerArquivoAsync(Stream fluxo, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(fluxo);
 
-        using var memoria = new MemoryStream();
-        await fluxo.CopyToAsync(memoria, cancellationToken).ConfigureAwait(false);
-        if (memoria.Length > FaturaCsvLayout.TamanhoMaximoBytes)
+        var maximo = FaturaCsvLayout.TamanhoMaximoBytes;
+        var buffer = new byte[maximo + 1];
+        var lidos = 0;
+        while (lidos < buffer.Length)
+        {
+            var n = await fluxo.ReadAsync(buffer.AsMemory(lidos, buffer.Length - lidos), cancellationToken).ConfigureAwait(false);
+            if (n == 0)
+                break;
+
+            lidos += n;
+        }
+
+        if (lidos > maximo)
             throw new InvalidOperationException(FaturaCsvLayout.MensagemArquivoGrande);
 
-        return memoria.ToArray();
+        var arquivo = new byte[lidos];
+        buffer.AsSpan(0, lidos).CopyTo(arquivo);
+        return arquivo;
     }
 
     public static Leitura Ler(byte[] arquivo, IReadOnlyList<Categoria> categorias)

@@ -18,7 +18,7 @@ public static class FaturaCsvLayout
 
     public const char Separador = ';';
 
-    /// <summary>Acima disto o arquivo é recusado, sem interpretar o conteúdo.</summary>
+    /// <summary>Acima disto o arquivo é recusado. A leitura do fluxo para em 1 MB + 1 byte, sem interpretar o conteúdo.</summary>
     public const int TamanhoMaximoBytes = 1_048_576;
 
     public const string MensagemArquivoGrande = "O arquivo passa de 1 MB. Nada foi importado.";
