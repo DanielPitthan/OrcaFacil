@@ -31,4 +31,11 @@ public class ItemLancamentoFormModel
 
     /// <summary>Posição na fatura. Compra e estorno dividem a mesma sequência.</summary>
     public int Ordem { get; set; }
+
+    /// <summary>
+    /// SHA-256 da linha de CSV que originou o item.
+    /// Salvar a fatura regrava os itens; sem este campo a deduplicação se perde.
+    /// </summary>
+    [MaxLength(64)]
+    public string? HashImportacao { get; set; }
 }

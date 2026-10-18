@@ -8,6 +8,10 @@ public static class ItensFaturaRegras
 {
     public const decimal TotalMinimo = 0.01m;
 
+    public const string MensagemTotalMinimo = "O total líquido da fatura precisa ser de pelo menos R$ 0,01.";
+
+    public const string MensagemSomaAcimaDoTotal = "A soma dos itens não pode passar do total da fatura.";
+
     /// <summary>Compra entra positiva; estorno, com a mesma magnitude e sinal negativo.</summary>
     public static decimal ValorAssinado(ItemLancamento item)
         => item.EhEstorno ? -item.Valor : item.Valor;
@@ -28,7 +32,7 @@ public static class ItensFaturaRegras
             throw new InvalidOperationException("Esta categoria não permite itens na fatura.");
 
         if (valorFatura < TotalMinimo)
-            throw new InvalidOperationException("O total líquido da fatura precisa ser de pelo menos R$ 0,01.");
+            throw new InvalidOperationException(MensagemTotalMinimo);
 
         if (itens.Any(i => string.IsNullOrWhiteSpace(i.Descricao) || i.Descricao.Length > 120))
             throw new InvalidOperationException("Informe a descrição de cada item da fatura.");
@@ -49,7 +53,7 @@ public static class ItensFaturaRegras
             throw new InvalidOperationException("O item precisa de uma categoria diferente da fatura.");
 
         if (itens.Sum(ValorAssinado) > valorFatura)
-            throw new InvalidOperationException("A soma dos itens não pode passar do total da fatura.");
+            throw new InvalidOperationException(MensagemSomaAcimaDoTotal);
 
         foreach (var item in itens.Where(i => i.Natureza == NaturezaItemLancamento.Parcelada))
         {

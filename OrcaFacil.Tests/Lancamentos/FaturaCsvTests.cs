@@ -369,8 +369,10 @@ public class FaturaCsvTests
         Assert.Equal("Nota \"x\"", linha.Descritivo);
         Assert.Equal(10m, linha.Valor);
 
-        Assert.Contains(leitura.Erros, erro => erro.Numero == 4 && erro.Coluna == "Linha" && erro.Mensagem.Contains("aspas", StringComparison.Ordinal));
-        Assert.Contains(leitura.Erros, erro => erro.Numero == 5 && erro.Coluna == "Linha" && erro.Mensagem.Contains("8 colunas", StringComparison.Ordinal));
+        var erro = Assert.Single(leitura.Erros);
+        Assert.Equal(4, erro.Numero);
+        Assert.Equal("Linha", erro.Coluna);
+        Assert.Contains("aspas", erro.Mensagem, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -386,6 +388,173 @@ public class FaturaCsvTests
         Assert.NotEqual(compra, estorno);
         Assert.NotEqual(compra, outraParcela);
         Assert.Matches("^[0-9A-F]{64}$", compra);
+    }
+
+    [Fact]
+    public void Ler_QuebraDeLinhaEntreAspas_MantemOCampoEALinhaSeguinte()
+    {
+        var leitura = Ler(Arquivo(
+            "16/10/2026;\"Uber\nviagem\";20,00;Lazer;;;;",
+            "18/10/2026;Padaria;10,00;Alimentação;;;;"));
+
+        Assert.True(leitura.ArquivoAceito);
+        Assert.Empty(leitura.Erros);
+        Assert.Equal(2, leitura.Linhas.Count);
+        Assert.Equal(3, leitura.Linhas[0].Numero);
+        Assert.Equal("Uber\nviagem", leitura.Linhas[0].Descricao);
+        Assert.Equal(20m, leitura.Linhas[0].Valor);
+        Assert.Equal(5, leitura.Linhas[1].Numero);
+        Assert.Equal("Padaria", leitura.Linhas[1].Descricao);
+    }
+
+    [Fact]
+    public void EscaparELer_PrefixoDeFormula_NaoMexeNoValorNegativo()
+    {
+        Assert.Equal("'=cmd", FaturaCsvLayout.Escapar("=cmd"));
+        Assert.Equal("'+soma", FaturaCsvLayout.Escapar("+soma"));
+        Assert.Equal("'@a", FaturaCsvLayout.Escapar("@a"));
+        Assert.Equal("'-tarifa", FaturaCsvLayout.Escapar("-tarifa"));
+        Assert.Equal("-18,00", FaturaCsvLayout.Escapar("-18,00"));
+        Assert.Equal("-18", FaturaCsvLayout.Escapar("-18"));
+
+        var linha = string.Join(';',
+            "16/10/2026",
+            FaturaCsvLayout.Escapar("=cmd"),
+            "-18,00",
+            "Alimentação",
+            "Avulsa",
+            "",
+            "",
+            FaturaCsvLayout.Escapar("-tarifa"));
+
+        var leitura = Ler(Arquivo(linha));
+
+        Assert.True(leitura.ArquivoAceito);
+        Assert.Empty(leitura.Erros);
+        var estorno = Assert.Single(leitura.Linhas);
+        Assert.Equal("=cmd", estorno.Descricao);
+        Assert.Equal("-tarifa", estorno.Descritivo);
+        Assert.True(estorno.EhEstorno);
+        Assert.Equal(18m, estorno.Valor);
+        Assert.Equal("Alimentação", estorno.NomeCategoria);
+    }
+
+    [Fact]
+    public void Ler_ArquivoMaiorQueUmMega_RecusaSemLer()
+    {
+        var grande = new byte[FaturaCsvLayout.TamanhoMaximoBytes + 1];
+        grande[0] = 0xEF;
+        grande[1] = 0xBB;
+        grande[2] = 0xBF;
+
+        var leitura = FaturaCsv.Ler(grande, Categorias);
+
+        Assert.False(leitura.ArquivoAceito);
+        Assert.Equal(FaturaCsvLayout.MensagemArquivoGrande, leitura.ErroArquivo);
+        Assert.Empty(leitura.Linhas);
+        Assert.Empty(leitura.Erros);
+    }
+
+    [Fact]
+    public async Task LerArquivoAsync_ParaNoMegaMaisUmByteERecusaSemLerOResto()
+    {
+        var extra = 8;
+        var fluxo = new FluxoEmPedacos(FaturaCsvLayout.TamanhoMaximoBytes + extra, pedaco: 1024);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => FaturaCsv.LerArquivoAsync(fluxo));
+
+        Assert.Equal(FaturaCsvLayout.MensagemArquivoGrande, ex.Message);
+        Assert.Equal(FaturaCsvLayout.TamanhoMaximoBytes + 1, fluxo.Lidos);
+        Assert.Equal(extra - 1, fluxo.Tamanho - fluxo.Lidos);
+
+        var sobra = fluxo.Read(new byte[extra], 0, extra);
+        Assert.Equal(extra - 1, sobra);
+        Assert.Equal(fluxo.Tamanho, fluxo.Lidos);
+    }
+
+    [Fact]
+    public async Task LerArquivoAsync_ExatamenteUmByteAcima_RecusaSemDevolverPrefixo()
+    {
+        var fluxo = new FluxoEmPedacos(FaturaCsvLayout.TamanhoMaximoBytes + 1, pedaco: 64 * 1024);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => FaturaCsv.LerArquivoAsync(fluxo));
+
+        Assert.Equal(FaturaCsvLayout.MensagemArquivoGrande, ex.Message);
+        Assert.Equal(fluxo.Tamanho, fluxo.Lidos);
+        Assert.Equal(0, fluxo.Read(new byte[1], 0, 1));
+    }
+
+    [Fact]
+    public async Task LerArquivoAsync_NoLimite_DevolveOsBytesInteiros()
+    {
+        var dados = new byte[FaturaCsvLayout.TamanhoMaximoBytes];
+        dados[0] = 0xEF;
+        dados[^1] = 0x0A;
+        var fluxo = new FluxoEmPedacos(dados, pedaco: 4096);
+
+        var lidos = await FaturaCsv.LerArquivoAsync(fluxo);
+
+        Assert.Equal(dados, lidos);
+        Assert.Equal(dados.Length, fluxo.Lidos);
+    }
+
+    private sealed class FluxoEmPedacos : Stream
+    {
+        private readonly byte[] _dados;
+        private readonly int _pedaco;
+        private int _posicao;
+
+        public FluxoEmPedacos(int tamanho, int pedaco)
+            : this(new byte[tamanho], pedaco)
+        {
+        }
+
+        public FluxoEmPedacos(byte[] dados, int pedaco)
+        {
+            _dados = dados;
+            _pedaco = pedaco;
+        }
+
+        public int Tamanho => _dados.Length;
+
+        public int Lidos { get; private set; }
+
+        public override bool CanRead => true;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => false;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush()
+        {
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            var restante = _dados.Length - _posicao;
+            if (restante <= 0)
+                return 0;
+
+            var n = Math.Min(count, Math.Min(restante, _pedaco));
+            Array.Copy(_dados, _posicao, buffer, offset, n);
+            _posicao += n;
+            Lidos += n;
+            return n;
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     private static FaturaCsv.Leitura Ler(string texto, params Categoria[] categorias)
