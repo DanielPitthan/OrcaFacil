@@ -3,13 +3,18 @@ namespace OrcaFacil.Core.Armazenamento.Espelho.Pasta;
 /// <summary>
 /// Publica o espelho na pasta: grava um temporário e só então troca o nome.
 /// Se a troca não fecha, o espelho anterior permanece. O único descarte no meio
-/// do caminho é o temporário desta publicação.
+/// do caminho é o temporário desta publicação, e só quando o rename não deixou
+/// os dois nomes visíveis.
 /// </summary>
 /// <remarks>
 /// Quando o nome definitivo já existe, ele é renomeado para uma reserva, o
-/// temporário assume o nome definitivo e a reserva só é removida nessa ordem.
-/// Se a segunda troca falha, a reserva volta ao nome definitivo. Se essa volta
-/// também falha, a reserva fica na pasta e não é apagada.
+/// temporário assume o nome definitivo e a reserva só é removida nessa ordem,
+/// com a origem do temporário já ausente. Se a segunda troca falha de verdade,
+/// a reserva volta ao nome definitivo. Se essa volta também falha, a reserva
+/// fica na pasta e não é apagada.
+/// Se o rename vira cópia (definitivo novo e temporário continuam visíveis),
+/// nada é apagado: o resultado é <see cref="CodigoFalhaPastaEspelho.PublicadoComResiduo"/>
+/// e a reserva do arquivo anterior permanece até uma troca confirmada.
 /// Provedor sem rename (alguns da nuvem) não entra em cópia por cima: a operação
 /// para e o arquivo anterior continua no nome definitivo.
 /// </remarks>
@@ -53,17 +58,36 @@ public sealed class ProtocoloPublicacaoEspelho
 
         var parqueOk = false;
         var promoveOk = false;
+        var manterTemporario = false;
         try
         {
             if (!diagnostico.ArquivoNoNomeFinal)
-                return await PromoverTemporarioAsync(temporario);
+            {
+                var primeiro = await PromoverTemporarioAsync(temporario);
+                if (primeiro.Codigo == CodigoFalhaPastaEspelho.PublicadoComResiduo)
+                    manterTemporario = true;
+
+                return primeiro;
+            }
 
             var parque = await _volume.RenomearAsync(_volume.NomeArquivo, reserva, cancellationToken);
+            if (parque.AmbosNomesVisiveis)
+            {
+                manterTemporario = true;
+                return FalhaDeRenome(parque);
+            }
+
             if (!parque.Sucesso)
                 return FalhaDeRenome(parque);
 
             parqueOk = true;
             var promove = await _volume.RenomearAsync(temporario, _volume.NomeArquivo, CancellationToken.None);
+            if (promove.AmbosNomesVisiveis)
+            {
+                manterTemporario = true;
+                return ResultadoOperacaoPasta.PublicadoComResiduo();
+            }
+
             if (!promove.Sucesso)
             {
                 if (!await VoltarReservaAsync(reserva))
@@ -88,7 +112,7 @@ public sealed class ProtocoloPublicacaoEspelho
         }
         finally
         {
-            if (!promoveOk)
+            if (!promoveOk && !manterTemporario)
                 await DescartarTemporarioAsync(temporario);
         }
     }
@@ -109,6 +133,9 @@ public sealed class ProtocoloPublicacaoEspelho
     private async Task<ResultadoOperacaoPasta> PromoverTemporarioAsync(string temporario)
     {
         var renome = await _volume.RenomearAsync(temporario, _volume.NomeArquivo, CancellationToken.None);
+        if (renome.AmbosNomesVisiveis)
+            return ResultadoOperacaoPasta.PublicadoComResiduo();
+
         if (renome.Sucesso)
             return ResultadoOperacaoPasta.Ok();
 

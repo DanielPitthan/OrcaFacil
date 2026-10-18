@@ -1,3 +1,4 @@
+using OrcaFacil.Core.Armazenamento.Espelho.Pasta;
 using OrcaFacil.Core.Tema;
 
 namespace OrcaFacil.Tests.Tema;
@@ -60,6 +61,37 @@ public class PreferenciasTemaTests
         Assert.Equal(TemaPreferido.Escuro, preferencias.Tema);
         Assert.False(memoria.Contem("Config.NotificacoesAtivas"));
         Assert.False(memoria.Contem("Config.GraficoLancamentosExpandido"));
+    }
+
+    [Fact]
+    public void Redefinir_PreservaAUriDaPastaDoEspelho()
+    {
+        const string uri = "content://com.android.externalstorage.documents/tree/primary%3AOrca";
+        var memoria = new PreferenciasEmMemoria();
+        var preferencias = new PreferenciasTema(memoria);
+        preferencias.Tema = TemaPreferido.Escuro;
+        memoria.Definir(UriEscolhaPasta.ChavePreferencia, uri);
+        memoria.Definir("Config.SomAtivo", "false");
+
+        preferencias.Redefinir();
+
+        Assert.Equal("Escuro", memoria.ValorOuNulo(PreferenciasTema.Chave));
+        Assert.Equal(uri, memoria.ValorOuNulo(UriEscolhaPasta.ChavePreferencia));
+        Assert.Equal(uri, new MemoriaPastaEspelho(memoria).LerUri());
+        Assert.False(memoria.Contem("Config.SomAtivo"));
+    }
+
+    [Fact]
+    public void Redefinir_SemUriDePasta_NaoCriaAChave()
+    {
+        var memoria = new PreferenciasEmMemoria();
+        var preferencias = new PreferenciasTema(memoria);
+        preferencias.Tema = TemaPreferido.Claro;
+
+        preferencias.Redefinir();
+
+        Assert.False(memoria.Contem(UriEscolhaPasta.ChavePreferencia));
+        Assert.Equal("Claro", memoria.ValorOuNulo(PreferenciasTema.Chave));
     }
 
     [Fact]

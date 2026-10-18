@@ -202,7 +202,9 @@ public class MapeamentoLeituraPastaEspelhoTests
 
         foreach (var codigo in Enum.GetValues<CodigoFalhaPastaEspelho>())
         {
-            if (codigo is CodigoFalhaPastaEspelho.Nenhuma or CodigoFalhaPastaEspelho.PastaNaoEscolhida)
+            if (codigo is CodigoFalhaPastaEspelho.Nenhuma
+                or CodigoFalhaPastaEspelho.PastaNaoEscolhida
+                or CodigoFalhaPastaEspelho.PublicadoComResiduo)
                 continue;
 
             Assert.True(

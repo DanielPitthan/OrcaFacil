@@ -23,7 +23,13 @@ public enum CodigoFalhaPastaEspelho
     NomeRecusado,
     EspelhoPreservadoForaDoNome,
     TrocaNaoConfirmada,
-    Indisponivel
+    Indisponivel,
+
+    /// <summary>
+    /// O nome definitivo já tem o espelho novo e o temporário também continuou.
+    /// Não é falha: nada foi apagado, inclusive a reserva do arquivo anterior.
+    /// </summary>
+    PublicadoComResiduo
 }
 
 public static class MensagensPastaEspelho
@@ -61,6 +67,8 @@ public static class MensagensPastaEspelho
             "A troca do espelho não pôde ser confirmada. Nenhum outro arquivo foi apagado.",
         CodigoFalhaPastaEspelho.Indisponivel =>
             "Não foi possível acessar a pasta do espelho. Nenhum arquivo foi apagado.",
+        CodigoFalhaPastaEspelho.PublicadoComResiduo =>
+            "O espelho novo está no nome definitivo. A cópia temporária permaneceu na pasta e não foi apagada. O arquivo anterior só sai quando a troca fica confirmada.",
         _ => "Não foi possível acessar a pasta do espelho. Nenhum arquivo foi apagado."
     };
 }
@@ -148,6 +156,9 @@ public sealed record DiagnosticoPastaEspelho
 {
     public DiagnosticoPastaEspelho(CodigoFalhaPastaEspelho codigo, bool arquivoNoNomeFinal)
     {
+        if (codigo == CodigoFalhaPastaEspelho.PublicadoComResiduo)
+            throw new ArgumentException("PublicadoComResiduo é resultado de publicação, não diagnóstico da pasta.");
+
         if (arquivoNoNomeFinal && codigo != CodigoFalhaPastaEspelho.Nenhuma)
             throw new ArgumentException("Só dá para afirmar que o arquivo está na pasta quando o acesso foi livre.");
 
@@ -166,10 +177,12 @@ public sealed record ResultadoOperacaoPasta
 {
     public ResultadoOperacaoPasta(bool sucesso, CodigoFalhaPastaEspelho codigo, string mensagem)
     {
-        if (sucesso != (codigo == CodigoFalhaPastaEspelho.Nenhuma))
+        if (sucesso != EhPublicacao(codigo))
             throw new ArgumentException("Sucesso e código não combinam.");
-        if (sucesso && mensagem.Length != 0)
-            throw new ArgumentException("Sucesso não leva mensagem.");
+        if (codigo == CodigoFalhaPastaEspelho.Nenhuma && mensagem.Length != 0)
+            throw new ArgumentException("Sucesso limpo não leva mensagem.");
+        if (codigo == CodigoFalhaPastaEspelho.PublicadoComResiduo && string.IsNullOrWhiteSpace(mensagem))
+            throw new ArgumentException("Publicação com resíduo precisa de mensagem.");
         if (!sucesso && string.IsNullOrWhiteSpace(mensagem))
             throw new ArgumentException("Falha precisa de mensagem.");
 
@@ -184,37 +197,64 @@ public sealed record ResultadoOperacaoPasta
 
     public string Mensagem { get; }
 
+    public static bool EhPublicacao(CodigoFalhaPastaEspelho codigo)
+        => codigo is CodigoFalhaPastaEspelho.Nenhuma or CodigoFalhaPastaEspelho.PublicadoComResiduo;
+
     public static ResultadoOperacaoPasta Ok() => new(true, CodigoFalhaPastaEspelho.Nenhuma, "");
+
+    public static ResultadoOperacaoPasta PublicadoComResiduo()
+        => new(
+            true,
+            CodigoFalhaPastaEspelho.PublicadoComResiduo,
+            MensagensPastaEspelho.Para(CodigoFalhaPastaEspelho.PublicadoComResiduo));
 
     public static ResultadoOperacaoPasta Falha(CodigoFalhaPastaEspelho codigo)
     {
-        if (codigo == CodigoFalhaPastaEspelho.Nenhuma)
-            throw new ArgumentException("Falha precisa de um código.", nameof(codigo));
+        if (EhPublicacao(codigo))
+            throw new ArgumentException("Falha precisa de um código de falha.", nameof(codigo));
 
         return new ResultadoOperacaoPasta(false, codigo, MensagensPastaEspelho.Para(codigo));
     }
 
-    public override string ToString() => Sucesso ? "ResultadoOperacaoPasta" : $"ResultadoOperacaoPasta:{Codigo}";
+    public override string ToString()
+        => Codigo == CodigoFalhaPastaEspelho.Nenhuma
+            ? "ResultadoOperacaoPasta"
+            : $"ResultadoOperacaoPasta:{Codigo}";
 }
 
 public sealed record ResultadoRenomeacaoVolume
 {
-    public ResultadoRenomeacaoVolume(CodigoFalhaPastaEspelho codigo, bool destinoJaExistia = false)
+    public ResultadoRenomeacaoVolume(
+        CodigoFalhaPastaEspelho codigo,
+        bool destinoJaExistia = false,
+        bool ambosNomesVisiveis = false)
     {
-        if (codigo == CodigoFalhaPastaEspelho.Nenhuma && destinoJaExistia)
-            throw new ArgumentException("Renomeação concluída não tem destino prévio.");
+        if (codigo == CodigoFalhaPastaEspelho.Nenhuma && (destinoJaExistia || ambosNomesVisiveis))
+            throw new ArgumentException("Renomeação concluída não tem destino prévio nem origem restante.");
+        if (destinoJaExistia && ambosNomesVisiveis)
+            throw new ArgumentException("Destino prévio e cópia sem exclusão são observações diferentes.");
 
         Codigo = codigo;
         DestinoJaExistia = destinoJaExistia;
+        AmbosNomesVisiveis = ambosNomesVisiveis;
     }
 
     public CodigoFalhaPastaEspelho Codigo { get; }
 
     public bool DestinoJaExistia { get; }
 
+    /// <summary>
+    /// O destino apareceu e a origem continuou. O provedor copiou em vez de renomear.
+    /// Quem chama não apaga nenhum dos dois.
+    /// </summary>
+    public bool AmbosNomesVisiveis { get; }
+
     public bool Sucesso => Codigo == CodigoFalhaPastaEspelho.Nenhuma;
 
     public static ResultadoRenomeacaoVolume Ok() => new(CodigoFalhaPastaEspelho.Nenhuma);
+
+    public static ResultadoRenomeacaoVolume CopiaSemExcluirOrigem()
+        => new(CodigoFalhaPastaEspelho.ProvedorSemTroca, ambosNomesVisiveis: true);
 
     public static ResultadoRenomeacaoVolume Falha(CodigoFalhaPastaEspelho codigo, bool destinoJaExistia = false)
         => new(codigo, destinoJaExistia);

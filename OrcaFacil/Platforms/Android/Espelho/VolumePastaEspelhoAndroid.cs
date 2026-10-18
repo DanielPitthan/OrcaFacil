@@ -16,9 +16,10 @@ namespace OrcaFacil.Platforms.Android.Espelho;
 /// </summary>
 /// <remarks>
 /// Provedores como o Drive podem anunciar rename e ainda assim implementá-lo como
-/// cópia mais exclusão, sem atomicidade. A pós-condição exige o destino visível e
-/// a origem ausente antes de seguir. A reserva (espelho anterior) só é apagada
-/// quando o nome definitivo já tem o arquivo novo. Fora isso, o único delete é o
+/// cópia mais exclusão, sem atomicidade. A pós-condição de troca confirmada exige
+/// o destino visível e a origem ausente. Se os dois nomes continuam visíveis, este
+/// volume não apaga nenhum dos dois: o protocolo publica com resíduo e a reserva
+/// do arquivo anterior só sai numa troca confirmada. Fora isso, o único delete é o
 /// temporário criado nesta operação, pelo URI que o próprio <c>createDocument</c> devolveu.
 /// A URI da pasta não entra em mensagem nem em log.
 /// </remarks>
@@ -123,10 +124,10 @@ public sealed class VolumePastaEspelhoAndroid : IVolumePastaEspelho
             if (destinoDepois.Quantidade == 1 && origemDepois.Quantidade == 0)
                 return Task.FromResult(ResultadoRenomeacaoVolume.Ok());
 
-            // Os dois nomes visíveis: o provedor pode ter copiado em vez de renomear.
-            // Não apagamos nenhum dos dois — a cópia pode ser o único espelho válido.
+            // Os dois nomes visíveis: o rename virou cópia e a origem ficou.
+            // Não apagar nenhum dos dois. O protocolo é quem decide o resíduo.
             if (destinoDepois.Quantidade > 0 && origemDepois.Quantidade > 0)
-                return Task.FromResult(ResultadoRenomeacaoVolume.Falha(CodigoFalhaPastaEspelho.ProvedorSemTroca));
+                return Task.FromResult(ResultadoRenomeacaoVolume.CopiaSemExcluirOrigem());
 
             return Task.FromResult(ResultadoRenomeacaoVolume.Falha(CodigoFalhaPastaEspelho.TrocaNaoConfirmada));
         }
