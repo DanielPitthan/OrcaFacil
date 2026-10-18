@@ -208,6 +208,43 @@ public class NormalizadorComprovanteTests
     }
 
     [Fact]
+    public void Corte_NaoSeparaMarcaCombinanteNemSurrogate()
+    {
+        const string marca = "\u0301";
+        var estoura = new string('A', 79) + "e" + marca;
+        var cortado = Assert.Single(NormalizadorComprovante.Normalizar(
+            Cupom(Item("cru", estoura, reconhecido: true, 1m)),
+            []).Linhas);
+
+        Assert.Equal(estoura, cortado.NomeLido);
+        Assert.True(cortado.NomeExcedeLimite);
+        Assert.Equal(new string('A', 79), cortado.Nome);
+        Assert.DoesNotContain("e", cortado.Nome);
+        Assert.DoesNotContain(marca, cortado.Nome);
+        Assert.EndsWith("e" + marca, cortado.NomeLido);
+
+        var cabe = new string('B', 78) + "e" + marca;
+        var inteiro = Assert.Single(NormalizadorComprovante.Normalizar(
+            Cupom(Item("cru", cabe, reconhecido: true, 1m)),
+            []).Linhas);
+
+        Assert.Equal(80, cabe.Length);
+        Assert.Equal(cabe, inteiro.Nome);
+        Assert.EndsWith("e" + marca, inteiro.Nome);
+        Assert.False(inteiro.NomeExcedeLimite);
+
+        var emoji = new string('C', 79) + "\U0001F600";
+        var semPar = Assert.Single(NormalizadorComprovante.Normalizar(
+            Cupom(Item("cru", emoji, reconhecido: true, 1m)),
+            []).Linhas);
+
+        Assert.Equal(81, emoji.Length);
+        Assert.Equal(new string('C', 79), semPar.Nome);
+        Assert.DoesNotContain("\uD83D", semPar.Nome);
+        Assert.Equal(emoji, semPar.NomeLido);
+    }
+
+    [Fact]
     public void TotalDivergente_DevolveCupomESomaDasLinhas()
     {
         var catalogo = new List<ProdutoCesta>

@@ -1,3 +1,4 @@
+using System.Globalization;
 using OrcaFacil.Core.Cesta;
 using OrcaFacil.Core.Entities;
 
@@ -321,11 +322,18 @@ public static class NormalizadorComprovante
         if (nome.Length <= TamanhoMaximoNome)
             return nome;
 
-        var tamanho = TamanhoMaximoNome;
-        if (char.IsHighSurrogate(nome[tamanho - 1]))
-            tamanho--;
+        var limites = StringInfo.ParseCombiningCharacters(nome);
+        var corte = 0;
+        for (var i = 0; i < limites.Length; i++)
+        {
+            var fim = i + 1 < limites.Length ? limites[i + 1] : nome.Length;
+            if (fim > TamanhoMaximoNome)
+                break;
 
-        return nome[..tamanho];
+            corte = fim;
+        }
+
+        return nome[..corte];
     }
 
     private readonly struct BuscaCatalogo
