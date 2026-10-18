@@ -33,7 +33,7 @@ public interface IConfiguracaoService
     /// Remove as preferências gravadas e volta ao padrão.
     /// Preserva <c>Config.Tema</c> e a URI da pasta do espelho.
     /// Também tenta apagar a chave da API no SecureStorage, que <c>Preferences.Clear</c> não alcança.
-    /// <c>false</c> quando a chave pode ter permanecido.
+    /// <c>false</c> quando a chave pode ter permanecido. Pode ser chamado de novo.
     /// </summary>
-    bool Redefinir();
+    Task<bool> Redefinir();
 }

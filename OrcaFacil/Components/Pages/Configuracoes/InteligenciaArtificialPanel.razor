@@ -147,7 +147,7 @@
             if (!string.IsNullOrWhiteSpace(_chaveDigitada))
             {
                 var nova = _chaveDigitada.Trim();
-                if (nova.Contains('\r') || nova.Contains('\n'))
+                if (TextoChaveApi.TemLixo(nova))
                 {
                     Snackbar.Add(ResultadoMensagem.TextoPedidoInvalido, Severity.Error);
                     return;

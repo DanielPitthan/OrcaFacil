@@ -75,5 +75,5 @@ public class ConfiguracaoService : IConfiguracaoService
         }
     }
 
-    public bool Redefinir() => _tema.Redefinir();
+    public Task<bool> Redefinir() => _tema.Redefinir();
 }

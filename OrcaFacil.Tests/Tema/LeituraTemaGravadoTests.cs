@@ -15,7 +15,7 @@ public class LeituraTemaGravadoTests
         repositorio.GravarTexto(PreferenciasTema.Chave, texto);
         var adaptador = new AdaptadorPreferencias(repositorio);
 
-        Assert.Equal(tema, new PreferenciasTema(adaptador).Tema);
+        Assert.Equal(tema, new PreferenciasTema(adaptador, CofreChaveVazio.Instancia).Tema);
         Assert.Equal(texto, repositorio.LerTexto(PreferenciasTema.Chave));
         Assert.Null(repositorio.LerInteiro(PreferenciasTema.Chave));
     }
@@ -30,7 +30,7 @@ public class LeituraTemaGravadoTests
         repositorio.GravarInteiro(PreferenciasTema.Chave, (int)tema);
         var adaptador = new AdaptadorPreferencias(repositorio);
 
-        Assert.Equal(tema, new PreferenciasTema(adaptador).Tema);
+        Assert.Equal(tema, new PreferenciasTema(adaptador, CofreChaveVazio.Instancia).Tema);
         Assert.Equal((int)tema, repositorio.LerInteiro(PreferenciasTema.Chave));
         Assert.Null(repositorio.LerTexto(PreferenciasTema.Chave));
         Assert.Equal(

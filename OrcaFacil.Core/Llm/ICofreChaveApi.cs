@@ -16,9 +16,11 @@ public interface ICofreChaveApi
     Task GuardarAsync(string chave, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Apaga a chave. No app, chama <c>SecureStorage.Remove</c> e <c>RemoveAll</c>.
-    /// <c>true</c> quando as duas chamadas concluíram. <c>false</c> quando alguma falhou
-    /// e a chave pode ter permanecido. Não devolve a chave nem o texto da exceção.
+    /// Apaga a chave. No app, chama <c>SecureStorage.Remove</c> e <c>RemoveAll</c>
+    /// e confirma com uma leitura que não apaga nada.
+    /// <c>true</c> só quando essa leitura mostra que a chave não está.
+    /// <c>false</c> quando ela ficou ou a ausência não pôde ser confirmada.
+    /// Não devolve a chave nem o texto da exceção. Pode ser chamado de novo.
     /// </summary>
-    bool RemoverTudo();
+    Task<bool> RemoverTudo();
 }

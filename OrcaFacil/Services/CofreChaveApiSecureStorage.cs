@@ -4,8 +4,8 @@ namespace OrcaFacil.Services;
 
 /// <summary>
 /// Chave da API só no SecureStorage. Não grava em Preferences e não entra em log nem em ToString.
-/// A leitura passa por <see cref="LeituraChaveApi"/>: falha vira ausência e pede RemoveAll;
-/// cancelamento do token segue sem apagar a chave.
+/// A leitura passa por <see cref="LeituraChaveApi"/>: lixo comprovado pede RemoveAll;
+/// falha transitória preserva a chave. Cancelamento do token segue sem apagar.
 /// </summary>
 public sealed class CofreChaveApiSecureStorage : ICofreChaveApi
 {
@@ -18,43 +18,52 @@ public sealed class CofreChaveApiSecureStorage : ICofreChaveApi
 
     public Task GuardarAsync(string chave, CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(chave);
-        if (chave.Contains('\r') || chave.Contains('\n'))
-            throw new ArgumentException("A chave da API não pode ter quebra de linha.", nameof(chave));
-
+        TextoChaveApi.RecusarInvalida(chave);
         cancellationToken.ThrowIfCancellationRequested();
         return SecureStorage.Default.SetAsync(ChaveArmazenamento, chave);
     }
 
     /// <summary>
     /// <c>Preferences.Clear</c> não toca neste arquivo.
-    /// <c>Remove</c> tira a chave; <c>RemoveAll</c> limpa o cofre quando o arquivo está ilegível.
-    /// As duas precisam concluir. Uma falha devolve <c>false</c> e não leva a exceção para a tela.
+    /// <c>Remove</c> devolve se a entrada saiu; <c>RemoveAll</c> limpa o arquivo cifrado.
+    /// O resultado só é sucesso se uma leitura seguinte, sem apagar, não achar a chave.
+    /// A exceção não sobe e não entra em log.
     /// </summary>
-    public bool RemoverTudo()
+    public Task<bool> RemoverTudo()
+        => RemocaoChaveApi.ConcluirAsync(ApagarNoSecureStorage, LerValorSemApagar);
+
+    private static Task<bool> ApagarNoSecureStorage()
     {
-        var removeOk = Tentar(static () => { _ = SecureStorage.Default.Remove(ChaveArmazenamento); });
-        var removeAllOk = Tentar(static () => SecureStorage.Default.RemoveAll());
-        return removeOk && removeAllOk;
+        var removeu = false;
+        try
+        {
+            removeu = SecureStorage.Default.Remove(ChaveArmazenamento);
+        }
+        catch (Exception)
+        {
+            removeu = false;
+        }
+
+        var limpouArquivo = false;
+        try
+        {
+            SecureStorage.Default.RemoveAll();
+            limpouArquivo = true;
+        }
+        catch (Exception)
+        {
+            limpouArquivo = false;
+        }
+
+        return Task.FromResult(removeu && limpouArquivo);
     }
+
+    private static Task<string?> LerValorSemApagar()
+        => SecureStorage.Default.GetAsync(ChaveArmazenamento);
 
     private static Task<string?> LerDoSecureStorage(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         return SecureStorage.Default.GetAsync(ChaveArmazenamento);
-    }
-
-    private static bool Tentar(Action acao)
-    {
-        try
-        {
-            acao();
-            return true;
-        }
-        catch (Exception)
-        {
-            // Sem log e sem devolver a exceção: ela pode carregar detalhe da chave.
-            return false;
-        }
     }
 }

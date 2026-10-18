@@ -59,7 +59,7 @@ public class ArmazenamentoService : IArmazenamentoService
         if (tipo.HasFlag(TipoLimpezaDados.Tudo))
         {
             _fotoPerfilService.Remover();
-            var chaveApagada = _configuracao.Redefinir();
+            var chaveApagada = await _configuracao.Redefinir();
 
             await using var context = await _contextFactory.CreateDbContextAsync();
             await SeedData.PopularEssencialAsync(context);

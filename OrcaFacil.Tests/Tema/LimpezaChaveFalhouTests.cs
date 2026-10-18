@@ -11,14 +11,14 @@ public class LimpezaChaveFalhouTests
     private const string Uri = "content://com.android.externalstorage.documents/tree/primary%3AOrca";
 
     [Fact]
-    public void CofreQueDevolveFalha_NaoReportaZerado_ELimpaOResto()
+    public async Task CofreQueDevolveFalha_NaoReportaZerado_ELimpaOResto()
     {
         var memoria = new PreferenciasEmMemoria();
         var cofre = new CofreQueFalha(Segredo);
         var preferencias = new PreferenciasTema(memoria, cofre);
         Preparar(memoria, preferencias);
 
-        var resultado = ResultadoLimpeza.Total(preferencias.Redefinir());
+        var resultado = ResultadoLimpeza.Total(await preferencias.Redefinir());
 
         Assert.False(resultado.ChaveApagada);
         Assert.True(resultado.ChavePermaneceu);
@@ -34,14 +34,14 @@ public class LimpezaChaveFalhouTests
     }
 
     [Fact]
-    public void CofreQueLancaComAChaveNaExcecao_NaoVaza_ENaoReportaZerado()
+    public async Task CofreQueLancaComAChaveNaExcecao_NaoVaza_ENaoReportaZerado()
     {
         var memoria = new PreferenciasEmMemoria();
         var cofre = new CofreQueLanca(Segredo);
         var preferencias = new PreferenciasTema(memoria, cofre);
         Preparar(memoria, preferencias);
 
-        var resultado = ResultadoLimpeza.Total(preferencias.Redefinir());
+        var resultado = ResultadoLimpeza.Total(await preferencias.Redefinir());
 
         Assert.True(resultado.ChavePermaneceu);
         Assert.Equal(ResultadoLimpeza.TextoChaveNaoApagada, resultado.Mensagem);
@@ -49,6 +49,35 @@ public class LimpezaChaveFalhouTests
         Assert.DoesNotContain("InvalidOperation", resultado.Mensagem, StringComparison.Ordinal);
         Assert.DoesNotContain("keystore", resultado.Mensagem, StringComparison.Ordinal);
         Assert.Equal(Segredo, cofre.Chave);
+        AssertRestouSoTemaEPasta(memoria, preferencias);
+    }
+
+    [Fact]
+    public async Task CofreQueDizQueApagouMasAChaveFica_NaoReportaZerado_ENaSegundaVezApaga()
+    {
+        var memoria = new PreferenciasEmMemoria();
+        var cofre = new CofreQueConfirmaLeitura(Segredo);
+        var preferencias = new PreferenciasTema(memoria, cofre);
+        Preparar(memoria, preferencias);
+
+        var primeira = ResultadoLimpeza.Total(await preferencias.Redefinir());
+
+        Assert.True(primeira.ChavePermaneceu);
+        Assert.Equal(ResultadoLimpeza.TextoChaveNaoApagada, primeira.Mensagem);
+        Assert.NotEqual(ResultadoLimpeza.TextoAplicacaoZerada, primeira.Mensagem);
+        Assert.DoesNotContain(Segredo, primeira.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain(Segredo, primeira.ToString(), StringComparison.Ordinal);
+        Assert.Equal(Segredo, cofre.Chave);
+        Assert.Equal(1, cofre.LeiturasSemApagar);
+        AssertRestouSoTemaEPasta(memoria, preferencias);
+
+        cofre.PassarAApagar();
+        var segunda = ResultadoLimpeza.Total(await preferencias.Redefinir());
+
+        Assert.False(segunda.ChavePermaneceu);
+        Assert.Equal(ResultadoLimpeza.TextoAplicacaoZerada, segunda.Mensagem);
+        Assert.Null(cofre.Chave);
+        Assert.Equal(2, cofre.LeiturasSemApagar);
         AssertRestouSoTemaEPasta(memoria, preferencias);
     }
 
@@ -153,7 +182,7 @@ public class LimpezaChaveFalhouTests
             return Task.CompletedTask;
         }
 
-        public bool RemoverTudo() => false;
+        public Task<bool> RemoverTudo() => Task.FromResult(false);
     }
 
     private sealed class CofreQueLanca : ICofreChaveApi
@@ -171,6 +200,51 @@ public class LimpezaChaveFalhouTests
         public Task GuardarAsync(string chave, CancellationToken cancellationToken = default)
             => throw new InvalidOperationException("guardar " + Chave);
 
-        public bool RemoverTudo() => throw new InvalidOperationException("keystore " + Chave);
+        public Task<bool> RemoverTudo() => throw new InvalidOperationException("keystore " + Chave);
+    }
+
+    /// <summary>
+    /// <c>Remove</c> devolve sucesso e a chave continua. A leitura seguinte, sem apagar, denuncia a falha.
+    /// Na repetição a chave sai de verdade.
+    /// </summary>
+    private sealed class CofreQueConfirmaLeitura : ICofreChaveApi
+    {
+        private bool _apagar;
+
+        public CofreQueConfirmaLeitura(string chave) => Chave = chave;
+
+        public string? Chave { get; private set; }
+
+        public int LeiturasSemApagar { get; private set; }
+
+        public void PassarAApagar() => _apagar = true;
+
+        public Task<string?> LerAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(Chave);
+        }
+
+        public Task GuardarAsync(string chave, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Chave = chave;
+            return Task.CompletedTask;
+        }
+
+        public Task<bool> RemoverTudo()
+            => RemocaoChaveApi.ConcluirAsync(
+                () =>
+                {
+                    if (_apagar)
+                        Chave = null;
+
+                    return Task.FromResult(true);
+                },
+                () =>
+                {
+                    LeiturasSemApagar++;
+                    return Task.FromResult(Chave);
+                });
     }
 }

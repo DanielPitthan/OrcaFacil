@@ -10,9 +10,143 @@ public class LeituraChaveApiTests
     private const string Salva = "sk-ant-salva";
 
     [Fact]
-    public async Task LeituraQueLanca_ViraSemChave_EChamaRemoveAll()
+    public async Task IOException_ViraSemChaveNestaLeitura_ENaoApaga()
     {
-        var cofre = CofreComFalha(new InvalidOperationException("keystore"));
+        var cofre = CofreComFalha(new IOException("disco " + Salva));
+
+        var valor = await cofre.LerAsync();
+
+        Assert.Null(valor);
+        Assert.Equal(0, cofre.Remocoes);
+        Assert.Equal(Salva, cofre.Chave);
+    }
+
+    [Fact]
+    public async Task KeyStoreIndisponivel_PreservaAChave()
+    {
+        var cofre = CofreComFalha(new KeyStoreException("Keystore unavailable"));
+
+        var valor = await cofre.LerAsync();
+
+        Assert.Null(valor);
+        Assert.Equal(0, cofre.Remocoes);
+        Assert.Equal(Salva, cofre.Chave);
+    }
+
+    [Fact]
+    public async Task KeyStoreComFalhaTransitoria_PreservaAChave()
+    {
+        var cofre = CofreComFalha(new KeyStoreException("system") { IsTransientFailure = true });
+
+        var valor = await cofre.LerAsync();
+
+        Assert.Null(valor);
+        Assert.Equal(0, cofre.Remocoes);
+        Assert.Equal(Salva, cofre.Chave);
+    }
+
+    [Fact]
+    public async Task Timeout_PreservaAChave()
+    {
+        var cofre = CofreComFalha(new TimeoutException("keystore temporariamente ocupado"));
+
+        var valor = await cofre.LerAsync();
+
+        Assert.Null(valor);
+        Assert.Equal(0, cofre.Remocoes);
+        Assert.Equal(Salva, cofre.Chave);
+    }
+
+    [Fact]
+    public async Task ExcecaoGenerica_PreservaAChave()
+    {
+        var cofre = CofreComFalha(new InvalidOperationException("keystore " + Salva));
+
+        var valor = await cofre.LerAsync();
+
+        Assert.Null(valor);
+        Assert.Equal(0, cofre.Remocoes);
+        Assert.Equal(Salva, cofre.Chave);
+    }
+
+    [Fact]
+    public async Task CryptographicException_ViraSemChave_EChamaRemoveAll()
+    {
+        var cofre = CofreComFalha(new CryptographicException("keystore " + Salva));
+
+        var valor = await cofre.LerAsync();
+
+        Assert.Null(valor);
+        Assert.Equal(1, cofre.Remocoes);
+        Assert.Null(cofre.Chave);
+    }
+
+    [Fact]
+    public async Task GeneralSecurityException_ChamaRemoveAll()
+    {
+        var cofre = CofreComFalha(new GeneralSecurityException("could not decrypt " + Salva));
+
+        var valor = await cofre.LerAsync();
+
+        Assert.Null(valor);
+        Assert.Equal(1, cofre.Remocoes);
+        Assert.Null(cofre.Chave);
+    }
+
+    [Fact]
+    public async Task KeyStoreDeChaveInvalidada_ChamaRemoveAll()
+    {
+        var cofre = CofreComFalha(new KeyPermanentlyInvalidatedException("user changed the key"));
+
+        var valor = await cofre.LerAsync();
+
+        Assert.Null(valor);
+        Assert.Equal(1, cofre.Remocoes);
+        Assert.Null(cofre.Chave);
+    }
+
+    [Fact]
+    public async Task KeyStoreExceptionSemIndicioTransitorio_ChamaRemoveAll()
+    {
+        var cofre = CofreComFalha(new KeyStoreException("signature/MAC verification failed"));
+
+        var valor = await cofre.LerAsync();
+
+        Assert.Null(valor);
+        Assert.Equal(1, cofre.Remocoes);
+        Assert.Null(cofre.Chave);
+    }
+
+    [Fact]
+    public async Task IOExceptionPorForaDeCryptographicException_PreservaAChave()
+    {
+        var cofre = CofreComFalha(new IOException("disco", new CryptographicException(Salva)));
+
+        var valor = await cofre.LerAsync();
+
+        Assert.Null(valor);
+        Assert.Equal(0, cofre.Remocoes);
+        Assert.Equal(Salva, cofre.Chave);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    public async Task RetornoNuloOuVazio_NaoChamaRemoveAll(string? valorGuardado)
+    {
+        var cofre = new CofreDeTeste(valorGuardado);
+
+        var valor = await cofre.LerAsync();
+
+        Assert.Equal(valorGuardado, valor);
+        Assert.Equal(0, cofre.Remocoes);
+        Assert.Equal(valorGuardado, cofre.Chave);
+    }
+
+    [Fact]
+    public async Task NuloSozinho_ChamaRemoveAll()
+    {
+        var cofre = new CofreDeTeste("\0");
 
         var valor = await cofre.LerAsync();
 
@@ -73,7 +207,7 @@ public class LeituraChaveApiTests
             () =>
             {
                 apagou++;
-                return false;
+                return Task.FromResult(false);
             },
             cts.Token));
 
@@ -96,7 +230,7 @@ public class LeituraChaveApiTests
             () =>
             {
                 apagou++;
-                return false;
+                return Task.FromResult(false);
             },
             cts.Token));
 
@@ -114,7 +248,7 @@ public class LeituraChaveApiTests
             () =>
             {
                 apagou++;
-                return false;
+                return Task.FromResult(false);
             }));
 
         Assert.IsAssignableFrom<OperationCanceledException>(excecao);
@@ -180,7 +314,12 @@ public class LeituraChaveApiTests
         Assert.Contains("LeituraChaveApi.LerAsync", cofre, StringComparison.Ordinal);
         Assert.Contains("SecureStorage.Default.GetAsync(ChaveArmazenamento)", cofre, StringComparison.Ordinal);
         Assert.Contains("SecureStorage.Default.Remove(ChaveArmazenamento)", cofre, StringComparison.Ordinal);
+        Assert.DoesNotContain("_ = SecureStorage.Default.Remove", cofre, StringComparison.Ordinal);
         Assert.Contains("SecureStorage.Default.RemoveAll()", cofre, StringComparison.Ordinal);
+        Assert.Contains("RemocaoChaveApi.ConcluirAsync", cofre, StringComparison.Ordinal);
+        Assert.Contains("TextoChaveApi.RecusarInvalida", cofre, StringComparison.Ordinal);
+        Assert.Contains("FalhaPermanenteDeDecriptacao", leitura, StringComparison.Ordinal);
+        Assert.Contains("TextoChaveApi.TemLixo", painel, StringComparison.Ordinal);
         Assert.Contains(
             "ResolucaoChaveApi.ResolverAsync(CofreChave, _chaveDigitada, cancellationToken)",
             painel,
@@ -253,11 +392,34 @@ public class LeituraChaveApiTests
             return Task.CompletedTask;
         }
 
-        public bool RemoverTudo()
+        public Task<bool> RemoverTudo()
         {
             Remocoes++;
             Chave = null;
-            return true;
+            return Task.FromResult(true);
+        }
+    }
+
+    private sealed class KeyStoreException : Exception
+    {
+        public KeyStoreException(string message) : base(message)
+        {
+        }
+
+        public bool IsTransientFailure { get; init; }
+    }
+
+    private sealed class GeneralSecurityException : Exception
+    {
+        public GeneralSecurityException(string message) : base(message)
+        {
+        }
+    }
+
+    private sealed class KeyPermanentlyInvalidatedException : Exception
+    {
+        public KeyPermanentlyInvalidatedException(string message) : base(message)
+        {
         }
     }
 
