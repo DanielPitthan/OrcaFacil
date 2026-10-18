@@ -331,6 +331,7 @@ public class EspelhoSnapshotTests
         Assert.Equal(0, portas.Semeaduras);
         Assert.Equal(0, portas.RemocoesBanco);
         Assert.Equal(0, portas.RemocoesEspelho);
+        Assert.Equal(0, portas.ConsultasPerfil);
         Assert.Equal(antes, await File.ReadAllBytesAsync(area.Espelho));
         Assert.True(File.Exists(area.Banco));
         Assert.DoesNotContain(Senha, resultado.Falha!.ToString(), StringComparison.Ordinal);
@@ -446,6 +447,7 @@ public class EspelhoSnapshotTests
         Assert.Equal(0, portas.Semeaduras);
         Assert.Equal(0, portas.RemocoesBanco);
         Assert.Equal(0, portas.RemocoesEspelho);
+        Assert.Equal(0, portas.ConsultasPerfil);
         Assert.Equal(antes, await File.ReadAllBytesAsync(area.Espelho));
     }
 
@@ -472,6 +474,7 @@ public class EspelhoSnapshotTests
         Assert.Equal(0, portas.Semeaduras);
         Assert.Equal(0, portas.RemocoesBanco);
         Assert.Equal(0, portas.RemocoesEspelho);
+        Assert.Equal(0, portas.ConsultasPerfil);
         Assert.Equal(antes, await File.ReadAllBytesAsync(area.Espelho));
 
         var ausente = await new EspelhoArquivo(area.Espelho, new SenhaFixa(null), _versao).LerAsync();
@@ -490,9 +493,53 @@ public class EspelhoSnapshotTests
 
         var semOpcoes = Assert.Throws<ArgumentNullException>(() => portas.CriarSemOpcoes(espelho, _versao));
         var semPreservacao = Assert.Throws<ArgumentNullException>(() => portas.CriarSemPreservacao(espelho, _versao));
+        var semPerfil = Assert.Throws<ArgumentNullException>(() => portas.CriarSemPerfil(espelho, _versao));
 
         Assert.Equal("opcoesPreparo", semOpcoes.ParamName);
         Assert.Equal("preservacao", semPreservacao.ParamName);
+        Assert.Equal("perfil", semPerfil.ParamName);
+    }
+
+    [Fact]
+    public async Task EspelhoArquivo_SemPerfil_SemeiaDeNovo_ENaoRestauraNemApaga()
+    {
+        using var area = new AreaTemp("NAO-LOGAR-CAMINHO-9f3a");
+        await PublicarAsync(area, "Marina");
+        var antes = await File.ReadAllBytesAsync(area.Espelho);
+        var relatorio = new RelatorioIntegridadeBanco();
+        Assert.Equal(SituacaoBancoVivo.Integro, ClassificacaoBancoVivo.Classificar(LeituraBancoVivo.Lida(relatorio)));
+        Assert.Equal(
+            SituacaoBancoVivo.SemPerfil,
+            ClassificacaoBancoVivo.AplicarPoliticaSeed(SituacaoBancoVivo.Integro, relatorio, haMembro: false));
+        Assert.Equal(
+            SituacaoBancoVivo.Vazio,
+            ClassificacaoBancoVivo.AplicarPoliticaSeed(SituacaoBancoVivo.Vazio, relatorio, haMembro: false));
+
+        var portas = new PortasCoordenador
+        {
+            BancoExiste = true,
+            Relatorio = relatorio,
+            HaMembro = false,
+            MigracaoSucesso = true
+        };
+
+        var resultado = await portas.Criar(new EspelhoArquivo(area.Espelho, new SenhaFixa(Senha), _versao), _versao).PrepararAsync();
+
+        Assert.Equal(SituacaoBancoVivo.SemPerfil, resultado.Estado!.BancoVivo);
+        Assert.Equal(AcaoArmazenamento.TelaDeRecuperacao, resultado.Acao);
+        Assert.Equal(AcaoArmazenamento.Semear, resultado.AcaoPlanejada);
+        Assert.Equal(1, portas.ConsultasPerfil);
+        Assert.Equal(1, portas.Migracoes);
+        Assert.Same(portas.Opcoes, portas.OpcoesRecebidas);
+        Assert.Equal(1, portas.Semeaduras);
+        Assert.Equal(0, portas.Restauracoes);
+        Assert.Equal(0, portas.Preservacoes);
+        Assert.Equal(0, portas.RemocoesBanco);
+        Assert.Equal(0, portas.RemocoesEspelho);
+        Assert.Equal(antes, await File.ReadAllBytesAsync(area.Espelho));
+        Assert.True(File.Exists(area.Banco));
+        Assert.NotNull(resultado.Falha);
+        AssertNaoVaza(resultado.Falha!, Senha, area.Raiz);
     }
 
     [Fact]
@@ -518,6 +565,7 @@ public class EspelhoSnapshotTests
         Assert.Equal(0, portas.Semeaduras);
         Assert.Equal(0, portas.RemocoesBanco);
         Assert.Equal(0, portas.RemocoesEspelho);
+        Assert.Equal(0, portas.ConsultasPerfil);
         Assert.Equal(antes, await File.ReadAllBytesAsync(area.Espelho));
         Assert.True(File.Exists(area.Banco));
     }
@@ -548,6 +596,7 @@ public class EspelhoSnapshotTests
         Assert.Equal(0, portas.Semeaduras);
         Assert.Equal(0, portas.RemocoesBanco);
         Assert.Equal(0, portas.RemocoesEspelho);
+        Assert.Equal(0, portas.ConsultasPerfil);
         Assert.Equal(antes, await File.ReadAllBytesAsync(area.Espelho));
         Assert.True(File.Exists(area.Banco));
         Assert.NotNull(resultado.Falha);
@@ -574,6 +623,7 @@ public class EspelhoSnapshotTests
         Assert.Equal(0, portas.Semeaduras);
         Assert.Equal(0, portas.RemocoesBanco);
         Assert.Equal(0, portas.RemocoesEspelho);
+        Assert.Equal(0, portas.ConsultasPerfil);
         Assert.Equal(AcaoArmazenamento.TelaDeRecuperacao, resultado.Acao);
         Assert.Equal(antes, await File.ReadAllBytesAsync(area.Espelho));
         Assert.True(File.Exists(area.Banco));
@@ -603,6 +653,7 @@ public class EspelhoSnapshotTests
         Assert.Equal(0, portas.Preservacoes);
         Assert.Equal(0, portas.RemocoesBanco);
         Assert.Equal(0, portas.RemocoesEspelho);
+        Assert.Equal(0, portas.ConsultasPerfil);
         Assert.Contains("schema não foi criado", resultado.Motivo, StringComparison.Ordinal);
     }
 
@@ -879,27 +930,34 @@ public class EspelhoSnapshotTests
         public int Restauracoes { get; private set; }
         public int Migracoes { get; private set; }
         public int Preservacoes { get; private set; }
+        public int ConsultasPerfil { get; private set; }
         public bool BancoExiste { get; init; }
         public RelatorioIntegridadeBanco? Relatorio { get; init; }
+        public bool HaMembro { get; init; } = true;
         public bool PreservacaoSucesso { get; init; } = true;
         public bool MigracaoExigeRecuperacao { get; init; }
+        public bool MigracaoSucesso { get; init; }
         public OpcoesPreparoBanco Opcoes { get; } = new() { VersaoAplicativo = "1.2.3" };
         public OpcoesPreparoBanco? OpcoesRecebidas { get; private set; }
 
         public CoordenadorArmazenamento Criar(IEspelhoDados espelho, IVersaoSchemaApp versao)
-            => Montar(espelho, versao, Opcoes, new Preservacao(this));
+            => Montar(espelho, versao, Opcoes, new Preservacao(this), new Perfil(this));
 
         public CoordenadorArmazenamento CriarSemOpcoes(IEspelhoDados espelho, IVersaoSchemaApp versao)
-            => Montar(espelho, versao, null!, new Preservacao(this));
+            => Montar(espelho, versao, null!, new Preservacao(this), new Perfil(this));
 
         public CoordenadorArmazenamento CriarSemPreservacao(IEspelhoDados espelho, IVersaoSchemaApp versao)
-            => Montar(espelho, versao, Opcoes, null!);
+            => Montar(espelho, versao, Opcoes, null!, new Perfil(this));
+
+        public CoordenadorArmazenamento CriarSemPerfil(IEspelhoDados espelho, IVersaoSchemaApp versao)
+            => Montar(espelho, versao, Opcoes, new Preservacao(this), null!);
 
         private CoordenadorArmazenamento Montar(
             IEspelhoDados espelho,
             IVersaoSchemaApp versao,
             OpcoesPreparoBanco opcoes,
-            IPreservacaoBancoVivo preservacao)
+            IPreservacaoBancoVivo preservacao,
+            IPresencaPerfil perfil)
             => new(
                 new Sonda(this),
                 espelho,
@@ -909,7 +967,8 @@ public class EspelhoSnapshotTests
                 new Semeadura(this),
                 new Limpeza(this),
                 opcoes,
-                preservacao);
+                preservacao,
+                perfil);
 
         private sealed class Sonda(PortasCoordenador portas) : ISondaBancoVivo
         {
@@ -949,7 +1008,19 @@ public class EspelhoSnapshotTests
                         new RelatorioIntegridadeBanco()));
                 }
 
+                if (portas.MigracaoSucesso)
+                    return Task.FromResult(new ResultadoPreparoBanco(null, new RelatorioIntegridadeBanco()));
+
                 throw new InvalidOperationException("não deveria migrar");
+            }
+        }
+
+        private sealed class Perfil(PortasCoordenador portas) : IPresencaPerfil
+        {
+            public Task<bool> HaMembroAsync(CancellationToken cancellationToken = default)
+            {
+                portas.ConsultasPerfil++;
+                return Task.FromResult(portas.HaMembro);
             }
         }
 
