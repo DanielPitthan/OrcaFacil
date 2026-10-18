@@ -186,6 +186,39 @@ public class ReparoAddCartoesInterrupcaoTests : IClassFixture<ReparoAddCartoesIn
     }
 
     [Fact]
+    public async Task OriginalReconstruida_IdSoNaCopia_NaoApagaACopia()
+    {
+        using var banco = _origem.Copiar();
+        long idNovo;
+        await using (var ctx = banco.CriarContexto())
+        {
+            await AplicarComandosAsync(ctx, IndiceApos("RENAME TO \"Transacoes\""));
+            await ExecutarAsync(ctx, "CREATE TABLE ef_temp_Transacoes AS SELECT * FROM Transacoes");
+            var idMercado = await EscalarAsync(ctx, "SELECT Id FROM Transacoes WHERE Descricao = 'Mercado'");
+            idNovo = await EscalarAsync(ctx, "SELECT MAX(Id) FROM Transacoes") + 100;
+            await ExecutarAsync(ctx, "INSERT INTO ef_temp_Transacoes SELECT * FROM Transacoes WHERE Descricao = 'Mercado'");
+            await ExecutarAsync(ctx, $"""
+                UPDATE ef_temp_Transacoes
+                SET Id = {idNovo}
+                WHERE Id = {idMercado}
+                  AND rowid = (SELECT MAX(rowid) FROM ef_temp_Transacoes WHERE Id = {idMercado})
+                """);
+        }
+
+        await ExigirQueBloqueiaAsync(banco, "Transacoes", "A cópia não foi apagada");
+
+        await using var conferir = banco.CriarContexto();
+        Assert.Equal(2L, await EscalarAsync(conferir, "SELECT COUNT(*) FROM Transacoes"));
+        Assert.Equal(3L, await EscalarAsync(conferir, "SELECT COUNT(*) FROM ef_temp_Transacoes"));
+        Assert.Equal(0L, await EscalarAsync(conferir, $"SELECT COUNT(*) FROM Transacoes WHERE Id = {idNovo}"));
+        Assert.Equal(1L, await EscalarAsync(conferir, $"SELECT COUNT(*) FROM ef_temp_Transacoes WHERE Id = {idNovo}"));
+        Assert.Equal("Hortifruti", await EscalarTextoAsync(conferir, "SELECT Observacao FROM Transacoes WHERE Descricao = 'Mercado'"));
+        Assert.Equal("Hortifruti", await EscalarTextoAsync(conferir, $"SELECT Observacao FROM ef_temp_Transacoes WHERE Id = {idNovo}"));
+        Assert.Contains("FK_Transacoes_Cartoes_CartaoId", await SqlTabelaAsync(conferir, "Transacoes"));
+        Assert.Equal(0L, await HistoricoAddCartoesAsync(conferir));
+    }
+
+    [Fact]
     public async Task OriginalReconstruida_CopiaRedundante_ApagaSoACopiaEConclui()
     {
         using var banco = _origem.Copiar();
