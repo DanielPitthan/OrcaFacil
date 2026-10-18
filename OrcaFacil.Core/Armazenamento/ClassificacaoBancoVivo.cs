@@ -48,17 +48,13 @@ public sealed record LeituraBancoVivo
 /// Não abre arquivo, não executa SQL, não migra e não apaga.
 /// </summary>
 /// <remarks>
-/// Ordem, de cima para baixo:
-/// ausente; leitura impossível; <see cref="RelatorioIntegridadeBanco.Integro"/>;
-/// migration desconhecida no histórico (app velho demais — não tratar como
-/// inconsistência restaurável, senão um espelho antigo seria copiado por cima);
-/// migration pela metade ou histórico com objeto faltando;
-/// só migrations conhecidas ainda fora do histórico (banco antigo coerente);
-/// qualquer outra divergência.
-/// Um objeto criado à mão, sem a migration no histórico, aparece como migration
-/// ausente. A migração então falha e o coordenador abre a recuperação, sem semear
-/// e sem apagar. Separar esse caso de um banco antigo coerente exigiria reler o
-/// SQLite, e quem lê é o <see cref="VerificadorIntegridadeBanco"/>.
+/// Ordem: ausente; leitura que lançou; relatório de arquivo ilegível;
+/// íntegro; migration desconhecida; SQLite vazio (sem tabelas e sem histórico);
+/// AddCartoes pela metade (vai para o reconciliador); outra migration pela metade
+/// ou histórico com objeto faltando; migrations conhecidas ainda pendentes num
+/// schema que já existe; qualquer outra divergência.
+/// Arquivo ilegível nunca é <see cref="SituacaoBancoVivo.Desatualizado"/> nem
+/// <see cref="SituacaoBancoVivo.Vazio"/>.
 /// </remarks>
 public static class ClassificacaoBancoVivo
 {
@@ -73,11 +69,20 @@ public static class ClassificacaoBancoVivo
             return SituacaoBancoVivo.Inconsistente;
 
         var relatorio = leitura.Relatorio!;
+        if (MarcaArquivoIlegivel(relatorio))
+            return SituacaoBancoVivo.Inconsistente;
+
         if (relatorio.Integro)
             return SituacaoBancoVivo.Integro;
 
         if (relatorio.MigrationsDesconhecidasNoHistorico.Count > 0)
             return SituacaoBancoVivo.SchemaMaisNovoQueOApp;
+
+        if (EhVazio(relatorio))
+            return SituacaoBancoVivo.Vazio;
+
+        if (relatorio.MigrationsPelaMetade.Contains(ReconciliadorAddCartoes.MigrationId))
+            return SituacaoBancoVivo.ParcialAddCartoes;
 
         if (relatorio.MigrationsPelaMetade.Count > 0
             || relatorio.MigrationsNoHistoricoComObjetoFaltando.Count > 0)
@@ -87,5 +92,39 @@ public static class ClassificacaoBancoVivo
             return SituacaoBancoVivo.Desatualizado;
 
         return SituacaoBancoVivo.Inconsistente;
+    }
+
+    /// <summary>
+    /// Relatório do <see cref="VerificadorIntegridadeBanco.RelatorioIlegivel"/>
+    /// ou o marcador de <see cref="RelatorioIntegridadeBanco.IlegivelMinimo"/>.
+    /// </summary>
+    public static bool MarcaArquivoIlegivel(RelatorioIntegridadeBanco relatorio)
+    {
+        ArgumentNullException.ThrowIfNull(relatorio);
+        if (relatorio.ArquivoIlegivel)
+            return true;
+
+        return TemMarcador(relatorio.TabelasFaltando)
+            || TemMarcador(relatorio.ColunasFaltando)
+            || TemMarcador(relatorio.IndicesFaltando)
+            || TemMarcador(relatorio.MigrationsAusentesNoHistorico);
+    }
+
+    private static bool EhVazio(RelatorioIntegridadeBanco relatorio) =>
+        relatorio.TabelasExistentes.Count == 0
+        && relatorio.MigrationsNoHistorico.Count == 0
+        && relatorio.MigrationsDesconhecidasNoHistorico.Count == 0
+        && relatorio.MigrationsPelaMetade.Count == 0
+        && relatorio.MigrationsNoHistoricoComObjetoFaltando.Count == 0;
+
+    private static bool TemMarcador(IReadOnlyList<string> itens)
+    {
+        foreach (var item in itens)
+        {
+            if (item.Contains("ilegível", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
     }
 }

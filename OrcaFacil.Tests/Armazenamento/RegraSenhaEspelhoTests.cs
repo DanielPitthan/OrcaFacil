@@ -5,9 +5,11 @@ namespace OrcaFacil.Tests.Armazenamento;
 public class RegraSenhaEspelhoTests
 {
     [Theory]
-    [InlineData("Orca1234")]
-    [InlineData("senha nova 1")]
-    [InlineData("Água1234")]
+    [InlineData("TrilhaAzul92")]
+    [InlineData("Costa#Azul1")]
+    [InlineData("frase comprida de backup")]
+    [InlineData("somenteletras")]
+    [InlineData("NAO-LOGAR-SENHA-9f3a")]
     public void SenhaComLetraENumero_AtendeOMinimo(string senha)
     {
         Assert.True(RegraSenhaEspelho.AtendeForcaMinima(senha));
@@ -19,9 +21,18 @@ public class RegraSenhaEspelhoTests
     [InlineData("")]
     [InlineData("   ")]
     [InlineData("curta1")]
-    [InlineData("somenteletras")]
+    [InlineData("Orca1234")]
+    [InlineData("somentelet")]
     [InlineData("12345678")]
     [InlineData("   a1   ")]
+    [InlineData("TrilhaAzul")]
+    [InlineData("trilhaazul9")]
+    [InlineData("password1234")]
+    [InlineData("Senha123456")]
+    [InlineData("orcafacil1234")]
+    [InlineData("aaaaaaaaaaaa")]
+    [InlineData("123456789012")]
+    [InlineData("Password1234!")]
     public void SenhaFraca_NaoAtende(string? senha)
     {
         Assert.False(RegraSenhaEspelho.AtendeForcaMinima(senha));
@@ -37,9 +48,11 @@ public class RegraSenhaEspelhoTests
     [Fact]
     public void Esquecimento_DocumentaSnapshotNovoSemApagarOAntigo()
     {
-        Assert.Equal(8, RegraSenhaEspelho.TamanhoMinimo);
-        Assert.Contains("letra", RegraSenhaEspelho.Requisitos, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("número", RegraSenhaEspelho.Requisitos, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(10, RegraSenhaEspelho.TamanhoMinimo);
+        Assert.Equal(12, RegraSenhaEspelho.TamanhoSemSimbolo);
+        Assert.Contains("12", RegraSenhaEspelho.Requisitos, StringComparison.Ordinal);
+        Assert.Contains("maiúscula", RegraSenhaEspelho.Requisitos, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("símbolo", RegraSenhaEspelho.Requisitos, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Esquecer a senha impede restaurar", RegraSenhaEspelho.Esquecimento, StringComparison.Ordinal);
         Assert.Contains("novo snapshot", RegraSenhaEspelho.Esquecimento, StringComparison.Ordinal);
         Assert.Contains("senha nova", RegraSenhaEspelho.Esquecimento, StringComparison.Ordinal);
@@ -72,8 +85,13 @@ public class RegraSenhaEspelhoTests
         Assert.Equal(0, versao.Calcular([]));
         Assert.Equal(versao.Atual, versao.Calcular(versao.Migrations.ToList()));
         Assert.Equal(versao.Atual - 1, versao.Calcular(versao.Migrations.Take(versao.Atual - 1).ToList()));
-        Assert.Equal(versao.Atual + 1, versao.Calcular(["20990101000000_Futura"]));
-        Assert.Equal(versao.Atual + 1, versao.Calcular([.. versao.Migrations, "20990101000000_Futura"]));
+
+        var comFuro = versao.Migrations.Where(id => id != versao.Migrations[3]).ToList();
+        Assert.Null(versao.Calcular(comFuro));
+        Assert.NotEqual(versao.Atual, versao.Calcular(comFuro));
+        Assert.Null(versao.Calcular(["20990101000000_Futura"]));
+        Assert.Null(versao.Calcular([.. versao.Migrations, "20990101000000_FuturaA", "20990201000000_FuturaB"]));
+        Assert.Null(versao.Calcular([versao.Migrations[0], versao.Migrations[0]]));
     }
 
     [Fact]

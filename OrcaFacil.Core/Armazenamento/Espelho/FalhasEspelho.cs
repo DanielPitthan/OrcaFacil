@@ -86,4 +86,7 @@ public sealed class IntegridadeSnapshotException : Exception
     public const string IntegrityCheck = "O snapshot não passou no PRAGMA integrity_check. Nada foi publicado.";
 
     public const string ForeignKeyCheck = "O snapshot não passou no PRAGMA foreign_key_check. Nada foi publicado.";
+
+    public const string BancoSemHistorico =
+        "O banco vivo não tem histórico de migrations contíguo e não vazio do app. Nada foi publicado.";
 }

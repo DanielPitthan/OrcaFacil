@@ -4,13 +4,15 @@ namespace OrcaFacil.Core.Armazenamento;
 
 /// <summary>
 /// Observa banco vivo e espelho pelas portas, decide com <see cref="MatrizDecisaoArmazenamento"/>
-/// e executa um único passo. Não conhece arquivo, SQLite nem Android.
+/// e executa o passo seguro. Não conhece arquivo, SQLite nem Android.
 /// </summary>
 /// <remarks>
 /// Regra de ouro: restauração que falha vira <see cref="AcaoArmazenamento.TelaDeRecuperacao"/>.
 /// Esse caminho não chama <see cref="ISemeaduraDados"/> e não chama <see cref="ILimpezaTotalDados"/>.
-/// Falha de migração também não cai para o espelho nesta chamada — o banco vivo continua no lugar.
-/// <see cref="LimparTudoAsync"/> é outro método e exige <see cref="PedidoLimparTudo"/>.
+/// Espelho mais antigo, depois de restaurado, é migrado com as <see cref="OpcoesPreparoBanco"/>.
+/// Semear cria o schema por essa mesma migração e só então grava os dados iniciais.
+/// Banco ilegível só é substituído depois de <see cref="IPreservacaoBancoVivo"/>; se a cópia falha, a recuperação abre.
+/// <see cref="PrepararAsync"/> e <see cref="LimparTudoAsync"/> não correm ao mesmo tempo.
 /// </remarks>
 public sealed class CoordenadorArmazenamento : IArmazenamentoDados
 {
@@ -21,6 +23,9 @@ public sealed class CoordenadorArmazenamento : IArmazenamentoDados
     private readonly IMigracaoBancoVivo _migracao;
     private readonly ISemeaduraDados _semeadura;
     private readonly ILimpezaTotalDados _limpeza;
+    private readonly IPreservacaoBancoVivo _preservacao;
+    private readonly OpcoesPreparoBanco _opcoes;
+    private readonly SemaphoreSlim _exclusao = new(1, 1);
 
     public CoordenadorArmazenamento(
         ISondaBancoVivo banco,
@@ -29,7 +34,9 @@ public sealed class CoordenadorArmazenamento : IArmazenamentoDados
         IRestauracaoEspelho restauracao,
         IMigracaoBancoVivo migracao,
         ISemeaduraDados semeadura,
-        ILimpezaTotalDados limpeza)
+        ILimpezaTotalDados limpeza,
+        OpcoesPreparoBanco opcoesPreparo,
+        IPreservacaoBancoVivo preservacao)
     {
         _banco = banco ?? throw new ArgumentNullException(nameof(banco));
         _espelho = espelho ?? throw new ArgumentNullException(nameof(espelho));
@@ -38,9 +45,22 @@ public sealed class CoordenadorArmazenamento : IArmazenamentoDados
         _migracao = migracao ?? throw new ArgumentNullException(nameof(migracao));
         _semeadura = semeadura ?? throw new ArgumentNullException(nameof(semeadura));
         _limpeza = limpeza ?? throw new ArgumentNullException(nameof(limpeza));
+        _opcoes = opcoesPreparo ?? throw new ArgumentNullException(nameof(opcoesPreparo));
+        _preservacao = preservacao ?? throw new ArgumentNullException(nameof(preservacao));
     }
 
-    public async Task<ResultadoArmazenamento> PrepararAsync(CancellationToken cancellationToken = default)
+    public Task<ResultadoArmazenamento> PrepararAsync(CancellationToken cancellationToken = default)
+        => EmExclusaoAsync(PrepararDentroDaExclusaoAsync, cancellationToken);
+
+    public Task<ResultadoLimpezaArmazenamento> LimparTudoAsync(
+        PedidoLimparTudo pedido,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(pedido);
+        return EmExclusaoAsync(ct => LimparDentroDaExclusaoAsync(ct), cancellationToken);
+    }
+
+    private async Task<ResultadoArmazenamento> PrepararDentroDaExclusaoAsync(CancellationToken cancellationToken)
     {
         Observacao observacao;
         try
@@ -64,7 +84,7 @@ public sealed class CoordenadorArmazenamento : IArmazenamentoDados
         var decisao = MatrizDecisaoArmazenamento.Decidir(observacao.Estado);
         try
         {
-            var resultado = await ExecutarAsync(decisao, observacao.Estado, cancellationToken);
+            var resultado = await ExecutarAsync(decisao, observacao, cancellationToken);
             if (resultado.Falha is null && resultado.Acao == AcaoArmazenamento.TelaDeRecuperacao)
             {
                 var falhaObservacao = FalhaDeObservacao(observacao);
@@ -84,12 +104,8 @@ public sealed class CoordenadorArmazenamento : IArmazenamentoDados
         }
     }
 
-    public async Task<ResultadoLimpezaArmazenamento> LimparTudoAsync(
-        PedidoLimparTudo pedido,
-        CancellationToken cancellationToken = default)
+    private async Task<ResultadoLimpezaArmazenamento> LimparDentroDaExclusaoAsync(CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(pedido);
-
         Exception? falhaBanco = null;
         Exception? falhaEspelho = null;
 
@@ -115,6 +131,19 @@ public sealed class CoordenadorArmazenamento : IArmazenamentoDados
             throw new LimpezaTotalException(falhaBanco, falhaEspelho);
 
         return new ResultadoLimpezaArmazenamento(BancoVivoRemovido: true, EspelhoRemovido: true);
+    }
+
+    private async Task<T> EmExclusaoAsync<T>(Func<CancellationToken, Task<T>> acao, CancellationToken cancellationToken)
+    {
+        await _exclusao.WaitAsync(cancellationToken);
+        try
+        {
+            return await acao(cancellationToken);
+        }
+        finally
+        {
+            _exclusao.Release();
+        }
     }
 
     private async Task<Observacao> ObservarAsync(CancellationToken cancellationToken)
@@ -144,6 +173,7 @@ public sealed class CoordenadorArmazenamento : IArmazenamentoDados
             }
         }
 
+        var bancoIlegivel = leituraFalhou || (relatorio is not null && ClassificacaoBancoVivo.MarcaArquivoIlegivel(relatorio));
         var banco = ClassificacaoBancoVivo.Classificar(new LeituraBancoVivo(bancoExiste, relatorio, leituraFalhou));
 
         Exception? falhaEspelho = null;
@@ -167,7 +197,6 @@ public sealed class CoordenadorArmazenamento : IArmazenamentoDados
                 }
                 else
                 {
-                    // Ilegível é estado observado, não exceção. O motivo fica na leitura.
                     espelho = SituacaoEspelho.Corrompido;
                     schema = ComparacaoSchemaEspelho.NaoAplicavel;
                 }
@@ -187,14 +216,16 @@ public sealed class CoordenadorArmazenamento : IArmazenamentoDados
         return new Observacao(
             new EstadoObservadoArmazenamento(banco, espelho, schema),
             falhaBanco,
-            falhaEspelho);
+            falhaEspelho,
+            bancoIlegivel);
     }
 
     private async Task<ResultadoArmazenamento> ExecutarAsync(
         DecisaoArmazenamento decisao,
-        EstadoObservadoArmazenamento estado,
+        Observacao observacao,
         CancellationToken cancellationToken)
     {
+        var estado = observacao.Estado;
         switch (decisao.Acao)
         {
             case AcaoArmazenamento.UsarBancoVivo:
@@ -203,30 +234,76 @@ public sealed class CoordenadorArmazenamento : IArmazenamentoDados
                 return Concluido(decisao, estado);
 
             case AcaoArmazenamento.MigrarBancoVivo:
-                var migracao = await _migracao.MigrarEVerificarAsync(cancellationToken);
-                if (!migracao.ExigeRecuperacao)
-                    return Concluido(decisao, estado);
-
-                var falhaMigracao = migracao.FalhaMigrate ?? new IntegridadeBancoException(migracao);
-                return FalhaDeExecucao(decisao.Acao, estado, falhaMigracao);
+                var falhaMigracao = await MigrarOuFalharAsync(decisao.Acao, estado, cancellationToken);
+                return falhaMigracao ?? Concluido(decisao, estado);
 
             case AcaoArmazenamento.RestaurarDoEspelho:
-                var restauracao = await _restauracao.RestaurarAsync(cancellationToken);
-                if (restauracao.Sucesso)
-                    return Concluido(decisao, estado);
+                if (observacao.BancoIlegivel)
+                {
+                    var preservacao = await _preservacao.PreservarAsync(cancellationToken);
+                    if (!preservacao.Sucesso)
+                    {
+                        return new ResultadoArmazenamento(
+                            AcaoArmazenamento.TelaDeRecuperacao,
+                            decisao.Acao,
+                            estado,
+                            "O banco ilegível não foi copiado, então o espelho não o substituiu. Nenhum arquivo foi apagado e nenhum dado foi semeado.",
+                            new InvalidOperationException(preservacao.MotivoFalha ?? "Não foi possível preservar o banco vivo."));
+                    }
+                }
 
-                return FalhaDeExecucao(
-                    decisao.Acao,
-                    estado,
-                    new InvalidOperationException(restauracao.MotivoFalha ?? "A restauração não concluiu."));
+                var restauracao = await _restauracao.RestaurarAsync(cancellationToken);
+                if (!restauracao.Sucesso)
+                {
+                    return FalhaDeExecucao(
+                        decisao.Acao,
+                        estado,
+                        new InvalidOperationException(restauracao.MotivoFalha ?? "A restauração não concluiu."));
+                }
+
+                if (estado.SchemaEspelho == ComparacaoSchemaEspelho.EspelhoMaisAntigo)
+                {
+                    var falhaDepois = await MigrarOuFalharAsync(decisao.Acao, estado, cancellationToken);
+                    if (falhaDepois is not null)
+                    {
+                        return falhaDepois with
+                        {
+                            Motivo = "O espelho antigo foi restaurado, mas a migração seguinte falhou. Nenhum arquivo foi apagado e nenhum dado foi semeado."
+                        };
+                    }
+                }
+
+                return Concluido(decisao, estado);
 
             case AcaoArmazenamento.Semear:
+                var falhaSchema = await MigrarOuFalharAsync(decisao.Acao, estado, cancellationToken);
+                if (falhaSchema is not null)
+                {
+                    return falhaSchema with
+                    {
+                        Motivo = "O schema não foi criado. Nenhum dado foi semeado e nenhum arquivo foi apagado."
+                    };
+                }
+
                 await _semeadura.SemearAsync(cancellationToken);
                 return Concluido(decisao, estado);
 
             default:
                 throw new ArgumentOutOfRangeException(nameof(decisao), decisao.Acao, "Ação de armazenamento desconhecida.");
         }
+    }
+
+    private async Task<ResultadoArmazenamento?> MigrarOuFalharAsync(
+        AcaoArmazenamento planejada,
+        EstadoObservadoArmazenamento estado,
+        CancellationToken cancellationToken)
+    {
+        var migracao = await _migracao.MigrarEVerificarAsync(_opcoes, cancellationToken);
+        if (!migracao.ExigeRecuperacao)
+            return null;
+
+        var falha = migracao.FalhaMigrate ?? new IntegridadeBancoException(migracao);
+        return FalhaDeExecucao(planejada, estado, falha);
     }
 
     private static ResultadoArmazenamento Concluido(DecisaoArmazenamento decisao, EstadoObservadoArmazenamento estado)
@@ -264,5 +341,6 @@ public sealed class CoordenadorArmazenamento : IArmazenamentoDados
     private sealed record Observacao(
         EstadoObservadoArmazenamento Estado,
         Exception? FalhaBanco,
-        Exception? FalhaEspelho);
+        Exception? FalhaEspelho,
+        bool BancoIlegivel);
 }

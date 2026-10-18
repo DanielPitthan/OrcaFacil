@@ -45,6 +45,12 @@ public static class LerEspelho
             if (pragma != ResultadoPragmaSnapshot.Ok)
                 throw new ArquivoCorrompidoException();
 
+            // O número autenticado no cabeçalho decide schema mais novo. Recalcular o histórico
+            // deste app devolve null para ids que ainda não existem aqui; exigir igualdade com
+            // esse recálculo transformava um espelho de duas migrations à frente em arquivo corrompido.
+            if (metadados.VersaoSchema > versaoApp.Atual)
+                throw new SchemaMaisNovoQueOAppException(metadados.VersaoSchema, versaoApp.Atual);
+
             IReadOnlyList<string> historico;
             try
             {
@@ -63,9 +69,6 @@ public static class LerEspelho
             if (versaoApp.Calcular(historico) != metadados.VersaoSchema
                 || !string.Equals(ultima, metadados.UltimaMigration, StringComparison.Ordinal))
                 throw new ArquivoCorrompidoException();
-
-            if (metadados.VersaoSchema > versaoApp.Atual)
-                throw new SchemaMaisNovoQueOAppException(metadados.VersaoSchema, versaoApp.Atual);
 
             entregue = true;
             return new SnapshotEspelho(pasta, caminhoSqlite, metadados);

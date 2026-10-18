@@ -132,7 +132,7 @@ public class VerificadorIntegridadeBancoTests
     }
 
     [Fact]
-    public async Task MigrationPelaMetade_ApontaSoOQueFalta_EAcionaRecuperacao()
+    public async Task ColunaCartaoIdCriada_SemTabelaCartoes_VerificadorAponta_EColunaVaziaEReconciliada()
     {
         using var banco = new BancoTemporario();
         await using var ctx = banco.CriarContexto();
@@ -163,14 +163,85 @@ public class VerificadorIntegridadeBancoTests
         Assert.Contains("Transacoes", relatorio.TabelasExistentes);
         Assert.Contains("ComprasCesta", relatorio.TabelasExistentes);
 
-        var excecao = await Assert.ThrowsAsync<IntegridadeBancoException>(() => PreparoBanco.ExigirIntegroAsync(ctx));
-        Assert.True(excecao.Resultado.ExigeRecuperacao);
-        Assert.NotNull(excecao.Resultado.FalhaMigrate);
-        Assert.Contains(Cartoes, excecao.Resultado.Relatorio.MigrationsPelaMetade);
-        Assert.DoesNotContain("Transacoes.CartaoId", excecao.Resultado.Relatorio.ColunasFaltando);
-        Assert.Contains("Cartoes", excecao.Resultado.Relatorio.TabelasFaltando);
+        await PreparoBanco.ExigirIntegroAsync(ctx);
+        await PreparoBanco.ExigirIntegroAsync(ctx);
+
         Assert.Equal("Daniel", await EscalarTextoAsync(ctx, "SELECT Nome FROM MembrosFamilia"));
         Assert.Equal("CartaoId", await EscalarTextoAsync(ctx, "SELECT name FROM pragma_table_info('Transacoes') WHERE name = 'CartaoId'"));
+        Assert.Equal(1L, await EscalarAsync(ctx, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'Cartoes'"));
+        Assert.Contains(Cartoes, (await VerificadorIntegridadeBanco.VerificarAsync(ctx)).MigrationsNoHistorico);
+        Assert.True((await VerificadorIntegridadeBanco.VerificarAsync(ctx)).Integro);
+    }
+
+    [Fact]
+    public async Task ColunaCartaoIdComValor_SemTabelaCartoes_NaoRepeteMigrate_EMensagemClara()
+    {
+        using var banco = new BancoTemporario();
+        await using var ctx = banco.CriarContexto();
+        await ctx.Database.MigrateAsync(PagamentoCesta);
+        await ExecutarAsync(ctx, "ALTER TABLE Transacoes ADD COLUMN CartaoId INTEGER NULL");
+        await InserirAsync(ctx, """
+            INSERT INTO Categorias (Nome, Icone, CorHex, TipoPadrao, EhPadraoDoSistema, PermiteItensFatura, Ativo)
+            VALUES ('Alimentação', 'A', '#9fb4c7', 1, 1, 0, 1)
+            """);
+        await InserirAsync(ctx, """
+            INSERT INTO MembrosFamilia (Nome, Avatar, Role, Ativo, CriadoEm)
+            VALUES ('Daniel', 'D', 0, 1, '2026-01-15 00:00:00')
+            """);
+        var categoriaId = await EscalarAsync(ctx, "SELECT Id FROM Categorias WHERE Nome = 'Alimentação'");
+        var membroId = await EscalarAsync(ctx, "SELECT Id FROM MembrosFamilia WHERE Nome = 'Daniel'");
+        await InserirAsync(ctx, $"""
+            INSERT INTO Transacoes (Descricao, Valor, Data, Tipo, Recorrencia, Pago, CategoriaId, MembroFamiliaId, CriadoEm, CartaoId)
+            VALUES ('Mercado', '10.00', '2026-02-03 00:00:00', 1, 0, 1, {categoriaId}, {membroId}, '2026-02-03 00:00:00', 7)
+            """);
+
+        var antes = await VerificadorIntegridadeBanco.VerificarAsync(ctx);
+        Assert.Contains("Cartoes", antes.TabelasFaltando);
+        Assert.DoesNotContain("Transacoes.CartaoId", antes.ColunasFaltando);
+        Assert.Contains(Cartoes, antes.MigrationsPelaMetade);
+
+        var excecao = await Assert.ThrowsAsync<IntegridadeBancoException>(() => PreparoBanco.ExigirIntegroAsync(ctx));
+        var deNovo = await Assert.ThrowsAsync<IntegridadeBancoException>(() => PreparoBanco.ExigirIntegroAsync(ctx));
+
+        Assert.Contains("AddCartoes", excecao.Message);
+        Assert.Contains("CartaoId", excecao.Message);
+        Assert.Contains("tabela Cartoes não existe", excecao.Message);
+        Assert.DoesNotContain("duplicate column", excecao.Message);
+        Assert.Equal(excecao.Message, deNovo.Message);
+        Assert.IsType<InvalidOperationException>(excecao.InnerException);
+        Assert.Contains("Cartoes", excecao.Resultado.Relatorio.TabelasFaltando);
+        Assert.Contains(Cartoes, excecao.Resultado.Relatorio.MigrationsPelaMetade);
+        Assert.DoesNotContain(Cartoes, excecao.Resultado.Relatorio.MigrationsNoHistorico);
+        Assert.Equal(7L, await EscalarAsync(ctx, "SELECT CartaoId FROM Transacoes"));
+        Assert.Equal("Daniel", await EscalarTextoAsync(ctx, "SELECT Nome FROM MembrosFamilia"));
+        Assert.Equal(0L, await EscalarAsync(ctx, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'Cartoes'"));
+    }
+
+    [Fact]
+    public async Task SchemaAddCartoesCompleto_SemHistorico_NaoRepeteAddDaColuna()
+    {
+        using var banco = new BancoTemporario();
+        await using var ctx = banco.CriarContexto();
+        await ctx.Database.MigrateAsync(Cartoes);
+        await InserirAsync(ctx, """
+            INSERT INTO MembrosFamilia (Nome, Avatar, Role, Ativo, CriadoEm)
+            VALUES ('Daniel', 'D', 0, 1, '2026-01-15 00:00:00')
+            """);
+        await ExecutarAsync(ctx, $"DELETE FROM __EFMigrationsHistory WHERE MigrationId = '{Cartoes}'");
+
+        var antes = await VerificadorIntegridadeBanco.VerificarAsync(ctx);
+        Assert.Contains(Cartoes, antes.MigrationsAusentesNoHistorico);
+        Assert.DoesNotContain("Transacoes.CartaoId", antes.ColunasFaltando);
+        Assert.DoesNotContain("Cartoes", antes.TabelasFaltando);
+
+        await PreparoBanco.ExigirIntegroAsync(ctx);
+        await PreparoBanco.ExigirIntegroAsync(ctx);
+
+        var depois = await VerificadorIntegridadeBanco.VerificarAsync(ctx);
+        Assert.True(depois.Integro);
+        Assert.Contains(Cartoes, depois.MigrationsNoHistorico);
+        Assert.Equal("Daniel", await EscalarTextoAsync(ctx, "SELECT Nome FROM MembrosFamilia"));
+        Assert.Equal(1L, await EscalarAsync(ctx, "SELECT COUNT(*) FROM pragma_table_info('Transacoes') WHERE name = 'CartaoId'"));
     }
 
     private static async Task<string> FotografarAsync(AppDbContext ctx)

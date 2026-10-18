@@ -2,7 +2,7 @@
 @implements IDisposable
 @inject InicializacaoApp Inicializacao
 
-@if (Inicializacao.LerEstado().Fase == FaseInicializacao.Pronta)
+@if (DecisaoAbertura.MostrarAplicativo(Inicializacao.LerEstado().Fase))
 {
     <Router AppAssembly="typeof(MauiProgram).Assembly" NotFoundPage="typeof(Pages.NotFound)">
         <Found Context="routeData">
@@ -20,7 +20,7 @@ else
     protected override void OnInitialized()
     {
         Inicializacao.AoMudar += OnMudou;
-        if (Inicializacao.LerEstado().Fase == FaseInicializacao.Pendente)
+        if (DecisaoAbertura.DeveIniciar(Inicializacao.LerEstado().Fase))
             Inicializacao.IniciarSemBloquear();
     }
 

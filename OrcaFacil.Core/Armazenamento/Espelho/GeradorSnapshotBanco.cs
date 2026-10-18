@@ -40,6 +40,20 @@ public sealed class GeradorSnapshotBanco
         if (!File.Exists(caminhoBancoVivo))
             throw new IntegridadeSnapshotException(IntegridadeSnapshotException.NadaPublicado);
 
+        try
+        {
+            if (new FileInfo(caminhoBancoVivo).Length <= 0)
+                throw new IntegridadeSnapshotException(IntegridadeSnapshotException.BancoSemHistorico);
+        }
+        catch (IntegridadeSnapshotException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new IntegridadeSnapshotException(IntegridadeSnapshotException.NadaPublicado);
+        }
+
         var pasta = Directory.CreateTempSubdirectory("orcafacil-snapshot-").FullName;
         try
         {
@@ -94,6 +108,26 @@ public sealed class GeradorSnapshotBanco
                 throw new IntegridadeSnapshotException(IntegridadeSnapshotException.NadaPublicado);
             }
 
+            if (_versao.Calcular(historico) is not int versaoSchema || versaoSchema < 1)
+                throw new IntegridadeSnapshotException(IntegridadeSnapshotException.BancoSemHistorico);
+
+            bool temDadosDoApp;
+            try
+            {
+                temDadosDoApp = await SqliteSnapshot.TemTabelaAsync(snapshot, TabelaDoApp, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch
+            {
+                throw new IntegridadeSnapshotException(IntegridadeSnapshotException.NadaPublicado);
+            }
+
+            if (!temDadosDoApp)
+                throw new IntegridadeSnapshotException(IntegridadeSnapshotException.BancoSemHistorico);
+
             var info = new FileInfo(snapshot);
             if (info.Length <= 0 || info.Length > FormatoEspelho.TamanhoMaximoConteudo)
                 throw new IntegridadeSnapshotException(IntegridadeSnapshotException.NadaPublicado);
@@ -117,12 +151,12 @@ public sealed class GeradorSnapshotBanco
             {
                 try
                 {
-                    var ultima = historico.Count == 0 ? "" : historico[^1];
+                    var ultima = historico[^1];
                     metadados = CofreEspelho.Gravar(
                         cifrado,
                         bytes,
                         senha,
-                        _versao.Calcular(historico),
+                        versaoSchema,
                         ultima,
                         DateTimeOffset.UtcNow,
                         _iteracoes);
@@ -166,6 +200,8 @@ public sealed class GeradorSnapshotBanco
             ApagarPasta(pasta);
         }
     }
+
+    private const string TabelaDoApp = "MembrosFamilia";
 
     private static void ApagarArquivo(string caminho)
     {

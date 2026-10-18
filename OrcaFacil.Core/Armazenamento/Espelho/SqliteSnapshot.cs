@@ -58,6 +58,18 @@ internal static class SqliteSnapshot
         return ids;
     }
 
+    public static async Task<bool> TemTabelaAsync(string caminho, string tabela, CancellationToken cancellationToken)
+    {
+        await using var conexao = await AbrirAsync(caminho, SqliteOpenMode.ReadOnly, cancellationToken);
+        await using var comando = conexao.CreateCommand();
+        comando.CommandText = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = $tabela LIMIT 1";
+        var parametro = comando.CreateParameter();
+        parametro.ParameterName = "$tabela";
+        parametro.Value = tabela;
+        comando.Parameters.Add(parametro);
+        return await comando.ExecuteScalarAsync(cancellationToken) is not null;
+    }
+
     private static async Task<SqliteConnection> AbrirAsync(
         string caminho,
         SqliteOpenMode modo,
