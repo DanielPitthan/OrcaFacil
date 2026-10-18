@@ -1,4 +1,5 @@
 using OrcaFacil.Core.Armazenamento.Espelho.Pasta;
+using OrcaFacil.Core.Llm;
 using OrcaFacil.Core.Tema;
 
 namespace OrcaFacil.Tests.Tema;
@@ -61,6 +62,35 @@ public class PreferenciasTemaTests
         Assert.Equal(TemaPreferido.Escuro, preferencias.Tema);
         Assert.False(memoria.Contem("Config.NotificacoesAtivas"));
         Assert.False(memoria.Contem("Config.GraficoLancamentosExpandido"));
+    }
+
+    [Fact]
+    public void Redefinir_RemoveAChaveDoCofre_EPreservaTemaEUriDoEspelho()
+    {
+        const string uri = "content://com.android.externalstorage.documents/tree/primary%3AOrca";
+        var memoria = new PreferenciasEmMemoria();
+        var cofre = new CofreChaveFalso();
+        var preferencias = new PreferenciasTema(memoria, cofre);
+        preferencias.Tema = TemaPreferido.Escuro;
+        memoria.Definir(UriEscolhaPasta.ChavePreferencia, uri);
+        memoria.Definir(ChipsInteligencia.ChaveUrl, "https://api.anthropic.com");
+        memoria.Definir(ChipsInteligencia.ChaveModelo, PedidoMensagem.ModeloAnthropic);
+        memoria.Definir(ChipsInteligencia.ChaveProvedor, "Anthropic");
+        memoria.Definir("Config.NotificacoesAtivas", "false");
+
+        IRedefinicaoPreferencias redefinicao = preferencias;
+        redefinicao.Redefinir();
+
+        Assert.Equal(1, cofre.Remocoes);
+        Assert.Null(cofre.Chave);
+        Assert.Equal("Escuro", memoria.ValorOuNulo(PreferenciasTema.Chave));
+        Assert.Equal(TemaPreferido.Escuro, preferencias.Tema);
+        Assert.Equal(uri, memoria.ValorOuNulo(UriEscolhaPasta.ChavePreferencia));
+        Assert.Equal(uri, new MemoriaPastaEspelho(memoria).LerUri());
+        Assert.False(memoria.Contem(ChipsInteligencia.ChaveUrl));
+        Assert.False(memoria.Contem(ChipsInteligencia.ChaveModelo));
+        Assert.False(memoria.Contem(ChipsInteligencia.ChaveProvedor));
+        Assert.False(memoria.Contem("Config.NotificacoesAtivas"));
     }
 
     [Fact]
@@ -135,5 +165,31 @@ public class PreferenciasTemaTests
 
         Assert.Equal("legado", memoria.ValorOuNulo(PreferenciasTema.Chave));
         Assert.Equal(TemaPreferido.Automatico, preferencias.Tema);
+    }
+
+    private sealed class CofreChaveFalso : ICofreChaveApi
+    {
+        public int Remocoes { get; private set; }
+
+        public string? Chave { get; private set; } = "sk-ant-salva";
+
+        public Task<string?> LerAsync(CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(Chave);
+        }
+
+        public Task GuardarAsync(string chave, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Chave = chave;
+            return Task.CompletedTask;
+        }
+
+        public void RemoverTudo()
+        {
+            Remocoes++;
+            Chave = null;
+        }
     }
 }

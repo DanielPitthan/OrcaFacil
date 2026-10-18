@@ -30,8 +30,9 @@ public interface IConfiguracaoService
     ProvedorIa? ProvedorInteligencia { get; set; }
 
     /// <summary>
-    /// Remove as preferências gravadas e volta ao padrão. A chave <c>Config.Tema</c> é preservada.
-    /// A chave da API no SecureStorage não é removida aqui.
+    /// Remove as preferências gravadas e volta ao padrão.
+    /// Preserva <c>Config.Tema</c> e a URI da pasta do espelho.
+    /// Também apaga a chave da API no SecureStorage, que <c>Preferences.Clear</c> não alcança.
     /// </summary>
     void Redefinir();
 }

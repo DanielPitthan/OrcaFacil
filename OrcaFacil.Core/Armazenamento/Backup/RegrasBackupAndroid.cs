@@ -15,10 +15,11 @@ namespace OrcaFacil.Core.Armazenamento.Backup;
 ///
 /// Preferences do MAUI, com nome nulo, grava
 /// <c>{id}_preferences.xml</c>. Tema, avisos e a URI da pasta do espelho viajam nesse arquivo.
-/// A chave do SecureStorage é outro arquivo,
-/// <c>{id}.microsoft.maui.essentials.preferences.xml</c>, cifrado com chave do Keystore
-/// que o backup não leva. Excluir esse arquivo é a mesma regra da issue #34:
-/// não criar um segundo XML de backup.
+/// A chave do SecureStorage é o arquivo
+/// <c>{id}.microsoft.maui.essentials.preferences</c> (no disco, com <c>.xml</c>),
+/// cifrado com chave do Keystore que o backup não leva. A exclusão usa o nome
+/// sem <c>.xml</c>: o Android também cobre o arquivo com sufixo. Uma linha só,
+/// a mesma nos dois XML. Não criar um segundo conjunto.
 ///
 /// Temporário e reserva da publicação (<c>orcafacil.espelho.{guid}.tmp</c> e
 /// <c>orcafacil.espelho.reserva.{guid}</c>) não têm caminho fixo. O atributo
@@ -139,7 +140,7 @@ public static class RegrasBackupAndroid
     private static List<RegraBackupAndroid> CriarExclusoes()
         =>
         [
-            Regra(DominioPreferencias, ArquivoSecureStorage, diretorio: false),
+            Regra(DominioPreferencias, NomeSecureStorage, diretorio: false),
             Regra(DominioArquivo, PastaLogs, diretorio: true),
             Regra(DominioArquivo, PastaBackupsMigracao, diretorio: true),
             Regra(DominioArquivo, PastaCacheEspelho, diretorio: true)
@@ -220,6 +221,13 @@ public sealed record RegraBackupAndroid(string Dominio, string Caminho, bool Dir
         if (string.Equals(Caminho, caminho, StringComparison.Ordinal))
             return true;
 
-        return Diretorio && caminho.StartsWith(Caminho + "/", StringComparison.Ordinal);
+        if (Diretorio && caminho.StartsWith(Caminho + "/", StringComparison.Ordinal))
+            return true;
+
+        // sharedpref sem .xml também vale para o arquivo no disco. Uma regra, sem duplicar a linha.
+        return !Diretorio
+            && string.Equals(dominio, RegrasBackupAndroid.DominioPreferencias, StringComparison.Ordinal)
+            && !Caminho.EndsWith(".xml", StringComparison.Ordinal)
+            && string.Equals(caminho, Caminho + ".xml", StringComparison.Ordinal);
     }
 }

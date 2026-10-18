@@ -1,10 +1,13 @@
 using OrcaFacil.Core.Armazenamento.Espelho.Pasta;
+using OrcaFacil.Core.Llm;
 
 namespace OrcaFacil.Core.Tema;
 
 /// <summary>
 /// Apaga as preferências gravadas e devolve <c>Config.Tema</c> como estava.
 /// A URI da pasta do espelho também fica: redefinir o tema não desliga o espelho.
+/// Se o cofre foi informado, também esvazia a chave da API.
+/// <c>Preferences.Clear</c> não alcança o SecureStorage.
 /// <c>ConfiguracaoService.Redefinir</c> só delega para este método.
 /// </summary>
 public interface IRedefinicaoPreferencias
@@ -14,18 +17,21 @@ public interface IRedefinicaoPreferencias
 
 /// <summary>
 /// Chave <c>Config.Tema</c>. O padrão é Automático e só é gravado quando alguém escolhe.
-/// <see cref="Redefinir"/> apaga as outras preferências, devolve esta chave como estava
-/// e preserva <see cref="UriEscolhaPasta.ChavePreferencia"/>.
+/// <see cref="Redefinir"/> apaga as outras preferências, devolve esta chave como estava,
+/// preserva <see cref="UriEscolhaPasta.ChavePreferencia"/> e, com cofre, chama
+/// <see cref="ICofreChaveApi.RemoverTudo"/>.
 /// </summary>
 public sealed class PreferenciasTema : IRedefinicaoPreferencias
 {
     public const string Chave = "Config.Tema";
 
     private readonly IPreferenciasSimples _preferencias;
+    private readonly ICofreChaveApi? _cofre;
 
-    public PreferenciasTema(IPreferenciasSimples preferencias)
+    public PreferenciasTema(IPreferenciasSimples preferencias, ICofreChaveApi? cofre = null)
     {
         _preferencias = preferencias;
+        _cofre = cofre;
     }
 
     public TemaPreferido Tema
@@ -45,5 +51,8 @@ public sealed class PreferenciasTema : IRedefinicaoPreferencias
             _preferencias.Definir(Chave, texto ?? MapeamentoTema.TextoAutomatico);
         if (preservarPasta)
             _preferencias.Definir(UriEscolhaPasta.ChavePreferencia, uriPasta ?? "");
+
+        // Depois de devolver tema e pasta: uma falha do cofre não desfaz essa preservação.
+        _cofre?.RemoverTudo();
     }
 }

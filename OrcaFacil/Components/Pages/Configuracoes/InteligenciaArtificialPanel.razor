@@ -105,8 +105,12 @@
         _provedor = Configuracao.ProvedorInteligencia;
         try
         {
-            var salva = await CofreChave.LerAsync();
+            var salva = await CofreChave.LerAsync(_cancelamento.Token);
             _temChave = !string.IsNullOrWhiteSpace(salva);
+        }
+        catch (OperationCanceledException)
+        {
+            // Sair da aba não é ausência de chave e não apaga o cofre.
         }
         catch (Exception)
         {
@@ -203,21 +207,8 @@
         }
     }
 
-    private async Task<string?> ResolverChaveAsync(CancellationToken cancellationToken = default)
-    {
-        if (!string.IsNullOrWhiteSpace(_chaveDigitada))
-            return _chaveDigitada.Trim();
-
-        try
-        {
-            var salva = await CofreChave.LerAsync(cancellationToken);
-            return string.IsNullOrWhiteSpace(salva) ? null : salva.Trim();
-        }
-        catch (Exception)
-        {
-            return null;
-        }
-    }
+    private Task<string?> ResolverChaveAsync(CancellationToken cancellationToken = default)
+        => ResolucaoChaveApi.ResolverAsync(CofreChave, _chaveDigitada, cancellationToken);
 
     private void MostrarTeste(ResultadoMensagem resultado, string? chave)
     {
