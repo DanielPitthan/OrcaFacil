@@ -1,4 +1,12 @@
 .of-boot {
+    --boot-bg: light-dark(#EFF3F7, #12151B);
+    --boot-surface: light-dark(#ffffff, #1B1F27);
+    --boot-text: light-dark(#1E2A33, #E8EAF0);
+    --boot-marca: light-dark(#426785, #B2CFE6);
+    --boot-muted: light-dark(#5A6B78, #C9D1DD);
+    --boot-button: light-dark(#659ECD, #6EA8FE);
+    --boot-button-text: light-dark(#1E2A33, #0B1220);
+    --boot-border: light-dark(rgba(30, 42, 51, 0.45), #3A4150);
     box-sizing: border-box;
     min-height: 100vh;
     min-height: 100dvh;
@@ -6,15 +14,16 @@
     align-items: center;
     justify-content: center;
     padding: calc(24px + env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom));
-    background: #EFF3F7;
+    background: var(--of-background, var(--boot-bg));
+    color: var(--of-text, var(--boot-text));
 }
 
 .of-boot-card {
     width: min(100%, 440px);
     padding: 24px;
     border-radius: 16px;
-    background: #ffffff;
-    color: #1E2A33;
+    background: var(--of-surface, var(--boot-surface));
+    color: inherit;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 
@@ -23,7 +32,7 @@
     font-size: 0.8125rem;
     font-weight: 700;
     letter-spacing: 0.02em;
-    color: #659ECD;
+    color: var(--boot-marca);
 }
 
 .of-boot h1 {
@@ -46,13 +55,13 @@
     word-break: break-word;
     font-size: 0.875rem;
     padding: 12px;
-    border: 1px solid rgba(90, 107, 120, 0.45);
+    border: 1px solid var(--of-border-strong, var(--boot-border));
     border-radius: 12px;
 }
 
 .of-boot-log {
     font-size: 0.8125rem;
-    color: #5A6B78;
+    color: var(--of-text-secondary, var(--boot-muted));
 }
 
 .of-boot button {
@@ -61,8 +70,8 @@
     margin-top: 4px;
     border: 0;
     border-radius: 12px;
-    background: #659ECD;
-    color: #ffffff;
+    background: var(--of-primary, var(--boot-button));
+    color: var(--boot-button-text);
     font: inherit;
     font-weight: 700;
     padding: 12px 16px;
@@ -72,19 +81,42 @@
     opacity: 0.65;
 }
 
+:global(html.of-tema-claro) .of-boot {
+    background: #EFF3F7;
+    color: #1E2A33;
+}
+
+:global(html.of-tema-claro) .of-boot-card {
+    background: #ffffff;
+}
+
+:global(html.of-tema-claro) .of-boot button {
+    background: #659ECD;
+    color: #1E2A33;
+}
+
 :global(html.of-tema-escuro) .of-boot {
     background: #12151B;
+    color: #E8EAF0;
 }
 
 :global(html.of-tema-escuro) .of-boot-card {
-    background: #1C212B;
-    color: #E8EEF4;
+    background: #1B1F27;
+}
+
+:global(html.of-tema-escuro) .of-boot-marca {
+    color: #B2CFE6;
 }
 
 :global(html.of-tema-escuro) .of-boot-detalhe {
-    border-color: rgba(232, 238, 244, 0.35);
+    border-color: #3A4150;
 }
 
 :global(html.of-tema-escuro) .of-boot-log {
-    color: #B7C3CE;
+    color: #C9D1DD;
+}
+
+:global(html.of-tema-escuro) .of-boot button {
+    background: #6EA8FE;
+    color: #0B1220;
 }

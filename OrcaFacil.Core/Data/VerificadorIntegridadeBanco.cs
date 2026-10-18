@@ -66,6 +66,32 @@ public static class VerificadorIntegridadeBanco
         };
     }
 
+    /// <summary>
+    /// Relatório quando o arquivo não pôde ser lido. Não abre o SQLite.
+    /// Lista o que o model espera como falta, porque nada pôde ser confirmado.
+    /// </summary>
+    public static RelatorioIntegridadeBanco RelatorioIlegivel(AppDbContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        try
+        {
+            var esperado = EsperadoPeloModelo(context);
+            var migrations = context.Database.GetMigrations().ToList();
+            return new RelatorioIntegridadeBanco
+            {
+                TabelasFaltando = esperado.Tabelas.Order(StringComparer.Ordinal).ToList(),
+                ColunasFaltando = esperado.Colunas.Order(StringComparer.Ordinal).ToList(),
+                IndicesFaltando = esperado.Indices.Order(StringComparer.Ordinal).ToList(),
+                MigrationsAusentesNoHistorico = migrations
+            };
+        }
+        catch (Exception)
+        {
+            return RelatorioIntegridadeBanco.IlegivelMinimo;
+        }
+    }
+
     private static Esperado EsperadoPeloModelo(AppDbContext context)
     {
         var esperado = new Esperado();
@@ -259,6 +285,14 @@ public static class VerificadorIntegridadeBanco
 
 public sealed class RelatorioIntegridadeBanco
 {
+    public static RelatorioIntegridadeBanco IlegivelMinimo { get; } = new()
+    {
+        TabelasFaltando = ["(arquivo ilegível)"],
+        ColunasFaltando = ["(arquivo ilegível)"],
+        IndicesFaltando = ["(arquivo ilegível)"],
+        MigrationsAusentesNoHistorico = ["(histórico ilegível)"]
+    };
+
     public IReadOnlyList<string> TabelasExistentes { get; init; } = [];
     public IReadOnlyList<string> TabelasFaltando { get; init; } = [];
     public IReadOnlyList<string> ColunasFaltando { get; init; } = [];

@@ -43,7 +43,7 @@
     private void Atualizar()
     {
         var (fase, passo, resumo) = Inicializacao.LerEstado();
-        _falhou = fase == FaseInicializacao.Falhou;
+        _falhou = DecisaoAbertura.MostrarFalha(fase);
         _passo = passo;
         _resumo = resumo;
         if (fase != FaseInicializacao.EmAndamento)
