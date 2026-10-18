@@ -64,4 +64,55 @@ public class AddEhEstornoItemFaturaMigrationTests
         Assert.Equal(80m, conferido.Transacoes.Single().Valor);
         Assert.Equal(["McDonald's", "Big Steak"], gravados.Select(i => i.Descritivo));
     }
+
+    [Fact]
+    public void Down_DevolveAMagnitudeDoEstornoAoTotalERemoveAColuna()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        using (var atual = new AppDbContext(options))
+        {
+            atual.Database.Migrate();
+            atual.Database.ExecuteSqlRaw(
+                """
+                INSERT INTO Categorias (Nome, Icone, CorHex, TipoPadrao, EhPadraoDoSistema, PermiteItensFatura, Ativo)
+                VALUES ('Cartão de Crédito', '💳', '#B2CFE6', 1, 1, 1, 1),
+                       ('Alimentação', '🛒', '#B2CFE6', 1, 0, 0, 1);
+                INSERT INTO MembrosFamilia (Nome, Avatar, Ativo, CriadoEm, Role)
+                VALUES ('Daniel', '👤', 1, '2026-10-01 00:00:00', 0);
+                INSERT INTO Transacoes (Descricao, Valor, Data, Tipo, Recorrencia, Pago, CategoriaId, MembroFamiliaId, CriadoEm)
+                VALUES ('Fatura Nubank', '120', '2026-10-18 00:00:00', 1, 0, 0, 1, 1, '2026-10-18 00:00:00');
+                INSERT INTO ItensLancamento (Descricao, Descritivo, Valor, Natureza, Ordem, TransacaoId, CategoriaId, EhEstorno)
+                VALUES ('Alimentação', 'Mercado', '50', 0, 0, 1, 2, 0),
+                       ('Estorno', 'Devolução', '80', 0, 1, 1, 2, 1);
+                """);
+        }
+
+        using (var voltar = new AppDbContext(options))
+            voltar.Database.Migrate("20261016011256_AddDescritivoItemFatura");
+
+        Assert.Equal(200m, LerDecimal(connection, "SELECT Valor FROM Transacoes"));
+        Assert.Equal(0, LerInteiro(connection, "SELECT COUNT(*) FROM pragma_table_info('ItensLancamento') WHERE name = 'EhEstorno'"));
+        Assert.Equal(2, LerInteiro(connection, "SELECT COUNT(*) FROM ItensLancamento"));
+        Assert.Equal(50m, LerDecimal(connection, "SELECT Valor FROM ItensLancamento WHERE Ordem = 0"));
+        Assert.Equal(80m, LerDecimal(connection, "SELECT Valor FROM ItensLancamento WHERE Ordem = 1"));
+    }
+
+    private static decimal LerDecimal(SqliteConnection connection, string sql)
+    {
+        using var comando = connection.CreateCommand();
+        comando.CommandText = sql;
+        return Convert.ToDecimal(comando.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static int LerInteiro(SqliteConnection connection, string sql)
+    {
+        using var comando = connection.CreateCommand();
+        comando.CommandText = sql;
+        return Convert.ToInt32(comando.ExecuteScalar(), System.Globalization.CultureInfo.InvariantCulture);
+    }
 }

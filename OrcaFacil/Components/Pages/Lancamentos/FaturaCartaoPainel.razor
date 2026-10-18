@@ -258,18 +258,7 @@
 
     private IReadOnlyList<ItemLancamentoFormModel> ItensVisiveis => FaturaCartaoEditor.Ordenar(Modelo.Itens);
 
-    private decimal SomaForaDoRascunho
-    {
-        get
-        {
-            var soma = Soma;
-            if (_editando is not null)
-                soma -= ItensFaturaRegras.ValorAssinado(_editando);
-            return soma;
-        }
-    }
-
-    private decimal RestanteLista => FaturaCartaoEditor.Restante(Modelo.Valor, SomaForaDoRascunho);
+    private decimal RestanteLista => FaturaCartaoEditor.RestanteAoEditar(Modelo.Valor, Soma, _editando);
 
     private bool DicaCritica => Modelo.Valor > 0 && _itemValor > RestanteLista;
 

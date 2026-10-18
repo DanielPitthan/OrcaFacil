@@ -272,6 +272,10 @@ namespace OrcaFacil.Core.Data.Migrations
                     b.Property<bool>("EhEstorno")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("HashImportacao")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Natureza")
                         .HasColumnType("INTEGER");
 
@@ -294,7 +298,10 @@ namespace OrcaFacil.Core.Data.Migrations
 
                     b.HasIndex("CategoriaId");
 
-                    b.HasIndex("TransacaoId");
+                    b.HasIndex("TransacaoId", "HashImportacao")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ItensLancamento_TransacaoId_HashImportacao")
+                        .HasFilter("\"HashImportacao\" IS NOT NULL");
 
                     b.ToTable("ItensLancamento");
                 });
