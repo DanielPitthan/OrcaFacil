@@ -11,6 +11,8 @@ public class VerificadorIntegridadeBancoTests
     private const string Cartoes = "20261015194450_AddCartoes";
     private const string Descritivo = "20261016011256_AddDescritivoItemFatura";
     private const string Estorno = "20261016182243_AddEhEstornoItemFatura";
+    private const string Hash = "20261017164213_AddHashImportacaoItemFatura";
+    private const string IndiceHash = "20261017172616_AddIndiceHashImportacaoItemFatura";
 
     [Fact]
     public async Task BancoMigrado_EIntegro_ECheckNaoAlteraArquivo()
@@ -54,9 +56,11 @@ public class VerificadorIntegridadeBancoTests
         Assert.Contains("ItensLancamento", parcial.TabelasExistentes);
         Assert.Contains("Cartoes", parcial.TabelasExistentes);
         Assert.Empty(parcial.TabelasFaltando);
-        Assert.Empty(parcial.IndicesFaltando);
-        Assert.Equal(["ItensLancamento.Descritivo", "ItensLancamento.EhEstorno"], parcial.ColunasFaltando);
-        Assert.Equal([Descritivo, Estorno], parcial.MigrationsAusentesNoHistorico);
+        Assert.Equal(["IX_ItensLancamento_TransacaoId_HashImportacao"], parcial.IndicesFaltando);
+        Assert.Equal(
+            ["ItensLancamento.Descritivo", "ItensLancamento.EhEstorno", "ItensLancamento.HashImportacao"],
+            parcial.ColunasFaltando);
+        Assert.Equal([Descritivo, Estorno, Hash, IndiceHash], parcial.MigrationsAusentesNoHistorico);
         Assert.Empty(parcial.MigrationsPelaMetade);
         Assert.DoesNotContain(Cartoes, parcial.MigrationsAusentesNoHistorico);
         Assert.Equal(antes, await FotografarAsync(ctx));
@@ -85,9 +89,10 @@ public class VerificadorIntegridadeBancoTests
         Assert.Equal(antes, await FotografarAsync(ctx));
 
         Assert.False(relatorio.Integro);
-        Assert.Empty(relatorio.ColunasFaltando);
-        Assert.Empty(relatorio.IndicesFaltando);
-        Assert.Equal([Estorno], relatorio.MigrationsAusentesNoHistorico);
+        Assert.Equal(["ItensLancamento.HashImportacao"], relatorio.ColunasFaltando);
+        Assert.DoesNotContain("ItensLancamento.EhEstorno", relatorio.ColunasFaltando);
+        Assert.Equal(["IX_ItensLancamento_TransacaoId_HashImportacao"], relatorio.IndicesFaltando);
+        Assert.Equal([Estorno, Hash, IndiceHash], relatorio.MigrationsAusentesNoHistorico);
         Assert.Empty(relatorio.MigrationsPelaMetade);
         Assert.Empty(relatorio.TabelasFaltando);
         Assert.Contains(Estorno, relatorio.Resumo);
@@ -95,7 +100,7 @@ public class VerificadorIntegridadeBancoTests
         var excecao = await Assert.ThrowsAsync<IntegridadeBancoException>(() => PreparoBanco.ExigirIntegroAsync(ctx));
         Assert.True(excecao.Resultado.ExigeRecuperacao);
         Assert.NotNull(excecao.Resultado.FalhaMigrate);
-        Assert.Equal([Estorno], excecao.Resultado.Relatorio.MigrationsAusentesNoHistorico);
+        Assert.Equal([Estorno, Hash, IndiceHash], excecao.Resultado.Relatorio.MigrationsAusentesNoHistorico);
         Assert.DoesNotContain("ItensLancamento.EhEstorno", excecao.Resultado.Relatorio.ColunasFaltando);
         Assert.Contains(Estorno, excecao.Message);
         Assert.Equal("Daniel", await EscalarTextoAsync(ctx, "SELECT Nome FROM MembrosFamilia"));
