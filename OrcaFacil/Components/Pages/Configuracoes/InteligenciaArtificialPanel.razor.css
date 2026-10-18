@@ -28,8 +28,16 @@
     margin: 4px;
     border-radius: var(--of-radius-pill);
     min-height: var(--of-touch);
+}
+
+.of-ia-chips ::deep .mud-chip:not(.mud-chip-selected) {
     background: var(--of-chip-bg);
     color: var(--of-text);
+}
+
+.of-ia-chips ::deep .mud-chip.mud-chip-selected {
+    background: var(--of-primary);
+    color: var(--of-chip-selecionado-texto);
 }
 
 .of-ia-aviso,
@@ -49,11 +57,11 @@
 }
 
 .of-ia-ok {
-    color: var(--of-success);
+    color: var(--of-resultado-ok);
 }
 
 .of-ia-erro {
-    color: var(--of-error);
+    color: var(--of-resultado-erro);
 }
 
 .of-ia-acoes {

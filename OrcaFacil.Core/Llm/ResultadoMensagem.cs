@@ -58,6 +58,10 @@ public sealed record ResultadoMensagem(
     public const string TextoSobrecarga = "O provedor está sobrecarregado agora.";
     public const string TextoTimeout = "A leitura demorou demais e foi interrompida.";
     public const string TextoPedidoInvalido = "O pedido foi recusado.";
+    public const string TextoChaveNaoInformada = "Informe a chave da API.";
+    public const string TextoUrlNaoInformada = "Informe a URL da API.";
+    public const string TextoModeloNaoInformado = "Informe o modelo.";
+    public const string TextoUrlInvalida = "A URL da API precisa ser https, sem usuário nem parâmetros.";
     public const string TextoRespostaInvalida = "A resposta veio fora do formato esperado.";
     public const string TextoSemRede = "Não foi possível conectar ao provedor.";
     public const string TextoFalha = "O provedor não concluiu a leitura.";

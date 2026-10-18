@@ -773,8 +773,171 @@ public class ClienteMensagensTests
 
         Assert.Equal(0, captura.Chamadas);
         Assert.Equal(TipoResultadoMensagem.PedidoInvalido, resultado.Tipo);
+        Assert.Equal(ResultadoMensagem.TextoUrlInvalida, resultado.Mensagem);
         Assert.DoesNotContain(Chave, resultado.Mensagem, StringComparison.Ordinal);
         Assert.DoesNotContain("segredo", resultado.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task TesteDeConexao_ChaveVazia_NaoChamaARede(string? chave)
+    {
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.Unauthorized, "corpo"));
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.TestarConexaoAsync(Base, chave, PedidoMensagem.ModeloAnthropic);
+
+        Assert.Equal(0, captura.Chamadas);
+        Assert.Equal(ResultadoMensagem.TextoChaveNaoInformada, resultado.Mensagem);
+        Assert.NotEqual(ResultadoMensagem.TextoNaoAutorizado, resultado.Mensagem);
+        Assert.DoesNotContain("chave-teste", resultado.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task TesteDeConexao_ModeloVazio_NaoChamaARede(string? modelo)
+    {
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, "ok"));
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.TestarConexaoAsync(Base, Chave, modelo);
+
+        Assert.Equal(0, captura.Chamadas);
+        Assert.Equal(ResultadoMensagem.TextoModeloNaoInformado, resultado.Mensagem);
+        Assert.DoesNotContain(Chave, resultado.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task TesteDeConexao_UrlVazia_NaoChamaARede(string? url)
+    {
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, "ok"));
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.TestarConexaoAsync(url, Chave, PedidoMensagem.ModeloAnthropic);
+
+        Assert.Equal(0, captura.Chamadas);
+        Assert.Equal(ResultadoMensagem.TextoUrlNaoInformada, resultado.Mensagem);
+        Assert.DoesNotContain(Chave, resultado.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("https://api.anthropic.com/v1?token=segredo")]
+    [InlineData("https://api.anthropic.com/v1#segredo")]
+    [InlineData("http://api.anthropic.com")]
+    [InlineData("https://user:segredo@api.anthropic.com")]
+    public async Task TesteDeConexao_UrlComQueryOuInvalida_NaoChamaARede(string url)
+    {
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, "ok"));
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.TestarConexaoAsync(url, Chave, PedidoMensagem.ModeloAnthropic);
+
+        Assert.Equal(0, captura.Chamadas);
+        Assert.Equal(ResultadoMensagem.TextoUrlInvalida, resultado.Mensagem);
+        Assert.NotEqual(ResultadoMensagem.TextoPedidoInvalido, resultado.Mensagem);
+        Assert.DoesNotContain(Chave, resultado.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain("segredo", resultado.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(302)]
+    [InlineData(307)]
+    public async Task TesteDeConexao_RedirectNaoESeguido(int status)
+    {
+        const string outra = "https://evil.test/coletor";
+        var captura = new CapturaHandler(pedido =>
+        {
+            if (pedido.RequestUri?.Host == "evil.test")
+                return Resposta(HttpStatusCode.OK, "ok " + Chave);
+
+            var resposta = Resposta((HttpStatusCode)status, "corpo " + Chave);
+            resposta.Headers.Location = new Uri(outra);
+            resposta.Content = new ConteudoQueFalhaSeLido();
+            return resposta;
+        });
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.TestarConexaoAsync(Base, Chave, PedidoMensagem.ModeloAnthropic);
+
+        Assert.Equal(1, captura.Chamadas);
+        Assert.Equal("https://api.anthropic.com/v1/messages", Assert.Single(captura.Uris));
+        Assert.DoesNotContain(captura.Uris, uri => uri.Contains("evil.test", StringComparison.Ordinal));
+        Assert.Equal(TipoResultadoMensagem.Falha, resultado.Tipo);
+        Assert.Equal(ResultadoMensagem.TextoFalha, resultado.Mensagem);
+        Assert.False(resultado.Sucesso);
+        Assert.DoesNotContain(Chave, resultado.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain("evil.test", resultado.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FrasesDoTesteDeConexao_SaoDistintasENaoCarregamChave()
+    {
+        string[] frases =
+        [
+            ResultadoMensagem.TextoChaveNaoInformada,
+            ResultadoMensagem.TextoUrlNaoInformada,
+            ResultadoMensagem.TextoModeloNaoInformado,
+            ResultadoMensagem.TextoUrlInvalida,
+            ResultadoMensagem.TextoNaoAutorizado,
+            ResultadoMensagem.TextoSemRede,
+            ResultadoMensagem.TextoTimeout,
+            ResultadoMensagem.TextoPedidoInvalido
+        ];
+
+        Assert.Equal(frases.Length, frases.Distinct(StringComparer.Ordinal).Count());
+        foreach (var frase in frases)
+        {
+            Assert.DoesNotContain(Chave, frase, StringComparison.Ordinal);
+            Assert.DoesNotContain("segredo", frase, StringComparison.Ordinal);
+        }
+    }
+
+    [Theory]
+    [InlineData("a")]
+    [InlineData("API")]
+    [InlineData("de")]
+    [InlineData(" ")]
+    public void TextoExibicao_ChaveCurta_NaoTrocaFraseFixa(string segredo)
+    {
+        var frases = new[]
+        {
+            ResultadoMensagem.TextoChaveNaoInformada,
+            ResultadoMensagem.TextoUrlNaoInformada,
+            ResultadoMensagem.TextoModeloNaoInformado,
+            ResultadoMensagem.TextoUrlInvalida,
+            ResultadoMensagem.TextoNaoAutorizado,
+            ResultadoMensagem.TextoSemRede,
+            ResultadoMensagem.TextoTimeout
+        };
+
+        foreach (var frase in frases)
+        {
+            var resultado = ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, frase);
+            Assert.Equal(frase, ClienteMensagens.TextoExibicao(resultado, segredo));
+        }
+    }
+
+    [Fact]
+    public void PreparoChamada_ToStringNaoExpoeChave()
+    {
+        var tipo = typeof(ClienteMensagens).GetNestedType("PreparoChamada", System.Reflection.BindingFlags.NonPublic);
+        Assert.NotNull(tipo);
+        var ctor = tipo!.GetConstructor([typeof(Uri), typeof(string), typeof(ResultadoMensagem)]);
+        Assert.NotNull(ctor);
+        var valor = ctor!.Invoke([new Uri("https://api.anthropic.com/v1/messages"), Chave, null]);
+
+        var texto = valor.ToString();
+
+        Assert.Equal("PreparoChamada", texto);
+        Assert.DoesNotContain(Chave, texto!, StringComparison.Ordinal);
+        Assert.DoesNotContain("anthropic", texto, StringComparison.Ordinal);
     }
 
     [Fact]

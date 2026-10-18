@@ -146,22 +146,20 @@ public sealed class ClienteMensagens : IDisposable
         string? modelo,
         CancellationToken cancellationToken = default)
     {
+        if (DiagnosticoTeste(urlBase, chave, modelo) is ResultadoMensagem local)
+            return Task.FromResult(local);
+
         var preparo = PrepararChamada(urlBase, chave);
         if (preparo.Falha is not null)
             return Task.FromResult(preparo.Falha);
 
-        if (string.IsNullOrWhiteSpace(modelo))
-        {
-            return Task.FromResult(
-                ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoPedidoInvalido));
-        }
-
-        var json = PedidoMensagem.MontarTesteConexao(modelo);
+        var json = PedidoMensagem.MontarTesteConexao(modelo!);
         return EnviarAsync(preparo.Uri, preparo.Chave, json, interpretarComprovante: false, cancellationToken);
     }
 
     /// <summary>
-    /// Texto fixo para a tela. Se a mensagem carregasse a chave, devolve a falha genérica.
+    /// Texto fixo para a tela. Frase conhecida não é trocada quando a chave é curta
+    /// e aparece dentro dela. Mensagem fora dessas frases, se carregar a chave, vira falha genérica.
     /// </summary>
     public static string TextoExibicao(ResultadoMensagem resultado, string? segredo)
     {
@@ -170,15 +168,56 @@ public sealed class ClienteMensagens : IDisposable
             ? ResultadoMensagem.TextoConexaoOk
             : (string.IsNullOrEmpty(resultado.Mensagem) ? ResultadoMensagem.TextoFalha : resultado.Mensagem);
 
-        if (!string.IsNullOrEmpty(segredo) && texto.Contains(segredo, StringComparison.Ordinal))
+        if (FraseFixa(texto) || string.IsNullOrWhiteSpace(segredo))
+            return texto;
+
+        if (texto.Contains(segredo, StringComparison.Ordinal))
             return ResultadoMensagem.TextoFalha;
 
         return texto;
     }
 
+    private static bool FraseFixa(string texto) => texto is
+        ResultadoMensagem.TextoConexaoOk or
+        ResultadoMensagem.TextoNaoAutorizado or
+        ResultadoMensagem.TextoLimite or
+        ResultadoMensagem.TextoSobrecarga or
+        ResultadoMensagem.TextoTimeout or
+        ResultadoMensagem.TextoPedidoInvalido or
+        ResultadoMensagem.TextoChaveNaoInformada or
+        ResultadoMensagem.TextoUrlNaoInformada or
+        ResultadoMensagem.TextoModeloNaoInformado or
+        ResultadoMensagem.TextoUrlInvalida or
+        ResultadoMensagem.TextoRespostaInvalida or
+        ResultadoMensagem.TextoSemRede or
+        ResultadoMensagem.TextoFalha;
+
+    /// <summary>
+    /// Falhas locais do teste, antes da rede. Cada uma tem frase própria,
+    /// diferente do 401, da falta de rede e do prazo.
+    /// </summary>
+    private static ResultadoMensagem? DiagnosticoTeste(string? urlBase, string? chave, string? modelo)
+    {
+        if (string.IsNullOrWhiteSpace(urlBase))
+            return ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoUrlNaoInformada);
+
+        if (PedidoMensagem.CriarUri(urlBase) is null)
+            return ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoUrlInvalida);
+
+        if (string.IsNullOrWhiteSpace(chave))
+            return ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoChaveNaoInformada);
+
+        if (string.IsNullOrWhiteSpace(modelo))
+            return ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoModeloNaoInformado);
+
+        return null;
+    }
+
     private readonly record struct PreparoChamada(Uri Uri, string Chave, ResultadoMensagem? Falha)
     {
         public static PreparoChamada Recusa(ResultadoMensagem falha) => new(null!, "", falha);
+
+        public override string ToString() => "PreparoChamada";
     }
 
     private PreparoChamada PrepararChamada(string? urlBase, string? chave)
@@ -228,9 +267,12 @@ public sealed class ClienteMensagens : IDisposable
             if (resposta.StatusCode != HttpStatusCode.OK)
                 return MapearStatus(resposta);
 
-            return interpretarComprovante
-                ? await LerCorpoAsync(resposta, limite.Token)
-                : ResultadoMensagem.ConexaoOk();
+            // 200 do teste de conexão é sucesso sem ler o corpo: não é um comprovante,
+            // e o texto da resposta não entra na mensagem.
+            if (!interpretarComprovante)
+                return ResultadoMensagem.ConexaoOk();
+
+            return await LerCorpoAsync(resposta, limite.Token);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
