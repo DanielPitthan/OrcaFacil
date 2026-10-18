@@ -6,7 +6,9 @@ namespace OrcaFacil.Core.Armazenamento.Espelho;
 
 /// <summary>
 /// Número de schema que este build grava e compara. É a quantidade de migrations conhecidas,
-/// na ordem do identificador. Uma migration desconhecida no histórico conta como schema mais novo.
+/// na ordem do identificador. O histórico só vira esse número quando é um prefixo contíguo.
+/// Um furo ou um id desconhecido não é o schema atual: o número de um app mais novo vem do
+/// cabeçalho autenticado do espelho, não de um recálculo local.
 /// </summary>
 public sealed class VersaoSchemaAplicacao : IVersaoSchemaApp
 {
@@ -30,34 +32,26 @@ public sealed class VersaoSchemaAplicacao : IVersaoSchemaApp
     public IReadOnlyList<string> Migrations => _migrations;
 
     /// <summary>
-    /// 0 se o banco não tem histórico. O índice (1-based) da última migration conhecida.
-    /// Se qualquer id do histórico não pertence a este app, devolve <see cref="Atual"/> + 1.
+    /// 0 se o histórico está vazio. A quantidade de migrations quando a lista é exatamente
+    /// o prefixo contíguo das migrations conhecidas, na mesma ordem. Null se falta uma no meio,
+    /// se a ordem não é esse prefixo, ou se há id que este app não conhece.
     /// </summary>
-    public int Calcular(IReadOnlyList<string> historico)
+    public int? Calcular(IReadOnlyList<string> historico)
     {
         ArgumentNullException.ThrowIfNull(historico);
         if (historico.Count == 0)
             return 0;
 
-        foreach (var id in historico)
+        if (historico.Count > _migrations.Count)
+            return null;
+
+        for (var i = 0; i < historico.Count; i++)
         {
-            if (!_migrations.Contains(id, StringComparer.Ordinal))
-                return _migrations.Count + 1;
+            if (!string.Equals(historico[i], _migrations[i], StringComparison.Ordinal))
+                return null;
         }
 
-        var indice = IndexOf(historico[^1]);
-        return indice + 1;
-    }
-
-    private int IndexOf(string id)
-    {
-        for (var i = 0; i < _migrations.Count; i++)
-        {
-            if (string.Equals(_migrations[i], id, StringComparison.Ordinal))
-                return i;
-        }
-
-        return -1;
+        return historico.Count;
     }
 
     private static VersaoSchemaAplicacao CriarDoAssembly()

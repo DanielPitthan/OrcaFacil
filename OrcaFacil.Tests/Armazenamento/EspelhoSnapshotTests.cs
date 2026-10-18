@@ -11,7 +11,7 @@ namespace OrcaFacil.Tests.Armazenamento;
 
 public class EspelhoSnapshotTests
 {
-    private const string Senha = "Orca1234";
+    private const string Senha = "TrilhaAzul92";
     private const string SenhaErrada = "Outra1234";
     private readonly VersaoSchemaAplicacao _versao = VersaoSchemaAplicacao.DoApp;
     private readonly GeradorSnapshotBanco _gerador = new(VersaoSchemaAplicacao.DoApp);
@@ -147,26 +147,52 @@ public class EspelhoSnapshotTests
     }
 
     [Fact]
-    public async Task SchemaMaisNovo_LancaSchemaMaisNovoQueOApp()
+    public async Task SchemaDuasMigrationsAFrente_LancaSchemaMaisNovoQueOApp()
     {
         using var area = new AreaTemp("NAO-LOGAR-CAMINHO-9f3a");
-        await using (var vivo = await CriarBancoAbertoAsync(area.Banco, "Marina"))
-        {
-            await ExecutarAsync(vivo, """
-                INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20990101000000_Futura', '10.0.0')
-                """);
-            await _gerador.GerarAsync(area.Banco, Senha, new DestinoEspelhoArquivo(area.Espelho));
-        }
+        await GravarEspelhoComHistoricoExtraAsync(
+            area,
+            _versao.Atual + 2,
+            "20990101000000_FuturaA",
+            "20990201000000_FuturaB");
 
         var excecao = await Assert.ThrowsAsync<SchemaMaisNovoQueOAppException>(() => LerEspelho.AbrirAsync(area.Espelho, Senha, _versao));
 
         Assert.Equal(CodigoFalhaEspelho.SchemaMaisNovoQueOApp, excecao.Codigo);
-        Assert.Equal(_versao.Atual + 1, excecao.VersaoEspelho);
+        Assert.Equal(_versao.Atual + 2, excecao.VersaoEspelho);
         Assert.Equal(_versao.Atual, excecao.VersaoApp);
+        Assert.Null(_versao.Calcular(ComExtras("20990101000000_FuturaA", "20990201000000_FuturaB")));
         AssertNaoVaza(excecao, Senha, area.Raiz);
         Assert.True(File.Exists(area.Espelho));
         Assert.True(File.Exists(area.Banco));
+    }
+
+    [Fact]
+    public async Task NumeroAutenticadoMaior_NaoExigeIgualdadeComORecalculo()
+    {
+        using var area = new AreaTemp();
+        await GravarEspelhoComHistoricoExtraAsync(
+            area,
+            _versao.Atual + 5,
+            "20990101000000_FuturaA",
+            "20990201000000_FuturaB");
+
+        var excecao = await Assert.ThrowsAsync<SchemaMaisNovoQueOAppException>(() => LerEspelho.AbrirAsync(area.Espelho, Senha, _versao));
+
+        Assert.Equal(_versao.Atual + 5, excecao.VersaoEspelho);
+        Assert.IsNotType<ArquivoCorrompidoException>(excecao);
+    }
+
+    [Fact]
+    public async Task FuroNoHistorico_NaoAbreComoSchemaAtual()
+    {
+        using var area = new AreaTemp();
+        await GravarEspelhoComFuroAsync(area, _versao.Atual);
+
+        var excecao = await Assert.ThrowsAsync<ArquivoCorrompidoException>(() => LerEspelho.AbrirAsync(area.Espelho, Senha, _versao));
+
+        Assert.Equal(CodigoFalhaEspelho.ArquivoCorrompido, excecao.Codigo);
+        Assert.Null(_versao.Calcular(HistoricoComFuro()));
     }
 
     [Fact]
@@ -287,17 +313,98 @@ public class EspelhoSnapshotTests
     }
 
     [Fact]
+    public async Task BancoVazio_NaoSubstituiOEspelhoBom()
+    {
+        using var area = new AreaTemp("NAO-LOGAR-CAMINHO-9f3a");
+        await PublicarAsync(area, "Marina");
+        var anterior = await File.ReadAllBytesAsync(area.Espelho);
+        ApagarLaterais(area.Banco);
+        await File.WriteAllBytesAsync(area.Banco, []);
+        var destino = new DestinoEspelhoArquivo(area.Espelho);
+
+        var excecao = await Assert.ThrowsAsync<IntegridadeSnapshotException>(() => _gerador.GerarAsync(area.Banco, Senha, destino));
+
+        Assert.Equal(IntegridadeSnapshotException.BancoSemHistorico, excecao.Message);
+        Assert.Equal(anterior, await File.ReadAllBytesAsync(area.Espelho));
+        Assert.Equal(0, new FileInfo(area.Banco).Length);
+        AssertNaoVaza(excecao, Senha, area.Raiz);
+
+        using var aberto = await LerEspelho.AbrirAsync(area.Espelho, Senha, _versao);
+        await using var snapshot = AbrirSomenteLeitura(aberto.CaminhoSqlite);
+        Assert.Equal("Marina", await EscalarTextoAsync(snapshot, "SELECT Nome FROM MembrosFamilia"));
+    }
+
+    [Fact]
+    public async Task SqliteSemHistoricoDoApp_NaoPublica()
+    {
+        using var area = new AreaTemp();
+        await PublicarAsync(area, "Marina");
+        var anterior = await File.ReadAllBytesAsync(area.Espelho);
+        var vazio = Path.Combine(area.Raiz, "vazio.db");
+        await using (var conexao = await AbrirAsync(vazio, criar: true))
+        {
+        }
+
+        var destino = new DestinoQueRecusa();
+        var excecao = await Assert.ThrowsAsync<IntegridadeSnapshotException>(() => _gerador.GerarAsync(vazio, Senha, destino));
+
+        Assert.Equal(0, destino.Chamadas);
+        Assert.Equal(IntegridadeSnapshotException.BancoSemHistorico, excecao.Message);
+        Assert.Equal(anterior, await File.ReadAllBytesAsync(area.Espelho));
+    }
+
+    [Fact]
+    public async Task HistoricoSemTabelaDoApp_NaoPublica()
+    {
+        using var area = new AreaTemp();
+        await PublicarAsync(area, "Marina");
+        var anterior = await File.ReadAllBytesAsync(area.Espelho);
+        var casca = Path.Combine(area.Raiz, "casca.db");
+        await CriarHistoricoSemTabelaDoAppAsync(casca);
+        var destino = new DestinoQueRecusa();
+
+        var excecao = await Assert.ThrowsAsync<IntegridadeSnapshotException>(() => _gerador.GerarAsync(casca, Senha, destino));
+
+        Assert.Equal(0, destino.Chamadas);
+        Assert.Equal(IntegridadeSnapshotException.BancoSemHistorico, excecao.Message);
+        Assert.Equal(anterior, await File.ReadAllBytesAsync(area.Espelho));
+    }
+
+    [Fact]
+    public async Task FuroNoHistorico_NaoPublicaEMantemOEspelhoAnterior()
+    {
+        using var area = new AreaTemp("NAO-LOGAR-CAMINHO-9f3a");
+        await PublicarAsync(area, "Marina");
+        var anterior = await File.ReadAllBytesAsync(area.Espelho);
+        await using (var vivo = await AbrirAsync(area.Banco))
+        {
+            await using var apagar = vivo.CreateCommand();
+            apagar.CommandText = """
+                DELETE FROM "__EFMigrationsHistory"
+                WHERE "MigrationId" = '20261008141717_PerfilFechamentoLogs'
+                """;
+            Assert.Equal(1, await apagar.ExecuteNonQueryAsync());
+        }
+
+        var destino = new DestinoQueRecusa();
+        var excecao = await Assert.ThrowsAsync<IntegridadeSnapshotException>(() => _gerador.GerarAsync(area.Banco, Senha, destino));
+
+        Assert.Equal(0, destino.Chamadas);
+        Assert.Equal(IntegridadeSnapshotException.BancoSemHistorico, excecao.Message);
+        Assert.Equal(anterior, await File.ReadAllBytesAsync(area.Espelho));
+        AssertNaoVaza(excecao, Senha, area.Raiz);
+        Assert.Null(_versao.Calcular(HistoricoComFuro()));
+    }
+
+    [Fact]
     public async Task EspelhoArquivo_SchemaMaisNovo_PedeAtualizacaoSemRestaurar()
     {
         using var area = new AreaTemp();
-        await using (var vivo = await CriarBancoAbertoAsync(area.Banco, "Marina"))
-        {
-            await ExecutarAsync(vivo, """
-                INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
-                VALUES ('20990101000000_Futura', '10.0.0')
-                """);
-            await _gerador.GerarAsync(area.Banco, Senha, new DestinoEspelhoArquivo(area.Espelho));
-        }
+        await GravarEspelhoComHistoricoExtraAsync(
+            area,
+            _versao.Atual + 2,
+            "20990101000000_FuturaA",
+            "20990201000000_FuturaB");
 
         var antes = await File.ReadAllBytesAsync(area.Espelho);
         var portas = new PortasCoordenador();
@@ -305,7 +412,7 @@ public class EspelhoSnapshotTests
         var resultado = await portas.Criar(new EspelhoArquivo(area.Espelho, new SenhaFixa(Senha), _versao), _versao).PrepararAsync();
 
         Assert.True(leitura.Legivel);
-        Assert.Equal(_versao.Atual + 1, leitura.VersaoSchema);
+        Assert.Equal(_versao.Atual + 2, leitura.VersaoSchema);
         Assert.Equal(AcaoArmazenamento.PedirAtualizacaoDoApp, resultado.Acao);
         Assert.Null(resultado.Falha);
         Assert.Equal(0, portas.Restauracoes);
@@ -344,6 +451,108 @@ public class EspelhoSnapshotTests
         Assert.DoesNotContain(area.Raiz, ausente.Motivo, StringComparison.Ordinal);
         Assert.Equal("EspelhoArquivo", errada.ToString());
         Assert.DoesNotContain(area.Raiz, errada.ToString(), StringComparison.Ordinal);
+    }
+
+    private async Task GravarEspelhoComHistoricoExtraAsync(AreaTemp area, int versaoSchema, params string[] extras)
+    {
+        string ultima;
+        await using (var vivo = await CriarBancoAbertoAsync(area.Banco, "Marina"))
+        {
+            foreach (var id in extras)
+            {
+                await using var comando = vivo.CreateCommand();
+                comando.CommandText = """
+                    INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                    VALUES ($id, '10.0.0')
+                    """;
+                comando.Parameters.AddWithValue("$id", id);
+                Assert.Equal(1, await comando.ExecuteNonQueryAsync());
+            }
+
+            ultima = await EscalarTextoAsync(vivo, """
+                SELECT "MigrationId" FROM "__EFMigrationsHistory" ORDER BY "MigrationId" DESC LIMIT 1
+                """);
+            var snapshot = Path.Combine(area.Raiz, "consistente.db");
+            await using var vacuum = vivo.CreateCommand();
+            vacuum.CommandText = "VACUUM INTO $destino;";
+            vacuum.Parameters.AddWithValue("$destino", snapshot);
+            await vacuum.ExecuteNonQueryAsync();
+            var bytes = await File.ReadAllBytesAsync(snapshot);
+            CofreEspelho.Gravar(
+                area.Espelho,
+                bytes,
+                Senha,
+                versaoSchema,
+                ultima,
+                DateTimeOffset.UtcNow,
+                FormatoEspelho.IteracoesPadrao);
+        }
+    }
+
+    private async Task GravarEspelhoComFuroAsync(AreaTemp area, int versaoSchema)
+    {
+        await using var vivo = await CriarBancoAbertoAsync(area.Banco, "Marina");
+        await using (var apagar = vivo.CreateCommand())
+        {
+            apagar.CommandText = """
+                DELETE FROM "__EFMigrationsHistory"
+                WHERE "MigrationId" = '20261008141717_PerfilFechamentoLogs'
+                """;
+            Assert.Equal(1, await apagar.ExecuteNonQueryAsync());
+        }
+        var ultima = await EscalarTextoAsync(vivo, """
+            SELECT "MigrationId" FROM "__EFMigrationsHistory" ORDER BY "MigrationId" DESC LIMIT 1
+            """);
+        var snapshot = Path.Combine(area.Raiz, "consistente.db");
+        await using var vacuum = vivo.CreateCommand();
+        vacuum.CommandText = "VACUUM INTO $destino;";
+        vacuum.Parameters.AddWithValue("$destino", snapshot);
+        await vacuum.ExecuteNonQueryAsync();
+        CofreEspelho.Gravar(
+            area.Espelho,
+            await File.ReadAllBytesAsync(snapshot),
+            Senha,
+            versaoSchema,
+            ultima,
+            DateTimeOffset.UtcNow,
+            FormatoEspelho.IteracoesPadrao);
+    }
+
+    private List<string> HistoricoComFuro()
+        => _versao.Migrations.Where(id => id != "20261008141717_PerfilFechamentoLogs").ToList();
+
+    private List<string> ComExtras(params string[] extras)
+        => [.. _versao.Migrations, .. extras];
+
+    private static async Task CriarHistoricoSemTabelaDoAppAsync(string caminho)
+    {
+        await using var conexao = await AbrirAsync(caminho, criar: true);
+        await ExecutarAsync(conexao, """
+            CREATE TABLE "__EFMigrationsHistory" (
+                "MigrationId" TEXT NOT NULL CONSTRAINT "PK___EFMigrationsHistory" PRIMARY KEY,
+                "ProductVersion" TEXT NOT NULL
+            )
+            """);
+        foreach (var id in VersaoSchemaAplicacao.DoApp.Migrations)
+        {
+            await using var comando = conexao.CreateCommand();
+            comando.CommandText = """
+                INSERT INTO "__EFMigrationsHistory" ("MigrationId", "ProductVersion")
+                VALUES ($id, '10.0.0')
+                """;
+            comando.Parameters.AddWithValue("$id", id);
+            Assert.Equal(1, await comando.ExecuteNonQueryAsync());
+        }
+    }
+
+    private static void ApagarLaterais(string banco)
+    {
+        foreach (var sufixo in new[] { "-wal", "-shm" })
+        {
+            var lateral = banco + sufixo;
+            if (File.Exists(lateral))
+                File.Delete(lateral);
+        }
     }
 
     private async Task PublicarAsync(AreaTemp area, string nome)
