@@ -55,6 +55,8 @@ public sealed record LeituraBancoVivo
 /// schema que já existe; qualquer outra divergência.
 /// Arquivo ilegível nunca é <see cref="SituacaoBancoVivo.Desatualizado"/> nem
 /// <see cref="SituacaoBancoVivo.Vazio"/>.
+/// <see cref="SituacaoBancoVivo.SemPerfil"/> não sai da estrutura: o coordenador aplica
+/// <see cref="PoliticaSeed"/> quando o relatório já é íntegro e não há membro.
 /// </remarks>
 public static class ClassificacaoBancoVivo
 {
@@ -92,6 +94,23 @@ public static class ClassificacaoBancoVivo
             return SituacaoBancoVivo.Desatualizado;
 
         return SituacaoBancoVivo.Inconsistente;
+    }
+
+    /// <summary>
+    /// Schema íntegro sem membro vira <see cref="SituacaoBancoVivo.SemPerfil"/>.
+    /// As outras situações ficam como estão: banco vazio, inconsistente ou mais novo não é promovido.
+    /// </summary>
+    public static SituacaoBancoVivo AplicarPoliticaSeed(
+        SituacaoBancoVivo situacao,
+        RelatorioIntegridadeBanco? relatorio,
+        bool haMembro)
+    {
+        if (situacao != SituacaoBancoVivo.Integro || relatorio is null)
+            return situacao;
+
+        return PoliticaSeed.DevePopular(new ResultadoPreparoBanco(null, relatorio), haMembro)
+            ? SituacaoBancoVivo.SemPerfil
+            : situacao;
     }
 
     /// <summary>

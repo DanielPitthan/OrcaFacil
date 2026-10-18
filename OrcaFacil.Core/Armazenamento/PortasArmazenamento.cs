@@ -13,6 +13,15 @@ public interface ISondaBancoVivo
     Task<RelatorioIntegridadeBanco> VerificarAsync(CancellationToken cancellationToken = default);
 }
 
+/// <summary>
+/// Há ao menos um membro/perfil. O coordenador só pergunta quando o schema está íntegro.
+/// A implementação consulta <c>MembrosFamilia</c>; não cria arquivo e não semeia.
+/// </summary>
+public interface IPresencaPerfil
+{
+    Task<bool> HaMembroAsync(CancellationToken cancellationToken = default);
+}
+
 /// <summary>Versão de schema que este build grava no espelho. O coordenador só compara o número.</summary>
 public interface IVersaoSchemaApp
 {
@@ -131,6 +140,7 @@ public interface IMigracaoBancoVivo
 /// <summary>
 /// Dados iniciais depois que o schema já existe. O coordenador cria o schema
 /// com <see cref="IMigracaoBancoVivo"/> e só então chama este método.
+/// Se esta chamada falha, a abertura seguinte repete quando o schema continua sem membro.
 /// Restauração que falha não chega aqui.
 /// </summary>
 public interface ISemeaduraDados

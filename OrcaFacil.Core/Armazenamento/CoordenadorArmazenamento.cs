@@ -11,6 +11,7 @@ namespace OrcaFacil.Core.Armazenamento;
 /// Esse caminho não chama <see cref="ISemeaduraDados"/> e não chama <see cref="ILimpezaTotalDados"/>.
 /// Espelho mais antigo, depois de restaurado, é migrado com as <see cref="OpcoesPreparoBanco"/>.
 /// Semear cria o schema por essa mesma migração e só então grava os dados iniciais.
+/// Schema íntegro sem membro vira <see cref="SituacaoBancoVivo.SemPerfil"/> por <see cref="PoliticaSeed"/> e semeia de novo.
 /// Banco ilegível só é substituído depois de <see cref="IPreservacaoBancoVivo"/>; se a cópia falha, a recuperação abre.
 /// <see cref="PrepararAsync"/> e <see cref="LimparTudoAsync"/> não correm ao mesmo tempo.
 /// </remarks>
@@ -24,6 +25,7 @@ public sealed class CoordenadorArmazenamento : IArmazenamentoDados
     private readonly ISemeaduraDados _semeadura;
     private readonly ILimpezaTotalDados _limpeza;
     private readonly IPreservacaoBancoVivo _preservacao;
+    private readonly IPresencaPerfil _perfil;
     private readonly OpcoesPreparoBanco _opcoes;
     private readonly SemaphoreSlim _exclusao = new(1, 1);
 
@@ -36,7 +38,8 @@ public sealed class CoordenadorArmazenamento : IArmazenamentoDados
         ISemeaduraDados semeadura,
         ILimpezaTotalDados limpeza,
         OpcoesPreparoBanco opcoesPreparo,
-        IPreservacaoBancoVivo preservacao)
+        IPreservacaoBancoVivo preservacao,
+        IPresencaPerfil perfil)
     {
         _banco = banco ?? throw new ArgumentNullException(nameof(banco));
         _espelho = espelho ?? throw new ArgumentNullException(nameof(espelho));
@@ -47,6 +50,7 @@ public sealed class CoordenadorArmazenamento : IArmazenamentoDados
         _limpeza = limpeza ?? throw new ArgumentNullException(nameof(limpeza));
         _opcoes = opcoesPreparo ?? throw new ArgumentNullException(nameof(opcoesPreparo));
         _preservacao = preservacao ?? throw new ArgumentNullException(nameof(preservacao));
+        _perfil = perfil ?? throw new ArgumentNullException(nameof(perfil));
     }
 
     public Task<ResultadoArmazenamento> PrepararAsync(CancellationToken cancellationToken = default)
@@ -175,6 +179,11 @@ public sealed class CoordenadorArmazenamento : IArmazenamentoDados
 
         var bancoIlegivel = leituraFalhou || (relatorio is not null && ClassificacaoBancoVivo.MarcaArquivoIlegivel(relatorio));
         var banco = ClassificacaoBancoVivo.Classificar(new LeituraBancoVivo(bancoExiste, relatorio, leituraFalhou));
+        if (banco == SituacaoBancoVivo.Integro)
+        {
+            var haMembro = await _perfil.HaMembroAsync(cancellationToken);
+            banco = ClassificacaoBancoVivo.AplicarPoliticaSeed(banco, relatorio, haMembro);
+        }
 
         Exception? falhaEspelho = null;
         var espelhoExiste = _espelho.Existe();
