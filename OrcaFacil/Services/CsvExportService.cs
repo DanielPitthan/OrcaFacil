@@ -33,11 +33,11 @@ public class CsvExportService : ICsvExportService
         return caminho;
     }
 
-    public async Task CompartilharAsync(string caminhoArquivo)
+    public async Task CompartilharAsync(string caminhoArquivo, string? titulo = null)
     {
         await Share.Default.RequestAsync(new ShareFileRequest
         {
-            Title = "Exportar Relatório - Pro Orçamento",
+            Title = string.IsNullOrWhiteSpace(titulo) ? "Exportar Relatório - Pro Orçamento" : titulo,
             File = new ShareFile(caminhoArquivo)
         });
     }

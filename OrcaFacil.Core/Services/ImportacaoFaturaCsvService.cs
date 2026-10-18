@@ -29,6 +29,8 @@ public sealed record LinhaPreviaImportacaoFaturaCsv(
 /// <summary>
 /// Prévia da importação. Não grava.
 /// Os totais somam as linhas válidas que ainda não estão na fatura.
+/// <see cref="TotalFatura"/> e <see cref="SomaItensAtual"/> vêm da fatura gravada.
+/// O valor digitado na tela, ainda não salvo, não entra no teto.
 /// </summary>
 public sealed record PreviaImportacaoFaturaCsv(
     bool ArquivoAceito,
@@ -38,7 +40,9 @@ public sealed record PreviaImportacaoFaturaCsv(
     IReadOnlyList<FaturaCsv.ErroLinha> Erros,
     decimal TotalCompras,
     decimal TotalEstornos,
-    decimal TotalLiquido);
+    decimal TotalLiquido,
+    decimal TotalFatura = 0m,
+    decimal SomaItensAtual = 0m);
 
 /// <summary>O que a confirmação gravou. Totais são das linhas novas, já arredondados.</summary>
 public sealed record ResultadoImportacaoFaturaCsv(
@@ -199,10 +203,12 @@ public class ImportacaoFaturaCsvService
 
     private static PreviaImportacaoFaturaCsv MontarPrevia(Transacao fatura, bool mesFechado, FaturaCsv.Leitura leitura)
     {
+        var totalGravado = fatura.Valor;
+        var somaItens = fatura.Itens.Sum(ItensFaturaRegras.ValorAssinado);
         if (!leitura.ArquivoAceito)
         {
             return new PreviaImportacaoFaturaCsv(
-                false, leitura.ErroArquivo, mesFechado, [], [], 0, 0, 0);
+                false, leitura.ErroArquivo, mesFechado, [], [], 0, 0, 0, totalGravado, somaItens);
         }
 
         var hashes = ColetarHashes(fatura);
@@ -237,7 +243,9 @@ public class ImportacaoFaturaCsvService
             leitura.Erros,
             compras,
             estornos,
-            DinheiroEstorno.Arredondar(compras - estornos));
+            DinheiroEstorno.Arredondar(compras - estornos),
+            totalGravado,
+            somaItens);
     }
 
     private static List<FaturaCsv.Linha> Selecionar(

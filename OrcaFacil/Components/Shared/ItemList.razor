@@ -44,6 +44,14 @@
                        aria-label="@TextoEstorno">
                 @TextoEstorno
             </MudButton>
+            @if (OnImportar.HasDelegate)
+            {
+                <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.UploadFile"
+                           Class="of-lista-acao of-lista-acao-larga" ButtonType="ButtonType.Button"
+                           OnClick="OnImportar" aria-label="@TextoImportar">
+                    @TextoImportar
+                </MudButton>
+            }
         </div>
     }
     else
@@ -74,6 +82,8 @@
     [Parameter] public EventCallback OnEstorno { get; set; }
     [Parameter] public bool EstornoDesabilitado { get; set; }
     [Parameter] public string TextoEstorno { get; set; } = "Estorno";
+    [Parameter] public EventCallback OnImportar { get; set; }
+    [Parameter] public string TextoImportar { get; set; } = "Importar CSV";
 
     private object Chave(TItem item) => ChaveItem?.Invoke(item) ?? (object)item!;
 
