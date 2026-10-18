@@ -20,8 +20,9 @@ public class CoordenadorArmazenamentoTests
 
                     var ambiente = AmbienteFalso.Observando(estado);
                     var resultado = await ambiente.Criar().PrepararAsync();
-                    var semDadosSemEspelho = espelho == SituacaoEspelho.Ausente
-                        && banco is SituacaoBancoVivo.Ausente or SituacaoBancoVivo.Vazio;
+                    var semear = banco == SituacaoBancoVivo.SemPerfil
+                        || (espelho == SituacaoEspelho.Ausente
+                            && banco is SituacaoBancoVivo.Ausente or SituacaoBancoVivo.Vazio);
 
                     Assert.Equal(estado, resultado.Estado);
                     Assert.Equal(MatrizDecisaoArmazenamento.Decidir(estado).Acao, resultado.Acao);
@@ -34,13 +35,14 @@ public class CoordenadorArmazenamentoTests
                     Assert.DoesNotContain("remover-espelho", ambiente.Chamadas);
                     Assert.DoesNotContain("preservar", ambiente.Chamadas);
 
-                    if (semDadosSemEspelho)
+                    if (semear)
                     {
                         Assert.Equal(AcaoArmazenamento.Semear, resultado.Acao);
                         Assert.Equal(1, ambiente.Semeaduras);
                         var indiceMigrar = ambiente.Chamadas.IndexOf("migrar");
                         var indiceSemear = ambiente.Chamadas.IndexOf("semear");
                         Assert.True(indiceMigrar >= 0 && indiceSemear > indiceMigrar);
+                        Assert.Equal(0, ambiente.Restauracoes);
                     }
                     else
                     {
@@ -60,6 +62,7 @@ public class CoordenadorArmazenamentoTests
                     else
                         Assert.Null(ambiente.OpcoesRecebidas);
                     Assert.Equal(banco == SituacaoBancoVivo.Ausente ? 0 : 1, ambiente.Verificacoes);
+                    Assert.Equal(banco is SituacaoBancoVivo.Integro or SituacaoBancoVivo.SemPerfil ? 1 : 0, ambiente.ConsultasPerfil);
                     Assert.Equal(espelho == SituacaoEspelho.Ausente ? 0 : 1, ambiente.LeiturasEspelho);
                     var bancoDeveExistir = ambiente.BancoExistia
                         || resultado.Acao is AcaoArmazenamento.RestaurarDoEspelho or AcaoArmazenamento.Semear;
@@ -231,6 +234,67 @@ public class CoordenadorArmazenamentoTests
         Assert.Equal(0, ambiente.RemocoesBanco);
         Assert.Equal(0, ambiente.RemocoesEspelho);
         Assert.Same(ambiente.Opcoes, ambiente.OpcoesRecebidas);
+    }
+
+    [Fact]
+    public async Task SemeaduraQueFalhaNaPrimeiraAbertura_ERepetidaNaSegunda()
+    {
+        var ambiente = AmbienteFalso.Observando(new EstadoObservadoArmazenamento(
+            SituacaoBancoVivo.Ausente,
+            SituacaoEspelho.Ausente,
+            ComparacaoSchemaEspelho.SemEspelho));
+        ambiente.SemeaduraLanca = true;
+        var coordenador = ambiente.Criar();
+
+        var primeira = await coordenador.PrepararAsync();
+
+        Assert.Equal(AcaoArmazenamento.TelaDeRecuperacao, primeira.Acao);
+        Assert.Equal(AcaoArmazenamento.Semear, primeira.AcaoPlanejada);
+        Assert.Equal(1, ambiente.Migracoes);
+        Assert.Equal(1, ambiente.Semeaduras);
+        Assert.Equal(0, ambiente.ConsultasPerfil);
+        Assert.Equal(0, ambiente.RemocoesBanco);
+        Assert.Equal(0, ambiente.RemocoesEspelho);
+        Assert.Equal(0, ambiente.Restauracoes);
+        Assert.False(ambiente.EspelhoExiste);
+
+        ambiente.SemeaduraLanca = false;
+        ambiente.BancoExiste = true;
+        ambiente.Relatorio = new RelatorioIntegridadeBanco();
+        ambiente.HaMembro = false;
+
+        var segunda = await coordenador.PrepararAsync();
+
+        Assert.Equal(AcaoArmazenamento.Semear, segunda.Acao);
+        Assert.Equal(SituacaoBancoVivo.SemPerfil, segunda.Estado!.BancoVivo);
+        Assert.Null(segunda.Falha);
+        Assert.Equal(2, ambiente.Semeaduras);
+        Assert.Equal(2, ambiente.Migracoes);
+        Assert.Equal(1, ambiente.ConsultasPerfil);
+        Assert.Equal(0, ambiente.RemocoesBanco);
+        Assert.Equal(0, ambiente.RemocoesEspelho);
+        Assert.Equal(0, ambiente.Restauracoes);
+        Assert.True(ambiente.BancoExiste);
+        Assert.False(ambiente.EspelhoExiste);
+    }
+
+    [Fact]
+    public async Task BancoIntegroComMembro_NaoSemeiaDeNovo()
+    {
+        var ambiente = AmbienteFalso.Observando(new EstadoObservadoArmazenamento(
+            SituacaoBancoVivo.Integro,
+            SituacaoEspelho.Legivel,
+            ComparacaoSchemaEspelho.Igual));
+        ambiente.HaMembro = true;
+
+        var resultado = await ambiente.Criar().PrepararAsync();
+
+        Assert.Equal(AcaoArmazenamento.UsarBancoVivo, resultado.Acao);
+        Assert.Equal(SituacaoBancoVivo.Integro, resultado.Estado!.BancoVivo);
+        Assert.Equal(1, ambiente.ConsultasPerfil);
+        Assert.Equal(0, ambiente.Semeaduras);
+        Assert.Equal(0, ambiente.Migracoes);
+        Assert.Equal(0, ambiente.Restauracoes);
     }
 
     [Fact]
@@ -516,6 +580,7 @@ public class CoordenadorArmazenamentoTests
             ComparacaoSchemaEspelho.SemEspelho));
 
         Assert.Throws<ArgumentNullException>(() => ambiente.CriarSemOpcoes());
+        Assert.Throws<ArgumentNullException>(() => ambiente.CriarSemPerfil());
     }
 
     [Fact]
@@ -718,6 +783,10 @@ public class CoordenadorArmazenamentoTests
 
         public bool PreservacaoSucesso { get; set; } = true;
 
+        public bool HaMembro { get; set; } = true;
+
+        public int ConsultasPerfil { get; private set; }
+
         public TaskCompletionSource<bool>? SegurarVerificacao { get; set; }
 
         public TaskCompletionSource<bool> VerificacaoEntrou { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -737,6 +806,12 @@ public class CoordenadorArmazenamentoTests
                 case SituacaoBancoVivo.Integro:
                     ambiente.BancoExiste = true;
                     ambiente.Relatorio = new RelatorioIntegridadeBanco();
+                    ambiente.HaMembro = true;
+                    break;
+                case SituacaoBancoVivo.SemPerfil:
+                    ambiente.BancoExiste = true;
+                    ambiente.Relatorio = new RelatorioIntegridadeBanco();
+                    ambiente.HaMembro = false;
                     break;
                 case SituacaoBancoVivo.Vazio:
                     ambiente.BancoExiste = true;
@@ -820,10 +895,13 @@ public class CoordenadorArmazenamentoTests
         }
 
         public CoordenadorArmazenamento Criar()
-            => new(new Sonda(this), new Espelho(this), new Versao(this), new Restauracao(this), new Migracao(this), new Semeadura(this), new Limpeza(this), Opcoes, new Preservacao(this));
+            => new(new Sonda(this), new Espelho(this), new Versao(this), new Restauracao(this), new Migracao(this), new Semeadura(this), new Limpeza(this), Opcoes, new Preservacao(this), new Perfil(this));
 
         public CoordenadorArmazenamento CriarSemOpcoes()
-            => new(new Sonda(this), new Espelho(this), new Versao(this), new Restauracao(this), new Migracao(this), new Semeadura(this), new Limpeza(this), null!, new Preservacao(this));
+            => new(new Sonda(this), new Espelho(this), new Versao(this), new Restauracao(this), new Migracao(this), new Semeadura(this), new Limpeza(this), null!, new Preservacao(this), new Perfil(this));
+
+        public CoordenadorArmazenamento CriarSemPerfil()
+            => new(new Sonda(this), new Espelho(this), new Versao(this), new Restauracao(this), new Migracao(this), new Semeadura(this), new Limpeza(this), Opcoes, new Preservacao(this), null!);
 
         private sealed class Sonda(AmbienteFalso ambiente) : ISondaBancoVivo
         {
@@ -907,6 +985,17 @@ public class CoordenadorArmazenamentoTests
                 if (ambiente.MigracaoLanca)
                     throw new InvalidOperationException("migração interrompida");
                 return Task.FromResult(ambiente.ResultadoMigracao);
+            }
+        }
+
+        private sealed class Perfil(AmbienteFalso ambiente) : IPresencaPerfil
+        {
+            public Task<bool> HaMembroAsync(CancellationToken cancellationToken = default)
+            {
+                ambiente.Chamadas.Add("perfil");
+                ambiente.ConsultasPerfil++;
+                cancellationToken.ThrowIfCancellationRequested();
+                return Task.FromResult(ambiente.HaMembro);
             }
         }
 

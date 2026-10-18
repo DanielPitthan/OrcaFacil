@@ -24,7 +24,10 @@ public sealed record DecisaoArmazenamento(AcaoArmazenamento Acao, string Motivo)
 /// O parcial de AddCartoes migra para passar em <see cref="OrcaFacil.Core.Data.ReconciliadorAddCartoes"/>.
 ///
 /// Semear existe quando não há dado utilizável e não há espelho: banco ausente, ou
-/// SQLite vazio. Espelho presente, mesmo corrompido, não semeia. SQLite vazio com
+/// SQLite vazio. Também semeia de novo quando o schema já está íntegro e não há
+/// membro/perfil (<see cref="SituacaoBancoVivo.SemPerfil"/>), com ou sem espelho:
+/// o espelho não substitui esse arquivo e nada é apagado. Espelho presente, mesmo
+/// corrompido, não semeia por cima de banco ausente ou vazio. SQLite vazio com
 /// espelho legível restaura; com espelho corrompido abre a recuperação.
 ///
 /// Schema do espelho mais novo que o app, quando o banco vivo não dá para usar,
@@ -75,6 +78,7 @@ public static class MatrizDecisaoArmazenamento
     private static LinhaMatrizArmazenamento[] Montar()
     {
         const string usar = "O banco vivo está íntegro. Ele é a fonte desta execução; o espelho não o substitui.";
+        const string semPerfil = "O schema está íntegro e não há membro/perfil. A semeadura é repetida; o espelho não substitui este arquivo e nada é apagado.";
         const string migrar = "O banco vivo é de um schema anterior e segue coerente. A migração ocorre nele; o espelho não é copiado por cima.";
         const string parcial = "A migration AddCartoes está pela metade. A migração passa pelo reconciliador; o espelho não é copiado por cima.";
         const string bancoMaisNovo = "O banco vivo foi gravado por uma versão mais nova do app. Pare e peça a atualização; não restaure o espelho por cima.";
@@ -93,6 +97,12 @@ public static class MatrizDecisaoArmazenamento
             L(SituacaoBancoVivo.Integro, SituacaoEspelho.Legivel, ComparacaoSchemaEspelho.Igual, AcaoArmazenamento.UsarBancoVivo, usar),
             L(SituacaoBancoVivo.Integro, SituacaoEspelho.Legivel, ComparacaoSchemaEspelho.EspelhoMaisAntigo, AcaoArmazenamento.UsarBancoVivo, usar),
             L(SituacaoBancoVivo.Integro, SituacaoEspelho.Legivel, ComparacaoSchemaEspelho.EspelhoMaisNovo, AcaoArmazenamento.UsarBancoVivo, usar),
+
+            L(SituacaoBancoVivo.SemPerfil, SituacaoEspelho.Ausente, ComparacaoSchemaEspelho.SemEspelho, AcaoArmazenamento.Semear, semPerfil),
+            L(SituacaoBancoVivo.SemPerfil, SituacaoEspelho.Corrompido, ComparacaoSchemaEspelho.NaoAplicavel, AcaoArmazenamento.Semear, semPerfil),
+            L(SituacaoBancoVivo.SemPerfil, SituacaoEspelho.Legivel, ComparacaoSchemaEspelho.Igual, AcaoArmazenamento.Semear, semPerfil),
+            L(SituacaoBancoVivo.SemPerfil, SituacaoEspelho.Legivel, ComparacaoSchemaEspelho.EspelhoMaisAntigo, AcaoArmazenamento.Semear, semPerfil),
+            L(SituacaoBancoVivo.SemPerfil, SituacaoEspelho.Legivel, ComparacaoSchemaEspelho.EspelhoMaisNovo, AcaoArmazenamento.Semear, semPerfil),
 
             L(SituacaoBancoVivo.Desatualizado, SituacaoEspelho.Ausente, ComparacaoSchemaEspelho.SemEspelho, AcaoArmazenamento.MigrarBancoVivo, migrar),
             L(SituacaoBancoVivo.Desatualizado, SituacaoEspelho.Corrompido, ComparacaoSchemaEspelho.NaoAplicavel, AcaoArmazenamento.MigrarBancoVivo, migrar),

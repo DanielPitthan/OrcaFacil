@@ -13,8 +13,8 @@ public enum AcaoArmazenamento
     RestaurarDoEspelho,
 
     /// <summary>
-    /// Não há dado utilizável e não há espelho: arquivo ausente, ou SQLite vazio.
-    /// O coordenador cria o schema e só então semeia.
+    /// Não há dado utilizável para o app: arquivo ausente, SQLite vazio sem espelho,
+    /// ou schema íntegro ainda sem membro/perfil. O coordenador garante o schema e semeia.
     /// </summary>
     Semear,
 
@@ -36,6 +36,13 @@ public enum SituacaoBancoVivo
     Vazio,
 
     Integro,
+
+    /// <summary>
+    /// O schema deste app está íntegro e não há membro/perfil.
+    /// A semeadura que falhou depois do schema é repetida. O espelho não substitui o arquivo.
+    /// </summary>
+    SemPerfil,
+
     Desatualizado,
 
     /// <summary>
