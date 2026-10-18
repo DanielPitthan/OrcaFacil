@@ -16,13 +16,27 @@ public sealed class GeradorSnapshotBanco
 {
     private readonly VersaoSchemaAplicacao _versao;
     private readonly int _iteracoes;
+    private readonly Func<string, CancellationToken, Task>? _aposVacuum;
 
     public GeradorSnapshotBanco(VersaoSchemaAplicacao versao, int? iteracoesPbkdf2 = null)
+        : this(versao, iteracoesPbkdf2, aposVacuum: null)
+    {
+    }
+
+    /// <summary>
+    /// <paramref name="aposVacuum"/> só existe para o teste adulterar o snapshot
+    /// depois do <c>VACUUM INTO</c> e antes do <c>integrity_check</c>. Produção passa null.
+    /// </summary>
+    internal GeradorSnapshotBanco(
+        VersaoSchemaAplicacao versao,
+        int? iteracoesPbkdf2,
+        Func<string, CancellationToken, Task>? aposVacuum)
     {
         _versao = versao ?? throw new ArgumentNullException(nameof(versao));
         _iteracoes = iteracoesPbkdf2 ?? FormatoEspelho.IteracoesPadrao;
         if (_iteracoes < FormatoEspelho.IteracoesMinimas || _iteracoes > FormatoEspelho.IteracoesMaximas)
             throw new ArgumentOutOfRangeException(nameof(iteracoesPbkdf2));
+        _aposVacuum = aposVacuum;
     }
 
     public async Task<MetadadosEspelho> GerarAsync(
@@ -74,6 +88,9 @@ public sealed class GeradorSnapshotBanco
 
             if (!File.Exists(snapshot))
                 throw new IntegridadeSnapshotException(IntegridadeSnapshotException.NadaPublicado);
+
+            if (_aposVacuum is not null)
+                await _aposVacuum(snapshot, cancellationToken);
 
             ResultadoPragmaSnapshot pragma;
             try

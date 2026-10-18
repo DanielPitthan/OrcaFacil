@@ -261,6 +261,28 @@ public class EspelhoSnapshotTests
     }
 
     [Fact]
+    public async Task IntegrityCheckFalha_NaoPublicaEMantemOEspelhoAnterior()
+    {
+        using var area = new AreaTemp("NAO-LOGAR-CAMINHO-9f3a");
+        await PublicarAsync(area, "Marina");
+        var anterior = await File.ReadAllBytesAsync(area.Espelho);
+        var destino = new DestinoQueRecusa();
+        var gerador = new GeradorSnapshotBanco(_versao, iteracoesPbkdf2: null, CorromperEspacoReservadoAsync);
+
+        var excecao = await Assert.ThrowsAsync<IntegridadeSnapshotException>(() => gerador.GerarAsync(area.Banco, Senha, destino));
+
+        Assert.Equal(0, destino.Chamadas);
+        Assert.Equal(IntegridadeSnapshotException.IntegrityCheck, excecao.Message);
+        Assert.Equal(anterior, await File.ReadAllBytesAsync(area.Espelho));
+        AssertNaoVaza(excecao, Senha, area.Raiz);
+        Assert.True(File.Exists(area.Banco));
+
+        using var aberto = await LerEspelho.AbrirAsync(area.Espelho, Senha, _versao);
+        await using var snapshot = AbrirSomenteLeitura(aberto.CaminhoSqlite);
+        Assert.Equal("Marina", await EscalarTextoAsync(snapshot, "SELECT Nome FROM MembrosFamilia"));
+    }
+
+    [Fact]
     public async Task BancoMalformado_NaoPublica()
     {
         using var area = new AreaTemp("NAO-LOGAR-CAMINHO-9f3a");
@@ -732,6 +754,19 @@ public class EspelhoSnapshotTests
         comando.Parameters.AddWithValue("$nome", nome);
         Assert.Equal(1, await comando.ExecuteNonQueryAsync());
         return conexao;
+    }
+
+    /// <summary>
+    /// Byte 20 do cabeçalho é o espaço reservado no fim de cada página. Com zero, o snapshot do
+    /// <c>VACUUM INTO</c> é válido. Um valor diferente faz o <c>PRAGMA integrity_check</c> devolver
+    /// texto que não é "ok", e o arquivo ainda abre. Se a abertura lançasse, o gerador cairia em
+    /// <see cref="IntegridadeSnapshotException.NadaPublicado"/> em vez do ramo do integrity_check.
+    /// </summary>
+    private static async Task CorromperEspacoReservadoAsync(string snapshot, CancellationToken cancellationToken)
+    {
+        var bytes = await File.ReadAllBytesAsync(snapshot, cancellationToken);
+        bytes[20] = bytes[20] == 0 ? (byte)1 : (byte)0;
+        await File.WriteAllBytesAsync(snapshot, bytes, cancellationToken);
     }
 
     private static async Task CriarBancoComForeignKeyQuebradaAsync(string caminho)
