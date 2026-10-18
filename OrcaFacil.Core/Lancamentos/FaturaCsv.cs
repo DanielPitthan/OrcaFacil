@@ -46,10 +46,41 @@ public static class FaturaCsv
         public bool ArquivoAceito => ErroArquivo is null;
     }
 
+    /// <summary>
+    /// Lê no máximo 1 MB + 1 byte. O byte a mais só revela que o arquivo passou do limite.
+    /// Nesse caso a leitura para, o começo não é interpretado e o restante do fluxo fica intacto.
+    /// </summary>
+    public static async Task<byte[]> LerArquivoAsync(Stream fluxo, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(fluxo);
+
+        var maximo = FaturaCsvLayout.TamanhoMaximoBytes;
+        var buffer = new byte[maximo + 1];
+        var lidos = 0;
+        while (lidos < buffer.Length)
+        {
+            var n = await fluxo.ReadAsync(buffer.AsMemory(lidos, buffer.Length - lidos), cancellationToken).ConfigureAwait(false);
+            if (n == 0)
+                break;
+
+            lidos += n;
+        }
+
+        if (lidos > maximo)
+            throw new InvalidOperationException(FaturaCsvLayout.MensagemArquivoGrande);
+
+        var arquivo = new byte[lidos];
+        buffer.AsSpan(0, lidos).CopyTo(arquivo);
+        return arquivo;
+    }
+
     public static Leitura Ler(byte[] arquivo, IReadOnlyList<Categoria> categorias)
     {
         ArgumentNullException.ThrowIfNull(arquivo);
         ArgumentNullException.ThrowIfNull(categorias);
+
+        if (arquivo.Length > FaturaCsvLayout.TamanhoMaximoBytes)
+            return Leitura.Recusar(FaturaCsvLayout.MensagemArquivoGrande);
 
         if (!TentarDecodificar(arquivo, out var texto, out var erroCodificacao))
             return Leitura.Recusar(erroCodificacao!);
@@ -57,28 +88,29 @@ public static class FaturaCsv
         if (string.IsNullOrWhiteSpace(texto))
             return Leitura.Recusar("O arquivo está vazio. Nada foi importado.");
 
-        var linhasTexto = DividirLinhas(texto);
-        if (!TentarAceitarPrologo(linhasTexto, out var erroPrologo))
+        var registros = DividirRegistros(texto);
+        if (!TentarAceitarPrologo(registros, out var erroPrologo))
             return Leitura.Recusar(erroPrologo!);
 
         var mapa = MapearCategorias(categorias);
         var linhas = new List<Linha>();
         var erros = new List<ErroLinha>();
 
-        for (var i = 2; i < linhasTexto.Count; i++)
+        for (var i = 2; i < registros.Count; i++)
         {
-            var bruta = linhasTexto[i];
+            var bruta = registros[i].Texto;
             if (string.IsNullOrWhiteSpace(bruta) || FaturaCsvLayout.EhLinhaExemplo(bruta))
                 continue;
 
-            LerLinha(bruta, i + 1, mapa, linhas, erros);
+            LerLinha(bruta, registros[i].Numero, mapa, linhas, erros);
         }
 
         return new Leitura(linhas, erros, null);
     }
 
     /// <summary>
-    /// Identificação estável da linha já normalizada, para a checagem de duplicata nas próximas entregas.
+    /// Identificação estável da linha já normalizada. A importação compara este hash
+    /// com os itens da fatura para não gravar a mesma linha duas vezes.
     /// A hora não entra. O valor é a magnitude positiva; o estorno entra à parte.
     /// </summary>
     public static string CalcularHash(
@@ -129,31 +161,76 @@ public static class FaturaCsv
         }
     }
 
-    private static List<string> DividirLinhas(string texto)
+    private readonly record struct RegistroCsv(int Numero, string Texto);
+
+    /// <summary>
+    /// Quebra de linha fora das aspas separa o registro. Dentro das aspas, ela faz parte do campo.
+    /// O número é a linha física em que o registro começa.
+    /// </summary>
+    private static List<RegistroCsv> DividirRegistros(string texto)
     {
         var normalizado = texto.Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
-        return [.. normalizado.Split('\n')];
+        var registros = new List<RegistroCsv>();
+        var atual = new StringBuilder();
+        var aspas = false;
+        var linhaFisica = 1;
+        var inicio = 1;
+
+        for (var i = 0; i < normalizado.Length; i++)
+        {
+            var c = normalizado[i];
+            if (c == '"')
+            {
+                atual.Append(c);
+                if (aspas && i + 1 < normalizado.Length && normalizado[i + 1] == '"')
+                {
+                    atual.Append('"');
+                    i++;
+                    continue;
+                }
+
+                aspas = !aspas;
+                continue;
+            }
+
+            if (c == '\n' && !aspas)
+            {
+                registros.Add(new RegistroCsv(inicio, atual.ToString()));
+                atual.Clear();
+                linhaFisica++;
+                inicio = linhaFisica;
+                continue;
+            }
+
+            if (c == '\n')
+                linhaFisica++;
+
+            atual.Append(c);
+        }
+
+        registros.Add(new RegistroCsv(inicio, atual.ToString()));
+        return registros;
     }
 
-    private static bool TentarAceitarPrologo(IReadOnlyList<string> linhas, out string? erro)
+    private static bool TentarAceitarPrologo(IReadOnlyList<RegistroCsv> linhas, out string? erro)
     {
-        if (linhas.Count == 0 || string.IsNullOrWhiteSpace(linhas[0]))
+        if (linhas.Count == 0 || string.IsNullOrWhiteSpace(linhas[0].Texto))
         {
             erro = "O arquivo está vazio. Nada foi importado.";
             return false;
         }
 
-        erro = ErroDeVersao(linhas[0]);
+        erro = ErroDeVersao(linhas[0].Texto);
         if (erro is not null)
             return false;
 
-        if (linhas.Count < 2 || string.IsNullOrWhiteSpace(linhas[1]))
+        if (linhas.Count < 2 || string.IsNullOrWhiteSpace(linhas[1].Texto))
         {
             erro = $"O arquivo não tem o cabeçalho. A segunda linha precisa ser exatamente {FaturaCsvLayout.Cabecalho}. Nada foi importado.";
             return false;
         }
 
-        if (!string.Equals(linhas[1], FaturaCsvLayout.Cabecalho, StringComparison.Ordinal))
+        if (!string.Equals(linhas[1].Texto, FaturaCsvLayout.Cabecalho, StringComparison.Ordinal))
         {
             erro = $"O cabeçalho não confere com o modelo. A segunda linha precisa ser exatamente {FaturaCsvLayout.Cabecalho}. Nada foi importado.";
             return false;
@@ -219,13 +296,13 @@ public static class FaturaCsv
         }
 
         var dataTexto = campos[0].Trim();
-        var descricao = campos[1].Trim();
+        var descricao = LerTexto(campos[1]);
         var valorTexto = campos[2].Trim();
-        var categoriaTexto = campos[3].Trim();
-        var naturezaTexto = campos[4].Trim();
+        var categoriaTexto = LerTexto(campos[3]);
+        var naturezaTexto = LerTexto(campos[4]);
         var parcelaTexto = campos[5].Trim();
         var totalTexto = campos[6].Trim();
-        var descritivo = campos[7].Trim();
+        var descritivo = LerTexto(campos[7]);
         var daLinha = new List<ErroLinha>();
 
         DateTime data = default;
@@ -374,6 +451,15 @@ public static class FaturaCsv
 
         if (parcelaAtual is not null && totalParcelas is not null && parcelaAtual > totalParcelas)
             erros.Add(new ErroLinha(numero, FaturaCsvLayout.ColunaParcelaAtual, "A parcela atual não pode ser maior que o total de parcelas."));
+    }
+
+    private static string LerTexto(string campo)
+    {
+        var texto = campo.Trim();
+        if (texto.Length >= 2 && texto[0] == '\'' && texto[1] is '=' or '+' or '-' or '@')
+            return texto[1..];
+
+        return texto;
     }
 
     private static bool TentarInteiro(string texto, out int valor)

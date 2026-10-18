@@ -1,4 +1,5 @@
 using System.Globalization;
+using OrcaFacil.Core.Armazenamento.Espelho.Pasta;
 using OrcaFacil.Core.Tema;
 
 namespace OrcaFacil.Tests.Tema;
@@ -49,6 +50,25 @@ public class LimpezaPreservaTemaTests
             repositorio.LerTexto(PreferenciasTema.Chave));
         Assert.Equal(tema, preferencias.Tema);
         Assert.False(adaptador.Contem("Config.PrazosAviso"));
+    }
+
+    [Fact]
+    public void LimparAsync_Tudo_PreservaAUriDaPastaDoEspelho()
+    {
+        const string uri = "content://com.android.externalstorage.documents/tree/primary%3AOrca";
+        var repositorio = new RepositorioPreferenciasMemoria();
+        var adaptador = new AdaptadorPreferencias(repositorio);
+        var preferencias = new PreferenciasTema(adaptador);
+        preferencias.Tema = TemaPreferido.Escuro;
+        repositorio.GravarTexto(UriEscolhaPasta.ChavePreferencia, uri);
+        repositorio.GravarTexto("Config.NotificacoesAtivas", "false");
+
+        Redefinir(preferencias);
+
+        Assert.Equal("Escuro", repositorio.LerTexto(PreferenciasTema.Chave));
+        Assert.Equal(uri, repositorio.LerTexto(UriEscolhaPasta.ChavePreferencia));
+        Assert.Equal(uri, new MemoriaPastaEspelho(adaptador).LerUri());
+        Assert.False(adaptador.Contem("Config.NotificacoesAtivas"));
     }
 
     [Fact]
