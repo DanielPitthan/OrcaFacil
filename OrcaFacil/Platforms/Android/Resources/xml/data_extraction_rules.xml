@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12 ou mais novo (android:dataExtractionRules).
+  Nuvem e troca de aparelho levam o mesmo conjunto. Sem a seção device-transfer,
+  a troca de aparelho copiaria tudo, inclusive a chave.
+  A nuvem só sobe se o aparelho cifra o backup. A troca não depende disso.
+  A issue #34 exclui a chave por este arquivo; não criar outro XML de backup.
+-->
+<data-extraction-rules>
+    <cloud-backup disableIfNoEncryptionCapabilities="true">
+        <include domain="file" path="orcafacil.db" />
+        <include domain="file" path="orcafacil.db-wal" />
+        <include domain="file" path="orcafacil.db-shm" />
+        <include domain="file" path="orcafacil.db-journal" />
+        <include domain="file" path="perfil" />
+        <include domain="sharedpref" path="com.pitthan.orcafacil_preferences.xml" />
+        <exclude domain="sharedpref" path="com.pitthan.orcafacil.microsoft.maui.essentials.preferences.xml" />
+        <exclude domain="file" path="logs" />
+        <exclude domain="file" path="backups" />
+        <exclude domain="file" path="orcafacil-espelho" />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="file" path="orcafacil.db" />
+        <include domain="file" path="orcafacil.db-wal" />
+        <include domain="file" path="orcafacil.db-shm" />
+        <include domain="file" path="orcafacil.db-journal" />
+        <include domain="file" path="perfil" />
+        <include domain="sharedpref" path="com.pitthan.orcafacil_preferences.xml" />
+        <exclude domain="sharedpref" path="com.pitthan.orcafacil.microsoft.maui.essentials.preferences.xml" />
+        <exclude domain="file" path="logs" />
+        <exclude domain="file" path="backups" />
+        <exclude domain="file" path="orcafacil-espelho" />
+    </device-transfer>
+</data-extraction-rules>

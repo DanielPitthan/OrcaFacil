@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 11 e anteriores (android:fullBackupContent).
+  A mesma tabela está em data_extraction_rules.xml e em RegrasBackupAndroid.
+  Sem requireFlags: o app ainda instala no Android 7, e a flag corta o backup lá.
+  A issue #34 exclui a chave por este arquivo; não criar outro XML de backup.
+-->
+<full-backup-content>
+    <include domain="file" path="orcafacil.db" />
+    <include domain="file" path="orcafacil.db-wal" />
+    <include domain="file" path="orcafacil.db-shm" />
+    <include domain="file" path="orcafacil.db-journal" />
+    <include domain="file" path="perfil" />
+    <include domain="sharedpref" path="com.pitthan.orcafacil_preferences.xml" />
+    <exclude domain="sharedpref" path="com.pitthan.orcafacil.microsoft.maui.essentials.preferences.xml" />
+    <exclude domain="file" path="logs" />
+    <exclude domain="file" path="backups" />
+    <exclude domain="file" path="orcafacil-espelho" />
+</full-backup-content>
