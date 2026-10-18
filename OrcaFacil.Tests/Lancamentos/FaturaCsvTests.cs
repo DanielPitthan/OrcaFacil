@@ -369,8 +369,10 @@ public class FaturaCsvTests
         Assert.Equal("Nota \"x\"", linha.Descritivo);
         Assert.Equal(10m, linha.Valor);
 
-        Assert.Contains(leitura.Erros, erro => erro.Numero == 4 && erro.Coluna == "Linha" && erro.Mensagem.Contains("aspas", StringComparison.Ordinal));
-        Assert.Contains(leitura.Erros, erro => erro.Numero == 5 && erro.Coluna == "Linha" && erro.Mensagem.Contains("8 colunas", StringComparison.Ordinal));
+        var erro = Assert.Single(leitura.Erros);
+        Assert.Equal(4, erro.Numero);
+        Assert.Equal("Linha", erro.Coluna);
+        Assert.Contains("aspas", erro.Mensagem, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -386,6 +388,72 @@ public class FaturaCsvTests
         Assert.NotEqual(compra, estorno);
         Assert.NotEqual(compra, outraParcela);
         Assert.Matches("^[0-9A-F]{64}$", compra);
+    }
+
+    [Fact]
+    public void Ler_QuebraDeLinhaEntreAspas_MantemOCampoEALinhaSeguinte()
+    {
+        var leitura = Ler(Arquivo(
+            "16/10/2026;\"Uber\nviagem\";20,00;Lazer;;;;",
+            "18/10/2026;Padaria;10,00;Alimentação;;;;"));
+
+        Assert.True(leitura.ArquivoAceito);
+        Assert.Empty(leitura.Erros);
+        Assert.Equal(2, leitura.Linhas.Count);
+        Assert.Equal(3, leitura.Linhas[0].Numero);
+        Assert.Equal("Uber\nviagem", leitura.Linhas[0].Descricao);
+        Assert.Equal(20m, leitura.Linhas[0].Valor);
+        Assert.Equal(5, leitura.Linhas[1].Numero);
+        Assert.Equal("Padaria", leitura.Linhas[1].Descricao);
+    }
+
+    [Fact]
+    public void EscaparELer_PrefixoDeFormula_NaoMexeNoValorNegativo()
+    {
+        Assert.Equal("'=cmd", FaturaCsvLayout.Escapar("=cmd"));
+        Assert.Equal("'+soma", FaturaCsvLayout.Escapar("+soma"));
+        Assert.Equal("'@a", FaturaCsvLayout.Escapar("@a"));
+        Assert.Equal("'-tarifa", FaturaCsvLayout.Escapar("-tarifa"));
+        Assert.Equal("-18,00", FaturaCsvLayout.Escapar("-18,00"));
+        Assert.Equal("-18", FaturaCsvLayout.Escapar("-18"));
+
+        var linha = string.Join(';',
+            "16/10/2026",
+            FaturaCsvLayout.Escapar("=cmd"),
+            "-18,00",
+            "Alimentação",
+            "Avulsa",
+            "",
+            "",
+            FaturaCsvLayout.Escapar("-tarifa"));
+
+        var leitura = Ler(Arquivo(linha));
+
+        Assert.True(leitura.ArquivoAceito);
+        Assert.Empty(leitura.Erros);
+        var estorno = Assert.Single(leitura.Linhas);
+        Assert.Equal("=cmd", estorno.Descricao);
+        Assert.Equal("-tarifa", estorno.Descritivo);
+        Assert.True(estorno.EhEstorno);
+        Assert.Equal(18m, estorno.Valor);
+        Assert.Equal("Alimentação", estorno.NomeCategoria);
+    }
+
+    [Fact]
+    public void Ler_ArquivoMaiorQueUmMega_RecusaSemLer()
+    {
+        var grande = new byte[FaturaCsvLayout.TamanhoMaximoBytes + 1];
+        grande[0] = 0xEF;
+        grande[1] = 0xBB;
+        grande[2] = 0xBF;
+
+        var leitura = FaturaCsv.Ler(grande, Categorias);
+
+        Assert.False(leitura.ArquivoAceito);
+        Assert.Contains("1 MB", leitura.ErroArquivo);
+        Assert.Contains("Nada foi importado", leitura.ErroArquivo);
+        Assert.Empty(leitura.Linhas);
+        Assert.Empty(leitura.Erros);
     }
 
     private static FaturaCsv.Leitura Ler(string texto, params Categoria[] categorias)

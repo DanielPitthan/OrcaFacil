@@ -32,6 +32,13 @@ public class ItemLancamento
 
     public int Ordem { get; set; }
 
+    /// <summary>
+    /// SHA-256 da linha de CSV que originou o item.
+    /// Itens lançados na mão ficam sem hash; a reimportação reconhece os que já entraram.
+    /// </summary>
+    [MaxLength(64)]
+    public string? HashImportacao { get; set; }
+
     public int TransacaoId { get; set; }
     public Transacao? Transacao { get; set; }
 
