@@ -488,7 +488,7 @@ public class BackupEspelhoAgoraTests
     }
 
     [Fact]
-    public async Task SoDemonstracao_ComEspelho_PedeConfirmacao_ENaoTrocaASenha()
+    public async Task SoDemonstracao_ComEspelho_Recusa_ENaoTrocaASenha()
     {
         using var area = new AreaTemp();
         await SemearDemonstracaoAsync(area.Banco);
@@ -501,12 +501,56 @@ public class BackupEspelhoAgoraTests
 
         var resultado = await backup.ExecutarAsync(area.Banco, SenhaNova, SenhaNova);
 
+        Assert.False(resultado.ExigeConfirmacao);
+        Assert.False(resultado.Sucesso);
+        Assert.Equal(BackupEspelhoAgora.MensagemRecusaEspelhoExistente, resultado.Mensagem);
+        AssertNaoVaza(resultado, Senha);
+        AssertNaoVaza(resultado, SenhaNova);
+        Assert.Equal(Senha, provedor.Obter());
+        Assert.Equal(0, volume.CriacoesIniciadas);
+        Assert.Equal(anterior, volume.Arquivos[volume.NomeArquivo]);
+    }
+
+    [Fact]
+    public async Task SoPerfilMinimo_ComEspelho_Recusa_ENaoTrocaASenha()
+    {
+        using var area = new AreaTemp();
+        await InserirSoPerfilMinimoAsync(area.Banco);
+        var volume = new VolumeMemoria();
+        var anterior = new byte[] { 7, 7 };
+        volume.Arquivos[volume.NomeArquivo] = anterior;
+        var provedor = new ProvedorSenhaEspelhoMemoria();
+        Assert.True(provedor.Definir(Senha, Senha).Aceita);
+        var backup = Criar(volume, provedor);
+
+        var resultado = await backup.ExecutarAsync(area.Banco, SenhaNova, SenhaNova);
+
+        Assert.False(resultado.ExigeConfirmacao);
+        Assert.False(resultado.Sucesso);
+        Assert.Equal(BackupEspelhoAgora.MensagemRecusaEspelhoExistente, resultado.Mensagem);
+        Assert.Equal(Senha, provedor.Obter());
+        Assert.Equal(0, volume.CriacoesIniciadas);
+        Assert.Equal(anterior, volume.Arquivos[volume.NomeArquivo]);
+    }
+
+    [Fact]
+    public async Task DemonstracaoComLancamentoReal_ComEspelho_PedeConfirmacao()
+    {
+        using var area = new AreaTemp();
+        await SemearDemonstracaoComLancamentoRealAsync(area.Banco);
+        var volume = new VolumeMemoria();
+        var anterior = new byte[] { 8, 1 };
+        volume.Arquivos[volume.NomeArquivo] = anterior;
+        var provedor = new ProvedorSenhaEspelhoMemoria();
+        Assert.True(provedor.Definir(Senha, Senha).Aceita);
+        var backup = Criar(volume, provedor);
+
+        var resultado = await backup.ExecutarAsync(area.Banco, SenhaNova, SenhaNova);
+
         Assert.True(resultado.ExigeConfirmacao);
         Assert.False(resultado.Sucesso);
         Assert.Equal(BackupEspelhoAgora.MensagemConfirmacao, resultado.Mensagem);
         Assert.NotEqual(BackupEspelhoAgora.MensagemRecusaEspelhoExistente, resultado.Mensagem);
-        AssertNaoVaza(resultado, Senha);
-        AssertNaoVaza(resultado, SenhaNova);
         Assert.Equal(Senha, provedor.Obter());
         Assert.Equal(0, volume.CriacoesIniciadas);
         Assert.Equal(anterior, volume.Arquivos[volume.NomeArquivo]);
@@ -732,6 +776,45 @@ public class BackupEspelhoAgoraTests
     }
 
     [Fact]
+    public async Task PassoSeguinteAoProtocoloLanca_MesmoComReleituraNula_Publica_AdotaSenhaNova_ENaoDizQueManteve()
+    {
+        using var area = new AreaTemp();
+        await using var vivo = await CriarBancoAbertoAsync(area.Banco, "Marina");
+        var volume = new VolumeMemoria { FalharCopiaDefinitivoAPartirDa = 2 };
+        var anterior = new byte[] { 1, 1, 1 };
+        volume.Arquivos[volume.NomeArquivo] = anterior;
+        var provedor = new ProvedorSenhaEspelhoMemoria();
+        Assert.True(provedor.Definir(Senha, Senha).Aceita);
+        var backup = Criar(
+            volume,
+            provedor,
+            new AreaTemporariaEspelhoEmDisco(Path.Combine(area.Raiz, "cache")),
+            depoisDoProtocolo: (_, _) => throw new InvalidOperationException("passo seguinte"));
+
+        var resultado = await backup.ExecutarAsync(area.Banco, SenhaNova, SenhaNova, substituirEspelhoExistente: true);
+
+        Assert.True(resultado.Sucesso);
+        Assert.Equal(BackupEspelhoAgora.MensagemGravadoLeituraNaoConfirmada, resultado.Mensagem);
+        Assert.NotEqual(BackupEspelhoAgora.MensagemMantido, resultado.Mensagem);
+        Assert.DoesNotContain("mantido", resultado.Mensagem, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(SenhaNova, provedor.Obter());
+        Assert.NotEqual(anterior, volume.Arquivos[volume.NomeArquivo]);
+        Assert.DoesNotContain(volume.NomeArquivo, volume.Apagados);
+        Assert.Equal("Marina", await EscalarTextoAsync(vivo, "SELECT Nome FROM MembrosFamilia"));
+
+        var copia = Path.Combine(area.Raiz, "espelho.bin");
+        await File.WriteAllBytesAsync(copia, volume.Arquivos[volume.NomeArquivo]);
+        using (var aberto = await LerEspelho.AbrirAsync(copia, SenhaNova, VersaoSchemaAplicacao.DoApp))
+        {
+            await using var snapshot = AbrirSomenteLeitura(aberto.CaminhoSqlite);
+            Assert.Equal("Marina", await EscalarTextoAsync(snapshot, "SELECT Nome FROM MembrosFamilia"));
+        }
+
+        await Assert.ThrowsAsync<SenhaIncorretaException>(() =>
+            LerEspelho.AbrirAsync(copia, Senha, VersaoSchemaAplicacao.DoApp));
+    }
+
+    [Fact]
     public void LogDoEspelho_GravaTipoEOmiteCaminhoEUri()
     {
         var caminho = Path.Combine(Path.GetTempPath(), "orcafacil-cache", "snap.db");
@@ -748,6 +831,7 @@ public class BackupEspelhoAgoraTests
         }
 
         var texto = TextoLogEspelho.Montar("Falha ao publicar o espelho.", [], excecao);
+        var informacao = TextoLogEspelho.Montar($"Cache em {caminho} via {uri}.", [windows], null);
 
         Assert.Contains("IOException", texto, StringComparison.Ordinal);
         Assert.Contains("Falha ao publicar o espelho.", texto, StringComparison.Ordinal);
@@ -759,9 +843,16 @@ public class BackupEspelhoAgoraTests
         Assert.DoesNotContain("espelho.tmp", texto, StringComparison.Ordinal);
         Assert.DoesNotContain(nameof(LogDoEspelho_GravaTipoEOmiteCaminhoEUri), texto, StringComparison.Ordinal);
 
+        Assert.DoesNotContain(caminho, informacao, StringComparison.Ordinal);
+        Assert.DoesNotContain(uri, informacao, StringComparison.Ordinal);
+        Assert.DoesNotContain(windows, informacao, StringComparison.Ordinal);
+        Assert.DoesNotContain("content://", informacao, StringComparison.Ordinal);
+        Assert.Contains("Cache em", informacao, StringComparison.Ordinal);
+
         var fonte = File.ReadAllText(Path.Combine(RaizRepositorio(), "OrcaFacil/Services/Espelho/RegistroLogEspelho.cs"));
         Assert.Contains("TextoLogEspelho.Montar", fonte, StringComparison.Ordinal);
         Assert.DoesNotContain("Log.Error(excecao", fonte, StringComparison.Ordinal);
+        Assert.DoesNotContain("Log.Information(mensagem", fonte, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -824,15 +915,22 @@ public class BackupEspelhoAgoraTests
         VolumeMemoria volume,
         ProvedorSenhaEspelhoMemoria provedor,
         IAreaTemporariaEspelho? area = null,
-        IRegistroLog? log = null)
-        => new(
+        IRegistroLog? log = null,
+        Func<ResultadoOperacaoPasta, CancellationToken, Task>? depoisDoProtocolo = null)
+    {
+        var destino = new DestinoEspelhoPasta(new ProtocoloPublicacaoEspelho(volume))
+        {
+            DepoisDoProtocolo = depoisDoProtocolo
+        };
+        return new(
             volume,
-            new DestinoEspelhoPasta(new ProtocoloPublicacaoEspelho(volume)),
+            destino,
             provedor,
             provedor,
             VersaoSchemaAplicacao.DoApp,
             log,
             area);
+    }
 
     private static string SemComentarios(string fonte)
     {
@@ -1100,6 +1198,43 @@ public class BackupEspelhoAgoraTests
         ctx.MembrosFamilia.Add(perfil);
         await ctx.SaveChangesAsync();
         CatalogoDemonstracao.AdicionarDemonstracao(ctx, perfil, new DateTime(2026, 10, 19));
+        await ctx.SaveChangesAsync();
+    }
+
+    private static async Task InserirSoPerfilMinimoAsync(string caminho)
+    {
+        var opcoes = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite($"Data Source={caminho};Pooling=False")
+            .Options;
+        await using var ctx = new AppDbContext(opcoes);
+        await ctx.Database.MigrateAsync();
+        ctx.MembrosFamilia.Add(CatalogoDemonstracao.CriarPerfil());
+        await ctx.SaveChangesAsync();
+    }
+
+    private static async Task SemearDemonstracaoComLancamentoRealAsync(string caminho)
+    {
+        var opcoes = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite($"Data Source={caminho};Pooling=False")
+            .Options;
+        await using var ctx = new AppDbContext(opcoes);
+        await ctx.Database.MigrateAsync();
+        ctx.Categorias.AddRange(CatalogoDemonstracao.CriarCategorias());
+        var perfil = CatalogoDemonstracao.CriarPerfil();
+        ctx.MembrosFamilia.Add(perfil);
+        await ctx.SaveChangesAsync();
+        CatalogoDemonstracao.AdicionarDemonstracao(ctx, perfil, new DateTime(2026, 10, 19));
+        var alimentacao = ctx.Categorias.Single(categoria => categoria.Nome == "Alimentação");
+        ctx.Transacoes.Add(new Transacao
+        {
+            Descricao = "Padaria",
+            Valor = 12.50m,
+            Data = new DateTime(2026, 10, 2),
+            Tipo = TipoTransacao.Despesa,
+            Recorrencia = TipoRecorrencia.Unica,
+            CategoriaId = alimentacao.Id,
+            MembroFamiliaId = perfil.Id
+        });
         await ctx.SaveChangesAsync();
     }
 

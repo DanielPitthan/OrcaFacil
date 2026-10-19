@@ -6,10 +6,10 @@ namespace OrcaFacil.Core.Data;
 /// <summary>O que a leitura do banco vivo conseguiu afirmar.</summary>
 public enum LeituraDadosReais
 {
-    /// <summary>Vazio, ou só com categoria padrão do sistema.</summary>
+    /// <summary>Vazio, categoria padrão, demonstração semeada ou só o perfil mínimo. O backup recusa.</summary>
     SemDadosReais,
 
-    /// <summary>Há registro que <see cref="PoliticaSemeadura.HaDadoDoUsuarioAsync"/> trata como dado do usuário.</summary>
+    /// <summary><see cref="PoliticaSemeadura"/> classificou <see cref="SituacaoConteudoBanco.DadoReal"/>. O backup pede confirmação.</summary>
     ComDadosReais,
 
     /// <summary>O arquivo não pôde ser lido. Não trate como vazio.</summary>
@@ -17,9 +17,9 @@ public enum LeituraDadosReais
 }
 
 /// <summary>
-/// Lê o banco vivo para o backup. O critério é
-/// <see cref="PoliticaSemeadura.HaDadoDoUsuarioAsync"/>, o mesmo da abertura:
-/// categoria padrão do sistema não conta e log de evento conta.
+/// Lê o banco vivo para o backup. Usa
+/// <see cref="PoliticaSemeadura.ClassificarConteudoAsync"/>: vazio e só demonstração
+/// recusam a troca do espelho; dado real, inclusive log, pede confirmação.
 /// </summary>
 public static class PresencaDadosReaisUsuario
 {
@@ -53,7 +53,7 @@ public static class PresencaDadosReaisUsuario
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(ctx);
-        return await PoliticaSemeadura.HaDadoDoUsuarioAsync(ctx, cancellationToken)
+        return await PoliticaSemeadura.ClassificarConteudoAsync(ctx, cancellationToken) == SituacaoConteudoBanco.DadoReal
             ? LeituraDadosReais.ComDadosReais
             : LeituraDadosReais.SemDadosReais;
     }

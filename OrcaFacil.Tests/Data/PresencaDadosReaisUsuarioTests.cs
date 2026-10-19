@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.Armazenamento;
+using OrcaFacil.Core.Armazenamento.Partida;
 using OrcaFacil.Core.Data;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
@@ -49,36 +50,72 @@ public class PresencaDadosReaisUsuarioTests
     }
 
     [Fact]
-    public async Task AberturaEBackup_ClassificamIgual_Vazio_Demonstracao_Log_EDadoReal()
+    public async Task Mesa_TresEstados_AberturaSemeiaSoNoVazio_BackupRecusaVazioESoDemonstracao()
     {
-        await using (var vazio = await Banco.AbrirAsync())
-            await ConferirIgualAsync(vazio, false);
-
-        await using (var demonstracao = await Banco.AbrirAsync())
+        await ConferirMesaAsync(SituacaoConteudoBanco.Vazio, _ => Task.CompletedTask);
+        await ConferirMesaAsync(SituacaoConteudoBanco.Vazio, async banco =>
         {
-            var perfil = await demonstracao.EssencialAsync();
-            CatalogoDemonstracao.AdicionarDemonstracao(demonstracao.Contexto, perfil, new DateTime(2026, 10, 19));
-            await demonstracao.Contexto.SaveChangesAsync();
-            await ConferirIgualAsync(demonstracao, true);
-        }
-
-        await using (var soLog = await Banco.AbrirAsync())
+            banco.Contexto.Categorias.AddRange(CatalogoDemonstracao.CriarCategorias());
+            await banco.Contexto.SaveChangesAsync();
+        });
+        await ConferirMesaAsync(SituacaoConteudoBanco.SoDemonstracao, async banco =>
         {
-            soLog.Contexto.LogsEvento.Add(new LogEvento { Tipo = TipoLogEvento.Sistema, Mensagem = "abriu" });
-            await soLog.Contexto.SaveChangesAsync();
-            await ConferirIgualAsync(soLog, true);
-        }
-
-        await using (var real = await Banco.AbrirAsync())
+            banco.Contexto.MembrosFamilia.Add(CatalogoDemonstracao.CriarPerfil());
+            await banco.Contexto.SaveChangesAsync();
+        });
+        await ConferirMesaAsync(SituacaoConteudoBanco.SoDemonstracao, async banco =>
         {
-            real.Contexto.MembrosFamilia.Add(new MembroFamilia { Nome = "Marina", Avatar = "M", Ativo = true });
-            await real.Contexto.SaveChangesAsync();
-            await ConferirIgualAsync(real, true);
-        }
+            var perfil = await banco.EssencialAsync();
+            CatalogoDemonstracao.AdicionarDemonstracao(banco.Contexto, perfil, new DateTime(2026, 10, 19));
+            await banco.Contexto.SaveChangesAsync();
+        });
+        await ConferirMesaAsync(SituacaoConteudoBanco.DadoReal, async banco =>
+        {
+            banco.Contexto.LogsEvento.Add(new LogEvento { Tipo = TipoLogEvento.Sistema, Mensagem = "abriu" });
+            await banco.Contexto.SaveChangesAsync();
+        });
+        await ConferirMesaAsync(SituacaoConteudoBanco.DadoReal, async banco =>
+        {
+            var perfil = await banco.EssencialAsync();
+            CatalogoDemonstracao.AdicionarDemonstracao(banco.Contexto, perfil, new DateTime(2026, 10, 19));
+            var alimentacao = banco.Contexto.Categorias.Single(categoria => categoria.Nome == "Alimentação");
+            banco.Contexto.Transacoes.Add(new Transacao
+            {
+                Descricao = "Padaria",
+                Valor = 12.50m,
+                Data = new DateTime(2026, 10, 2),
+                Tipo = TipoTransacao.Despesa,
+                Recorrencia = TipoRecorrencia.Unica,
+                CategoriaId = alimentacao.Id,
+                MembroFamiliaId = perfil.Id
+            });
+            await banco.Contexto.SaveChangesAsync();
+        });
     }
 
     [Fact]
-    public async Task LancamentoNoFormatoDaDemonstracao_ContaComoDado()
+    public async Task Abertura_NaoSemeia_Demonstracao_PerfilMinimo_NemLog()
+    {
+        await AssertNaoSemeiaAsync(async banco =>
+        {
+            var perfil = await banco.EssencialAsync();
+            CatalogoDemonstracao.AdicionarDemonstracao(banco.Contexto, perfil, new DateTime(2026, 10, 19));
+            await banco.Contexto.SaveChangesAsync();
+        });
+        await AssertNaoSemeiaAsync(async banco =>
+        {
+            banco.Contexto.MembrosFamilia.Add(CatalogoDemonstracao.CriarPerfil());
+            await banco.Contexto.SaveChangesAsync();
+        });
+        await AssertNaoSemeiaAsync(async banco =>
+        {
+            banco.Contexto.LogsEvento.Add(new LogEvento { Tipo = TipoLogEvento.Sistema, Mensagem = "abriu" });
+            await banco.Contexto.SaveChangesAsync();
+        }, criaPerfilMinimo: true);
+    }
+
+    [Fact]
+    public async Task LancamentoNoFormatoDaDemonstracao_ESoDemonstracao()
     {
         await using var banco = await Banco.AbrirAsync();
         var perfil = await banco.EssencialAsync();
@@ -95,7 +132,9 @@ public class PresencaDadosReaisUsuarioTests
         });
         await banco.Contexto.SaveChangesAsync();
 
-        Assert.Equal(LeituraDadosReais.ComDadosReais, await PresencaDadosReaisUsuario.ClassificarAsync(banco.Contexto));
+        Assert.Equal(SituacaoConteudoBanco.SoDemonstracao, await PoliticaSemeadura.ClassificarConteudoAsync(banco.Contexto));
+        Assert.True(await PoliticaSemeadura.HaDadoDoUsuarioAsync(banco.Contexto));
+        Assert.Equal(LeituraDadosReais.SemDadosReais, await PresencaDadosReaisUsuario.ClassificarAsync(banco.Contexto));
     }
 
     [Fact]
@@ -227,12 +266,54 @@ public class PresencaDadosReaisUsuarioTests
         Assert.Equal(LeituraDadosReais.ComDadosReais, await PresencaDadosReaisUsuario.ClassificarAsync(fechado.Contexto));
     }
 
-    private static async Task ConferirIgualAsync(Banco banco, bool dado)
+    private static async Task ConferirMesaAsync(SituacaoConteudoBanco estado, Func<Banco, Task> preparar)
     {
-        var abertura = await PoliticaSemeadura.HaDadoDoUsuarioAsync(banco.Contexto);
-        var backup = await PresencaDadosReaisUsuario.ClassificarAsync(banco.Contexto);
-        Assert.Equal(dado, abertura);
-        Assert.Equal(dado ? LeituraDadosReais.ComDadosReais : LeituraDadosReais.SemDadosReais, backup);
+        await using var banco = await Banco.AbrirAsync();
+        await preparar(banco);
+
+        Assert.Equal(estado, await PoliticaSemeadura.ClassificarConteudoAsync(banco.Contexto));
+        Assert.Equal(
+            estado != SituacaoConteudoBanco.Vazio,
+            await PoliticaSemeadura.HaDadoDoUsuarioAsync(banco.Contexto));
+        Assert.Equal(
+            estado == SituacaoConteudoBanco.DadoReal ? LeituraDadosReais.ComDadosReais : LeituraDadosReais.SemDadosReais,
+            await PresencaDadosReaisUsuario.ClassificarAsync(banco.Contexto));
+    }
+
+    private static async Task AssertNaoSemeiaAsync(Func<Banco, Task> preparar, bool criaPerfilMinimo = false)
+    {
+        await using var banco = await Banco.AbrirAsync();
+        await preparar(banco);
+        await banco.FecharContextoAsync();
+
+        var chamadas = 0;
+        var log = new LogMudo();
+        var semeadura = new SemeaduraDadosApp(
+            new CaminhoBancoVivo(banco.Caminho),
+            log,
+            (_, _) =>
+            {
+                chamadas++;
+                return Task.CompletedTask;
+            });
+        await semeadura.SemearAsync();
+
+        Assert.Equal(0, chamadas);
+        var opcoes = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite($"Data Source={banco.Caminho};Pooling=False")
+            .Options;
+        await using var leitura = new AppDbContext(opcoes);
+        var nomes = await leitura.MembrosFamilia.Select(membro => membro.Nome).ToListAsync();
+        if (criaPerfilMinimo)
+        {
+            Assert.Contains(PoliticaSemeadura.MensagemPerfilMinimo, log.Mensagens);
+            Assert.Equal(PoliticaSemeadura.NomePerfilMinimo, Assert.Single(nomes));
+            Assert.False(await leitura.Transacoes.AnyAsync());
+        }
+        else
+        {
+            Assert.Equal(CatalogoDemonstracao.NomePerfilPadrao, Assert.Single(nomes));
+        }
     }
 
     private sealed class Banco : IAsyncDisposable
@@ -243,9 +324,20 @@ public class PresencaDadosReaisUsuarioTests
             Contexto = contexto;
         }
 
+        private bool _contextoAberto = true;
+
         public string Caminho { get; }
 
         public AppDbContext Contexto { get; }
+
+        public async Task FecharContextoAsync()
+        {
+            if (!_contextoAberto)
+                return;
+
+            await Contexto.DisposeAsync();
+            _contextoAberto = false;
+        }
 
         public static async Task<Banco> AbrirAsync()
         {
@@ -269,7 +361,7 @@ public class PresencaDadosReaisUsuarioTests
 
         public async ValueTask DisposeAsync()
         {
-            await Contexto.DisposeAsync();
+            await FecharContextoAsync();
             foreach (var sufixo in new[] { "", "-wal", "-shm" })
             {
                 var arquivo = Caminho + sufixo;
@@ -277,5 +369,14 @@ public class PresencaDadosReaisUsuarioTests
                     File.Delete(arquivo);
             }
         }
+    }
+
+    private sealed class LogMudo : IRegistroLog
+    {
+        public List<string> Mensagens { get; } = [];
+
+        public void Informacao(string mensagem, object?[] argumentos) => Mensagens.Add(mensagem);
+
+        public void Erro(Exception? excecao, string mensagem, object?[] argumentos) => Mensagens.Add(mensagem);
     }
 }

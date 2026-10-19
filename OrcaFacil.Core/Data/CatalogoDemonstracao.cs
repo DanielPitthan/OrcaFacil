@@ -7,15 +7,18 @@ namespace OrcaFacil.Core.Data;
 /// <summary>
 /// O que o app grava sozinho na instalação: categorias padrão, o perfil "Usuário"
 /// e os lançamentos, orçamentos e metas de demonstração.
-/// Quem decide se isso já é dado do usuário é
-/// <see cref="OrcaFacil.Core.Armazenamento.PoliticaSemeadura.HaDadoDoUsuarioAsync"/>:
-/// categoria padrão não conta; perfil, lançamento, orçamento, meta e log contam.
+/// <see cref="OrcaFacil.Core.Armazenamento.PoliticaSemeadura.ClassificarConteudoAsync"/>
+/// separa os três estados: categoria padrão fica em vazio, este catálogo e o perfil
+/// mínimo ficam em só demonstração, e qualquer outra linha — inclusive log — é dado real.
 /// </summary>
 public static class CatalogoDemonstracao
 {
     public const string NomePerfilPadrao = "Usuário";
 
     public const string AvatarPerfilPadrao = "👤";
+
+    /// <summary>Meses gravados na primeira abertura: o atual e os dois anteriores.</summary>
+    public const int RepeticoesMensais = 3;
 
     public static IReadOnlyList<CategoriaPadrao> Categorias { get; } =
     [
@@ -114,8 +117,9 @@ public static class CatalogoDemonstracao
             ids[categoria.Nome] = categoria.Id;
 
         var mesAtual = new DateTime(hoje.Year, hoje.Month, 1);
-        foreach (var mesRef in new[] { mesAtual.AddMonths(-2), mesAtual.AddMonths(-1), mesAtual })
+        for (var deslocamento = RepeticoesMensais - 1; deslocamento >= 0; deslocamento--)
         {
+            var mesRef = mesAtual.AddMonths(-deslocamento);
             foreach (var item in Lancamentos)
             {
                 ctx.Transacoes.Add(new Transacao

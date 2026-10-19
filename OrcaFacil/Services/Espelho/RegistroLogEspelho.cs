@@ -7,7 +7,7 @@ namespace OrcaFacil.Services.Espelho;
 /// <summary>
 /// Log do backup do espelho. A tela cria uma instância; este tipo não entra no registro
 /// de DI, para o conflito com o coordenador continuar só na linha do provedor de senha.
-/// A exceção não segue crua: o log recebe o tipo e a mensagem sem caminho nem URI.
+/// Mensagem e exceção não seguem cruas: o log recebe o texto sem caminho nem URI.
 /// </summary>
 public sealed class RegistroLogEspelho : IRegistroLog
 {
@@ -15,7 +15,7 @@ public sealed class RegistroLogEspelho : IRegistroLog
     {
         try
         {
-            Log.Information(mensagem, argumentos);
+            Log.Information("{Registro}", TextoLogEspelho.Montar(mensagem, argumentos, null));
         }
         catch (Exception ex)
         {
