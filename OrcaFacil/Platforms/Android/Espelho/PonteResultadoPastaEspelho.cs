@@ -1,6 +1,6 @@
-using global::Android.App;
-using global::Android.Content;
-using global::Android.Provider;
+using Android.App;
+using Android.Content;
+using Android.Provider;
 using OrcaFacil.Core.Armazenamento.Espelho.Pasta;
 
 namespace OrcaFacil.Platforms.Android.Espelho;

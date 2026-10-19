@@ -1,5 +1,5 @@
-﻿using global::Android.App;
-using global::Android.Runtime;
+﻿using Android.App;
+using Android.Runtime;
 
 namespace OrcaFacil;
 

@@ -1,5 +1,5 @@
-using global::Android.App;
-using global::Android.Content;
+using Android.App;
+using Android.Content;
 using Microsoft.Extensions.DependencyInjection;
 using OrcaFacil.Services.Interfaces;
 

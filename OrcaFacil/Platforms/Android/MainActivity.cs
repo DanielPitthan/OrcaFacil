@@ -1,7 +1,7 @@
-using global::Android.App;
-using global::Android.Content;
-using global::Android.Content.PM;
-using global::Android.Views;
+using Android.App;
+using Android.Content;
+using Android.Content.PM;
+using Android.Views;
 using OrcaFacil.Platforms.Android.Espelho;
 
 namespace OrcaFacil;
