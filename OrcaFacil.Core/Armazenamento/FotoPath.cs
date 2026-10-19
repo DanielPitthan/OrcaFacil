@@ -7,12 +7,14 @@ namespace OrcaFacil.Core.Armazenamento;
 /// </summary>
 /// <remarks>
 /// A restauração do espelho grava só o nome, pela <see cref="ExtrairNomeArquivo"/>.
-/// Valor que não vira nome permanece. A leitura no app ainda abre o caminho antigo
-/// quando o arquivo existe. Null é "sem foto"; qualquer outro valor persistido é só o nome.
+/// Valor que não vira nome permanece. A leitura só abre arquivo dentro da pasta
+/// <c>perfil</c>, depois de normalizar o caminho. Null é "sem foto"; qualquer outro
+/// valor persistido é só o nome.
 /// </remarks>
 public static class FotoPath
 {
-    public const int TamanhoMaximo = 255;
+    /// <summary>Igual ao MaxLength da coluna FotoPath. Não encurtar: isso pediria migration.</summary>
+    public const int TamanhoMaximo = 260;
 
     private static readonly char[] Proibidos = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
 
@@ -88,5 +90,51 @@ public static class FotoPath
 
         erro = "";
         return true;
+    }
+
+    /// <summary>
+    /// Caminho absoluto dentro de <paramref name="pastaFotos"/>, ou null.
+    /// O prefixo da pasta, com separador no fim, é exigido antes de <see cref="File.Exists"/>.
+    /// Nome sem diretório é lido nessa pasta, não na pasta corrente.
+    /// </summary>
+    public static string? CaminhoDentroDaPasta(string pastaFotos, string? valor)
+    {
+        if (string.IsNullOrWhiteSpace(valor) || string.IsNullOrWhiteSpace(pastaFotos))
+            return null;
+
+        var candidato = EhSomenteNomeArquivo(valor)
+            ? Path.Combine(pastaFotos, valor)
+            : valor;
+
+        string cheio;
+        string prefixo;
+        try
+        {
+            cheio = Path.GetFullPath(candidato);
+            var raiz = Path.GetFullPath(pastaFotos);
+            prefixo = raiz.EndsWith(Path.DirectorySeparatorChar)
+                ? raiz
+                : raiz + Path.DirectorySeparatorChar;
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException or IOException)
+        {
+            return null;
+        }
+
+        if (!cheio.StartsWith(prefixo, StringComparison.Ordinal))
+            return null;
+
+        try
+        {
+            return File.Exists(cheio) ? cheio : null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 }

@@ -1,4 +1,7 @@
+using System.ComponentModel.DataAnnotations;
+using System.Reflection;
 using OrcaFacil.Core.Armazenamento;
+using OrcaFacil.Core.Entities;
 
 namespace OrcaFacil.Tests.Armazenamento;
 
@@ -63,6 +66,110 @@ public class FotoPathTests
     {
         var nome = new string('a', FotoPath.TamanhoMaximo);
         Assert.Equal(nome, FotoPath.ExigirNomeArquivo(nome));
+    }
+
+    [Fact]
+    public void TamanhoMaximo_AcompanhaOMaxLengthDaColuna()
+    {
+        var maximo = typeof(MembroFamilia).GetProperty(nameof(MembroFamilia.FotoPath))!
+            .GetCustomAttribute<MaxLengthAttribute>()!.Length;
+        Assert.Equal(260, maximo);
+        Assert.Equal(FotoPath.TamanhoMaximo, maximo);
+    }
+
+    [Fact]
+    public void CaminhoAbsolutoForaDaPasta_NaoAbre()
+    {
+        using var area = new AreaFoto();
+        var segredo = Path.Combine(area.Raiz, "segredo.bin");
+        File.WriteAllBytes(segredo, [1, 2, 3]);
+
+        Assert.True(File.Exists(segredo));
+        Assert.Null(FotoPath.CaminhoDentroDaPasta(area.Pasta, segredo));
+        Assert.Equal(new byte[] { 1, 2, 3 }, File.ReadAllBytes(segredo));
+    }
+
+    [Fact]
+    public void TravessiaComPontoPonto_NaoAbre()
+    {
+        using var area = new AreaFoto();
+        var segredo = Path.Combine(area.Raiz, "segredo.bin");
+        File.WriteAllBytes(segredo, [4, 5]);
+        var travessia = Path.Combine(area.Pasta, "..", "segredo.bin");
+
+        Assert.True(File.Exists(travessia));
+        Assert.Null(FotoPath.CaminhoDentroDaPasta(area.Pasta, travessia));
+        Assert.Null(FotoPath.CaminhoDentroDaPasta(area.Pasta, "perfil/../segredo.bin"));
+    }
+
+    [Fact]
+    public void PastaIrmaComOMesmoPrefixo_NaoAbre()
+    {
+        using var area = new AreaFoto();
+        var irma = Path.Combine(area.Raiz, "perfil-secreto");
+        Directory.CreateDirectory(irma);
+        var arquivo = Path.Combine(irma, "a.jpg");
+        File.WriteAllBytes(arquivo, [7]);
+
+        Assert.True(File.Exists(arquivo));
+        Assert.Null(FotoPath.CaminhoDentroDaPasta(area.Pasta, arquivo));
+    }
+
+    [Fact]
+    public void NomeSemDiretorio_UsaAPastaPerfil_ENaoAPastaCorrente()
+    {
+        using var area = new AreaFoto();
+        var nome = "orcafacil-armadilha-" + Guid.NewGuid().ToString("N") + ".jpg";
+        var armadilha = Path.Combine(Directory.GetCurrentDirectory(), nome);
+        var verdadeira = Path.Combine(area.Pasta, nome);
+        File.WriteAllBytes(armadilha, [1]);
+        File.WriteAllBytes(verdadeira, [2]);
+        try
+        {
+            var achou = FotoPath.CaminhoDentroDaPasta(area.Pasta, nome);
+            Assert.Equal(Path.GetFullPath(verdadeira), achou);
+            Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(achou!));
+        }
+        finally
+        {
+            File.Delete(armadilha);
+        }
+    }
+
+    [Fact]
+    public void CaminhoLegadoDentroDaPasta_AindaAbre()
+    {
+        using var area = new AreaFoto();
+        var foto = Path.Combine(area.Pasta, "foto-20261017.jpg");
+        File.WriteAllBytes(foto, [9]);
+
+        Assert.Equal(Path.GetFullPath(foto), FotoPath.CaminhoDentroDaPasta(area.Pasta, foto));
+        Assert.Equal(Path.GetFullPath(foto), FotoPath.CaminhoDentroDaPasta(area.Pasta, "foto-20261017.jpg"));
+    }
+
+    private sealed class AreaFoto : IDisposable
+    {
+        public AreaFoto()
+        {
+            Raiz = Directory.CreateTempSubdirectory("orcafacil-foto-").FullName;
+            Pasta = Path.Combine(Raiz, "perfil");
+            Directory.CreateDirectory(Pasta);
+        }
+
+        public string Raiz { get; }
+
+        public string Pasta { get; }
+
+        public void Dispose()
+        {
+            try
+            {
+                Directory.Delete(Raiz, recursive: true);
+            }
+            catch (IOException)
+            {
+            }
+        }
     }
 
     [Fact]

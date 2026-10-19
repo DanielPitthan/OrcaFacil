@@ -121,27 +121,10 @@ public class FotoPerfilService : IFotoPerfilService
     }
 
     /// <summary>
-    /// Caminho antigo ainda abre se o arquivo existe. Valor novo é só o nome, lido em <see cref="PastaFotos"/>.
+    /// Só abre arquivo dentro de <see cref="PastaFotos"/>. Nome sem pasta é resolvido ali.
     /// </summary>
     private string? ResolverArquivo(string? valor)
-    {
-        if (string.IsNullOrWhiteSpace(valor))
-            return null;
-
-        if (File.Exists(valor))
-            return valor;
-
-        try
-        {
-            var nome = FotoPath.ExtrairNomeArquivo(valor);
-            var naPasta = Path.Combine(PastaFotos, nome);
-            return File.Exists(naPasta) ? naPasta : null;
-        }
-        catch (ArgumentException)
-        {
-            return null;
-        }
-    }
+        => FotoPath.CaminhoDentroDaPasta(PastaFotos, valor);
 
     private void ApagarAnteriores(string destino)
     {

@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.Armazenamento;
+using OrcaFacil.Core.Enums;
 using OrcaFacil.Core.Armazenamento.Espelho;
 using OrcaFacil.Core.Armazenamento.Espelho.Pasta;
 using OrcaFacil.Core.Armazenamento.Partida;
@@ -315,8 +316,325 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
         Assert.Equal(0, semeadura.Chamadas);
         Assert.Equal(backup, await File.ReadAllBytesAsync(area.Backup));
         Assert.Equal(_espelhos.Valido, volume.Arquivos[volume.NomeArquivo]);
-        Assert.Contains(ArquivosDaPasta(area.Raiz), bytes => bytes.SequenceEqual(lixo));
+        var preservado = CopiaPreservada(area.Raiz);
+        Assert.Equal(lixo, await File.ReadAllBytesAsync(preservado));
         Assert.Empty(volume.Apagados);
+    }
+
+    [Fact]
+    public async Task BancoIlegivel_ComWalEShm_ConfereACopiaAntesDeMudarOVivo()
+    {
+        using var area = new Area();
+        var lixo = "banco-ilegivel-original"u8.ToArray();
+        var wal = "wal-original-123"u8.ToArray();
+        var shm = "shm-original"u8.ToArray();
+        await File.WriteAllBytesAsync(area.Banco, lixo);
+        await File.WriteAllBytesAsync(area.Banco + "-wal", wal);
+        await File.WriteAllBytesAsync(area.Banco + "-shm", shm);
+        var backup = area.GravarBackup([9, 8, 7]);
+        var preservacao = await new PreservacaoBancoArquivo(new CaminhoBancoVivo(area.Banco)).PreservarAsync();
+        Assert.True(preservacao.Sucesso);
+        var preservado = preservacao.Caminho!;
+        Assert.Equal(lixo, await File.ReadAllBytesAsync(preservado));
+        Assert.Equal(wal, await File.ReadAllBytesAsync(preservado + "-wal"));
+        Assert.Equal(shm, await File.ReadAllBytesAsync(preservado + "-shm"));
+        Assert.StartsWith(Path.Combine(area.Raiz, "backups", "orcafacil-preservado-"), preservado, StringComparison.Ordinal);
+        using (var leitura = File.OpenRead(preservado + "-shm"))
+            Assert.Equal(shm.Length, leitura.Length);
+
+        var volume = VolumeComEspelho(_espelhos.Valido);
+        var semeadura = new SemeaduraMarcador(area.Banco);
+        var resultado = await Montar(area, volume, new SenhaFixa(EspelhosReais.Senha), semeadura, new LimpezaQueConta()).PrepararAsync();
+
+        Assert.Equal(AcaoArmazenamento.RestaurarDoEspelho, resultado.Acao);
+        Assert.NotEqual(lixo, await File.ReadAllBytesAsync(area.Banco));
+        Assert.Equal(lixo, await File.ReadAllBytesAsync(preservado));
+        Assert.Equal(wal, await File.ReadAllBytesAsync(preservado + "-wal"));
+        Assert.Equal(shm, await File.ReadAllBytesAsync(preservado + "-shm"));
+        Assert.Equal(backup, await File.ReadAllBytesAsync(area.Backup));
+        Assert.Equal(_espelhos.Valido, volume.Arquivos[volume.NomeArquivo]);
+        Assert.Equal(0, semeadura.Chamadas);
+        Assert.Empty(volume.Apagados);
+    }
+
+    [Fact]
+    public async Task ExistenciaQueLanca_RecusaATroca_NaoSemeia_NaoApaga()
+    {
+        using var area = new Area();
+        var lixo = "banco-que-fica"u8.ToArray();
+        var wal = "wal-que-fica"u8.ToArray();
+        await File.WriteAllBytesAsync(area.Banco, lixo);
+        await File.WriteAllBytesAsync(area.Banco + "-wal", wal);
+        var backup = area.GravarBackup([3, 3]);
+        var volume = VolumeComEspelho(_espelhos.Valido);
+        var semeadura = new SemeaduraMarcador(area.Banco);
+        var caminho = new CaminhoBancoVivo(area.Banco);
+        var preservacao = new PreservacaoBancoArquivo(caminho, sonda =>
+        {
+            if (sonda.EndsWith("-wal", StringComparison.Ordinal))
+                throw new UnauthorizedAccessException("sonda");
+
+            return File.Exists(sonda);
+        });
+
+        var resultado = await Montar(
+            area,
+            volume,
+            new SenhaFixa(EspelhosReais.Senha),
+            semeadura,
+            new LimpezaQueConta(),
+            preservacao).PrepararAsync();
+
+        Assert.Equal(AcaoArmazenamento.TelaDeRecuperacao, resultado.Acao);
+        Assert.Equal(AcaoArmazenamento.RestaurarDoEspelho, resultado.AcaoPlanejada);
+        Assert.Equal(lixo, await File.ReadAllBytesAsync(area.Banco));
+        Assert.Equal(wal, await File.ReadAllBytesAsync(area.Banco + "-wal"));
+        Assert.Equal(backup, await File.ReadAllBytesAsync(area.Backup));
+        Assert.Equal(_espelhos.Valido, volume.Arquivos[volume.NomeArquivo]);
+        Assert.Empty(CopiasComPrefixo(area.Raiz, "orcafacil-preservado-"));
+        Assert.Equal(0, semeadura.Chamadas);
+        Assert.False(await TemMarcadorAsync(area.Banco));
+        Assert.Empty(volume.Apagados);
+    }
+
+    [Fact]
+    public async Task PreservacaoCancelada_ApagaACopiaIncompleta()
+    {
+        using var area = new Area();
+        var lixo = "original-cancelado"u8.ToArray();
+        var wal = "wal-cancelado"u8.ToArray();
+        await File.WriteAllBytesAsync(area.Banco, lixo);
+        await File.WriteAllBytesAsync(area.Banco + "-wal", wal);
+        using var cancelamento = new CancellationTokenSource();
+        var preservacao = new PreservacaoBancoArquivo(new CaminhoBancoVivo(area.Banco), null, _ => cancelamento.Cancel());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => preservacao.PreservarAsync(cancelamento.Token));
+
+        Assert.Equal(lixo, await File.ReadAllBytesAsync(area.Banco));
+        Assert.Equal(wal, await File.ReadAllBytesAsync(area.Banco + "-wal"));
+        Assert.Empty(CopiasComPrefixo(area.Raiz, "orcafacil-preservado-"));
+    }
+
+    [Fact]
+    public async Task CopiaComTamanhoDiferente_NaoContaComoPreservada()
+    {
+        using var area = new Area();
+        var lixo = "original-inteiro"u8.ToArray();
+        await File.WriteAllBytesAsync(area.Banco, lixo);
+        var preservacao = new PreservacaoBancoArquivo(new CaminhoBancoVivo(area.Banco), null, alvo =>
+        {
+            using var fluxo = new FileStream(alvo, FileMode.Open, FileAccess.Write, FileShare.Read);
+            fluxo.SetLength(0);
+        });
+
+        var resultado = await preservacao.PreservarAsync();
+
+        Assert.False(resultado.Sucesso);
+        Assert.Equal(lixo, await File.ReadAllBytesAsync(area.Banco));
+        Assert.Empty(CopiasComPrefixo(area.Raiz, "orcafacil-preservado-"));
+    }
+
+    [Fact]
+    public async Task Troca_CopiaBancoELaterais_AntesDeMudarOVivo()
+    {
+        using var area = new Area();
+        var original = new byte[] { 9, 9, 9, 9 };
+        var wal = new byte[] { 1, 2, 3 };
+        var shm = new byte[] { 4, 5 };
+        await File.WriteAllBytesAsync(area.Banco, original);
+        await File.WriteAllBytesAsync(area.Banco + "-wal", wal);
+        await File.WriteAllBytesAsync(area.Banco + "-shm", shm);
+        var origem = Path.Combine(area.Raiz, "snapshot.db");
+        var novo = new byte[] { 7, 7, 7 };
+        await File.WriteAllBytesAsync(origem, novo);
+
+        var resultado = TrocaArquivoBanco.Substituir(area.Banco, origem);
+
+        Assert.True(resultado.Sucesso);
+        Assert.Equal(novo, await File.ReadAllBytesAsync(area.Banco));
+        var copia = CopiaAntesDaTroca(area.Raiz);
+        Assert.Equal(original, await File.ReadAllBytesAsync(copia));
+        Assert.Equal(wal, await File.ReadAllBytesAsync(copia + "-wal"));
+        Assert.Equal(shm, await File.ReadAllBytesAsync(copia + "-shm"));
+        Assert.Equal(original.Length, new FileInfo(copia).Length);
+    }
+
+    [Fact]
+    public async Task ExistenciaQueLanca_NaTroca_NaoRenomeiaOBanco()
+    {
+        using var area = new Area();
+        var original = new byte[] { 2, 2, 2 };
+        var wal = new byte[] { 6 };
+        await File.WriteAllBytesAsync(area.Banco, original);
+        await File.WriteAllBytesAsync(area.Banco + "-wal", wal);
+        var origem = Path.Combine(area.Raiz, "snapshot.db");
+        await File.WriteAllBytesAsync(origem, [8, 8]);
+
+        var resultado = TrocaArquivoBanco.Substituir(area.Banco, origem, _ => throw new IOException("sonda"));
+
+        Assert.False(resultado.Sucesso);
+        Assert.Equal(original, await File.ReadAllBytesAsync(area.Banco));
+        Assert.Equal(wal, await File.ReadAllBytesAsync(area.Banco + "-wal"));
+        Assert.Equal(new byte[] { 8, 8 }, await File.ReadAllBytesAsync(origem));
+        Assert.Empty(CopiasComPrefixo(area.Raiz, "orcafacil-antes-troca-"));
+        Assert.Empty(Directory.GetFiles(area.Raiz, "*.reserva-*", SearchOption.AllDirectories));
+    }
+
+    [Fact]
+    public async Task BancoInconsistenteLegivel_CopiaAntesDeRestaurar_ENaoSemeia()
+    {
+        using var area = new Area();
+        await CriarMarinaAsync(area.Banco, foto: null);
+        await using (var ctx = ConexaoBancoArquivo.AbrirEscrita(area.Banco))
+        {
+            var membro = await ctx.MembrosFamilia.SingleAsync();
+            var categoria = new Categoria
+            {
+                Nome = "Moradia",
+                Icone = "M",
+                CorHex = "#112233",
+                TipoPadrao = TipoTransacao.Despesa
+            };
+            ctx.Categorias.Add(categoria);
+            await ctx.SaveChangesAsync();
+            ctx.Transacoes.Add(new Transacao
+            {
+                Descricao = "MarcadorAntesDaTroca",
+                Valor = 10m,
+                Data = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc),
+                Tipo = TipoTransacao.Despesa,
+                CategoriaId = categoria.Id,
+                MembroFamiliaId = membro.Id,
+                Pago = true
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        await using (var conexao = await AbrirAsync(area.Banco))
+        {
+            await using (var chaves = conexao.CreateCommand())
+            {
+                chaves.CommandText = "PRAGMA foreign_keys = OFF;";
+                await chaves.ExecuteNonQueryAsync();
+            }
+
+            await using (var apagar = conexao.CreateCommand())
+            {
+                apagar.CommandText = "DROP TABLE \"Metas\";";
+                await apagar.ExecuteNonQueryAsync();
+            }
+
+            await using var checkpoint = conexao.CreateCommand();
+            checkpoint.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
+            await checkpoint.ExecuteNonQueryAsync();
+        }
+
+        var volume = VolumeComEspelho(_espelhos.Valido);
+        var semeadura = new SemeaduraMarcador(area.Banco);
+        var resultado = await Montar(area, volume, new SenhaFixa(EspelhosReais.Senha), semeadura, new LimpezaQueConta()).PrepararAsync();
+
+        Assert.Equal(AcaoArmazenamento.RestaurarDoEspelho, resultado.Acao);
+        Assert.Equal(SituacaoBancoVivo.Inconsistente, resultado.Estado!.BancoVivo);
+        Assert.Equal("Marina", await NomeUnicoAsync(area.Banco));
+        Assert.Equal(0, semeadura.Chamadas);
+        var copia = CopiaAntesDaTroca(area.Raiz);
+        await using var conferida = await AbrirAsync(copia);
+        Assert.Equal("MarcadorAntesDaTroca", await EscalarAsync(conferida, """
+            SELECT "Descricao" FROM "Transacoes" WHERE "Descricao" = 'MarcadorAntesDaTroca'
+            """));
+        await using var vivo = await AbrirAsync(area.Banco);
+        Assert.Equal("", await EscalarAsync(vivo, """
+            SELECT COALESCE((SELECT "Descricao" FROM "Transacoes" WHERE "Descricao" = 'MarcadorAntesDaTroca'), '')
+            """));
+        Assert.Equal(_espelhos.Valido, volume.Arquivos[volume.NomeArquivo]);
+        Assert.Empty(volume.Apagados);
+    }
+
+    [Fact]
+    public async Task TrocaInterrompida_SemEspelho_RecompoeENaoSemeia()
+    {
+        using var area = new Area();
+        await CriarMarinaAsync(area.Banco, foto: null);
+        foreach (var sufixo in ArquivosBancoVivo.Sufixos)
+        {
+            var caminho = area.Banco + sufixo;
+            if (!File.Exists(caminho))
+                continue;
+
+            File.Move(caminho, caminho + ".reserva-" + Guid.NewGuid().ToString("N"));
+        }
+
+        Assert.False(File.Exists(area.Banco));
+        var semeadura = new SemeaduraMarcador(area.Banco);
+        var resultado = await Montar(area, VolumeComFoto(), new SenhaFixa(null), semeadura, new LimpezaQueConta()).PrepararAsync();
+
+        Assert.Equal(AcaoArmazenamento.UsarBancoVivo, resultado.Acao);
+        Assert.Equal("Marina", await NomeUnicoAsync(area.Banco));
+        Assert.Equal(0, semeadura.Chamadas);
+        Assert.False(await TemMarcadorAsync(area.Banco));
+    }
+
+    [Fact]
+    public void ResiduoDaTroca_DevolveBancoELateral_SemApagar()
+    {
+        using var area = new Area();
+        var banco = new byte[] { 1, 2, 3, 4 };
+        var wal = new byte[] { 8, 8, 8 };
+        var reserva = area.Banco + ".reserva-" + Guid.NewGuid().ToString("N");
+        var reservaWal = area.Banco + "-wal.reserva-" + Guid.NewGuid().ToString("N");
+        File.WriteAllBytes(reserva, banco);
+        File.WriteAllBytes(reservaWal, wal);
+
+        ResiduoTrocaBanco.TentarRecompor(area.Banco);
+
+        Assert.Equal(banco, File.ReadAllBytes(area.Banco));
+        Assert.Equal(wal, File.ReadAllBytes(area.Banco + "-wal"));
+        Assert.False(File.Exists(reserva));
+        Assert.False(File.Exists(reservaWal));
+    }
+
+    [Fact]
+    public async Task SemPerfil_ComLancamentoRealEEspelhoValido_CriaSoPerfilMinimo()
+    {
+        using var area = new Area();
+        await CriarLancamentoSemMembroAsync(area.Banco);
+        var volume = VolumeComEspelho(_espelhos.Valido);
+        var log = new LogCaptura();
+        var semeadura = new SemeaduraComPolitica(area.Banco, log);
+
+        var resultado = await Montar(area, volume, new SenhaFixa(EspelhosReais.Senha), semeadura, new LimpezaQueConta()).PrepararAsync();
+
+        Assert.Equal(AcaoArmazenamento.Semear, resultado.Acao);
+        Assert.Equal(0, semeadura.Demonstracoes);
+        Assert.Equal(PoliticaSemeadura.NomePerfilMinimo, await NomeUnicoAsync(area.Banco));
+        await using var ctx = ConexaoBancoArquivo.AbrirLeitura(area.Banco);
+        var descricoes = await ctx.Transacoes.Select(transacao => transacao.Descricao).ToListAsync();
+        Assert.Equal(["Aluguel real"], descricoes);
+        Assert.DoesNotContain(descricoes, descricao => descricao is "Salário" or "Freelance" or "Supermercado");
+        Assert.Equal(_espelhos.Valido, volume.Arquivos[volume.NomeArquivo]);
+        Assert.Empty(volume.Apagados);
+        Assert.Contains(PoliticaSemeadura.MensagemPerfilMinimo, log.Mensagens);
+    }
+
+    [Fact]
+    public async Task SemPerfil_SemLancamento_AindaSemeiaDemonstracao()
+    {
+        using var area = new Area();
+        await using (var conexao = await AbrirCriandoAsync(area.Banco))
+        {
+            var opcoes = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(conexao).Options;
+            await using var ctx = new AppDbContext(opcoes);
+            await ctx.Database.MigrateAsync();
+        }
+
+        var log = new LogCaptura();
+        var semeadura = new SemeaduraComPolitica(area.Banco, log);
+        var resultado = await Montar(area, VolumeComFoto(), new SenhaFixa(null), semeadura, new LimpezaQueConta()).PrepararAsync();
+
+        Assert.Equal(AcaoArmazenamento.Semear, resultado.Acao);
+        Assert.Equal(1, semeadura.Demonstracoes);
+        Assert.Equal(SemeaduraMarcador.Nome, await NomeUnicoAsync(area.Banco));
+        Assert.Empty(log.Mensagens);
     }
 
     [Fact]
@@ -427,7 +745,8 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
         VolumeMemoriaTeste volume,
         IProvedorSenhaEspelho senha,
         ISemeaduraDados semeadura,
-        ILimpezaTotalDados limpeza)
+        ILimpezaTotalDados limpeza,
+        PreservacaoBancoArquivo? preservacao = null)
     {
         var caminho = new CaminhoBancoVivo(area.Banco);
         var versao = VersaoSchemaAplicacao.DoApp;
@@ -441,8 +760,25 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
             semeadura,
             limpeza,
             new OpcoesPreparoBanco { VersaoAplicativo = "1.0-teste" },
-            new PreservacaoBancoArquivo(caminho),
+            preservacao ?? new PreservacaoBancoArquivo(caminho),
             new PresencaPerfilArquivo(caminho));
+    }
+
+    private static string CopiaPreservada(string raiz)
+        => Assert.Single(CopiasComPrefixo(raiz, "orcafacil-preservado-"));
+
+    private static string CopiaAntesDaTroca(string raiz)
+        => Assert.Single(CopiasComPrefixo(raiz, "orcafacil-antes-troca-"));
+
+    private static List<string> CopiasComPrefixo(string raiz, string prefixo)
+    {
+        var pasta = Path.Combine(raiz, "backups");
+        if (!Directory.Exists(pasta))
+            return [];
+
+        return Directory.GetFiles(pasta, prefixo + "*.db")
+            .Where(caminho => Path.GetFileName(caminho).EndsWith(".db", StringComparison.Ordinal))
+            .ToList();
     }
 
     private static RestauracaoEspelhoDaPasta Restaurar(Area area, VolumeMemoriaTeste volume, IProvedorSenhaEspelho senha)
@@ -516,6 +852,60 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
                 FotoPath = foto
             });
             await ctx.SaveChangesAsync();
+        }
+
+        await using var checkpoint = conexao.CreateCommand();
+        checkpoint.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
+        await checkpoint.ExecuteNonQueryAsync();
+    }
+
+    private static async Task CriarLancamentoSemMembroAsync(string caminho)
+    {
+        await using var conexao = await AbrirCriandoAsync(caminho);
+        var opcoes = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(conexao).Options;
+        await using (var ctx = new AppDbContext(opcoes))
+        {
+            await ctx.Database.MigrateAsync();
+            var membro = new MembroFamilia
+            {
+                Nome = "QuemSaiu",
+                Avatar = "Q",
+                Ativo = true,
+                CriadoEm = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc)
+            };
+            var categoria = new Categoria
+            {
+                Nome = "Moradia",
+                Icone = "M",
+                CorHex = "#112233",
+                TipoPadrao = TipoTransacao.Despesa
+            };
+            ctx.MembrosFamilia.Add(membro);
+            ctx.Categorias.Add(categoria);
+            await ctx.SaveChangesAsync();
+            ctx.Transacoes.Add(new Transacao
+            {
+                Descricao = "Aluguel real",
+                Valor = 1200m,
+                Data = new DateTime(2026, 4, 2, 0, 0, 0, DateTimeKind.Utc),
+                Tipo = TipoTransacao.Despesa,
+                CategoriaId = categoria.Id,
+                MembroFamiliaId = membro.Id,
+                Pago = true
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        await using (var apagar = conexao.CreateCommand())
+        {
+            apagar.CommandText = "PRAGMA foreign_keys = OFF;";
+            await apagar.ExecuteNonQueryAsync();
+        }
+
+        await using (var apagar = conexao.CreateCommand())
+        {
+            apagar.CommandText = "DELETE FROM \"MembrosFamilia\";";
+            Assert.Equal(1, await apagar.ExecuteNonQueryAsync());
         }
 
         await using var checkpoint = conexao.CreateCommand();
@@ -714,6 +1104,37 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
             });
             await ctx.SaveChangesAsync(cancellationToken);
         }
+    }
+
+    private sealed class SemeaduraComPolitica(string caminho, IRegistroLog? log) : ISemeaduraDados
+    {
+        public int Demonstracoes { get; private set; }
+
+        public async Task SemearAsync(CancellationToken cancellationToken = default)
+        {
+            await using var ctx = ConexaoBancoArquivo.AbrirEscrita(caminho);
+            if (await PoliticaSemeadura.CriarPerfilMinimoSeHaLancamentoAsync(ctx, log, cancellationToken))
+                return;
+
+            Demonstracoes++;
+            ctx.MembrosFamilia.Add(new MembroFamilia
+            {
+                Nome = SemeaduraMarcador.Nome,
+                Avatar = "X",
+                Ativo = true,
+                CriadoEm = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            });
+            await ctx.SaveChangesAsync(cancellationToken);
+        }
+    }
+
+    private sealed class LogCaptura : IRegistroLog
+    {
+        public List<string> Mensagens { get; } = [];
+
+        public void Informacao(string mensagem, object?[] argumentos) => Mensagens.Add(mensagem);
+
+        public void Erro(Exception? excecao, string mensagem, object?[] argumentos) => Mensagens.Add(mensagem);
     }
 
     private sealed class LimpezaQueConta : ILimpezaTotalDados

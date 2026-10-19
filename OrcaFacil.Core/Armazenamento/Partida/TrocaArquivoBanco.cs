@@ -5,19 +5,27 @@ namespace OrcaFacil.Core.Armazenamento.Partida;
 
 /// <summary>
 /// Coloca o SQLite já validado no lugar do banco vivo.
+/// Antes de renomear um banco que já existe, copia o arquivo e os laterais para <c>backups</c>
+/// e confere tamanho e leitura. Sem essa cópia, a troca não começa.
 /// Se a troca não termina, o arquivo anterior volta ao nome de origem.
 /// Não apaga backup, espelho nem o banco que já estava no aparelho.
-/// O único descarte é o rascunho desta tentativa, que ainda não é o banco vivo.
+/// O único descarte é o rascunho desta tentativa, que ainda não é o banco vivo,
+/// e a cópia que não chegou a ser confirmada.
 /// </summary>
 internal static class TrocaArquivoBanco
 {
-    public static ResultadoRestauracao Substituir(string destino, string origemValidada)
+    public static ResultadoRestauracao Substituir(
+        string destino,
+        string origemValidada,
+        Func<string, bool>? sonda = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(destino);
         ArgumentException.ThrowIfNullOrWhiteSpace(origemValidada);
 
         string? rascunho = null;
         var afastados = new List<(string Original, string Reserva)>();
+        var copias = new List<string>();
+        var copiaConfirmada = false;
         var rascunhoVirouBanco = false;
         try
         {
@@ -30,11 +38,19 @@ internal static class TrocaArquivoBanco
             rascunho = Path.Combine(pasta, Path.GetFileName(destino) + ".restauracao-" + Guid.NewGuid().ToString("N"));
             File.Copy(origemValidada, rascunho, overwrite: false);
 
-            foreach (var original in ArquivosBancoVivo.Existentes(destino).ToList())
+            var inventario = ArquivosBancoVivo.Inventariar(destino, sonda);
+            if (inventario.Arquivos.Count > 0)
             {
-                var reserva = original + ".reserva-" + Guid.NewGuid().ToString("N");
-                File.Move(original, reserva);
-                afastados.Add((original, reserva));
+                var backups = CopiaConfirmada.GarantirPasta(destino, sonda);
+                CopiaConfirmada.Copiar(inventario, backups, "orcafacil-antes-troca", copias, CancellationToken.None);
+                copiaConfirmada = true;
+            }
+
+            foreach (var arquivo in inventario.Arquivos)
+            {
+                var reserva = arquivo.Caminho + ".reserva-" + Guid.NewGuid().ToString("N");
+                File.Move(arquivo.Caminho, reserva);
+                afastados.Add((arquivo.Caminho, reserva));
             }
 
             File.Move(rascunho, destino);
@@ -49,6 +65,9 @@ internal static class TrocaArquivoBanco
                 Devolver(afastados);
 
             ApagarRascunho(rascunho);
+            if (!copiaConfirmada)
+                CopiaConfirmada.ApagarIncompletos(copias);
+
             return ResultadoRestauracao.Falha("A restauração não concluiu. Nenhum arquivo foi apagado.");
         }
     }
@@ -99,6 +118,10 @@ internal static class TrocaArquivoBanco
                 catch (UnauthorizedAccessException)
                 {
                 }
+            }
+            else if (Directory.Exists(candidata))
+            {
+                backups = candidata;
             }
         }
 

@@ -78,16 +78,21 @@ public static class RegistroCoordenadorArmazenamento
 public sealed class SemeaduraDadosApp : ISemeaduraDados
 {
     private readonly CaminhoBancoVivo _caminho;
+    private readonly IRegistroLog _log;
 
-    public SemeaduraDadosApp(CaminhoBancoVivo caminho)
+    public SemeaduraDadosApp(CaminhoBancoVivo caminho, IRegistroLog log)
     {
         _caminho = caminho ?? throw new ArgumentNullException(nameof(caminho));
+        _log = log ?? throw new ArgumentNullException(nameof(log));
     }
 
     public async Task SemearAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         await using var contexto = ConexaoBancoArquivo.AbrirEscrita(_caminho.Valor);
+        if (await PoliticaSemeadura.CriarPerfilMinimoSeHaLancamentoAsync(contexto, _log, cancellationToken))
+            return;
+
         await SeedData.PopularAsync(contexto);
     }
 }

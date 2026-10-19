@@ -16,7 +16,7 @@ public class MembroFamilia
     /// <summary>
     /// Nome do arquivo da foto, sem pasta. Null é sem foto.
     /// A regra está em <see cref="OrcaFacil.Core.Armazenamento.FotoPath"/>.
-    /// A restauração do espelho grava só o nome. A leitura ainda abre o caminho antigo se o arquivo existir.
+    /// A restauração do espelho grava só o nome. A leitura só abre arquivo dentro da pasta perfil.
     /// </summary>
     [MaxLength(260)]
     public string? FotoPath { get; set; }
