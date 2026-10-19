@@ -512,6 +512,29 @@ public class BackupEspelhoAgoraTests
     }
 
     [Fact]
+    public async Task MesDoOrcamentoAlterado_ComEspelho_PedeConfirmacao()
+    {
+        using var area = new AreaTemp();
+        await SemearDemonstracaoComMesDeOrcamentoAlteradoAsync(area.Banco);
+        var volume = new VolumeMemoria();
+        var anterior = new byte[] { 5, 9 };
+        volume.Arquivos[volume.NomeArquivo] = anterior;
+        var provedor = new ProvedorSenhaEspelhoMemoria();
+        Assert.True(provedor.Definir(Senha, Senha).Aceita);
+        var backup = Criar(volume, provedor);
+
+        var resultado = await backup.ExecutarAsync(area.Banco, SenhaNova, SenhaNova);
+
+        Assert.True(resultado.ExigeConfirmacao);
+        Assert.False(resultado.Sucesso);
+        Assert.Equal(BackupEspelhoAgora.MensagemConfirmacao, resultado.Mensagem);
+        Assert.NotEqual(BackupEspelhoAgora.MensagemRecusaEspelhoExistente, resultado.Mensagem);
+        Assert.Equal(Senha, provedor.Obter());
+        Assert.Equal(0, volume.CriacoesIniciadas);
+        Assert.Equal(anterior, volume.Arquivos[volume.NomeArquivo]);
+    }
+
+    [Fact]
     public async Task SoPerfilMinimo_ComEspelho_Recusa_ENaoTrocaASenha()
     {
         using var area = new AreaTemp();
@@ -1198,6 +1221,18 @@ public class BackupEspelhoAgoraTests
         ctx.MembrosFamilia.Add(perfil);
         await ctx.SaveChangesAsync();
         CatalogoDemonstracao.AdicionarDemonstracao(ctx, perfil, new DateTime(2026, 10, 19));
+        await ctx.SaveChangesAsync();
+    }
+
+    private static async Task SemearDemonstracaoComMesDeOrcamentoAlteradoAsync(string caminho)
+    {
+        await SemearDemonstracaoAsync(caminho);
+        var opcoes = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite($"Data Source={caminho};Pooling=False")
+            .Options;
+        await using var ctx = new AppDbContext(opcoes);
+        var orcamento = await ctx.Orcamentos.FirstAsync(item => item.Categoria!.Nome == "Alimentação");
+        orcamento.Mes = orcamento.Mes == 1 ? 12 : orcamento.Mes - 1;
         await ctx.SaveChangesAsync();
     }
 

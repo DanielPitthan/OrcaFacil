@@ -36,6 +36,7 @@ public static class SeedData
 
     public static async Task PopularDemonstracaoAsync(AppDbContext ctx, MembroFamilia perfil)
     {
+        // Today só escolhe o dia em que a semente é gravada. O backup não consulta o relógio de novo.
         CatalogoDemonstracao.AdicionarDemonstracao(ctx, perfil, DateTime.Today);
         await ctx.SaveChangesAsync();
     }

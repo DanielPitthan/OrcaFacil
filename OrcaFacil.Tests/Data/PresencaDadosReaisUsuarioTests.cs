@@ -138,6 +138,91 @@ public class PresencaDadosReaisUsuarioTests
     }
 
     [Fact]
+    public async Task DemonstracaoDeUmDiaPassado_ContinuaSoDemonstracao_SemConsultarORelogio()
+    {
+        await using var banco = await Banco.AbrirAsync();
+        var perfil = await banco.EssencialAsync();
+        CatalogoDemonstracao.AdicionarDemonstracao(banco.Contexto, perfil, new DateTime(2024, 3, 31));
+        await banco.Contexto.SaveChangesAsync();
+
+        Assert.Equal(SituacaoConteudoBanco.SoDemonstracao, await PoliticaSemeadura.ClassificarConteudoAsync(banco.Contexto));
+        Assert.Equal(LeituraDadosReais.SemDadosReais, await PresencaDadosReaisUsuario.ClassificarAsync(banco.Contexto));
+    }
+
+    [Fact]
+    public async Task MesDoOrcamento_DiaDoLancamento_OuLinhaExtra_ViramDadoReal()
+    {
+        await using var mes = await Banco.AbrirAsync();
+        await SemearAsync(mes);
+        var orcamento = mes.Contexto.Orcamentos.First(item => item.Categoria!.Nome == "Alimentação");
+        orcamento.Mes = orcamento.Mes == 1 ? 12 : orcamento.Mes - 1;
+        await mes.Contexto.SaveChangesAsync();
+        Assert.Equal(SituacaoConteudoBanco.DadoReal, await PoliticaSemeadura.ClassificarConteudoAsync(mes.Contexto));
+
+        await using var dia = await Banco.AbrirAsync();
+        await SemearAsync(dia);
+        var salario = dia.Contexto.Transacoes.First(item => item.Descricao == "Salário");
+        salario.Data = salario.Data.AddDays(1);
+        await dia.Contexto.SaveChangesAsync();
+        Assert.Equal(SituacaoConteudoBanco.DadoReal, await PoliticaSemeadura.ClassificarConteudoAsync(dia.Contexto));
+
+        await using var extra = await Banco.AbrirAsync();
+        var perfil = await SemearAsync(extra);
+        var origem = extra.Contexto.Transacoes.First(item => item.Descricao == "Salário");
+        var copia = new Transacao
+        {
+            Descricao = origem.Descricao,
+            Valor = origem.Valor,
+            Data = origem.Data,
+            Tipo = origem.Tipo,
+            Recorrencia = origem.Recorrencia,
+            CategoriaId = origem.CategoriaId,
+            MembroFamiliaId = perfil.Id,
+            Pago = origem.Pago
+        };
+        extra.Contexto.Transacoes.Add(copia);
+        await extra.Contexto.SaveChangesAsync();
+        Assert.NotEqual(origem.Id, copia.Id);
+        Assert.Equal(SituacaoConteudoBanco.DadoReal, await PoliticaSemeadura.ClassificarConteudoAsync(extra.Contexto));
+    }
+
+    [Fact]
+    public async Task Abertura_NaoSemeia_QuandoSoMudaDataOuEntraLinhaIgual()
+    {
+        await AssertNaoSemeiaAsync(async banco =>
+        {
+            await SemearAsync(banco);
+            var orcamento = banco.Contexto.Orcamentos.First(item => item.Categoria!.Nome == "Alimentação");
+            orcamento.Mes = orcamento.Mes == 1 ? 12 : orcamento.Mes - 1;
+            await banco.Contexto.SaveChangesAsync();
+        });
+        await AssertNaoSemeiaAsync(async banco =>
+        {
+            await SemearAsync(banco);
+            var salario = banco.Contexto.Transacoes.First(item => item.Descricao == "Salário");
+            salario.Data = salario.Data.AddDays(1);
+            await banco.Contexto.SaveChangesAsync();
+        });
+        await AssertNaoSemeiaAsync(async banco =>
+        {
+            var perfil = await SemearAsync(banco);
+            var origem = banco.Contexto.Transacoes.First(item => item.Descricao == "Salário");
+            banco.Contexto.Transacoes.Add(new Transacao
+            {
+                Descricao = origem.Descricao,
+                Valor = origem.Valor,
+                Data = origem.Data,
+                Tipo = origem.Tipo,
+                Recorrencia = origem.Recorrencia,
+                CategoriaId = origem.CategoriaId,
+                MembroFamiliaId = perfil.Id,
+                Pago = origem.Pago
+            });
+            await banco.Contexto.SaveChangesAsync();
+        });
+    }
+
+    [Fact]
     public async Task LancamentoForaDoCatalogo_OrcamentoRepetido_OuQuartaCopia_SaoDadoReal()
     {
         await using var padaria = await Banco.AbrirAsync();
@@ -264,6 +349,14 @@ public class PresencaDadosReaisUsuarioTests
         fechado.Contexto.FechamentosPeriodo.Add(new FechamentoPeriodo { Mes = 10, Ano = 2026, Fechado = true });
         await fechado.Contexto.SaveChangesAsync();
         Assert.Equal(LeituraDadosReais.ComDadosReais, await PresencaDadosReaisUsuario.ClassificarAsync(fechado.Contexto));
+    }
+
+    private static async Task<MembroFamilia> SemearAsync(Banco banco)
+    {
+        var perfil = await banco.EssencialAsync();
+        CatalogoDemonstracao.AdicionarDemonstracao(banco.Contexto, perfil, new DateTime(2026, 10, 19));
+        await banco.Contexto.SaveChangesAsync();
+        return perfil;
     }
 
     private static async Task ConferirMesaAsync(SituacaoConteudoBanco estado, Func<Banco, Task> preparar)
