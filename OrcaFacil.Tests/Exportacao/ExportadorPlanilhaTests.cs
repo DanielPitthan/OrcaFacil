@@ -256,6 +256,9 @@ public class ExportadorPlanilhaTests
     [InlineData("https://user:SENTINELA-SENHA@api.exemplo.test:8443/v1;token=X?y=1#frag", "https://api.exemplo.test:8443/v1")]
     [InlineData("/path;token=SENTINELA-TOKEN?x=1", "/path")]
     [InlineData("https://api.exemplo.test/v1", "https://api.exemplo.test/v1")]
+    [InlineData("//user:SENTINELA-SENHA@host/v1?token=SENTINELA-TOKEN", "//host/v1")]
+    [InlineData("user:SENTINELA-SENHA@host/v1;token=SENTINELA-TOKEN", "host/v1")]
+    [InlineData("//user:SENTINELA-SENHA@host/v1;token=SENTINELA-TOKEN#frag", "//host/v1")]
     public void UrlSemSegredo_TiraUserinfoConsultaEMatriz(string url, string esperado)
     {
         var limpa = ExportadorPlanilha.UrlSemSegredo(url);
@@ -291,6 +294,45 @@ public class ExportadorPlanilhaTests
         Assert.Equal("bia.jpg", aba.Cell(3, 5).GetText());
         Assert.Equal("cris.jpg", aba.Cell(4, 5).GetText());
         Assert.Equal("duda.jpg", aba.Cell(5, 5).GetText());
+    }
+
+    [Theory]
+    [InlineData("pasta/foto-ana.jpg", "pasta/foto-ana.jpg")]
+    [InlineData("\u00A0/var/fotos/duda.jpg", "duda.jpg")]
+    [InlineData("\n/var/fotos/duda.jpg", "duda.jpg")]
+    [InlineData("\r/var/fotos/duda.jpg", "duda.jpg")]
+    [InlineData("\t/var/fotos/duda.jpg", "duda.jpg")]
+    [InlineData(" /var/fotos/duda.jpg", "duda.jpg")]
+    [InlineData("content://X", "")]
+    [InlineData("\u00A0content://X", "")]
+    [InlineData("content://midia/bia.jpg", "bia.jpg")]
+    public void NomeDeFoto_BrancoNaoEscondePasta_EUriSemSegmentoSaiVazia(string valor, string esperado)
+        => Assert.Equal(esperado, ExportadorPlanilha.NomeDeFoto(valor));
+
+    [Fact]
+    public void FotoComBrancoOuUriSemSegmento_NaoVazaPastaNemHost()
+    {
+        using var fabrica = new TestDbContextFactory();
+        using var contexto = fabrica.CreateDbContext();
+        var quando = DateTime.UtcNow;
+        contexto.MembrosFamilia.AddRange(
+            new MembroFamilia { Nome = "Ana", FotoPath = "pasta/foto-ana.jpg", CriadoEm = quando },
+            new MembroFamilia { Nome = "Eva", FotoPath = "\n/SENTINELA-PASTA/eva.jpg", CriadoEm = quando },
+            new MembroFamilia { Nome = "Lia", FotoPath = "\u00A0content://SENTINELA-HOST", CriadoEm = quando });
+        contexto.SaveChanges();
+
+        using var destino = new MemoryStream();
+        ExportadorPlanilha.Exportar(contexto, new ConfiguracaoExportavel(), destino);
+        var xml = XmlDasPartes(destino.ToArray());
+        Assert.DoesNotContain("SENTINELA-PASTA", xml, StringComparison.Ordinal);
+        Assert.DoesNotContain("SENTINELA-HOST", xml, StringComparison.Ordinal);
+        Assert.DoesNotContain("content://", xml, StringComparison.Ordinal);
+
+        using var pasta = new XLWorkbook(destino);
+        var aba = pasta.Worksheet("Perfis");
+        Assert.Equal("pasta/foto-ana.jpg", aba.Cell(2, 5).GetText());
+        Assert.Equal("eva.jpg", aba.Cell(3, 5).GetText());
+        Assert.Equal(XLDataType.Blank, aba.Cell(4, 5).DataType);
     }
 
     [Fact]

@@ -346,6 +346,29 @@ public class PlanilhaPtBrTests
     }
 
     [Fact]
+    public void SurrogateSolto_ViraSubstituicaoENaoLanca()
+    {
+        ConferirSurrogate(new string(['\uD800', 'f', 'o', 't', 'o']), "\uFFFDfoto");
+        ConferirSurrogate(new string(['\uDE00', 'f', 'o', 't', 'o']), "\uFFFDfoto");
+        ConferirSurrogate(new string(['f', 'o', '\uD800', 't', 'o']), "fo\uFFFDto");
+        ConferirSurrogate(new string(['f', 'o', '\uDE00', 't', 'o']), "fo\uFFFDto");
+    }
+
+    private void ConferirSurrogate(string texto, string esperado)
+    {
+        Reabrir(pasta =>
+        {
+            var aba = PlanilhaPtBr.CriarAba(pasta, "Perfis");
+            PlanilhaPtBr.GravarTexto(aba.Cell(2, 1), texto);
+        }, pasta =>
+        {
+            var celula = pasta.Worksheet("Perfis").Cell(2, 1);
+            Assert.Equal(XLDataType.Text, celula.DataType);
+            Assert.Equal(esperado, celula.GetText());
+        });
+    }
+
+    [Fact]
     public void DataUtcNoHorarioDeVerao_ViraUtcMenosDuas()
     {
         var utc = new DateTime(2018, 11, 15, 3, 30, 45, DateTimeKind.Utc);

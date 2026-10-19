@@ -197,7 +197,7 @@ public static class PlanilhaPtBr
     public static void GravarTexto(IXLCell celula, string? texto)
     {
         GarantirCelula(celula);
-        var bruto = SemControle(texto ?? "");
+        var bruto = SemControle(TrocarSurrogateSolto(texto ?? ""));
         var neutralizar = PrecisaNeutralizar(bruto);
         var valor = Cortar(bruto);
         if (PrecisaNeutralizar(valor))
@@ -323,8 +323,17 @@ public static class PlanilhaPtBr
     {
         for (var i = 0; i < texto.Length;)
         {
-            var rune = Rune.GetRuneAt(texto, i);
-            i += rune.Utf16SequenceLength;
+            // Surrogate solto não é escalar. Vira U+FFFD e a leitura segue um char.
+            if (!Rune.TryGetRuneAt(texto, i, out var rune))
+            {
+                rune = Rune.ReplacementChar;
+                i++;
+            }
+            else
+            {
+                i += rune.Utf16SequenceLength;
+            }
+
             if (IgnoravelNoInicio(rune))
                 continue;
 
@@ -332,6 +341,54 @@ public static class PlanilhaPtBr
         }
 
         return false;
+    }
+
+    /// <summary>Par incompleto não pode ir para o XML. Cada um vira U+FFFD.</summary>
+    private static string TrocarSurrogateSolto(string texto)
+    {
+        var temSolto = false;
+        for (var i = 0; i < texto.Length; i++)
+        {
+            if (char.IsHighSurrogate(texto[i]))
+            {
+                if (i + 1 >= texto.Length || !char.IsLowSurrogate(texto[i + 1]))
+                {
+                    temSolto = true;
+                    break;
+                }
+
+                i++;
+            }
+            else if (char.IsLowSurrogate(texto[i]))
+            {
+                temSolto = true;
+                break;
+            }
+        }
+
+        if (!temSolto)
+            return texto;
+
+        var resultado = new StringBuilder(texto.Length);
+        for (var i = 0; i < texto.Length; i++)
+        {
+            if (char.IsHighSurrogate(texto[i]) && i + 1 < texto.Length && char.IsLowSurrogate(texto[i + 1]))
+            {
+                resultado.Append(texto[i]);
+                resultado.Append(texto[i + 1]);
+                i++;
+            }
+            else if (char.IsSurrogate(texto[i]))
+            {
+                resultado.Append('\uFFFD');
+            }
+            else
+            {
+                resultado.Append(texto[i]);
+            }
+        }
+
+        return resultado.ToString();
     }
 
     private static bool IgnoravelNoInicio(Rune rune)

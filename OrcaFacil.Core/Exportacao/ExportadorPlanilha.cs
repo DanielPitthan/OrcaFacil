@@ -519,15 +519,19 @@ public static class ExportadorPlanilha
         if (!EhCaminhoAbsoluto(valor))
             return valor;
 
-        var texto = valor.Trim();
-        var corte = Math.Max(texto.LastIndexOf('/'), texto.LastIndexOf('\\'));
-        var nome = corte < 0 ? texto : texto[(corte + 1)..];
-        var parametro = nome.IndexOfAny(['?', '#', ';']);
-        return parametro < 0 ? nome : nome[..parametro];
+        return NomeDeArquivo(SemBrancoNasPontas(valor));
     }
 
+    /// <summary>
+    /// O branco da ponta, inclusive NBSP, tab e quebra de linha, sai antes do teste.
+    /// Sem isso, um espaço na frente esconde a pasta.
+    /// </summary>
     private static bool EhCaminhoAbsoluto(string valor)
     {
+        valor = SemBrancoNasPontas(valor);
+        if (valor.Length == 0)
+            return false;
+
         if (valor.Contains("://", StringComparison.Ordinal))
             return true;
 
@@ -540,6 +544,41 @@ public static class ExportadorPlanilha
         return Path.IsPathRooted(valor);
     }
 
+    private static string SemBrancoNasPontas(string valor)
+    {
+        var inicio = 0;
+        var fim = valor.Length;
+        while (inicio < fim && char.IsWhiteSpace(valor[inicio]))
+            inicio++;
+        while (fim > inicio && char.IsWhiteSpace(valor[fim - 1]))
+            fim--;
+
+        return valor[inicio..fim];
+    }
+
+    /// <summary>
+    /// URI sem segmento depois da autoridade (<c>content://X</c>) não tem nome de arquivo.
+    /// O host não entra no lugar.
+    /// </summary>
+    private static string NomeDeArquivo(string texto)
+    {
+        var esquema = texto.IndexOf("://", StringComparison.Ordinal);
+        if (esquema >= 0)
+        {
+            var resto = texto[(esquema + 3)..];
+            var barra = resto.IndexOfAny(['/', '\\']);
+            if (barra < 0)
+                return "";
+
+            texto = resto[barra..];
+        }
+
+        var corte = Math.Max(texto.LastIndexOf('/'), texto.LastIndexOf('\\'));
+        var nome = corte < 0 ? texto : texto[(corte + 1)..];
+        var parametro = nome.IndexOfAny(['?', '#', ';']);
+        return parametro < 0 ? nome : nome[..parametro];
+    }
+
     private static string TextoItemFatura(ItemLancamento? item)
     {
         if (item is null)
@@ -549,15 +588,17 @@ public static class ExportadorPlanilha
     }
 
     /// <summary>
-    /// Esquema, host, porta e caminho. Sem userinfo. Corta em <c>;</c>, <c>?</c> e <c>#</c>,
-    /// inclusive o parâmetro de matriz <c>;token=</c>.
+    /// Esquema, host, porta e caminho. Sem userinfo, também quando não há esquema
+    /// (<c>//user:senha@host</c> ou <c>user:senha@host</c>). Corta em <c>;</c>, <c>?</c> e <c>#</c>.
     /// </summary>
     internal static string? UrlSemSegredo(string? url)
     {
         if (string.IsNullOrWhiteSpace(url))
             return url;
 
-        if (Uri.TryCreate(url, UriKind.Absolute, out var absoluta) && absoluta.IsAbsoluteUri && !string.IsNullOrEmpty(absoluta.Host))
+        if (Uri.TryCreate(url, UriKind.Absolute, out var absoluta)
+            && absoluta.IsAbsoluteUri
+            && !string.IsNullOrEmpty(absoluta.Host))
         {
             var autoridade = absoluta.Authority;
             var arroba = autoridade.LastIndexOf('@');
@@ -572,8 +613,42 @@ public static class ExportadorPlanilha
             return absoluta.Scheme + "://" + autoridade + caminho;
         }
 
-        var indice = url.IndexOfAny([';', '?', '#']);
-        return indice < 0 ? url : url[..indice];
+        return SemUserinfoEParametros(url);
+    }
+
+    /// <summary>
+    /// Tira <c>user:senha@</c> antes do host e corta parâmetros. Vale para URL sem esquema.
+    /// </summary>
+    private static string SemUserinfoEParametros(string url)
+    {
+        string prefixo;
+        string resto;
+        var esquema = url.IndexOf("://", StringComparison.Ordinal);
+        if (esquema >= 0)
+        {
+            prefixo = url[..(esquema + 3)];
+            resto = url[(esquema + 3)..];
+        }
+        else
+        {
+            var barras = 0;
+            while (barras < url.Length && url[barras] == '/')
+                barras++;
+
+            prefixo = url[..barras];
+            resto = url[barras..];
+        }
+
+        var arroba = resto.IndexOf('@');
+        var fimDaAutoridade = resto.IndexOfAny(['/', '?', '#', ';']);
+        if (arroba >= 0 && (fimDaAutoridade < 0 || arroba < fimDaAutoridade))
+            resto = resto[(arroba + 1)..];
+
+        var corte = resto.IndexOfAny([';', '?', '#']);
+        if (corte >= 0)
+            resto = resto[..corte];
+
+        return prefixo + resto;
     }
 
     internal static string TextoPrazos(PrazoAviso prazos)
