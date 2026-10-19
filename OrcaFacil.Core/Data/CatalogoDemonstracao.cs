@@ -8,8 +8,9 @@ namespace OrcaFacil.Core.Data;
 /// O que o app grava sozinho na instalação: categorias padrão, o perfil "Usuário"
 /// e os lançamentos, orçamentos e metas de demonstração.
 /// <see cref="OrcaFacil.Core.Armazenamento.PoliticaSemeadura.ClassificarConteudoAsync"/>
-/// separa os três estados: categoria padrão fica em vazio, este catálogo e o perfil
-/// mínimo ficam em só demonstração, e qualquer outra linha — inclusive log — é dado real.
+/// separa os três estados. No backup, uma linha só é demonstração quando repete,
+/// campo a campo, o que <see cref="LancamentosSemeados"/>, <see cref="OrcamentosSemeados"/>
+/// e <see cref="MetasSemeadas"/> gravariam para a mesma data de referência.
 /// </summary>
 public static class CatalogoDemonstracao
 {
@@ -102,8 +103,64 @@ public static class CatalogoDemonstracao
         };
 
     /// <summary>
+    /// Lançamentos que <see cref="AdicionarDemonstracao"/> grava para <paramref name="hoje"/>.
+    /// Cada data é <c>mesRef.AddDays(item.Dia)</c>. O dia de "hoje" não entra no lançamento;
+    /// ele só entra no prazo das metas.
+    /// </summary>
+    public static IReadOnlyList<LancamentoSemeado> LancamentosSemeados(DateTime hoje)
+    {
+        var lista = new List<LancamentoSemeado>(Lancamentos.Count * RepeticoesMensais);
+        var mesAtual = new DateTime(hoje.Year, hoje.Month, 1);
+        for (var deslocamento = RepeticoesMensais - 1; deslocamento >= 0; deslocamento--)
+        {
+            var mesRef = mesAtual.AddMonths(-deslocamento);
+            foreach (var item in Lancamentos)
+            {
+                lista.Add(new LancamentoSemeado(
+                    item.Descricao,
+                    item.Valor,
+                    mesRef.AddDays(item.Dia),
+                    item.Tipo,
+                    item.Recorrencia,
+                    item.Categoria));
+            }
+        }
+
+        return lista;
+    }
+
+    /// <summary>Orçamentos do mês de <paramref name="hoje"/>. O dia não entra na linha.</summary>
+    public static IReadOnlyList<OrcamentoSemeado> OrcamentosSemeados(DateTime hoje)
+    {
+        var mesAtual = new DateTime(hoje.Year, hoje.Month, 1);
+        var lista = new List<OrcamentoSemeado>(Orcamentos.Count);
+        foreach (var item in Orcamentos)
+            lista.Add(new OrcamentoSemeado(item.Categoria, item.ValorLimite, mesAtual.Month, mesAtual.Year));
+
+        return lista;
+    }
+
+    /// <summary>Metas com prazo <paramref name="hoje"/> mais <see cref="MetaDemonstracao.PrazoMeses"/>.</summary>
+    public static IReadOnlyList<MetaSemeada> MetasSemeadas(DateTime hoje)
+    {
+        var lista = new List<MetaSemeada>(Metas.Count);
+        foreach (var item in Metas)
+        {
+            lista.Add(new MetaSemeada(
+                item.Nome,
+                item.ValorAlvo,
+                item.ValorAtual,
+                item.Icone,
+                hoje.AddMonths(item.PrazoMeses)));
+        }
+
+        return lista;
+    }
+
+    /// <summary>
     /// Acrescenta a demonstração. O perfil e as categorias padrão já precisam estar gravados.
     /// O mês de referência é <paramref name="hoje"/>, como na primeira abertura do app.
+    /// As linhas saem de <see cref="LancamentosSemeados"/>, <see cref="OrcamentosSemeados"/> e <see cref="MetasSemeadas"/>.
     /// </summary>
     public static void AdicionarDemonstracao(AppDbContext ctx, MembroFamilia perfil, DateTime hoje)
     {
@@ -116,45 +173,40 @@ public static class CatalogoDemonstracao
         foreach (var categoria in ctx.Categorias)
             ids[categoria.Nome] = categoria.Id;
 
-        var mesAtual = new DateTime(hoje.Year, hoje.Month, 1);
-        for (var deslocamento = RepeticoesMensais - 1; deslocamento >= 0; deslocamento--)
+        foreach (var linha in LancamentosSemeados(hoje))
         {
-            var mesRef = mesAtual.AddMonths(-deslocamento);
-            foreach (var item in Lancamentos)
+            ctx.Transacoes.Add(new Transacao
             {
-                ctx.Transacoes.Add(new Transacao
-                {
-                    Descricao = item.Descricao,
-                    Valor = item.Valor,
-                    Data = mesRef.AddDays(item.Dia),
-                    Tipo = item.Tipo,
-                    Recorrencia = item.Recorrencia,
-                    CategoriaId = Id(ids, item.Categoria),
-                    MembroFamiliaId = perfil.Id
-                });
-            }
-        }
-
-        foreach (var item in Orcamentos)
-        {
-            ctx.Orcamentos.Add(new Orcamento
-            {
-                CategoriaId = Id(ids, item.Categoria),
-                ValorLimite = item.ValorLimite,
-                Mes = mesAtual.Month,
-                Ano = mesAtual.Year
+                Descricao = linha.Descricao,
+                Valor = linha.Valor,
+                Data = linha.Data,
+                Tipo = linha.Tipo,
+                Recorrencia = linha.Recorrencia,
+                CategoriaId = Id(ids, linha.Categoria),
+                MembroFamiliaId = perfil.Id
             });
         }
 
-        foreach (var item in Metas)
+        foreach (var linha in OrcamentosSemeados(hoje))
+        {
+            ctx.Orcamentos.Add(new Orcamento
+            {
+                CategoriaId = Id(ids, linha.Categoria),
+                ValorLimite = linha.ValorLimite,
+                Mes = linha.Mes,
+                Ano = linha.Ano
+            });
+        }
+
+        foreach (var linha in MetasSemeadas(hoje))
         {
             ctx.Metas.Add(new Meta
             {
-                Nome = item.Nome,
-                ValorAlvo = item.ValorAlvo,
-                ValorAtual = item.ValorAtual,
-                Prazo = hoje.AddMonths(item.PrazoMeses),
-                Icone = item.Icone,
+                Nome = linha.Nome,
+                ValorAlvo = linha.ValorAlvo,
+                ValorAtual = linha.ValorAtual,
+                Prazo = linha.Prazo,
+                Icone = linha.Icone,
                 MembroFamiliaId = perfil.Id
             });
         }
@@ -171,6 +223,23 @@ public static class CatalogoDemonstracao
         string CorHex,
         TipoTransacao TipoPadrao,
         bool PermiteItensFatura);
+
+    public readonly record struct LancamentoSemeado(
+        string Descricao,
+        decimal Valor,
+        DateTime Data,
+        TipoTransacao Tipo,
+        TipoRecorrencia Recorrencia,
+        string Categoria);
+
+    public readonly record struct OrcamentoSemeado(string Categoria, decimal ValorLimite, int Mes, int Ano);
+
+    public readonly record struct MetaSemeada(
+        string Nome,
+        decimal ValorAlvo,
+        decimal ValorAtual,
+        string Icone,
+        DateTime Prazo);
 
     public readonly record struct LancamentoDemonstracao(
         string Descricao,
