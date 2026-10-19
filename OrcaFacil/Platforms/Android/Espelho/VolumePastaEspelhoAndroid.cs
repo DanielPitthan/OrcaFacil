@@ -1,10 +1,10 @@
-using Android.Content;
-using Android.Database;
-using Android.Provider;
+using global::Android.Content;
+using global::Android.Database;
+using global::Android.Provider;
 using Microsoft.Maui.ApplicationModel;
 using OrcaFacil.Core.Armazenamento.Espelho;
 using OrcaFacil.Core.Armazenamento.Espelho.Pasta;
-using AndroidUri = Android.Net.Uri;
+using AndroidUri = global::Android.Net.Uri;
 
 namespace OrcaFacil.Platforms.Android.Espelho;
 

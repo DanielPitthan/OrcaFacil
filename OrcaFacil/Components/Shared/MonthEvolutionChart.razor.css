@@ -1,4 +1,5 @@
 .of-evolucao {
+    width: 100%;
     min-width: 0;
     margin-bottom: 12px;
     background: var(--of-surface);
@@ -29,8 +30,30 @@
 
 .of-evolucao-plot {
     position: relative;
+    width: 100%;
     min-width: 0;
     height: 168px;
+}
+
+/* A caixa prende o SVG. O plot fica por fora para o traço "Hoje" não ser cortado. */
+.of-evolucao-caixa {
+    width: 100%;
+    min-width: 0;
+    height: 168px;
+    overflow: hidden;
+}
+
+.of-evolucao-caixa ::deep .mud-chart,
+.of-evolucao-caixa ::deep .mud-chart svg {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    height: 168px;
+    min-height: 0;
+    max-height: 168px;
+    margin: 0;
+    overflow: hidden;
 }
 
 .of-hoje {

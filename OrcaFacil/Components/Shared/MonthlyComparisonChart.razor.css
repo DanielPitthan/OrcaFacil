@@ -1,4 +1,5 @@
 .of-comparacao {
+    width: 100%;
     min-width: 0;
     margin-bottom: 8px;
     padding: 8px 8px 12px;
@@ -8,9 +9,27 @@
     overflow: hidden;
 }
 
+/* Android 11 (WebView ~83): MatchBoundsToSize observa o SVG. Com display:flex
+   e altura vinda do viewBox, o contentRect oscila e o rótulo (out/26) infla.
+   Caixa em px, largura do pai e overflow hidden quebram o ciclo. */
 .of-comparacao-plot {
+    width: 100%;
     min-width: 0;
     height: 220px;
+    overflow: hidden;
+}
+
+.of-comparacao-plot ::deep .mud-chart,
+.of-comparacao-plot ::deep .mud-chart svg {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    height: 220px;
+    min-height: 0;
+    max-height: 220px;
+    margin: 0;
+    overflow: hidden;
 }
 
 .of-legenda {

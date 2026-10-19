@@ -1,6 +1,6 @@
-using Android.Content;
+using global::Android.Content;
 using OrcaFacil.Core.Armazenamento.Espelho.Pasta;
-using AndroidUri = Android.Net.Uri;
+using AndroidUri = global::Android.Net.Uri;
 
 namespace OrcaFacil.Platforms.Android.Espelho;
 
