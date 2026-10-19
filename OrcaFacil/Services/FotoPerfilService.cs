@@ -27,7 +27,6 @@ public class FotoPerfilService : IFotoPerfilService
 
     public async Task<string?> TirarSelfieAsync()
     {
-        var antes = FotografarCaches();
         FileResult? arquivo = null;
         try
         {
@@ -36,13 +35,12 @@ public class FotoPerfilService : IFotoPerfilService
         }
         finally
         {
-            ApagarNovidades(antes, TentarCaminho(arquivo));
+            ApagarTemporarioDoFluxo(TentarCaminho(arquivo));
         }
     }
 
     public async Task<string?> EscolherDaGaleriaAsync()
     {
-        var antes = FotografarCaches();
         FileResult? arquivo = null;
         try
         {
@@ -51,7 +49,7 @@ public class FotoPerfilService : IFotoPerfilService
         }
         finally
         {
-            ApagarNovidades(antes, TentarCaminho(arquivo));
+            ApagarTemporarioDoFluxo(TentarCaminho(arquivo));
         }
     }
 
@@ -60,7 +58,6 @@ public class FotoPerfilService : IFotoPerfilService
         Func<Task>? aoReceberFoto = null,
         CancellationToken cancellationToken = default)
     {
-        var antes = FotografarCaches();
         FileResult? arquivo = null;
         try
         {
@@ -85,7 +82,7 @@ public class FotoPerfilService : IFotoPerfilService
         }
         finally
         {
-            ApagarNovidades(antes, TentarCaminho(arquivo));
+            ApagarTemporarioDoFluxo(TentarCaminho(arquivo));
         }
     }
 
@@ -225,7 +222,7 @@ public class FotoPerfilService : IFotoPerfilService
         }
         finally
         {
-            ApagarTemporario(temporario);
+            ApagarTemporarioDoFluxo(temporario);
         }
     }
 
@@ -472,90 +469,6 @@ public class FotoPerfilService : IFotoPerfilService
         return memoria.ToArray();
     }
 
-    private readonly record struct InstantaneoPastas(string[] Raizes, HashSet<string> Existentes);
-
-    private static InstantaneoPastas FotografarCaches()
-    {
-        var raizes = new[]
-        {
-            Path.GetFullPath(FileSystem.CacheDirectory),
-            Path.GetFullPath(Path.GetTempPath())
-        }.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-
-        var existentes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var raiz in raizes)
-        {
-            if (!Directory.Exists(raiz))
-                continue;
-
-            existentes.Add(raiz);
-            try
-            {
-                foreach (var entrada in Directory.EnumerateFileSystemEntries(raiz, "*", SearchOption.AllDirectories))
-                    existentes.Add(Path.GetFullPath(entrada));
-            }
-            catch (Exception)
-            {
-                // O que não deu para listar continua de fora. O finally ainda apaga o caminho conhecido.
-            }
-        }
-
-        return new InstantaneoPastas(raizes, existentes);
-    }
-
-    private void ApagarNovidades(InstantaneoPastas antes, string? caminhoConhecido)
-    {
-        ApagarTemporario(caminhoConhecido);
-        for (var volta = 0; volta < 8; volta++)
-        {
-            var apagou = false;
-            foreach (var raiz in antes.Raizes)
-            {
-                if (!Directory.Exists(raiz))
-                    continue;
-
-                List<string> entradas;
-                try
-                {
-                    entradas = Directory.EnumerateFileSystemEntries(raiz, "*", SearchOption.AllDirectories)
-                        .Select(Path.GetFullPath)
-                        .Where(caminho => !antes.Existentes.Contains(caminho))
-                        .Where(caminho => LimpezaFotoTemporaria.PodeApagar(caminho, PastaFotos, raiz, raiz))
-                        .OrderByDescending(Profundidade)
-                        .ToList();
-                }
-                catch (Exception)
-                {
-                    continue;
-                }
-
-                foreach (var caminho in entradas)
-                {
-                    try
-                    {
-                        if (File.Exists(caminho))
-                        {
-                            File.Delete(caminho);
-                            apagou = true;
-                        }
-                        else if (Directory.Exists(caminho) && !Directory.EnumerateFileSystemEntries(caminho).Any())
-                        {
-                            Directory.Delete(caminho);
-                            apagou = true;
-                        }
-                    }
-                    catch (Exception)
-                    {
-                        // Pasta vazia do seletor. O caminho não entra no log.
-                    }
-                }
-            }
-
-            if (!apagou)
-                break;
-        }
-    }
-
     private static string? TentarCaminho(FileResult? arquivo)
     {
         if (arquivo is null)
@@ -572,25 +485,42 @@ public class FotoPerfilService : IFotoPerfilService
     }
 
     /// <summary>
-    /// Apaga só cache ou pasta temporária. Nunca a pasta perfil/ nem um arquivo fora desses dois lugares.
+    /// Apaga o caminho guardado do <see cref="FileResult"/> e as pastas vazias ancestrais dele.
+    /// Não enumera <see cref="FileSystem.CacheDirectory"/> nem <see cref="Path.GetTempPath"/>.
     /// </summary>
-    private void ApagarTemporario(string? caminho)
+    private void ApagarTemporarioDoFluxo(string? caminho)
     {
-        if (!LimpezaFotoTemporaria.PodeApagar(caminho, PastaFotos, FileSystem.CacheDirectory, Path.GetTempPath()))
-            return;
-
-        try
+        foreach (var item in LimpezaFotoTemporaria.ListarRemocao(
+                     caminho,
+                     PastaFotos,
+                     FileSystem.CacheDirectory,
+                     Path.GetTempPath()))
         {
-            if (File.Exists(caminho))
-                File.Delete(caminho!);
-        }
-        catch (Exception)
-        {
-            // O cache do aparelho é temporário. O caminho não entra no log.
+            try
+            {
+                if (File.Exists(item))
+                    File.Delete(item);
+                else if (Directory.Exists(item) && DiretorioVazio(item))
+                    Directory.Delete(item);
+            }
+            catch (Exception)
+            {
+                // O cache do aparelho é temporário. O caminho não entra no log.
+            }
         }
     }
 
-    private static int Profundidade(string caminho) => caminho.Count(c => c is '\\' or '/');
+    private static bool DiretorioVazio(string caminho)
+    {
+        try
+        {
+            return !Directory.EnumerateFileSystemEntries(caminho).Any();
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
 
     private sealed class Descarte
     {

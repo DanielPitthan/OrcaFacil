@@ -36,8 +36,10 @@ public class RedutorFotoFonteTests
         Assert.Contains("FileSystem.AppDataDirectory, \"perfil\"", fonte, StringComparison.Ordinal);
         Assert.Contains("foto-{DateTime.Now:yyyyMMddHHmmss}.jpg", fonte, StringComparison.Ordinal);
         Assert.Contains("private const float LadoMaximo = 512f;", fonte, StringComparison.Ordinal);
-        Assert.Contains("ApagarNovidades", fonte, StringComparison.Ordinal);
-        Assert.Contains("LimpezaFotoTemporaria.PodeApagar", fonte, StringComparison.Ordinal);
+        Assert.Contains("LimpezaFotoTemporaria.ListarRemocao", fonte, StringComparison.Ordinal);
+        Assert.DoesNotContain("SearchOption.AllDirectories", fonte, StringComparison.Ordinal);
+        Assert.DoesNotContain("FotografarCaches", fonte, StringComparison.Ordinal);
+        Assert.DoesNotContain("ApagarNovidades", fonte, StringComparison.Ordinal);
         Assert.DoesNotContain("<<<<<<<", fonte, StringComparison.Ordinal);
         Assert.Equal(1, fonte.Split('\n').Count(linha => linha.Contains("LogWarning", StringComparison.Ordinal)));
     }
