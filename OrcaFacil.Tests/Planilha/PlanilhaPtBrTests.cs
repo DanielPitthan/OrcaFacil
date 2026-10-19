@@ -320,6 +320,49 @@ public class PlanilhaPtBrTests
         });
     }
 
+    [Fact]
+    public void DecimalNoTeto_ViraTextoExatoSemExcecao()
+    {
+        const string digitos = "79228162514264337593543950335";
+
+        Reabrir(pasta =>
+        {
+            var aba = PlanilhaPtBr.CriarAba(pasta, "Operações");
+            PlanilhaPtBr.GravarNumero(aba.Cell(2, 1), decimal.MaxValue);
+            PlanilhaPtBr.GravarNumero(aba.Cell(3, 1), decimal.MinValue);
+            PlanilhaPtBr.GravarMoeda(aba.Cell(4, 1), decimal.MaxValue);
+            PlanilhaPtBr.GravarMoeda(aba.Cell(5, 1), decimal.MinValue);
+        }, pasta =>
+        {
+            var aba = pasta.Worksheet("Operações");
+            Assert.Equal(digitos, aba.Cell(2, 1).GetText());
+            Assert.Equal(XLDataType.Text, aba.Cell(2, 1).DataType);
+            Assert.Equal("-" + digitos, aba.Cell(3, 1).GetText());
+            Assert.True(aba.Cell(3, 1).Style.IncludeQuotePrefix);
+            Assert.Equal("R$ " + digitos, aba.Cell(4, 1).GetText());
+            Assert.Equal("R$ -" + digitos, aba.Cell(5, 1).GetText());
+            Assert.Equal(XLDataType.Text, aba.Cell(5, 1).DataType);
+        });
+    }
+
+    [Fact]
+    public void DataUtcNoHorarioDeVerao_ViraUtcMenosDuas()
+    {
+        var utc = new DateTime(2018, 11, 15, 3, 30, 45, DateTimeKind.Utc);
+
+        Reabrir(pasta =>
+        {
+            var aba = PlanilhaPtBr.CriarAba(pasta, "Perfis");
+            PlanilhaPtBr.GravarDataHora(aba.Cell(2, 1), utc);
+            PlanilhaPtBr.GravarData(aba.Cell(3, 1), utc);
+        }, pasta =>
+        {
+            var aba = pasta.Worksheet("Perfis");
+            Assert.Equal(new DateTime(2018, 11, 15, 1, 30, 0), aba.Cell(2, 1).GetDateTime());
+            Assert.Equal(new DateTime(2018, 11, 15), aba.Cell(3, 1).GetDateTime());
+        });
+    }
+
     [Theory]
     [InlineData("\u00A0=1+1")]
     [InlineData("\u3000=1")]
@@ -335,6 +378,234 @@ public class PlanilhaPtBrTests
     [InlineData("\u22121")]
     public void TextoComBrancoOuFullwidth_ReabreComoTextoInerte(string texto)
         => ConferirTextoInerte(texto, texto);
+
+    [Theory]
+    [InlineData("\u0009=1+1")]
+    [InlineData("\u000A=1+1")]
+    [InlineData("\u000B=1+1")]
+    [InlineData("\u000C=1+1")]
+    [InlineData("\u000D=1+1")]
+    [InlineData("\u0020=1+1")]
+    [InlineData("\u0085=1+1")]
+    [InlineData("\u00A0=1+1")]
+    [InlineData("\u00AD=1+1")]
+    [InlineData("\u0600=1+1")]
+    [InlineData("\u0601=1+1")]
+    [InlineData("\u0602=1+1")]
+    [InlineData("\u0603=1+1")]
+    [InlineData("\u0604=1+1")]
+    [InlineData("\u0605=1+1")]
+    [InlineData("\u061C=1+1")]
+    [InlineData("\u06DD=1+1")]
+    [InlineData("\u070F=1+1")]
+    [InlineData("\u0890=1+1")]
+    [InlineData("\u0891=1+1")]
+    [InlineData("\u08E2=1+1")]
+    [InlineData("\u1680=1+1")]
+    [InlineData("\u180E=1+1")]
+    [InlineData("\u2000=1+1")]
+    [InlineData("\u2001=1+1")]
+    [InlineData("\u2002=1+1")]
+    [InlineData("\u2003=1+1")]
+    [InlineData("\u2004=1+1")]
+    [InlineData("\u2005=1+1")]
+    [InlineData("\u2006=1+1")]
+    [InlineData("\u2007=1+1")]
+    [InlineData("\u2008=1+1")]
+    [InlineData("\u2009=1+1")]
+    [InlineData("\u200A=1+1")]
+    [InlineData("\u200B=1+1")]
+    [InlineData("\u200C=1+1")]
+    [InlineData("\u200D=1+1")]
+    [InlineData("\u200E=1+1")]
+    [InlineData("\u200F=1+1")]
+    [InlineData("\u2028=1+1")]
+    [InlineData("\u2029=1+1")]
+    [InlineData("\u202A=1+1")]
+    [InlineData("\u202B=1+1")]
+    [InlineData("\u202C=1+1")]
+    [InlineData("\u202D=1+1")]
+    [InlineData("\u202E=1+1")]
+    [InlineData("\u202F=1+1")]
+    [InlineData("\u205F=1+1")]
+    [InlineData("\u2060=1+1")]
+    [InlineData("\u2061=1+1")]
+    [InlineData("\u2062=1+1")]
+    [InlineData("\u2063=1+1")]
+    [InlineData("\u2064=1+1")]
+    [InlineData("\u2066=1+1")]
+    [InlineData("\u2067=1+1")]
+    [InlineData("\u2068=1+1")]
+    [InlineData("\u2069=1+1")]
+    [InlineData("\u206A=1+1")]
+    [InlineData("\u206B=1+1")]
+    [InlineData("\u206C=1+1")]
+    [InlineData("\u206D=1+1")]
+    [InlineData("\u206E=1+1")]
+    [InlineData("\u206F=1+1")]
+    [InlineData("\u3000=1+1")]
+    [InlineData("\uFEFF=1+1")]
+    [InlineData("\uFFF9=1+1")]
+    [InlineData("\uFFFA=1+1")]
+    [InlineData("\uFFFB=1+1")]
+    [InlineData("\U000110BD=1+1")]
+    [InlineData("\U000110CD=1+1")]
+    [InlineData("\U00013430=1+1")]
+    [InlineData("\U00013431=1+1")]
+    [InlineData("\U00013432=1+1")]
+    [InlineData("\U00013433=1+1")]
+    [InlineData("\U00013434=1+1")]
+    [InlineData("\U00013435=1+1")]
+    [InlineData("\U00013436=1+1")]
+    [InlineData("\U00013437=1+1")]
+    [InlineData("\U00013438=1+1")]
+    [InlineData("\U00013439=1+1")]
+    [InlineData("\U0001343A=1+1")]
+    [InlineData("\U0001343B=1+1")]
+    [InlineData("\U0001343C=1+1")]
+    [InlineData("\U0001343D=1+1")]
+    [InlineData("\U0001343E=1+1")]
+    [InlineData("\U0001343F=1+1")]
+    [InlineData("\U0001BCA0=1+1")]
+    [InlineData("\U0001BCA1=1+1")]
+    [InlineData("\U0001BCA2=1+1")]
+    [InlineData("\U0001BCA3=1+1")]
+    [InlineData("\U0001D173=1+1")]
+    [InlineData("\U0001D174=1+1")]
+    [InlineData("\U0001D175=1+1")]
+    [InlineData("\U0001D176=1+1")]
+    [InlineData("\U0001D177=1+1")]
+    [InlineData("\U0001D178=1+1")]
+    [InlineData("\U0001D179=1+1")]
+    [InlineData("\U0001D17A=1+1")]
+    [InlineData("\U000E0001=1+1")]
+    [InlineData("\U000E0020=1+1")]
+    [InlineData("\U000E0021=1+1")]
+    [InlineData("\U000E0022=1+1")]
+    [InlineData("\U000E0023=1+1")]
+    [InlineData("\U000E0024=1+1")]
+    [InlineData("\U000E0025=1+1")]
+    [InlineData("\U000E0026=1+1")]
+    [InlineData("\U000E0027=1+1")]
+    [InlineData("\U000E0028=1+1")]
+    [InlineData("\U000E0029=1+1")]
+    [InlineData("\U000E002A=1+1")]
+    [InlineData("\U000E002B=1+1")]
+    [InlineData("\U000E002C=1+1")]
+    [InlineData("\U000E002D=1+1")]
+    [InlineData("\U000E002E=1+1")]
+    [InlineData("\U000E002F=1+1")]
+    [InlineData("\U000E0030=1+1")]
+    [InlineData("\U000E0031=1+1")]
+    [InlineData("\U000E0032=1+1")]
+    [InlineData("\U000E0033=1+1")]
+    [InlineData("\U000E0034=1+1")]
+    [InlineData("\U000E0035=1+1")]
+    [InlineData("\U000E0036=1+1")]
+    [InlineData("\U000E0037=1+1")]
+    [InlineData("\U000E0038=1+1")]
+    [InlineData("\U000E0039=1+1")]
+    [InlineData("\U000E003A=1+1")]
+    [InlineData("\U000E003B=1+1")]
+    [InlineData("\U000E003C=1+1")]
+    [InlineData("\U000E003D=1+1")]
+    [InlineData("\U000E003E=1+1")]
+    [InlineData("\U000E003F=1+1")]
+    [InlineData("\U000E0040=1+1")]
+    [InlineData("\U000E0041=1+1")]
+    [InlineData("\U000E0042=1+1")]
+    [InlineData("\U000E0043=1+1")]
+    [InlineData("\U000E0044=1+1")]
+    [InlineData("\U000E0045=1+1")]
+    [InlineData("\U000E0046=1+1")]
+    [InlineData("\U000E0047=1+1")]
+    [InlineData("\U000E0048=1+1")]
+    [InlineData("\U000E0049=1+1")]
+    [InlineData("\U000E004A=1+1")]
+    [InlineData("\U000E004B=1+1")]
+    [InlineData("\U000E004C=1+1")]
+    [InlineData("\U000E004D=1+1")]
+    [InlineData("\U000E004E=1+1")]
+    [InlineData("\U000E004F=1+1")]
+    [InlineData("\U000E0050=1+1")]
+    [InlineData("\U000E0051=1+1")]
+    [InlineData("\U000E0052=1+1")]
+    [InlineData("\U000E0053=1+1")]
+    [InlineData("\U000E0054=1+1")]
+    [InlineData("\U000E0055=1+1")]
+    [InlineData("\U000E0056=1+1")]
+    [InlineData("\U000E0057=1+1")]
+    [InlineData("\U000E0058=1+1")]
+    [InlineData("\U000E0059=1+1")]
+    [InlineData("\U000E005A=1+1")]
+    [InlineData("\U000E005B=1+1")]
+    [InlineData("\U000E005C=1+1")]
+    [InlineData("\U000E005D=1+1")]
+    [InlineData("\U000E005E=1+1")]
+    [InlineData("\U000E005F=1+1")]
+    [InlineData("\U000E0060=1+1")]
+    [InlineData("\U000E0061=1+1")]
+    [InlineData("\U000E0062=1+1")]
+    [InlineData("\U000E0063=1+1")]
+    [InlineData("\U000E0064=1+1")]
+    [InlineData("\U000E0065=1+1")]
+    [InlineData("\U000E0066=1+1")]
+    [InlineData("\U000E0067=1+1")]
+    [InlineData("\U000E0068=1+1")]
+    [InlineData("\U000E0069=1+1")]
+    [InlineData("\U000E006A=1+1")]
+    [InlineData("\U000E006B=1+1")]
+    [InlineData("\U000E006C=1+1")]
+    [InlineData("\U000E006D=1+1")]
+    [InlineData("\U000E006E=1+1")]
+    [InlineData("\U000E006F=1+1")]
+    [InlineData("\U000E0070=1+1")]
+    [InlineData("\U000E0071=1+1")]
+    [InlineData("\U000E0072=1+1")]
+    [InlineData("\U000E0073=1+1")]
+    [InlineData("\U000E0074=1+1")]
+    [InlineData("\U000E0075=1+1")]
+    [InlineData("\U000E0076=1+1")]
+    [InlineData("\U000E0077=1+1")]
+    [InlineData("\U000E0078=1+1")]
+    [InlineData("\U000E0079=1+1")]
+    [InlineData("\U000E007A=1+1")]
+    [InlineData("\U000E007B=1+1")]
+    [InlineData("\U000E007C=1+1")]
+    [InlineData("\U000E007D=1+1")]
+    [InlineData("\U000E007E=1+1")]
+    [InlineData("\U000E007F=1+1")]
+    public void PrefixoInvisivel_NeutralizaFormula(string texto)
+        => ConferirTextoInerte(texto, EsperadoAposGravar(texto));
+
+    private static string EsperadoAposGravar(string texto)
+    {
+        var resultado = new StringBuilder(texto.Length);
+        for (var i = 0; i < texto.Length; i++)
+        {
+            var caractere = texto[i];
+            if (caractere < ' ' && caractere is not '\t' and not '\n' and not '\r'
+                || caractere is '\uFFFE' or '\uFFFF')
+            {
+                resultado.Append(' ');
+            }
+            else if (caractere == '\r' && i + 1 < texto.Length && texto[i + 1] == '\n')
+            {
+                resultado.Append(Environment.NewLine);
+                i++;
+            }
+            else if (caractere is '\n' or '\r')
+            {
+                resultado.Append(Environment.NewLine);
+            }
+            else
+            {
+                resultado.Append(caractere);
+            }
+        }
+
+        return resultado.ToString();
+    }
 
     [Fact]
     public void Controle_ViraEspacoENaoViraCodigoDoExcel()

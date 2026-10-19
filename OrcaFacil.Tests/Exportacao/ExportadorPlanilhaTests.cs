@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Reflection;
 using System.Text;
 using ClosedXML.Excel;
@@ -13,7 +14,6 @@ namespace OrcaFacil.Tests.Exportacao;
 
 public class ExportadorPlanilhaTests
 {
-    private const string SentinelaFoto = "SENTINELA-FOTO";
     private const string SentinelaHash = "SENTINELA-HASH";
     private const string SentinelaLog = "SENTINELA-LOG";
     private const string SentinelaChave = "SENTINELA-CHAVE";
@@ -24,7 +24,7 @@ public class ExportadorPlanilhaTests
 
     private static readonly string[] Sentinelas =
     [
-        SentinelaFoto, SentinelaHash, SentinelaLog, SentinelaChave,
+        SentinelaHash, SentinelaLog, SentinelaChave,
         SentinelaUri, SentinelaSenha, SentinelaMigration, SentinelaToken
     ];
 
@@ -72,7 +72,7 @@ public class ExportadorPlanilhaTests
             .ToArray();
 
         Assert.Equal(
-            ["Tema", "NotificacoesAtivas", "SomAtivo", "PrazosAviso", "Provedor", "Url", "Modelo"],
+            ["Tema", "NotificacoesAtivas", "SomAtivo", "GraficoLancamentosExpandido", "PrazosAviso", "Provedor", "Url", "Modelo"],
             nomes);
 
         foreach (var nome in nomes)
@@ -99,15 +99,18 @@ public class ExportadorPlanilhaTests
             NotificacoesAtivas = true,
             SomAtivo = false,
             PrazosAviso = PrazoAviso.TresDiasAntes | PrazoAviso.NoDia,
+            GraficoLancamentosExpandido = true,
             Provedor = "Ollama",
-            Url = "https://api.exemplo.test/v1?token=" + SentinelaToken,
+            Url = "https://user:" + SentinelaSenha + "@api.exemplo.test/v1;token=" + SentinelaToken,
             Modelo = "llama3"
         };
 
         using var destino = new MemoryStream();
         ExportadorPlanilha.Exportar(contexto, configuracao, destino);
-        var bytes = destino.ToArray();
-        var pacote = Encoding.Latin1.GetString(bytes);
+        Assert.Equal(0, destino.Position);
+        var bytes = new byte[destino.Length];
+        Assert.Equal(bytes.Length, destino.Read(bytes, 0, bytes.Length));
+        var pacote = XmlDasPartes(bytes);
         foreach (var sentinela in Sentinelas)
             Assert.True(pacote.IndexOf(sentinela, StringComparison.Ordinal) < 0, "A planilha contém " + sentinela + ".");
         Assert.True(pacote.IndexOf("content://", StringComparison.Ordinal) < 0, "A planilha contém content://.");
@@ -129,12 +132,12 @@ public class ExportadorPlanilhaTests
         }
 
         var perfis = pasta.Worksheet("Perfis");
-        Cabecalho(perfis, "Nome", "Apelido", "Papel", "Ativo", "Tem foto", "Criado em");
+        Cabecalho(perfis, "Nome", "Apelido", "Papel", "Ativo", "Foto", "Criado em");
         Assert.Equal("Daniel", perfis.Cell(2, 1).GetText());
         Assert.Equal("Dani", perfis.Cell(2, 2).GetText());
         Assert.Equal("Administrador", perfis.Cell(2, 3).GetText());
         Assert.Equal(PlanilhaPtBr.Sim, perfis.Cell(2, 4).GetText());
-        Assert.Equal(PlanilhaPtBr.Sim, perfis.Cell(2, 5).GetText());
+        Assert.Equal("foto-daniel.jpg", perfis.Cell(2, 5).GetText());
         DataHora(perfis.Cell(2, 6), new DateTime(2026, 10, 18, 23, 30, 0));
         Assert.Equal(2, perfis.LastRowUsed()!.RowNumber());
 
@@ -147,7 +150,7 @@ public class ExportadorPlanilhaTests
         var lancamentos = pasta.Worksheet("Lançamentos");
         Cabecalho(lancamentos,
             "Descrição", "Valor", "Data", "Tipo", "Recorrência", "Pago", "Observação",
-            "Categoria", "Perfil", "Lançamento de origem", "Cartão");
+            "Categoria", "Perfil", "Lançamento de origem", "Cartão", "Criado em");
         Assert.Equal("Aluguel de outubro", lancamentos.Cell(3, 1).GetText());
         Moeda(lancamentos.Cell(3, 2), 10.50m);
         Data(lancamentos.Cell(3, 3), new DateTime(2026, 10, 19));
@@ -158,6 +161,7 @@ public class ExportadorPlanilhaTests
         Assert.Equal("Daniel (Dani)", lancamentos.Cell(3, 9).GetText());
         Assert.Equal("Aluguel modelo — 01/09/2026", lancamentos.Cell(3, 10).GetText());
         Assert.Equal(credito.Rotulo, lancamentos.Cell(3, 11).GetText());
+        DataHora(lancamentos.Cell(3, 12), new DateTime(2026, 10, 18, 23, 30, 0));
 
         var itens = pasta.Worksheet("Itens da fatura");
         Cabecalho(itens,
@@ -235,13 +239,181 @@ public class ExportadorPlanilhaTests
         Assert.Equal("Escuro", config.Cell(2, 2).GetText());
         Assert.Equal(PlanilhaPtBr.Sim, config.Cell(3, 2).GetText());
         Assert.Equal(PlanilhaPtBr.Nao, config.Cell(4, 2).GetText());
-        Assert.Equal("3 dias antes do vencimento, No dia do vencimento", config.Cell(5, 2).GetText());
-        Assert.Equal("Ollama", config.Cell(6, 2).GetText());
-        Assert.Equal("https://api.exemplo.test/v1", config.Cell(7, 2).GetText());
-        Assert.Equal("llama3", config.Cell(8, 2).GetText());
+        Assert.Equal("Gráfico de lançamentos expandido", config.Cell(5, 1).GetText());
+        Assert.Equal(PlanilhaPtBr.Sim, config.Cell(5, 2).GetText());
+        Assert.Equal("3 dias antes do vencimento, No dia do vencimento", config.Cell(6, 2).GetText());
+        Assert.Equal("Ollama", config.Cell(7, 2).GetText());
+        Assert.Equal("https://api.exemplo.test/v1", config.Cell(8, 2).GetText());
+        Assert.Equal("llama3", config.Cell(9, 2).GetText());
 
         var fonte = File.ReadAllText(Path.Combine(Raiz(), "OrcaFacil.Core", "Exportacao", "ExportadorPlanilha.cs"));
         Assert.DoesNotContain("AdjustToContents", fonte, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("https://user:SENTINELA-SENHA@api.exemplo.test/v1?token=SENTINELA-TOKEN", "https://api.exemplo.test/v1")]
+    [InlineData("https://api.exemplo.test/path;token=SENTINELA-TOKEN", "https://api.exemplo.test/path")]
+    [InlineData("https://user:SENTINELA-SENHA@api.exemplo.test:8443/v1;token=X?y=1#frag", "https://api.exemplo.test:8443/v1")]
+    [InlineData("/path;token=SENTINELA-TOKEN?x=1", "/path")]
+    [InlineData("https://api.exemplo.test/v1", "https://api.exemplo.test/v1")]
+    public void UrlSemSegredo_TiraUserinfoConsultaEMatriz(string url, string esperado)
+    {
+        var limpa = ExportadorPlanilha.UrlSemSegredo(url);
+        Assert.Equal(esperado, limpa);
+        Assert.DoesNotContain("SENTINELA", limpa ?? "", StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FotoRelativaSaiIgual_EAbsolutaSaiSoONome()
+    {
+        using var fabrica = new TestDbContextFactory();
+        using var contexto = fabrica.CreateDbContext();
+        var quando = DateTime.UtcNow;
+        contexto.MembrosFamilia.AddRange(
+            new MembroFamilia { Nome = "Ana", FotoPath = "pasta/foto-ana.jpg", CriadoEm = quando },
+            new MembroFamilia { Nome = "Bia", FotoPath = "content://midia/SENTINELA-FOTO/bia.jpg?token=SEGREDO", CriadoEm = quando },
+            new MembroFamilia { Nome = "Cris", FotoPath = "C:\\Users\\d\\cris.jpg", CriadoEm = quando },
+            new MembroFamilia { Nome = "Duda", FotoPath = "/var/fotos/duda.jpg", CriadoEm = quando });
+        contexto.SaveChanges();
+
+        using var destino = new MemoryStream();
+        ExportadorPlanilha.Exportar(contexto, new ConfiguracaoExportavel(), destino);
+        var xml = XmlDasPartes(destino.ToArray());
+        Assert.DoesNotContain("SENTINELA-FOTO", xml, StringComparison.Ordinal);
+        Assert.DoesNotContain("content://", xml, StringComparison.Ordinal);
+        Assert.DoesNotContain("SEGREDO", xml, StringComparison.Ordinal);
+        Assert.DoesNotContain("C:\\Users", xml, StringComparison.Ordinal);
+        Assert.DoesNotContain("/var/fotos", xml, StringComparison.Ordinal);
+
+        using var pasta = new XLWorkbook(destino);
+        var aba = pasta.Worksheet("Perfis");
+        Assert.Equal("pasta/foto-ana.jpg", aba.Cell(2, 5).GetText());
+        Assert.Equal("bia.jpg", aba.Cell(3, 5).GetText());
+        Assert.Equal("cris.jpg", aba.Cell(4, 5).GetText());
+        Assert.Equal("duda.jpg", aba.Cell(5, 5).GetText());
+    }
+
+    [Fact]
+    public void CriadoEmEmNovembroDe2018_UsaUtcMenosDuas()
+    {
+        using var fabrica = new TestDbContextFactory();
+        using var contexto = fabrica.CreateDbContext();
+        contexto.MembrosFamilia.Add(new MembroFamilia
+        {
+            Nome = "Vera",
+            CriadoEm = new DateTime(2018, 11, 15, 3, 30, 45, DateTimeKind.Utc)
+        });
+        contexto.SaveChanges();
+
+        using var destino = new MemoryStream();
+        ExportadorPlanilha.Exportar(contexto, new ConfiguracaoExportavel(), destino);
+        using var pasta = new XLWorkbook(destino);
+        DataHora(pasta.Worksheet("Perfis").Cell(2, 6), new DateTime(2018, 11, 15, 1, 30, 0));
+    }
+
+    [Fact]
+    public void CriadoEmComKindLocal_PassaPorUtcAntesDeSaoPaulo()
+    {
+        var local = new DateTime(2018, 11, 15, 10, 0, 0, DateTimeKind.Local);
+        var utc = ExportadorPlanilha.InstanteUtc(local);
+        Assert.Equal(DateTimeKind.Utc, utc.Kind);
+        Assert.Equal(local.ToUniversalTime(), utc);
+
+        using var pasta = new XLWorkbook();
+        var aba = PlanilhaPtBr.CriarAba(pasta, "Perfis");
+        PlanilhaPtBr.GravarDataHora(aba.Cell(2, 1), utc);
+        var emSaoPaulo = TimeZoneInfo.ConvertTimeFromUtc(utc, PlanilhaPtBr.FusoBrasil);
+        Assert.Equal(
+            new DateTime(emSaoPaulo.Year, emSaoPaulo.Month, emSaoPaulo.Day, emSaoPaulo.Hour, emSaoPaulo.Minute, 0),
+            aba.Cell(2, 1).GetDateTime());
+    }
+
+    [Fact]
+    public void LeituraPaginada_TrazALinhaDaSegundaPagina()
+    {
+        using var fabrica = new TestDbContextFactory();
+        using var contexto = fabrica.CreateDbContext();
+        var total = ExportadorPlanilha.TamanhoLote + 1;
+        for (var i = 0; i < total; i++)
+        {
+            contexto.Categorias.Add(new Categoria
+            {
+                Nome = $"Cat{i:000}",
+                Icone = "A",
+                CorHex = "#112233"
+            });
+        }
+
+        contexto.SaveChanges();
+        using var destino = new MemoryStream();
+        ExportadorPlanilha.Exportar(contexto, new ConfiguracaoExportavel(), destino);
+        using var pasta = new XLWorkbook(destino);
+        var aba = pasta.Worksheet("Categorias");
+        Assert.Equal(total + 1, aba.LastRowUsed()!.RowNumber());
+        Assert.Equal("Cat000", aba.Cell(2, 1).GetText());
+        Assert.Equal($"Cat{total - 1:000}", aba.Cell(total + 1, 1).GetText());
+    }
+
+    [Fact]
+    public void AcimaDoTetoDeDados_FalhaComAContagem()
+    {
+        var teto = PlanilhaPtBr.MaximoLinhas - 1;
+        ExportadorPlanilha.ExigirLimiteDeDados("Categorias", teto);
+        var erro = Assert.Throws<InvalidOperationException>(
+            () => ExportadorPlanilha.ExigirLimiteDeDados("Categorias", teto + 1));
+        Assert.Contains("Categorias", erro.Message, StringComparison.Ordinal);
+        Assert.Contains((teto + 1).ToString(), erro.Message, StringComparison.Ordinal);
+        Assert.Contains(teto.ToString(), erro.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TodoValorDeEnumExportadoTemRotulo_EDesconhecidoFalha()
+    {
+        foreach (var papel in Enum.GetValues<PerfilRole>())
+            Assert.False(string.IsNullOrWhiteSpace(ExportadorPlanilha.TextoPapel(papel)));
+        foreach (var tipo in Enum.GetValues<TipoTransacao>())
+            Assert.False(string.IsNullOrWhiteSpace(ExportadorPlanilha.TextoTipo(tipo)));
+        foreach (var recorrencia in Enum.GetValues<TipoRecorrencia>())
+            Assert.False(string.IsNullOrWhiteSpace(ExportadorPlanilha.TextoRecorrencia(recorrencia)));
+        foreach (var natureza in Enum.GetValues<NaturezaItemLancamento>())
+            Assert.False(string.IsNullOrWhiteSpace(ExportadorPlanilha.TextoNatureza(natureza)));
+        foreach (var ativo in Enum.GetValues<TipoAtivo>())
+            Assert.False(string.IsNullOrWhiteSpace(ExportadorPlanilha.TextoAtivo(ativo)));
+        foreach (var operacao in Enum.GetValues<TipoOperacao>())
+            Assert.False(string.IsNullOrWhiteSpace(ExportadorPlanilha.TextoOperacao(operacao)));
+        foreach (var cartao in Enum.GetValues<TipoCartao>())
+            Assert.False(string.IsNullOrWhiteSpace(ExportadorPlanilha.TextoCartao(cartao)));
+        foreach (var beneficio in Enum.GetValues<TipoCartaoBeneficio>())
+            Assert.False(string.IsNullOrWhiteSpace(ExportadorPlanilha.TextoBeneficio(beneficio)));
+        foreach (var tema in Enum.GetValues<TemaPreferido>())
+            Assert.False(string.IsNullOrWhiteSpace(ExportadorPlanilha.TextoTema(tema)));
+        foreach (var prazo in Enum.GetValues<PrazoAviso>())
+            _ = ExportadorPlanilha.TextoPrazos(prazo);
+
+        Assert.Equal("", ExportadorPlanilha.TextoBeneficio(null));
+        Assert.Throws<InvalidOperationException>(() => ExportadorPlanilha.TextoPapel((PerfilRole)99));
+        Assert.Throws<InvalidOperationException>(() => ExportadorPlanilha.TextoTipo((TipoTransacao)99));
+        Assert.Throws<InvalidOperationException>(() => ExportadorPlanilha.TextoRecorrencia((TipoRecorrencia)99));
+        Assert.Throws<InvalidOperationException>(() => ExportadorPlanilha.TextoNatureza((NaturezaItemLancamento)99));
+        Assert.Throws<InvalidOperationException>(() => ExportadorPlanilha.TextoAtivo((TipoAtivo)99));
+        Assert.Throws<InvalidOperationException>(() => ExportadorPlanilha.TextoOperacao((TipoOperacao)99));
+        Assert.Throws<InvalidOperationException>(() => ExportadorPlanilha.TextoCartao((TipoCartao)99));
+        Assert.Throws<InvalidOperationException>(() => ExportadorPlanilha.TextoBeneficio((TipoCartaoBeneficio)99));
+        Assert.Throws<InvalidOperationException>(() => ExportadorPlanilha.TextoTema((TemaPreferido)99));
+        Assert.Throws<InvalidOperationException>(() => ExportadorPlanilha.TextoPrazos((PrazoAviso)32));
+    }
+
+    private static string XmlDasPartes(byte[] bytes)
+    {
+        using var zip = new ZipArchive(new MemoryStream(bytes), ZipArchiveMode.Read);
+        var xml = new StringBuilder();
+        foreach (var entrada in zip.Entries)
+        {
+            using var leitor = new StreamReader(entrada.Open(), Encoding.UTF8);
+            xml.Append(leitor.ReadToEnd());
+        }
+
+        return xml.ToString();
     }
 
     private static Cartao Semear(AppDbContext contexto)
@@ -251,7 +423,7 @@ public class ExportadorPlanilhaTests
         {
             Nome = "Daniel",
             Apelido = "Dani",
-            FotoPath = "content://" + SentinelaFoto + "/foto.jpg",
+            FotoPath = "foto-daniel.jpg",
             Role = PerfilRole.Admin,
             Ativo = true,
             CriadoEm = criado

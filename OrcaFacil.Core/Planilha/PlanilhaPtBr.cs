@@ -27,8 +27,8 @@ public static class PlanilhaPtBr
     /// <summary>Largura em caracteres da fonte padrão, sem medir o texto.</summary>
     public const double LarguraColuna = 22;
 
-    private static readonly CultureInfo PtBr = CultureInfo.GetCultureInfo("pt-BR");
-    private static readonly TimeZoneInfo FusoBrasil = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
+    internal static readonly CultureInfo Cultura = CultureInfo.GetCultureInfo("pt-BR");
+    internal static readonly TimeZoneInfo FusoBrasil = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
     private static readonly char[] CaracteresProibidosNaAba = [':', '\\', '/', '?', '*', '[', ']'];
 
     public static IXLWorksheet CriarAba(XLWorkbook pasta, string nome)
@@ -263,12 +263,30 @@ public static class PlanilhaPtBr
         return TimeZoneInfo.ConvertTimeFromUtc(instante, FusoBrasil);
     }
 
+    /// <summary>
+    /// O double tem cerca de 15 dígitos significativos. <see cref="decimal.MaxValue"/>
+    /// vira um double finito e o cast de volta lança <see cref="OverflowException"/>.
+    /// Os dois casos, e um double não finito, contam como "não cabe": o texto exato entra no lugar.
+    /// </summary>
     private static bool CabeEmDouble(decimal valor)
-        => (decimal)(double)valor == valor;
+    {
+        try
+        {
+            var numero = (double)valor;
+            if (!double.IsFinite(numero))
+                return false;
+
+            return (decimal)numero == valor;
+        }
+        catch (OverflowException)
+        {
+            return false;
+        }
+    }
 
     private static string TextoExato(decimal valor, bool moeda)
     {
-        var numero = valor.ToString("0.#############################", PtBr);
+        var numero = valor.ToString("0.#############################", Cultura);
         return moeda ? "R$ " + numero : numero;
     }
 
@@ -297,25 +315,42 @@ public static class PlanilhaPtBr
     /// <summary>
     /// = + - @ no início, ou tab, CR e LF, fazem o Excel tratar a célula como fórmula.
     /// O mesmo vale para os fullwidth ＝ ＋ － ＠ e para o menos U+2212.
-    /// NBSP, ideográfico, BOM e zero-width no começo são ignorados na checagem.
+    /// Antes do gatilho, espaço em branco (<see cref="Rune.IsWhiteSpace"/>),
+    /// formato (Cf) e separadores Zs, Zl e Zp são ignorados. Assim um NBSP,
+    /// U+2000–U+200A, U+202F, U+205F, U+1680, U+2028 ou U+2029 não esconde o =.
     /// </summary>
     private static bool PrecisaNeutralizar(string texto)
     {
-        foreach (var caractere in texto)
+        for (var i = 0; i < texto.Length;)
         {
-            if (IgnoravelNoInicio(caractere))
+            var rune = Rune.GetRuneAt(texto, i);
+            i += rune.Utf16SequenceLength;
+            if (IgnoravelNoInicio(rune))
                 continue;
 
-            return GatilhoDeFormula(caractere);
+            return GatilhoDeFormula(rune);
         }
 
         return false;
     }
 
-    private static bool IgnoravelNoInicio(char caractere) => caractere is
-        ' ' or '\u00A0' or '\u3000' or '\uFEFF'
-        or '\u200B' or '\u200C' or '\u200D' or '\u200E' or '\u200F'
-        or '\u2060' or '\u180E';
+    private static bool IgnoravelNoInicio(Rune rune)
+    {
+        if (GatilhoDeFormula(rune))
+            return false;
+
+        if (Rune.IsWhiteSpace(rune))
+            return true;
+
+        var categoria = Rune.GetUnicodeCategory(rune);
+        return categoria is UnicodeCategory.Format
+            or UnicodeCategory.SpaceSeparator
+            or UnicodeCategory.LineSeparator
+            or UnicodeCategory.ParagraphSeparator;
+    }
+
+    private static bool GatilhoDeFormula(Rune rune)
+        => rune.Value <= char.MaxValue && GatilhoDeFormula((char)rune.Value);
 
     private static bool GatilhoDeFormula(char caractere) => caractere is
         '=' or '+' or '-' or '@' or '\t' or '\r' or '\n'

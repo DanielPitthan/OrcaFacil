@@ -15,6 +15,9 @@ public sealed class ConfiguracaoExportavel
 
     public bool SomAtivo { get; init; }
 
+    /// <summary>Estado da tela do gráfico. Entra na planilha como as outras preferências.</summary>
+    public bool GraficoLancamentosExpandido { get; init; }
+
     public PrazoAviso PrazosAviso { get; init; }
 
     public string? Provedor { get; init; }

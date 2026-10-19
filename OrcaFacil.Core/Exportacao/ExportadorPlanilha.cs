@@ -96,35 +96,33 @@ public static class ExportadorPlanilha
         GravarRecargas(contexto, pasta);
         GravarConfiguracoes(configuracao, pasta);
         pasta.SaveAs(destino);
+        if (destino.CanSeek)
+            destino.Position = 0;
     }
 
     private static void GravarPerfis(AppDbContext contexto, XLWorkbook pasta)
     {
         var aba = Abrir(pasta, "Perfis");
-        PlanilhaPtBr.GravarCabecalho(aba, ["Nome", "Apelido", "Papel", "Ativo", "Tem foto", "Criado em"]);
-        var linhas = contexto.MembrosFamilia.AsNoTracking().OrderBy(m => m.Id).ToList();
-        for (var i = 0; i < linhas.Count; i++)
+        PlanilhaPtBr.GravarCabecalho(aba, ["Nome", "Apelido", "Papel", "Ativo", "Foto", "Criado em"]);
+        EmLotes(contexto.MembrosFamilia.AsNoTracking().OrderBy(m => m.Id), "Perfis", (membro, indice) =>
         {
-            var linha = LinhaDeDados(i);
-            var membro = linhas[i];
+            var linha = LinhaDeDados(indice);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 1), membro.Nome);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 2), membro.Apelido);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 3), TextoPapel(membro.Role));
             PlanilhaPtBr.GravarSimNao(PlanilhaPtBr.Celula(aba, linha, 4), membro.Ativo);
-            PlanilhaPtBr.GravarSimNao(PlanilhaPtBr.Celula(aba, linha, 5), !string.IsNullOrWhiteSpace(membro.FotoPath));
+            PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 5), NomeDeFoto(membro.FotoPath));
             PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 6), InstanteUtc(membro.CriadoEm));
-        }
+        });
     }
 
     private static void GravarCategorias(AppDbContext contexto, XLWorkbook pasta)
     {
         var aba = Abrir(pasta, "Categorias");
         PlanilhaPtBr.GravarCabecalho(aba, ["Nome", "Ícone", "Cor", "Tipo padrão", "Padrão do sistema", "Permite itens de fatura", "Ativa"]);
-        var linhas = contexto.Categorias.AsNoTracking().OrderBy(c => c.Id).ToList();
-        for (var i = 0; i < linhas.Count; i++)
+        EmLotes(contexto.Categorias.AsNoTracking().OrderBy(c => c.Id), "Categorias", (categoria, indice) =>
         {
-            var linha = LinhaDeDados(i);
-            var categoria = linhas[i];
+            var linha = LinhaDeDados(indice);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 1), categoria.Nome);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 2), categoria.Icone);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 3), categoria.CorHex);
@@ -132,7 +130,7 @@ public static class ExportadorPlanilha
             PlanilhaPtBr.GravarSimNao(PlanilhaPtBr.Celula(aba, linha, 5), categoria.EhPadraoDoSistema);
             PlanilhaPtBr.GravarSimNao(PlanilhaPtBr.Celula(aba, linha, 6), categoria.PermiteItensFatura);
             PlanilhaPtBr.GravarSimNao(PlanilhaPtBr.Celula(aba, linha, 7), categoria.Ativo);
-        }
+        });
     }
 
     private static void GravarLancamentos(AppDbContext contexto, XLWorkbook pasta)
@@ -141,19 +139,16 @@ public static class ExportadorPlanilha
         PlanilhaPtBr.GravarCabecalho(aba,
         [
             "Descrição", "Valor", "Data", "Tipo", "Recorrência", "Pago", "Observação",
-            "Categoria", "Perfil", "Lançamento de origem", "Cartão"
+            "Categoria", "Perfil", "Lançamento de origem", "Cartão", "Criado em"
         ]);
-        var linhas = contexto.Transacoes.AsNoTracking()
+        EmLotes(contexto.Transacoes.AsNoTracking()
             .Include(t => t.Categoria)
             .Include(t => t.MembroFamilia)
             .Include(t => t.Cartao)
             .Include(t => t.TransacaoOrigem)
-            .OrderBy(t => t.Id)
-            .ToList();
-        for (var i = 0; i < linhas.Count; i++)
+            .OrderBy(t => t.Id), "Lançamentos", (transacao, indice) =>
         {
-            var linha = LinhaDeDados(i);
-            var transacao = linhas[i];
+            var linha = LinhaDeDados(indice);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 1), transacao.Descricao);
             PlanilhaPtBr.GravarMoeda(PlanilhaPtBr.Celula(aba, linha, 2), transacao.Valor);
             PlanilhaPtBr.GravarData(PlanilhaPtBr.Celula(aba, linha, 3), transacao.Data);
@@ -165,7 +160,8 @@ public static class ExportadorPlanilha
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 9), TextoPerfil(transacao.MembroFamilia));
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 10), TextoOrigem(transacao.TransacaoOrigem));
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 11), transacao.Cartao?.Rotulo);
-        }
+            PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 12), InstanteUtc(transacao.CriadoEm));
+        });
     }
 
     private static void GravarItensFatura(AppDbContext contexto, XLWorkbook pasta)
@@ -176,15 +172,12 @@ public static class ExportadorPlanilha
             "Descrição", "Descritivo", "Valor", "Estorno", "Natureza", "Parcela",
             "Total de parcelas", "Ordem", "Lançamento", "Categoria"
         ]);
-        var linhas = contexto.ItensLancamento.AsNoTracking()
+        EmLotes(contexto.ItensLancamento.AsNoTracking()
             .Include(i => i.Transacao)
             .Include(i => i.Categoria)
-            .OrderBy(i => i.Id)
-            .ToList();
-        for (var i = 0; i < linhas.Count; i++)
+            .OrderBy(i => i.Id), "Itens da fatura", (item, indice) =>
         {
-            var linha = LinhaDeDados(i);
-            var item = linhas[i];
+            var linha = LinhaDeDados(indice);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 1), item.Descricao);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 2), item.Descritivo);
             PlanilhaPtBr.GravarMoeda(PlanilhaPtBr.Celula(aba, linha, 3), item.Valor);
@@ -195,28 +188,25 @@ public static class ExportadorPlanilha
             PlanilhaPtBr.GravarNumero(PlanilhaPtBr.Celula(aba, linha, 8), item.Ordem);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 9), item.Transacao?.Descricao);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 10), item.Categoria?.Nome);
-        }
+        });
     }
 
     private static void GravarOrcamentos(AppDbContext contexto, XLWorkbook pasta)
     {
         var aba = Abrir(pasta, "Orçamentos");
         PlanilhaPtBr.GravarCabecalho(aba, ["Categoria", "Limite", "Meta de redução", "Mês", "Ano", "Criado em"]);
-        var linhas = contexto.Orcamentos.AsNoTracking()
+        EmLotes(contexto.Orcamentos.AsNoTracking()
             .Include(o => o.Categoria)
-            .OrderBy(o => o.Id)
-            .ToList();
-        for (var i = 0; i < linhas.Count; i++)
+            .OrderBy(o => o.Id), "Orçamentos", (orcamento, indice) =>
         {
-            var linha = LinhaDeDados(i);
-            var orcamento = linhas[i];
+            var linha = LinhaDeDados(indice);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 1), orcamento.Categoria?.Nome);
             PlanilhaPtBr.GravarMoeda(PlanilhaPtBr.Celula(aba, linha, 2), orcamento.ValorLimite);
             PlanilhaPtBr.GravarNumero(PlanilhaPtBr.Celula(aba, linha, 3), orcamento.MetaReducaoPercentual);
             PlanilhaPtBr.GravarNumero(PlanilhaPtBr.Celula(aba, linha, 4), orcamento.Mes);
             PlanilhaPtBr.GravarNumero(PlanilhaPtBr.Celula(aba, linha, 5), orcamento.Ano);
             PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 6), InstanteUtc(orcamento.CriadoEm));
-        }
+        });
     }
 
     private static void GravarMetas(AppDbContext contexto, XLWorkbook pasta)
@@ -224,14 +214,11 @@ public static class ExportadorPlanilha
         var aba = Abrir(pasta, "Metas");
         PlanilhaPtBr.GravarCabecalho(aba,
             ["Nome", "Valor alvo", "Valor atual", "Prazo", "Ícone", "Concluída", "Perfil", "Percentual", "Criado em"]);
-        var linhas = contexto.Metas.AsNoTracking()
+        EmLotes(contexto.Metas.AsNoTracking()
             .Include(m => m.MembroFamilia)
-            .OrderBy(m => m.Id)
-            .ToList();
-        for (var i = 0; i < linhas.Count; i++)
+            .OrderBy(m => m.Id), "Metas", (meta, indice) =>
         {
-            var linha = LinhaDeDados(i);
-            var meta = linhas[i];
+            var linha = LinhaDeDados(indice);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 1), meta.Nome);
             PlanilhaPtBr.GravarMoeda(PlanilhaPtBr.Celula(aba, linha, 2), meta.ValorAlvo);
             PlanilhaPtBr.GravarMoeda(PlanilhaPtBr.Celula(aba, linha, 3), meta.ValorAtual);
@@ -241,40 +228,36 @@ public static class ExportadorPlanilha
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 7), TextoPerfil(meta.MembroFamilia));
             PlanilhaPtBr.GravarNumero(PlanilhaPtBr.Celula(aba, linha, 8), meta.PercentualConcluido);
             PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 9), InstanteUtc(meta.CriadoEm));
-        }
+        });
     }
 
     private static void GravarFechamentos(AppDbContext contexto, XLWorkbook pasta)
     {
         var aba = Abrir(pasta, "Fechamentos");
         PlanilhaPtBr.GravarCabecalho(aba, ["Mês", "Ano", "Fechado", "Atualizado em"]);
-        var linhas = contexto.FechamentosPeriodo.AsNoTracking().OrderBy(f => f.Id).ToList();
-        for (var i = 0; i < linhas.Count; i++)
+        EmLotes(contexto.FechamentosPeriodo.AsNoTracking().OrderBy(f => f.Id), "Fechamentos", (fechamento, indice) =>
         {
-            var linha = LinhaDeDados(i);
-            var fechamento = linhas[i];
+            var linha = LinhaDeDados(indice);
             PlanilhaPtBr.GravarNumero(PlanilhaPtBr.Celula(aba, linha, 1), fechamento.Mes);
             PlanilhaPtBr.GravarNumero(PlanilhaPtBr.Celula(aba, linha, 2), fechamento.Ano);
             PlanilhaPtBr.GravarSimNao(PlanilhaPtBr.Celula(aba, linha, 3), fechamento.Fechado);
             PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 4), InstanteUtc(fechamento.AtualizadoEm));
-        }
+        });
     }
 
     private static void GravarAtivos(AppDbContext contexto, XLWorkbook pasta)
     {
         var aba = Abrir(pasta, "Ativos");
         PlanilhaPtBr.GravarCabecalho(aba, ["Ticker", "Nome", "Tipo", "Ativo", "Criado em"]);
-        var linhas = contexto.AtivosFinanceiros.AsNoTracking().OrderBy(a => a.Id).ToList();
-        for (var i = 0; i < linhas.Count; i++)
+        EmLotes(contexto.AtivosFinanceiros.AsNoTracking().OrderBy(a => a.Id), "Ativos", (ativo, indice) =>
         {
-            var linha = LinhaDeDados(i);
-            var ativo = linhas[i];
+            var linha = LinhaDeDados(indice);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 1), ativo.Ticker);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 2), ativo.Nome);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 3), TextoAtivo(ativo.Tipo));
             PlanilhaPtBr.GravarSimNao(PlanilhaPtBr.Celula(aba, linha, 4), ativo.Ativo);
             PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 5), InstanteUtc(ativo.CriadoEm));
-        }
+        });
     }
 
     private static void GravarOperacoes(AppDbContext contexto, XLWorkbook pasta)
@@ -285,15 +268,12 @@ public static class ExportadorPlanilha
             "Ticker", "Nome do ativo", "Perfil", "Operação", "Data", "Quantidade",
             "Preço unitário", "Custos", "Corretora", "Criado em", "Atualizado em"
         ]);
-        var linhas = contexto.OperacoesAtivo.AsNoTracking()
+        EmLotes(contexto.OperacoesAtivo.AsNoTracking()
             .Include(o => o.Ativo)
             .Include(o => o.MembroFamilia)
-            .OrderBy(o => o.Id)
-            .ToList();
-        for (var i = 0; i < linhas.Count; i++)
+            .OrderBy(o => o.Id), "Operações", (operacao, indice) =>
         {
-            var linha = LinhaDeDados(i);
-            var operacao = linhas[i];
+            var linha = LinhaDeDados(indice);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 1), operacao.Ativo?.Ticker);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 2), operacao.Ativo?.Nome);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 3), TextoPerfil(operacao.MembroFamilia));
@@ -305,41 +285,36 @@ public static class ExportadorPlanilha
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 9), operacao.Corretora);
             PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 10), InstanteUtc(operacao.CriadoEm));
             PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 11), InstanteUtc(operacao.AtualizadoEm));
-        }
+        });
     }
 
     private static void GravarProdutos(AppDbContext contexto, XLWorkbook pasta)
     {
         var aba = Abrir(pasta, "Produtos da cesta");
         PlanilhaPtBr.GravarCabecalho(aba, ["Nome", "Categoria", "Ativo", "Criado em"]);
-        var linhas = contexto.ProdutosCesta.AsNoTracking()
+        EmLotes(contexto.ProdutosCesta.AsNoTracking()
             .Include(p => p.Categoria)
-            .OrderBy(p => p.Id)
-            .ToList();
-        for (var i = 0; i < linhas.Count; i++)
+            .OrderBy(p => p.Id), "Produtos da cesta", (produto, indice) =>
         {
-            var linha = LinhaDeDados(i);
-            var produto = linhas[i];
+            var linha = LinhaDeDados(indice);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 1), produto.Nome);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 2), produto.Categoria?.Nome);
             PlanilhaPtBr.GravarSimNao(PlanilhaPtBr.Celula(aba, linha, 3), produto.Ativo);
             PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 4), InstanteUtc(produto.CriadoEm));
-        }
+        });
     }
 
     private static void GravarLocais(AppDbContext contexto, XLWorkbook pasta)
     {
         var aba = Abrir(pasta, "Locais de compra");
         PlanilhaPtBr.GravarCabecalho(aba, ["Nome", "Ativo", "Criado em"]);
-        var linhas = contexto.LocaisCompra.AsNoTracking().OrderBy(l => l.Id).ToList();
-        for (var i = 0; i < linhas.Count; i++)
+        EmLotes(contexto.LocaisCompra.AsNoTracking().OrderBy(l => l.Id), "Locais de compra", (local, indice) =>
         {
-            var linha = LinhaDeDados(i);
-            var local = linhas[i];
+            var linha = LinhaDeDados(indice);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 1), local.Nome);
             PlanilhaPtBr.GravarSimNao(PlanilhaPtBr.Celula(aba, linha, 2), local.Ativo);
             PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 3), InstanteUtc(local.CriadoEm));
-        }
+        });
     }
 
     private static void GravarCompras(AppDbContext contexto, XLWorkbook pasta)
@@ -350,18 +325,15 @@ public static class ExportadorPlanilha
             "Mês", "Ano", "Data", "Local", "Benefício", "Tipo do benefício", "Cartão de benefício",
             "Dinheiro", "Valor no crédito", "Cartão de crédito", "Item da fatura", "Lançamento", "Criado em"
         ]);
-        var linhas = contexto.ComprasCesta.AsNoTracking()
+        EmLotes(contexto.ComprasCesta.AsNoTracking()
             .Include(c => c.LocalCompra)
             .Include(c => c.CartaoBeneficio)
             .Include(c => c.CartaoCredito)
             .Include(c => c.ItemFatura)
             .Include(c => c.Transacao)
-            .OrderBy(c => c.Id)
-            .ToList();
-        for (var i = 0; i < linhas.Count; i++)
+            .OrderBy(c => c.Id), "Compras da cesta", (compra, indice) =>
         {
-            var linha = LinhaDeDados(i);
-            var compra = linhas[i];
+            var linha = LinhaDeDados(indice);
             PlanilhaPtBr.GravarNumero(PlanilhaPtBr.Celula(aba, linha, 1), compra.Mes);
             PlanilhaPtBr.GravarNumero(PlanilhaPtBr.Celula(aba, linha, 2), compra.Ano);
             PlanilhaPtBr.GravarData(PlanilhaPtBr.Celula(aba, linha, 3), compra.Data);
@@ -375,39 +347,34 @@ public static class ExportadorPlanilha
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 11), TextoItemFatura(compra.ItemFatura));
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 12), compra.Transacao?.Descricao);
             PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 13), InstanteUtc(compra.CriadoEm));
-        }
+        });
     }
 
     private static void GravarItensCompra(AppDbContext contexto, XLWorkbook pasta)
     {
         var aba = Abrir(pasta, "Itens da compra");
         PlanilhaPtBr.GravarCabecalho(aba, ["Data da compra", "Local", "Produto", "Preço", "Ordem"]);
-        var linhas = contexto.ItensCompraCesta.AsNoTracking()
+        EmLotes(contexto.ItensCompraCesta.AsNoTracking()
             .Include(i => i.CompraCesta!).ThenInclude(c => c.LocalCompra)
             .Include(i => i.Produto)
-            .OrderBy(i => i.Id)
-            .ToList();
-        for (var i = 0; i < linhas.Count; i++)
+            .OrderBy(i => i.Id), "Itens da compra", (item, indice) =>
         {
-            var linha = LinhaDeDados(i);
-            var item = linhas[i];
+            var linha = LinhaDeDados(indice);
             PlanilhaPtBr.GravarData(PlanilhaPtBr.Celula(aba, linha, 1), item.CompraCesta?.Data);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 2), item.CompraCesta?.LocalCompra?.Nome);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 3), item.Produto?.Nome);
             PlanilhaPtBr.GravarMoeda(PlanilhaPtBr.Celula(aba, linha, 4), item.Preco);
             PlanilhaPtBr.GravarNumero(PlanilhaPtBr.Celula(aba, linha, 5), item.Ordem);
-        }
+        });
     }
 
     private static void GravarCartoes(AppDbContext contexto, XLWorkbook pasta)
     {
         var aba = Abrir(pasta, "Cartões");
         PlanilhaPtBr.GravarCabecalho(aba, ["Nome", "Bandeira", "Últimos dígitos", "Tipo", "Tipo do benefício", "Ativo", "Criado em"]);
-        var linhas = contexto.Cartoes.AsNoTracking().OrderBy(c => c.Id).ToList();
-        for (var i = 0; i < linhas.Count; i++)
+        EmLotes(contexto.Cartoes.AsNoTracking().OrderBy(c => c.Id), "Cartões", (cartao, indice) =>
         {
-            var linha = LinhaDeDados(i);
-            var cartao = linhas[i];
+            var linha = LinhaDeDados(indice);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 1), cartao.Nome);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 2), cartao.Bandeira);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 3), cartao.UltimosDigitos);
@@ -415,26 +382,23 @@ public static class ExportadorPlanilha
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 5), TextoBeneficio(cartao.TipoBeneficio));
             PlanilhaPtBr.GravarSimNao(PlanilhaPtBr.Celula(aba, linha, 6), cartao.Ativo);
             PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 7), InstanteUtc(cartao.CriadoEm));
-        }
+        });
     }
 
     private static void GravarRecargas(AppDbContext contexto, XLWorkbook pasta)
     {
         var aba = Abrir(pasta, "Recargas");
         PlanilhaPtBr.GravarCabecalho(aba, ["Cartão", "Data", "Valor", "Criado em"]);
-        var linhas = contexto.RecargasCartao.AsNoTracking()
+        EmLotes(contexto.RecargasCartao.AsNoTracking()
             .Include(r => r.Cartao)
-            .OrderBy(r => r.Id)
-            .ToList();
-        for (var i = 0; i < linhas.Count; i++)
+            .OrderBy(r => r.Id), "Recargas", (recarga, indice) =>
         {
-            var linha = LinhaDeDados(i);
-            var recarga = linhas[i];
+            var linha = LinhaDeDados(indice);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 1), recarga.Cartao?.Rotulo);
             PlanilhaPtBr.GravarData(PlanilhaPtBr.Celula(aba, linha, 2), recarga.Data);
             PlanilhaPtBr.GravarMoeda(PlanilhaPtBr.Celula(aba, linha, 3), recarga.Valor);
             PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 4), InstanteUtc(recarga.CriadoEm));
-        }
+        });
     }
 
     private static void GravarConfiguracoes(ConfiguracaoExportavel configuracao, XLWorkbook pasta)
@@ -444,10 +408,11 @@ public static class ExportadorPlanilha
         EscreverItem(aba, 2, "Tema", TextoTema(configuracao.Tema));
         EscreverSimNao(aba, 3, "Notificações", configuracao.NotificacoesAtivas);
         EscreverSimNao(aba, 4, "Som", configuracao.SomAtivo);
-        EscreverItem(aba, 5, "Prazos de aviso", TextoPrazos(configuracao.PrazosAviso));
-        EscreverItem(aba, 6, "Provedor", configuracao.Provedor);
-        EscreverItem(aba, 7, "URL", UrlSemConsulta(configuracao.Url));
-        EscreverItem(aba, 8, "Modelo", configuracao.Modelo);
+        EscreverSimNao(aba, 5, "Gráfico de lançamentos expandido", configuracao.GraficoLancamentosExpandido);
+        EscreverItem(aba, 6, "Prazos de aviso", TextoPrazos(configuracao.PrazosAviso));
+        EscreverItem(aba, 7, "Provedor", configuracao.Provedor);
+        EscreverItem(aba, 8, "URL", UrlSemSegredo(configuracao.Url));
+        EscreverItem(aba, 9, "Modelo", configuracao.Modelo);
     }
 
     private static void EscreverItem(IXLWorksheet aba, int linha, string item, string? valor)
@@ -464,11 +429,43 @@ public static class ExportadorPlanilha
 
     private static IXLWorksheet Abrir(XLWorkbook pasta, string nome) => PlanilhaPtBr.CriarAba(pasta, nome);
 
+    /// <summary>Lote da leitura paginada. O teste passa disso para provar a segunda página.</summary>
+    internal const int TamanhoLote = 200;
+
+    private static void EmLotes<T>(IQueryable<T> consulta, string aba, Action<T, int> gravar)
+    {
+        var total = consulta.Count();
+        ExigirLimiteDeDados(aba, total);
+
+        var pulados = 0;
+        while (pulados < total)
+        {
+            var lote = consulta.Skip(pulados).Take(TamanhoLote).ToList();
+            if (lote.Count == 0)
+                break;
+
+            for (var i = 0; i < lote.Count; i++)
+                gravar(lote[i], pulados + i);
+
+            pulados += lote.Count;
+        }
+    }
+
+    /// <summary>A primeira linha da aba é o cabeçalho. O Excel aceita 1.048.575 linhas de dados.</summary>
+    internal static void ExigirLimiteDeDados(string aba, int linhasDeDados)
+    {
+        var teto = PlanilhaPtBr.MaximoLinhas - 1;
+        if (linhasDeDados > teto)
+            throw new InvalidOperationException(
+                $"A aba {aba} tem {linhasDeDados} linhas de dados. O Excel aceita no máximo {teto} além do cabeçalho.");
+    }
+
     /// <summary>
     /// CriadoEm e AtualizadoEm são gravados com <see cref="DateTime.UtcNow"/>.
     /// O SQLite devolve o mesmo relógio com <see cref="DateTimeKind.Unspecified"/>.
+    /// Kind Local vira UTC antes de São Paulo.
     /// </summary>
-    private static DateTime InstanteUtc(DateTime instante) => instante.Kind switch
+    internal static DateTime InstanteUtc(DateTime instante) => instante.Kind switch
     {
         DateTimeKind.Utc => instante,
         DateTimeKind.Local => instante.ToUniversalTime(),
@@ -505,9 +502,42 @@ public static class ExportadorPlanilha
             return "";
 
         var data = origem.Data.Kind == DateTimeKind.Utc
-            ? TimeZoneInfo.ConvertTimeFromUtc(origem.Data, TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo"))
+            ? TimeZoneInfo.ConvertTimeFromUtc(origem.Data, PlanilhaPtBr.FusoBrasil)
             : origem.Data;
-        return $"{origem.Descricao} — {data:dd/MM/yyyy}";
+        return origem.Descricao + " — " + data.ToString("dd'/'MM'/'yyyy", PlanilhaPtBr.Cultura);
+    }
+
+    /// <summary>
+    /// Caminho relativo sai como está. Caminho absoluto, URI ou letra de unidade
+    /// vira só o nome do arquivo, sem pasta e sem consulta.
+    /// </summary>
+    internal static string NomeDeFoto(string? valor)
+    {
+        if (string.IsNullOrWhiteSpace(valor))
+            return "";
+
+        if (!EhCaminhoAbsoluto(valor))
+            return valor;
+
+        var texto = valor.Trim();
+        var corte = Math.Max(texto.LastIndexOf('/'), texto.LastIndexOf('\\'));
+        var nome = corte < 0 ? texto : texto[(corte + 1)..];
+        var parametro = nome.IndexOfAny(['?', '#', ';']);
+        return parametro < 0 ? nome : nome[..parametro];
+    }
+
+    private static bool EhCaminhoAbsoluto(string valor)
+    {
+        if (valor.Contains("://", StringComparison.Ordinal))
+            return true;
+
+        if (valor.StartsWith("//", StringComparison.Ordinal) || valor.StartsWith("\\\\", StringComparison.Ordinal))
+            return true;
+
+        if (valor.Length >= 3 && char.IsLetter(valor[0]) && valor[1] == ':' && valor[2] is '\\' or '/')
+            return true;
+
+        return Path.IsPathRooted(valor);
     }
 
     private static string TextoItemFatura(ItemLancamento? item)
@@ -518,20 +548,42 @@ public static class ExportadorPlanilha
         return string.IsNullOrWhiteSpace(item.Descritivo) ? item.Descricao : item.Descritivo;
     }
 
-    private static string? UrlSemConsulta(string? url)
+    /// <summary>
+    /// Esquema, host, porta e caminho. Sem userinfo. Corta em <c>;</c>, <c>?</c> e <c>#</c>,
+    /// inclusive o parâmetro de matriz <c>;token=</c>.
+    /// </summary>
+    internal static string? UrlSemSegredo(string? url)
     {
         if (string.IsNullOrWhiteSpace(url))
             return url;
 
-        if (Uri.TryCreate(url, UriKind.Absolute, out var absoluta))
-            return absoluta.GetLeftPart(UriPartial.Path);
+        if (Uri.TryCreate(url, UriKind.Absolute, out var absoluta) && absoluta.IsAbsoluteUri && !string.IsNullOrEmpty(absoluta.Host))
+        {
+            var autoridade = absoluta.Authority;
+            var arroba = autoridade.LastIndexOf('@');
+            if (arroba >= 0)
+                autoridade = autoridade[(arroba + 1)..];
 
-        var corte = url.IndexOfAny(['?', '#']);
-        return corte < 0 ? url : url[..corte];
+            var caminho = absoluta.AbsolutePath;
+            var corte = caminho.IndexOfAny([';', '?', '#']);
+            if (corte >= 0)
+                caminho = caminho[..corte];
+
+            return absoluta.Scheme + "://" + autoridade + caminho;
+        }
+
+        var indice = url.IndexOfAny([';', '?', '#']);
+        return indice < 0 ? url : url[..indice];
     }
 
-    private static string TextoPrazos(PrazoAviso prazos)
+    internal static string TextoPrazos(PrazoAviso prazos)
     {
+        const PrazoAviso conhecidos =
+            PrazoAviso.TresDiasAntes | PrazoAviso.UmDiaAntes | PrazoAviso.NoDia
+            | PrazoAviso.UmDiaDepois | PrazoAviso.Vencidas;
+        if ((prazos & ~conhecidos) != 0)
+            throw new InvalidOperationException($"Prazo de aviso desconhecido: {prazos}.");
+
         var partes = new List<string>();
         foreach (var (flag, texto) in TextosPrazo)
         {
@@ -542,65 +594,74 @@ public static class ExportadorPlanilha
         return string.Join(", ", partes);
     }
 
-    private static string TextoTema(TemaPreferido tema) => tema switch
+    internal static string TextoTema(TemaPreferido tema) => tema switch
     {
+        TemaPreferido.Automatico => "Automático",
         TemaPreferido.Claro => "Claro",
         TemaPreferido.Escuro => "Escuro",
-        _ => "Automático"
+        _ => throw new InvalidOperationException($"Tema desconhecido: {tema}.")
     };
 
-    private static string TextoPapel(PerfilRole papel) => papel switch
+    internal static string TextoPapel(PerfilRole papel) => papel switch
     {
+        PerfilRole.Admin => "Administrador",
         PerfilRole.Visualizador => "Visualizador",
-        _ => "Administrador"
+        _ => throw new InvalidOperationException($"Papel desconhecido: {papel}.")
     };
 
-    private static string TextoTipo(TipoTransacao tipo) => tipo switch
+    internal static string TextoTipo(TipoTransacao tipo) => tipo switch
     {
         TipoTransacao.Receita => "Receita",
-        _ => "Despesa"
+        TipoTransacao.Despesa => "Despesa",
+        _ => throw new InvalidOperationException($"Tipo de lançamento desconhecido: {tipo}.")
     };
 
-    private static string TextoRecorrencia(TipoRecorrencia recorrencia) => recorrencia switch
+    internal static string TextoRecorrencia(TipoRecorrencia recorrencia) => recorrencia switch
     {
+        TipoRecorrencia.Unica => "Única",
         TipoRecorrencia.Semanal => "Semanal",
         TipoRecorrencia.Mensal => "Mensal",
         TipoRecorrencia.Anual => "Anual",
-        _ => "Única"
+        _ => throw new InvalidOperationException($"Recorrência desconhecida: {recorrencia}.")
     };
 
-    private static string TextoNatureza(NaturezaItemLancamento natureza) => natureza switch
+    internal static string TextoNatureza(NaturezaItemLancamento natureza) => natureza switch
     {
+        NaturezaItemLancamento.Avulsa => "Avulsa",
         NaturezaItemLancamento.Parcelada => "Parcelada",
         NaturezaItemLancamento.Assinatura => "Assinatura",
-        _ => "Avulsa"
+        _ => throw new InvalidOperationException($"Natureza desconhecida: {natureza}.")
     };
 
-    private static string TextoAtivo(TipoAtivo tipo) => tipo switch
+    internal static string TextoAtivo(TipoAtivo tipo) => tipo switch
     {
+        TipoAtivo.Acao => "Ação",
         TipoAtivo.Fii => "FII",
         TipoAtivo.Etf => "ETF",
         TipoAtivo.Bdr => "BDR",
-        _ => "Ação"
+        _ => throw new InvalidOperationException($"Tipo de ativo desconhecido: {tipo}.")
     };
 
-    private static string TextoOperacao(TipoOperacao tipo) => tipo switch
+    internal static string TextoOperacao(TipoOperacao tipo) => tipo switch
     {
+        TipoOperacao.Compra => "Compra",
         TipoOperacao.Venda => "Venda",
-        _ => "Compra"
+        _ => throw new InvalidOperationException($"Operação desconhecida: {tipo}.")
     };
 
-    private static string TextoCartao(TipoCartao tipo) => tipo switch
+    internal static string TextoCartao(TipoCartao tipo) => tipo switch
     {
+        TipoCartao.Credito => "Crédito",
         TipoCartao.Beneficio => "Benefício",
-        _ => "Crédito"
+        _ => throw new InvalidOperationException($"Tipo de cartão desconhecido: {tipo}.")
     };
 
-    private static string TextoBeneficio(TipoCartaoBeneficio? tipo) => tipo switch
+    internal static string TextoBeneficio(TipoCartaoBeneficio? tipo) => tipo switch
     {
+        null => "",
         TipoCartaoBeneficio.ValeAlimentacao => "Vale alimentação",
         TipoCartaoBeneficio.ValeRefeicao => "Vale refeição",
         TipoCartaoBeneficio.Outro => "Outro",
-        _ => ""
+        _ => throw new InvalidOperationException($"Tipo de benefício desconhecido: {tipo}.")
     };
 }
