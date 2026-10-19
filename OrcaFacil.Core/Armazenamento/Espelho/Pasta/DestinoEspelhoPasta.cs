@@ -15,6 +15,12 @@ public sealed class DestinoEspelhoPasta : IDestinoEspelho
         _protocolo = protocolo ?? throw new ArgumentNullException(nameof(protocolo));
     }
 
+    /// <summary>
+    /// Passo seguinte ao retorno do protocolo. Produção deixa nulo.
+    /// Se lança depois de sucesso ou de promoção já efetuada, a falha carrega essa marca.
+    /// </summary>
+    internal Func<ResultadoOperacaoPasta, CancellationToken, Task>? DepoisDoProtocolo { get; set; }
+
     public Task<ResultadoOperacaoPasta> PublicarComResultadoAsync(
         string arquivoOrigem,
         CancellationToken cancellationToken = default)
@@ -24,7 +30,12 @@ public sealed class DestinoEspelhoPasta : IDestinoEspelho
     {
         var resultado = await PublicarInternoAsync(arquivoOrigem, cancellationToken);
         if (!resultado.Sucesso)
+        {
+            if (resultado.PromocaoEfetuada)
+                throw new PublicacaoEspelhoException(resultado.Mensagem, promocaoEfetuada: true);
+
             throw new IOException(resultado.Mensagem);
+        }
     }
 
     public override string ToString() => "DestinoEspelhoPasta";
@@ -33,9 +44,14 @@ public sealed class DestinoEspelhoPasta : IDestinoEspelho
         string arquivoOrigem,
         CancellationToken cancellationToken)
     {
+        ResultadoOperacaoPasta? resultado = null;
         try
         {
-            return await _protocolo.PublicarAsync(arquivoOrigem, cancellationToken);
+            resultado = await _protocolo.PublicarAsync(arquivoOrigem, cancellationToken);
+            if (DepoisDoProtocolo is not null)
+                await DepoisDoProtocolo(resultado, cancellationToken);
+
+            return resultado;
         }
         catch (OperationCanceledException)
         {
@@ -44,7 +60,23 @@ public sealed class DestinoEspelhoPasta : IDestinoEspelho
         catch (Exception ex)
         {
             var codigo = ClassificadorFalhaPastaEspelho.Classificar(SinalFalhaPasta.De(ex));
-            return ResultadoOperacaoPasta.Falha(codigo);
+            var promocaoEfetuada = resultado is not null && (resultado.Sucesso || resultado.PromocaoEfetuada);
+            return ResultadoOperacaoPasta.Falha(codigo, promocaoEfetuada);
         }
     }
+}
+
+/// <summary>
+/// Falha da publicação na pasta. <see cref="PromocaoEfetuada"/> fica ligado quando o
+/// temporário já assumiu o nome definitivo, mesmo que a chamada tenha falhado.
+/// </summary>
+public sealed class PublicacaoEspelhoException : IOException
+{
+    public PublicacaoEspelhoException(string mensagem, bool promocaoEfetuada)
+        : base(mensagem)
+    {
+        PromocaoEfetuada = promocaoEfetuada;
+    }
+
+    public bool PromocaoEfetuada { get; }
 }
