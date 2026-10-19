@@ -114,7 +114,7 @@ public static class ExportadorPlanilha
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 3), TextoPapel(membro.Role));
             PlanilhaPtBr.GravarSimNao(PlanilhaPtBr.Celula(aba, linha, 4), membro.Ativo);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 5), NomeDeFoto(membro.FotoPath));
-            PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 6), InstanteUtc(membro.CriadoEm));
+            GravarInstante(PlanilhaPtBr.Celula(aba, linha, 6), membro.CriadoEm);
         });
     }
 
@@ -162,7 +162,7 @@ public static class ExportadorPlanilha
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 9), TextoPerfil(transacao.MembroFamilia));
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 10), TextoOrigem(transacao.TransacaoOrigem));
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 11), transacao.Cartao?.Rotulo);
-            PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 12), InstanteUtc(transacao.CriadoEm));
+            GravarInstante(PlanilhaPtBr.Celula(aba, linha, 12), transacao.CriadoEm);
         });
     }
 
@@ -207,7 +207,7 @@ public static class ExportadorPlanilha
             PlanilhaPtBr.GravarNumero(PlanilhaPtBr.Celula(aba, linha, 3), orcamento.MetaReducaoPercentual);
             PlanilhaPtBr.GravarNumero(PlanilhaPtBr.Celula(aba, linha, 4), orcamento.Mes);
             PlanilhaPtBr.GravarNumero(PlanilhaPtBr.Celula(aba, linha, 5), orcamento.Ano);
-            PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 6), InstanteUtc(orcamento.CriadoEm));
+            GravarInstante(PlanilhaPtBr.Celula(aba, linha, 6), orcamento.CriadoEm);
         });
     }
 
@@ -229,7 +229,7 @@ public static class ExportadorPlanilha
             PlanilhaPtBr.GravarSimNao(PlanilhaPtBr.Celula(aba, linha, 6), meta.Concluida);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 7), TextoPerfil(meta.MembroFamilia));
             PlanilhaPtBr.GravarNumero(PlanilhaPtBr.Celula(aba, linha, 8), meta.PercentualConcluido);
-            PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 9), InstanteUtc(meta.CriadoEm));
+            GravarInstante(PlanilhaPtBr.Celula(aba, linha, 9), meta.CriadoEm);
         });
     }
 
@@ -243,7 +243,7 @@ public static class ExportadorPlanilha
             PlanilhaPtBr.GravarNumero(PlanilhaPtBr.Celula(aba, linha, 1), fechamento.Mes);
             PlanilhaPtBr.GravarNumero(PlanilhaPtBr.Celula(aba, linha, 2), fechamento.Ano);
             PlanilhaPtBr.GravarSimNao(PlanilhaPtBr.Celula(aba, linha, 3), fechamento.Fechado);
-            PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 4), InstanteUtc(fechamento.AtualizadoEm));
+            GravarInstante(PlanilhaPtBr.Celula(aba, linha, 4), fechamento.AtualizadoEm);
         });
     }
 
@@ -258,7 +258,7 @@ public static class ExportadorPlanilha
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 2), ativo.Nome);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 3), TextoAtivo(ativo.Tipo));
             PlanilhaPtBr.GravarSimNao(PlanilhaPtBr.Celula(aba, linha, 4), ativo.Ativo);
-            PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 5), InstanteUtc(ativo.CriadoEm));
+            GravarInstante(PlanilhaPtBr.Celula(aba, linha, 5), ativo.CriadoEm);
         });
     }
 
@@ -285,8 +285,8 @@ public static class ExportadorPlanilha
             PlanilhaPtBr.GravarMoeda(PlanilhaPtBr.Celula(aba, linha, 7), operacao.PrecoUnitario);
             PlanilhaPtBr.GravarMoeda(PlanilhaPtBr.Celula(aba, linha, 8), operacao.Custos);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 9), operacao.Corretora);
-            PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 10), InstanteUtc(operacao.CriadoEm));
-            PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 11), InstanteUtc(operacao.AtualizadoEm));
+            GravarInstante(PlanilhaPtBr.Celula(aba, linha, 10), operacao.CriadoEm);
+            GravarInstante(PlanilhaPtBr.Celula(aba, linha, 11), operacao.AtualizadoEm);
         });
     }
 
@@ -302,7 +302,7 @@ public static class ExportadorPlanilha
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 1), produto.Nome);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 2), produto.Categoria?.Nome);
             PlanilhaPtBr.GravarSimNao(PlanilhaPtBr.Celula(aba, linha, 3), produto.Ativo);
-            PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 4), InstanteUtc(produto.CriadoEm));
+            GravarInstante(PlanilhaPtBr.Celula(aba, linha, 4), produto.CriadoEm);
         });
     }
 
@@ -315,7 +315,7 @@ public static class ExportadorPlanilha
             var linha = LinhaDeDados(indice);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 1), local.Nome);
             PlanilhaPtBr.GravarSimNao(PlanilhaPtBr.Celula(aba, linha, 2), local.Ativo);
-            PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 3), InstanteUtc(local.CriadoEm));
+            GravarInstante(PlanilhaPtBr.Celula(aba, linha, 3), local.CriadoEm);
         });
     }
 
@@ -348,7 +348,7 @@ public static class ExportadorPlanilha
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 10), compra.CartaoCredito?.Rotulo);
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 11), TextoItemFatura(compra.ItemFatura));
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 12), compra.Transacao?.Descricao);
-            PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 13), InstanteUtc(compra.CriadoEm));
+            GravarInstante(PlanilhaPtBr.Celula(aba, linha, 13), compra.CriadoEm);
         });
     }
 
@@ -383,7 +383,7 @@ public static class ExportadorPlanilha
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 4), TextoCartao(cartao.Tipo));
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 5), TextoBeneficio(cartao.TipoBeneficio));
             PlanilhaPtBr.GravarSimNao(PlanilhaPtBr.Celula(aba, linha, 6), cartao.Ativo);
-            PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 7), InstanteUtc(cartao.CriadoEm));
+            GravarInstante(PlanilhaPtBr.Celula(aba, linha, 7), cartao.CriadoEm);
         });
     }
 
@@ -399,7 +399,7 @@ public static class ExportadorPlanilha
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 1), recarga.Cartao?.Rotulo);
             PlanilhaPtBr.GravarData(PlanilhaPtBr.Celula(aba, linha, 2), recarga.Data);
             PlanilhaPtBr.GravarMoeda(PlanilhaPtBr.Celula(aba, linha, 3), recarga.Valor);
-            PlanilhaPtBr.GravarDataHora(PlanilhaPtBr.Celula(aba, linha, 4), InstanteUtc(recarga.CriadoEm));
+            GravarInstante(PlanilhaPtBr.Celula(aba, linha, 4), recarga.CriadoEm);
         });
     }
 
@@ -481,6 +481,30 @@ public static class ExportadorPlanilha
         return TimeZoneInfo.ConvertTimeToUtc(relogio, fuso);
     }
 
+    /// <summary>
+    /// Horário de auditoria. Um Local que não existe no fuso (salto do horário de verão)
+    /// não derruba a exportação: o relógio original entra como texto.
+    /// </summary>
+    internal static void GravarInstante(IXLCell celula, DateTime? instante, TimeZoneInfo? fusoLocal = null)
+    {
+        if (instante is null)
+        {
+            PlanilhaPtBr.GravarDataHora(celula, null);
+            return;
+        }
+
+        try
+        {
+            PlanilhaPtBr.GravarDataHora(celula, InstanteUtc(instante.Value, fusoLocal));
+        }
+        catch (ArgumentException)
+        {
+            PlanilhaPtBr.GravarTexto(
+                celula,
+                instante.Value.ToString("dd'/'MM'/'yyyy HH':'mm':'ss", PlanilhaPtBr.Cultura));
+        }
+    }
+
     private static DateTime? InstanteUtc(DateTime? instante)
         => instante is null ? null : InstanteUtc(instante.Value);
 
@@ -539,15 +563,50 @@ public static class ExportadorPlanilha
             texto = resto[(barra + 1)..];
         }
 
-        var nome = UltimoSegmento(texto);
-        var parametro = nome.IndexOfAny(['?', '#', ';']);
-        if (parametro >= 0)
-            nome = nome[..parametro];
+        return NomeDepoisDosEscapes(UltimoSegmento(texto));
+    }
 
-        if (nome.Length == 0 || TemControle(nome))
+    /// <summary>
+    /// Decodifica <c>%XX</c> até estabilizar (no máximo 3 vezes). Se aparecer barra,
+    /// o último segmento é refeito. Só então corta <c>?</c>, <c>;</c> e <c>#</c>.
+    /// </summary>
+    private static string NomeDepoisDosEscapes(string segmento)
+    {
+        var nome = DecodificarPercent(segmento);
+        if (nome.Contains('/') || nome.Contains('\\'))
+            nome = UltimoSegmento(nome.Replace('\\', '/'));
+
+        var corte = nome.IndexOfAny(['?', '#', ';']);
+        if (corte >= 0)
+            nome = nome[..corte];
+
+        if (nome.Length == 0 || nome[^1] is '/' or '\\' or ':' || TemControle(nome))
             return "";
 
         return nome;
+    }
+
+    private static string DecodificarPercent(string texto)
+    {
+        for (var i = 0; i < 3; i++)
+        {
+            string proximo;
+            try
+            {
+                proximo = Uri.UnescapeDataString(texto);
+            }
+            catch (UriFormatException)
+            {
+                break;
+            }
+
+            if (proximo == texto)
+                break;
+
+            texto = proximo;
+        }
+
+        return texto;
     }
 
     /// <summary>Esquema RFC 3986 no início. Devolve o índice do <c>:</c>.</summary>
@@ -566,9 +625,15 @@ public static class ExportadorPlanilha
         return null;
     }
 
-    /// <summary><c>/</c> e <c>:</c> separam segmento. Letra de unidade sem barra também.</summary>
+    /// <summary>
+    /// <c>/</c> e <c>:</c> separam segmento. Se o texto termina num separador, não há nome:
+    /// o segmento anterior não entra no lugar.
+    /// </summary>
     private static string UltimoSegmento(string texto)
     {
+        if (texto.Length == 0 || texto[^1] is '/' or ':')
+            return "";
+
         var nome = "";
         var inicio = 0;
         for (var i = 0; i <= texto.Length; i++)
@@ -605,10 +670,9 @@ public static class ExportadorPlanilha
     }
 
     /// <summary>
-    /// Só http ou https, com o esquema no início da URL já normalizada.
-    /// Sai sem userinfo (último <c>@</c> da autoridade), sem matriz, sem consulta
-    /// e sem fragmento. <c>%3F</c>, <c>%3B</c> e <c>%23</c> no caminho também cortam.
-    /// Qualquer outra coisa volta vazia.
+    /// Só a origem <c>esquema://host</c> ou <c>esquema://host:porta</c>, como o Uri devolve.
+    /// Http ou https, com o esquema no início da URL já normalizada e host não vazio.
+    /// Caminho, consulta e fragmento não entram. Qualquer outra coisa volta vazia.
     /// </summary>
     internal static string UrlSemSegredo(string? url)
     {
@@ -619,50 +683,36 @@ public static class ExportadorPlanilha
         if (!ComecaComHttp(normalizada))
             return "";
 
-        var semSegredo = SemUserinfoEParametros(normalizada);
-        if (!Uri.TryCreate(semSegredo, UriKind.Absolute, out var absoluta)
+        var semUserinfo = SemUserinfo(normalizada);
+        if (!Uri.TryCreate(semUserinfo, UriKind.Absolute, out var absoluta)
             || !absoluta.IsAbsoluteUri
             || absoluta.Scheme is not ("http" or "https")
             || string.IsNullOrEmpty(absoluta.Host))
             return "";
 
-        return absoluta.Scheme + "://" + SemArrobaNaAutoridade(absoluta.Authority) + CortarCaminho(absoluta.AbsolutePath);
+        var porta = absoluta.IsDefaultPort ? "" : ":" + absoluta.Port.ToString(CultureInfo.InvariantCulture);
+        return absoluta.Scheme + "://" + absoluta.Host + porta;
     }
 
     private static bool ComecaComHttp(string url)
         => url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
             || url.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// Tira o userinfo inteiro e corta o caminho em <c>;</c>, <c>?</c>, <c>#</c>
-    /// e nos códigos <c>%3F</c>, <c>%3B</c> e <c>%23</c>.
-    /// </summary>
-    private static string SemUserinfoEParametros(string url)
+    /// <summary>Tira o userinfo no último <c>@</c> da autoridade, para o Uri conseguir ler o host.</summary>
+    private static string SemUserinfo(string url)
     {
         var esquema = url.IndexOf("://", StringComparison.Ordinal);
         var prefixo = url[..(esquema + 3)];
         var resto = url[(esquema + 3)..];
-
         var fimDaAutoridade = resto.IndexOfAny(['/', '?', '#', ';']);
         var autoridade = fimDaAutoridade < 0 ? resto : resto[..fimDaAutoridade];
+        var arroba = autoridade.LastIndexOf('@');
+        if (arroba < 0)
+            return url;
+
         var caminho = fimDaAutoridade < 0 ? "" : resto[fimDaAutoridade..];
-        return prefixo + SemArrobaNaAutoridade(autoridade) + CortarCaminho(caminho);
+        return prefixo + autoridade[(arroba + 1)..] + caminho;
     }
-
-    private static string CortarCaminho(string caminho)
-    {
-        var corte = caminho.IndexOfAny([';', '?', '#']);
-        foreach (var codigo in CodigosDeCorte)
-        {
-            var indice = caminho.IndexOf(codigo, StringComparison.OrdinalIgnoreCase);
-            if (indice >= 0 && (corte < 0 || indice < corte))
-                corte = indice;
-        }
-
-        return corte < 0 ? caminho : caminho[..corte];
-    }
-
-    private static readonly string[] CodigosDeCorte = ["%3F", "%3B", "%23"];
 
     /// <summary>
     /// Tira das pontas branco (<see cref="char.IsWhiteSpace"/>, inclusive NBSP),
@@ -714,13 +764,6 @@ public static class ExportadorPlanilha
             or UnicodeCategory.LineSeparator
             or UnicodeCategory.ParagraphSeparator
             or UnicodeCategory.Control;
-    }
-
-    /// <summary>O userinfo acaba no último <c>@</c> da autoridade. Um arroba no caminho fica.</summary>
-    private static string SemArrobaNaAutoridade(string autoridade)
-    {
-        var arroba = autoridade.LastIndexOf('@');
-        return arroba >= 0 ? autoridade[(arroba + 1)..] : autoridade;
     }
 
     internal static string TextoPrazos(PrazoAviso prazos)

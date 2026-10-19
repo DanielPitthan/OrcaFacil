@@ -243,7 +243,7 @@ public class ExportadorPlanilhaTests
         Assert.Equal(PlanilhaPtBr.Sim, config.Cell(5, 2).GetText());
         Assert.Equal("3 dias antes do vencimento, No dia do vencimento", config.Cell(6, 2).GetText());
         Assert.Equal("Ollama", config.Cell(7, 2).GetText());
-        Assert.Equal("https://api.exemplo.test/v1", config.Cell(8, 2).GetText());
+        Assert.Equal("https://api.exemplo.test", config.Cell(8, 2).GetText());
         Assert.Equal("llama3", config.Cell(9, 2).GetText());
 
         var fonte = File.ReadAllText(Path.Combine(Raiz(), "OrcaFacil.Core", "Exportacao", "ExportadorPlanilha.cs"));
@@ -251,18 +251,43 @@ public class ExportadorPlanilhaTests
     }
 
     [Theory]
-    [InlineData("https://user:SENTINELA-SENHA@api.exemplo.test/v1?token=SENTINELA-TOKEN", "https://api.exemplo.test/v1")]
-    [InlineData("https://user:SENTINELA-SENHA@api.exemplo.test/v1?token=X", "https://api.exemplo.test/v1")]
-    [InlineData("https://api.exemplo.test/path;token=SENTINELA-TOKEN", "https://api.exemplo.test/path")]
-    [InlineData("https://user:SENTINELA-SENHA@api.exemplo.test:8443/v1;token=X?y=1#frag", "https://api.exemplo.test:8443/v1")]
-    [InlineData("https://api.exemplo.test/v1", "https://api.exemplo.test/v1")]
-    [InlineData("HTTP://api.exemplo.test/v1", "http://api.exemplo.test/v1")]
-    [InlineData("https://user:SENTINELA-SEGRE@SENTINELA-DO@host/v1", "https://host/v1")]
-    [InlineData(" https://user:SENTINELA-SEGRE@SENTINELA-DO@host/v1", "https://host/v1")]
-    [InlineData("https://host/v1%3Ftoken=SENTINELA", "https://host/v1")]
-    [InlineData("https://host/v1%3ftoken=SENTINELA", "https://host/v1")]
-    [InlineData("https://host/v1%3Btoken=SENTINELA", "https://host/v1")]
-    [InlineData("https://host/v1%23SENTINELA", "https://host/v1")]
+    [InlineData("https://user:SENTINELA-SENHA@api.exemplo.test/v1?token=SENTINELA-TOKEN", "https://api.exemplo.test")]
+    [InlineData("https://user:SENTINELA-SENHA@api.exemplo.test/v1?token=X", "https://api.exemplo.test")]
+    [InlineData("https://api.exemplo.test/path;token=SENTINELA-TOKEN", "https://api.exemplo.test")]
+    [InlineData("https://user:SENTINELA-SENHA@api.exemplo.test:8443/v1;token=X?y=1#frag", "https://api.exemplo.test:8443")]
+    [InlineData("https://api.exemplo.test:443/v1", "https://api.exemplo.test")]
+    [InlineData("http://api.exemplo.test:80/v1", "http://api.exemplo.test")]
+    [InlineData("http://api.exemplo.test:8080/v1", "http://api.exemplo.test:8080")]
+    [InlineData("https://api.exemplo.test/v1", "https://api.exemplo.test")]
+    [InlineData("HTTP://api.exemplo.test/v1", "http://api.exemplo.test")]
+    [InlineData("HTTPS://HOST/V1", "https://host")]
+    [InlineData("https://user:segre@do@host/v1", "https://host")]
+    [InlineData("https://user:SENTINELA-SEGRE@SENTINELA-DO@host/v1", "https://host")]
+    [InlineData(" https://user:SENTINELA-SEGRE@SENTINELA-DO@host/v1", "https://host")]
+    [InlineData("https://host/v1%3Ftoken=SENTINELA", "https://host")]
+    [InlineData("https://host/v1%3ftoken=SENTINELA", "https://host")]
+    [InlineData("https://host/v1%3Btoken=SENTINELA", "https://host")]
+    [InlineData("https://host/v1%23SENTINELA", "https://host")]
+    [InlineData("https://host/v1%253Ftoken=SEGREDO", "https://host")]
+    [InlineData("https://user:SENTINELA%40x@host/v1", "https://host")]
+    [InlineData("https://host%40evil/SENTINELA", "")]
+    [InlineData("https://host/v1%3ASEGREDO", "https://host")]
+    [InlineData("https://[::1]/v1", "https://[::1]")]
+    [InlineData("https://user:SENTINELA@[::1]:8443/v1", "https://[::1]:8443")]
+    [InlineData("https://xn--caf-dma.example/v1", "https://xn--caf-dma.example")]
+    [InlineData("https://café.example/v1", "https://café.example")]
+    [InlineData("http:/host", "")]
+    [InlineData("http:\\\\host", "")]
+    [InlineData("ht\u200Btp://host", "")]
+    [InlineData("\thttps://host/SEGREDO", "https://host")]
+    [InlineData("https://ex\\ample.com/SENTINELA", "")]
+    [InlineData("https://user\\SENTINELA@host/v1", "https://host")]
+    [InlineData("https://host/../SEGREDO", "https://host")]
+    [InlineData("https://host/a%2F..%2FSEGREDO", "https://host")]
+    [InlineData("https://host/a%252F..%252FSEGREDO", "https://host")]
+    [InlineData("https:///x", "")]
+    [InlineData("https://@host/x", "https://host")]
+    [InlineData("https://user@", "")]
     [InlineData("/path;token=SENTINELA-TOKEN?x=1", "")]
     [InlineData("/path;token=X", "")]
     [InlineData("//user:SENTINELA-SENHA@host/v1?token=SENTINELA-TOKEN", "")]
@@ -287,11 +312,13 @@ public class ExportadorPlanilhaTests
     [InlineData("javascript:SENTINELA-SENHA", "")]
     [InlineData("data:text/plain,SENTINELA-SENHA", "")]
     [InlineData("ftp://SENTINELA-SENHA@host/v1", "")]
+    [InlineData("..", "")]
     public void UrlSemSegredo_TiraUserinfoConsultaEMatriz(string url, string esperado)
     {
         var limpa = ExportadorPlanilha.UrlSemSegredo(url);
         Assert.Equal(esperado, limpa);
         Assert.DoesNotContain("SENTINELA", limpa, StringComparison.Ordinal);
+        Assert.DoesNotContain("SEGREDO", limpa, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -358,8 +385,32 @@ public class ExportadorPlanilhaTests
     [InlineData("/var/fotos/duda.jpg\u200B", "duda.jpg")]
     [InlineData("C:Users\\daniel\\foto.jpg", "foto.jpg")]
     [InlineData("foto\u0001.jpg", "")]
+    [InlineData("C:\\Users\\daniel\\", "")]
+    [InlineData("/home/daniel/", "")]
+    [InlineData("pasta/", "")]
+    [InlineData("C:", "")]
+    [InlineData("..", "..")]
+    [InlineData(".", ".")]
+    [InlineData("   ", "")]
+    [InlineData("C:foto.jpg", "foto.jpg")]
+    [InlineData("content://a/b/c.jpg?x", "c.jpg")]
+    [InlineData("content://midia/bia.jpg%3Ftoken=SEGREDO", "bia.jpg")]
+    [InlineData("bia.jpg%3Ftoken=SEGREDO", "bia.jpg")]
+    [InlineData("bia.jpg%253Ftoken=SEGREDO", "bia.jpg")]
+    [InlineData("bia.jpg%3bx=SEGREDO", "bia.jpg")]
+    [InlineData("bia.jpg%23SEGREDO", "bia.jpg")]
+    [InlineData("pasta%2Fdaniel%2Ffoto.jpg", "foto.jpg")]
+    [InlineData("fo\u200Blder/SENTINELA-CF/foto.jpg", "foto.jpg")]
+    [InlineData("/home/daniel/\u200B", "")]
+    [InlineData("foto.jpg\u200B", "foto.jpg")]
     public void NomeDeFoto_SaiSoONomeDoArquivo(string valor, string esperado)
-        => Assert.Equal(esperado, ExportadorPlanilha.NomeDeFoto(valor));
+    {
+        var nome = ExportadorPlanilha.NomeDeFoto(valor);
+        Assert.Equal(esperado, nome);
+        Assert.DoesNotContain("SEGREDO", nome, StringComparison.Ordinal);
+        Assert.DoesNotContain("SENTINELA", nome, StringComparison.Ordinal);
+        Assert.DoesNotContain("daniel", nome, StringComparison.OrdinalIgnoreCase);
+    }
 
     [Fact]
     public void NomeDeFoto_PrefixoInvisivelNaoVazaPastaNoXml()
@@ -376,7 +427,16 @@ public class ExportadorPlanilhaTests
             new string(['\uD800'])
         };
 
-        var fotos = new List<string> { "C:Users\\daniel\\foto.jpg" };
+        var fotos = new List<string>
+        {
+            "C:Users\\daniel\\foto.jpg",
+            "/home/daniel/\u200B",
+            "/home/daniel/\u200B\uFEFF",
+            "/home/daniel/foto.jpg\u200B",
+            "pasta%2Fdaniel%2Ffoto.jpg",
+            "content://midia/bia.jpg%3Ftoken=SEGREDO",
+            "bia.jpg%253Ftoken=SEGREDO"
+        };
         foreach (var prefixo in prefixos)
         {
             foreach (var caminho in caminhos)
@@ -384,7 +444,12 @@ public class ExportadorPlanilhaTests
         }
 
         foreach (var foto in fotos)
-            Assert.Equal("foto.jpg", ExportadorPlanilha.NomeDeFoto(foto));
+        {
+            var nome = ExportadorPlanilha.NomeDeFoto(foto);
+            Assert.True(nome == EsperadoDaFoto(foto), foto + " deu " + nome);
+            Assert.DoesNotContain("daniel", nome, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("SEGREDO", nome, StringComparison.Ordinal);
+        }
 
         using var fabrica = new TestDbContextFactory();
         using var contexto = fabrica.CreateDbContext();
@@ -409,13 +474,35 @@ public class ExportadorPlanilhaTests
         var compartilhadas = Parte(bytes, "xl/sharedStrings.xml");
         Assert.DoesNotContain("daniel", compartilhadas, StringComparison.Ordinal);
         Assert.DoesNotContain("SENTINELA", compartilhadas, StringComparison.Ordinal);
-        Assert.DoesNotContain("daniel", XmlDasPartes(bytes), StringComparison.Ordinal);
+        Assert.DoesNotContain("SEGREDO", compartilhadas, StringComparison.Ordinal);
+        var xml = XmlDasPartes(bytes);
+        Assert.DoesNotContain("daniel", xml, StringComparison.Ordinal);
+        Assert.DoesNotContain("SEGREDO", xml, StringComparison.Ordinal);
 
         using var pasta = new XLWorkbook(destino);
         var aba = pasta.Worksheet("Perfis");
         for (var i = 0; i < fotos.Count; i++)
-            Assert.Equal("foto.jpg", aba.Cell(i + 2, 5).GetText());
-        Assert.Equal("https://host/v1", pasta.Worksheet("Configurações").Cell(8, 2).GetText());
+        {
+            var esperado = EsperadoDaFoto(fotos[i]);
+            var celula = aba.Cell(i + 2, 5);
+            if (esperado.Length == 0)
+                Assert.Equal(XLDataType.Blank, celula.DataType);
+            else
+                Assert.Equal(esperado, celula.GetText());
+        }
+
+        Assert.Equal("https://host", pasta.Worksheet("Configurações").Cell(8, 2).GetText());
+    }
+
+    private static string EsperadoDaFoto(string foto)
+    {
+        if (foto is "/home/daniel/\u200B" or "/home/daniel/\u200B\uFEFF")
+            return "";
+
+        if (foto.Contains("bia.jpg", StringComparison.Ordinal))
+            return "bia.jpg";
+
+        return "foto.jpg";
     }
 
     [Fact]
@@ -478,6 +565,32 @@ public class ExportadorPlanilhaTests
         var aba = PlanilhaPtBr.CriarAba(pasta, "Perfis");
         PlanilhaPtBr.GravarDataHora(aba.Cell(2, 1), utc);
         Assert.Equal(new DateTime(2018, 11, 15, 18, 0, 0), aba.Cell(2, 1).GetDateTime());
+    }
+
+    [Fact]
+    public void HorarioLocalInexistente_ViraTextoENaoLanca()
+    {
+        var ajuste = TimeZoneInfo.AdjustmentRule.CreateAdjustmentRule(
+            DateTime.MinValue.Date,
+            DateTime.MaxValue.Date,
+            TimeSpan.FromHours(1),
+            TimeZoneInfo.TransitionTime.CreateFixedDateRule(new DateTime(1, 1, 1, 2, 0, 0), 11, 4),
+            TimeZoneInfo.TransitionTime.CreateFixedDateRule(new DateTime(1, 1, 1, 2, 0, 0), 2, 17));
+        var fuso = TimeZoneInfo.CreateCustomTimeZone(
+            "FusoComBuraco", TimeSpan.FromHours(-3), "Fuso com buraco", "Padrão", "Verão", [ajuste]);
+        var inexistente = new DateTime(2018, 11, 4, 2, 30, 45, DateTimeKind.Local);
+
+        using var pasta = new XLWorkbook();
+        var aba = PlanilhaPtBr.CriarAba(pasta, "Perfis");
+        ExportadorPlanilha.GravarInstante(aba.Cell(2, 1), inexistente, fuso);
+        using var destino = new MemoryStream();
+        pasta.SaveAs(destino);
+        destino.Position = 0;
+        using var reaberta = new XLWorkbook(destino);
+        var celula = reaberta.Worksheet("Perfis").Cell(2, 1);
+        Assert.Equal(XLDataType.Text, celula.DataType);
+        Assert.Equal("04/11/2018 02:30:45", celula.GetText());
+        Assert.False(celula.HasFormula);
     }
 
     [Fact]
