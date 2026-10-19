@@ -388,6 +388,14 @@ else
                 _dataOriginal = transacao.Data;
                 _periodoOriginalFechado = await FechamentoService.EstaFechadoAsync(transacao.Data.Month, transacao.Data.Year);
             }
+            else
+            {
+                FluxoLancamento.IniciarNovo(_modelo, DateTime.Today);
+                _data = _modelo.Data;
+                GarantirCategoriaValida();
+                Snackbar.Add("Lançamento não encontrado.", Severity.Warning);
+                NavigationManager.NavigateTo("/lancamentos");
+            }
         }
         else
         {

@@ -70,10 +70,13 @@ public class FluxoLancamentoTests
     public void DepoisDoCartao_CadaTipoVoltaParaAEscolhaSemDadosDoCartao(string nome, int categoriaId)
     {
         var modelo = LancamentoDeCartao();
+        var hoje = new DateTime(2026, 10, 19);
 
-        FluxoLancamento.IniciarNovo(modelo, new DateTime(2026, 10, 19));
+        FluxoLancamento.IniciarNovo(modelo, hoje);
 
         Assert.Null(modelo.Id);
+        Assert.Equal(0m, modelo.Valor);
+        Assert.Equal(hoje, modelo.Data);
         Assert.Null(modelo.CartaoId);
         Assert.Equal(0, modelo.CategoriaId);
         Assert.Equal(TipoTransacao.Despesa, modelo.Tipo);
