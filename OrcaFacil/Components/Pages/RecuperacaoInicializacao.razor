@@ -5,10 +5,21 @@
         <p class="of-boot-marca">Pro Orçamento</p>
         @if (_falhou)
         {
-            <h1>Não foi possível abrir seus dados</h1>
-            <p>
-                O arquivo orcafacil.db continua no aparelho. Nenhum lançamento foi apagado.
-            </p>
+            @if (_atualizacao)
+            {
+                <h1>Atualize o Pro Orçamento</h1>
+                <p>
+                    Os dados neste aparelho são de uma versão mais nova do aplicativo.
+                    Atualize o Pro Orçamento para abri-los. Nenhum arquivo foi apagado e nenhum dado novo foi criado.
+                </p>
+            }
+            else
+            {
+                <h1>Não foi possível abrir seus dados</h1>
+                <p>
+                    O arquivo orcafacil.db continua no aparelho. Nenhum lançamento foi apagado e nenhum dado fictício foi criado.
+                </p>
+            }
             @if (!string.IsNullOrWhiteSpace(_passo))
             {
                 <p class="of-boot-passo">Etapa: @_passo</p>
@@ -29,6 +40,7 @@
 
 @code {
     private bool _falhou;
+    private bool _atualizacao;
     private bool _tentando;
     private string? _passo;
     private string? _resumo;
@@ -42,8 +54,9 @@
 
     private void Atualizar()
     {
-        var (fase, passo, resumo) = Inicializacao.LerEstado();
+        var (fase, passo, resumo, atualizacao) = Inicializacao.LerEstado();
         _falhou = DecisaoAbertura.MostrarFalha(fase);
+        _atualizacao = atualizacao;
         _passo = passo;
         _resumo = resumo;
         if (fase != FaseInicializacao.EmAndamento)

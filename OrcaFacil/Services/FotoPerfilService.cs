@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Maui.Graphics;
 using Microsoft.Maui.Graphics.Platform;
 using GraphicsImage = global::Microsoft.Maui.Graphics.IImage;
+using OrcaFacil.Core.Armazenamento;
 using OrcaFacil.Services.Interfaces;
 
 namespace OrcaFacil.Services;
@@ -39,19 +40,21 @@ public class FotoPerfilService : IFotoPerfilService
 
     public string? ObterDataUrl(string? caminho)
     {
-        if (string.IsNullOrWhiteSpace(caminho) || !File.Exists(caminho))
+        var fisico = ResolverArquivo(caminho);
+        if (fisico is null)
             return null;
 
-        var bytes = File.ReadAllBytes(caminho);
+        var bytes = File.ReadAllBytes(fisico);
         return $"data:image/jpeg;base64,{Convert.ToBase64String(bytes)}";
     }
 
     public async Task<string> GirarHorarioAsync(string caminho)
     {
-        if (string.IsNullOrWhiteSpace(caminho) || !File.Exists(caminho))
+        var fisico = ResolverArquivo(caminho);
+        if (fisico is null)
             throw new InvalidOperationException("Foto não encontrada.");
 
-        await using var entrada = File.OpenRead(caminho);
+        await using var entrada = File.OpenRead(fisico);
         var imagem = PlatformImage.FromStream(entrada)
             ?? throw new InvalidOperationException("Não foi possível ler a foto.");
 
@@ -100,7 +103,7 @@ public class FotoPerfilService : IFotoPerfilService
         }
 
         ApagarAnteriores(destino);
-        return destino;
+        return Path.GetFileName(destino);
     }
 
     private async Task<string> PersistirAsync(GraphicsImage imagem)
@@ -114,7 +117,30 @@ public class FotoPerfilService : IFotoPerfilService
         await using var saida = File.Create(destino);
         await reduzida.SaveAsync(saida, ImageFormat.Jpeg, 0.85f);
         ApagarAnteriores(destino);
-        return destino;
+        return Path.GetFileName(destino);
+    }
+
+    /// <summary>
+    /// Caminho antigo ainda abre se o arquivo existe. Valor novo é só o nome, lido em <see cref="PastaFotos"/>.
+    /// </summary>
+    private string? ResolverArquivo(string? valor)
+    {
+        if (string.IsNullOrWhiteSpace(valor))
+            return null;
+
+        if (File.Exists(valor))
+            return valor;
+
+        try
+        {
+            var nome = FotoPath.ExtrairNomeArquivo(valor);
+            var naPasta = Path.Combine(PastaFotos, nome);
+            return File.Exists(naPasta) ? naPasta : null;
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
     }
 
     private void ApagarAnteriores(string destino)

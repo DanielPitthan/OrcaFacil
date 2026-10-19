@@ -6,10 +6,9 @@ namespace OrcaFacil.Core.Armazenamento;
 /// reinstalação, porque o diretório interno do app muda.
 /// </summary>
 /// <remarks>
-/// O serviço de foto no projeto MAUI ainda grava o caminho cheio. Trocar essa
-/// gravação e normalizar o valor antigo na cópia do espelho fica para o PR de
-/// restauração. Este tipo é a regra que aquele PR tem de usar: null é "sem foto";
-/// qualquer outro valor é só o nome, sem separador de pasta.
+/// A restauração do espelho grava só o nome, pela <see cref="ExtrairNomeArquivo"/>.
+/// Valor que não vira nome permanece. A leitura no app ainda abre o caminho antigo
+/// quando o arquivo existe. Null é "sem foto"; qualquer outro valor persistido é só o nome.
 /// </remarks>
 public static class FotoPath
 {

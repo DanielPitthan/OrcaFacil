@@ -118,6 +118,10 @@ public sealed class EspelhoNaPastaUsuario : IEspelhoDados
 
     private async Task<LeituraEspelho> LerNomeAsync(string nome, CancellationToken cancellationToken)
     {
+        var recusa = _leitor.RecusaSemAbrirArquivo();
+        if (recusa is not null)
+            return recusa;
+
         var local = _area.CriarArquivo();
         try
         {

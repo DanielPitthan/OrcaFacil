@@ -15,8 +15,8 @@ public class MembroFamilia
 
     /// <summary>
     /// Nome do arquivo da foto, sem pasta. Null é sem foto.
-    /// A regra está em <see cref="OrcaFacil.Core.Armazenamento.FotoPath"/>. O serviço de perfil no app
-    /// ainda grava caminho cheio; a normalização entra no PR de restauração.
+    /// A regra está em <see cref="OrcaFacil.Core.Armazenamento.FotoPath"/>.
+    /// A restauração do espelho grava só o nome. A leitura ainda abre o caminho antigo se o arquivo existir.
     /// </summary>
     [MaxLength(260)]
     public string? FotoPath { get; set; }

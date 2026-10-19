@@ -1,19 +1,18 @@
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Maui.ApplicationModel;
+using OrcaFacil.Core.Armazenamento;
 using OrcaFacil.Core.Data;
-using OrcaFacil.Data;
 using OrcaFacil.Services.Interfaces;
 using Serilog;
 
 namespace OrcaFacil.Services;
 
 /// <summary>
-/// Roda migração, perfil e lembretes fora da thread principal.
-/// Falha de banco ou de perfil abre a tela de recuperação. O arquivo do banco não é apagado.
+/// Na abertura, o coordenador restaura, migra ou semeia. Depois vêm o perfil e os lembretes.
+/// Falha de restauração, banco ou perfil abre a tela de recuperação. Nenhum arquivo é apagado.
 /// </summary>
 public sealed class InicializacaoApp
 {
-    private readonly IDbContextFactory<AppDbContext> _factory;
+    private readonly CoordenadorArmazenamento _armazenamento;
     private readonly IPerfilContext _perfil;
     private readonly INotificationSchedulerService _agendador;
     private readonly SemaphoreSlim _porta = new(1, 1);
@@ -22,25 +21,26 @@ public sealed class InicializacaoApp
     private FaseInicializacao _fase = FaseInicializacao.Pendente;
     private string? _passo;
     private string? _resumoErro;
+    private bool _pedirAtualizacao;
     private string? _caminhoBanco;
     private string? _pastaLogs;
 
     public InicializacaoApp(
-        IDbContextFactory<AppDbContext> factory,
+        CoordenadorArmazenamento armazenamento,
         IPerfilContext perfil,
         INotificationSchedulerService agendador)
     {
-        _factory = factory;
+        _armazenamento = armazenamento;
         _perfil = perfil;
         _agendador = agendador;
     }
 
     public event Action? AoMudar;
 
-    public (FaseInicializacao Fase, string? Passo, string? ResumoErro) LerEstado()
+    public (FaseInicializacao Fase, string? Passo, string? ResumoErro, bool PedirAtualizacao) LerEstado()
     {
         lock (_estadoLock)
-            return (_fase, _passo, _resumoErro);
+            return (_fase, _passo, _resumoErro, _pedirAtualizacao);
     }
 
     /// <summary>
@@ -90,7 +90,7 @@ public sealed class InicializacaoApp
                 System.Diagnostics.Debug.WriteLine(logEx);
             }
 
-            Publicar(FaseInicializacao.Falhou, passo, resumo);
+            Publicar(FaseInicializacao.Falhou, passo, resumo, manterAtualizacao: true);
         }
         finally
         {
@@ -113,7 +113,7 @@ public sealed class InicializacaoApp
 
     private async Task ExecutarPassosAsync()
     {
-        await PassoAsync("migração do banco", () => DbInitializer.InitializeAsync(_factory)).ConfigureAwait(false);
+        await PassoAsync("armazenamento", PrepararArmazenamentoAsync).ConfigureAwait(false);
         await PassoAsync("inicialização do perfil", () => _perfil.InicializarAsync()).ConfigureAwait(false);
 
         // Falha do plugin de notificação não tranca o app. Falha de SQLite sobe e vira tela de recuperação.
@@ -127,6 +127,21 @@ public sealed class InicializacaoApp
                 ex,
                 "Falha no passo lembretes. O aplicativo segue aberto. Banco {Banco} não foi apagado.",
                 _caminhoBanco);
+        }
+    }
+
+    private async Task PrepararArmazenamentoAsync()
+    {
+        var resultado = await _armazenamento.PrepararAsync().ConfigureAwait(false);
+        var pedirAtualizacao = resultado.Acao == AcaoArmazenamento.PedirAtualizacaoDoApp;
+        lock (_estadoLock)
+            _pedirAtualizacao = pedirAtualizacao;
+
+        if (resultado.Acao is AcaoArmazenamento.TelaDeRecuperacao or AcaoArmazenamento.PedirAtualizacaoDoApp
+            || resultado.Falha is not null)
+        {
+            var passo = pedirAtualizacao ? "atualização do aplicativo" : "armazenamento";
+            throw new FalhaInicializacaoException(passo, new InvalidOperationException(resultado.Motivo));
         }
     }
 
@@ -156,7 +171,7 @@ public sealed class InicializacaoApp
         }
     }
 
-    private void Publicar(FaseInicializacao fase, string? passo, string? resumo)
+    private void Publicar(FaseInicializacao fase, string? passo, string? resumo, bool manterAtualizacao = false)
     {
         Action? handler;
         lock (_estadoLock)
@@ -164,6 +179,8 @@ public sealed class InicializacaoApp
             _fase = fase;
             _passo = passo;
             _resumoErro = resumo;
+            if (!manterAtualizacao)
+                _pedirAtualizacao = false;
             handler = AoMudar;
         }
 
