@@ -1,0 +1,338 @@
+using System.Globalization;
+using OrcaFacil.Core.Exportacao;
+using OrcaFacil.Core.Planilha;
+
+namespace OrcaFacil.Tests.Exportacao;
+
+public class BotaoExportarPlanilhaTests
+{
+    private const string Nota = "O arquivo exportado não é criptografado e contém os dados financeiros em claro.";
+
+    [Fact]
+    public void BotaoExportarParaExcelFicaNoPainelComCarregamentoEErro()
+    {
+        var painel = File.ReadAllText(CaminhoPainel());
+        var codigo = painel.IndexOf("@code", StringComparison.Ordinal);
+        var nota = painel.IndexOf(Nota, StringComparison.Ordinal);
+
+        Assert.Contains("Exportar para Excel", painel, StringComparison.Ordinal);
+        Assert.Contains("Exportando…", painel, StringComparison.Ordinal);
+        Assert.Contains("Disabled=\"_exportando\"", painel, StringComparison.Ordinal);
+        Assert.Contains("MudProgressLinear", painel, StringComparison.Ordinal);
+        Assert.Contains("MudAlert", painel, StringComparison.Ordinal);
+        Assert.Contains("role=\"note\"", painel, StringComparison.Ordinal);
+        Assert.True(nota >= 0 && codigo > nota, "A nota precisa aparecer na tela, antes do código.");
+        Assert.Contains("FileSystem.CacheDirectory", painel, StringComparison.Ordinal);
+        Assert.Contains("IDbContextFactory<AppDbContext>", painel, StringComparison.Ordinal);
+        Assert.Contains("ExportadorPlanilha.Exportar", painel, StringComparison.Ordinal);
+        Assert.Contains("ICompartilhadorArquivoLocal", painel, StringComparison.Ordinal);
+        Assert.Contains("CompartilharAsync", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("Share.Default", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("StackTrace", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("ex.Message", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("ex.ToString()", painel, StringComparison.Ordinal);
+        Assert.Contains(ArquivoExportacaoPlanilha.Mime, painel, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PainelFechaOArquivoAntesDeCompartilhar()
+    {
+        var painel = File.ReadAllText(CaminhoPainel());
+        var gravar = Trecho(painel, "private string Gravar", "private async Task ExportarAsync");
+        var exportar = Trecho(painel, "private async Task ExportarAsync", "private ConfiguracaoExportavel MontarConfiguracao");
+
+        var flush = gravar.IndexOf("destino.Flush()", StringComparison.Ordinal);
+        var fecha = gravar.IndexOf('}', flush);
+        var retorno = gravar.IndexOf("return arquivo", StringComparison.Ordinal);
+        Assert.True(flush >= 0 && fecha > flush && retorno > fecha);
+        Assert.Contains("using (var destino", gravar, StringComparison.Ordinal);
+        Assert.DoesNotContain("CompartilharAsync", gravar, StringComparison.Ordinal);
+
+        var indiceGravar = exportar.IndexOf("Gravar(", StringComparison.Ordinal);
+        var indiceShare = exportar.IndexOf("CompartilharAsync", StringComparison.Ordinal);
+        Assert.True(indiceGravar >= 0 && indiceShare > indiceGravar);
+    }
+
+    [Fact]
+    public void PainelMontaODtoSemSegredo()
+    {
+        var painel = File.ReadAllText(CaminhoPainel());
+        var montar = Trecho(painel, "private ConfiguracaoExportavel MontarConfiguracao", null);
+
+        Assert.Contains("Tema = Configuracao.Tema", montar, StringComparison.Ordinal);
+        Assert.Contains("NotificacoesAtivas = Configuracao.NotificacoesAtivas", montar, StringComparison.Ordinal);
+        Assert.Contains("SomAtivo = Configuracao.SomAtivo", montar, StringComparison.Ordinal);
+        Assert.Contains("GraficoLancamentosExpandido = Configuracao.GraficoLancamentosExpandido", montar, StringComparison.Ordinal);
+        Assert.Contains("PrazosAviso = Configuracao.PrazosAviso", montar, StringComparison.Ordinal);
+        Assert.Contains("Url = Configuracao.UrlInteligencia", montar, StringComparison.Ordinal);
+        Assert.Contains("Modelo = Configuracao.ModeloInteligencia", montar, StringComparison.Ordinal);
+        Assert.Contains("ProvedorInteligencia", montar, StringComparison.Ordinal);
+        Assert.Contains("ChipsInteligencia.Texto", montar, StringComparison.Ordinal);
+
+        Assert.DoesNotContain("SecureStorage", painel, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("senha", painel, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Espelho.Pasta.Uri", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("Ia.ChaveApi", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("ChaveApi", painel, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("CofreChave", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("chave", painel, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ConfiguracoesIncluiOPainelSoNaAbaArmazenamento()
+    {
+        var raiz = EncontrarRaiz();
+        var configuracoes = File.ReadAllText(Path.Combine(
+            raiz, "OrcaFacil", "Components", "Pages", "Configuracoes", "Configuracoes.razor"));
+        var armazenamentoPanel = File.ReadAllText(Path.Combine(
+            raiz, "OrcaFacil", "Components", "Pages", "Configuracoes", "ArmazenamentoPanel.razor"));
+
+        var armazenamento = BlocoAba(configuracoes, "Armazenamento");
+        var notificacoes = BlocoAba(configuracoes, "Notificações");
+        var inteligencia = BlocoAba(configuracoes, "Inteligência artificial");
+
+        Assert.Contains("<ArmazenamentoPanel />", armazenamento, StringComparison.Ordinal);
+        Assert.Contains("<ExportarPlanilhaPanel />", armazenamento, StringComparison.Ordinal);
+        Assert.DoesNotContain("ExportarPlanilhaPanel", notificacoes, StringComparison.Ordinal);
+        Assert.DoesNotContain("ExportarPlanilhaPanel", inteligencia, StringComparison.Ordinal);
+        Assert.DoesNotContain("ExportarPlanilhaPanel", armazenamentoPanel, StringComparison.Ordinal);
+        Assert.Equal(1, Contar(configuracoes, "<ExportarPlanilhaPanel />"));
+    }
+
+    private static string CaminhoPainel()
+        => Path.Combine(EncontrarRaiz(), "OrcaFacil", "Components", "Pages", "Configuracoes", "ExportarPlanilhaPanel.razor");
+
+    private static string Trecho(string fonte, string inicioMarca, string? fimMarca)
+    {
+        var inicio = fonte.IndexOf(inicioMarca, StringComparison.Ordinal);
+        Assert.True(inicio >= 0, inicioMarca);
+        var fim = fimMarca is null
+            ? fonte.Length
+            : fonte.IndexOf(fimMarca, inicio + inicioMarca.Length, StringComparison.Ordinal);
+        Assert.True(fim > inicio);
+        return fonte[inicio..fim];
+    }
+
+    private static string BlocoAba(string configuracoes, string titulo)
+    {
+        var marca = $"Text=\"{titulo}\"";
+        var inicio = configuracoes.IndexOf(marca, StringComparison.Ordinal);
+        Assert.True(inicio >= 0, titulo);
+        var fim = configuracoes.IndexOf("</MudTabPanel>", inicio, StringComparison.Ordinal);
+        Assert.True(fim > inicio);
+        return configuracoes[inicio..fim];
+    }
+
+    private static int Contar(string texto, string trecho)
+    {
+        var total = 0;
+        var indice = 0;
+        while (true)
+        {
+            indice = texto.IndexOf(trecho, indice, StringComparison.Ordinal);
+            if (indice < 0)
+                return total;
+            total++;
+            indice += trecho.Length;
+        }
+    }
+
+    private static string EncontrarRaiz()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (Directory.Exists(Path.Combine(dir.FullName, "OrcaFacil", "Components"))
+                && Directory.Exists(Path.Combine(dir.FullName, "OrcaFacil.Tests")))
+                return dir.FullName;
+
+            dir = dir.Parent;
+        }
+
+        throw new InvalidOperationException("Não foi possível localizar a raiz do repositório.");
+    }
+}
+
+public class ArquivoExportacaoPlanilhaTests
+{
+    private static readonly DateTime Instante = new(2026, 10, 19, 16, 30, 7);
+
+    [Fact]
+    public void NomeSegueAnoMesDiaEHora()
+    {
+        var nome = ArquivoExportacaoPlanilha.Nome(Instante);
+
+        Assert.Equal("orcafacil-20261019-163007.xlsx", nome);
+        Assert.Equal(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ArquivoExportacaoPlanilha.Mime);
+        Assert.True(ArquivoExportacaoPlanilha.NomeEhDesteApp(nome));
+        Assert.False(ArquivoExportacaoPlanilha.NomeEhDesteApp("orcafacil-20261019-163007.XLSX"));
+        Assert.False(ArquivoExportacaoPlanilha.NomeEhDesteApp("orcafacil-relatorio-20261019-163007.csv"));
+        Assert.False(ArquivoExportacaoPlanilha.NomeEhDesteApp("orcafacil-espelho.xlsx"));
+        Assert.False(ArquivoExportacaoPlanilha.NomeEhDesteApp("orcafacil-20261019-163007.xlsx.xlsx"));
+        Assert.False(ArquivoExportacaoPlanilha.NomeEhDesteApp("../orcafacil-20261019-163007.xlsx"));
+        Assert.False(ArquivoExportacaoPlanilha.NomeEhDesteApp(null));
+    }
+
+    [Fact]
+    public void CaminhoFicaNoTopoDoCache_ERecusaARaizDoVolume()
+    {
+        var raiz = Directory.CreateTempSubdirectory("orca-planilha-caminho-");
+        try
+        {
+            var cache = Path.Combine(raiz.FullName, "cache");
+            Directory.CreateDirectory(cache);
+            var nome = ArquivoExportacaoPlanilha.Nome(Instante);
+
+            var caminho = ArquivoExportacaoPlanilha.Caminho(cache + Path.DirectorySeparatorChar, Instante);
+
+            Assert.Equal(Path.GetFullPath(Path.Combine(cache, nome)), caminho);
+            Assert.Equal(nome, Path.GetFileName(caminho));
+            Assert.Throws<InvalidOperationException>(() => ArquivoExportacaoPlanilha.Caminho("/", Instante));
+            Assert.Throws<ArgumentException>(() => ArquivoExportacaoPlanilha.Caminho("   ", Instante));
+        }
+        finally
+        {
+            raiz.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ApagaSoOXlsxDesteAppNoTopoDoCache()
+    {
+        var raiz = Directory.CreateTempSubdirectory("orca-planilha-limpeza-");
+        try
+        {
+            var cache = Path.Combine(raiz.FullName, "cache");
+            var espelho = Path.Combine(cache, "orcafacil-espelho");
+            var fora = Path.Combine(raiz.FullName, "fora");
+            Directory.CreateDirectory(espelho);
+            Directory.CreateDirectory(fora);
+
+            var antigo = Path.Combine(cache, "orcafacil-20261018-090000.xlsx");
+            var atual = ArquivoExportacaoPlanilha.Caminho(cache, Instante);
+            var csv = Path.Combine(cache, "orcafacil-relatorio-20261019-120000.csv");
+            var outroXlsx = Path.Combine(cache, "orcafacil-espelho.xlsx");
+            var maiusculo = Path.Combine(cache, "orcafacil-20261019-163007.XLSX");
+            var aninhado = Path.Combine(espelho, "orcafacil-20261019-163007.xlsx");
+            var estagio = Path.Combine(espelho, "estagio.bin");
+            var pastaComNome = Path.Combine(cache, "orcafacil-20261017-010203.xlsx");
+            var dentroDaPasta = Path.Combine(pastaComNome, "dentro.txt");
+            var alvoFora = Path.Combine(fora, "orcafacil-20261019-163007.xlsx");
+            Directory.CreateDirectory(pastaComNome);
+
+            File.WriteAllText(antigo, "antigo");
+            File.WriteAllText(atual, "atual");
+            File.WriteAllText(csv, "csv");
+            File.WriteAllText(outroXlsx, "outro");
+            File.WriteAllText(maiusculo, "MAIUSCULO");
+            File.WriteAllText(aninhado, "aninhado");
+            File.WriteAllText(estagio, "estagio");
+            File.WriteAllText(dentroDaPasta, "dentro");
+            File.WriteAllText(alvoFora, "fora");
+
+            var apagados = ArquivoExportacaoPlanilha.ApagarAnteriores(cache);
+
+            Assert.Equal(2, apagados);
+            Assert.False(File.Exists(antigo));
+            Assert.False(File.Exists(atual));
+            Assert.Equal("csv", File.ReadAllText(csv));
+            Assert.Equal("outro", File.ReadAllText(outroXlsx));
+            Assert.Equal("MAIUSCULO", File.ReadAllText(maiusculo));
+            Assert.Equal("aninhado", File.ReadAllText(aninhado));
+            Assert.Equal("estagio", File.ReadAllText(estagio));
+            Assert.Equal("dentro", File.ReadAllText(dentroDaPasta));
+            Assert.Equal("fora", File.ReadAllText(alvoFora));
+            Assert.False(ArquivoExportacaoPlanilha.ApagarSeForDesteApp(alvoFora, cache));
+            Assert.False(ArquivoExportacaoPlanilha.ApagarSeForDesteApp(
+                Path.Combine(cache, "..", "fora", "orcafacil-20261019-163007.xlsx"),
+                cache));
+            Assert.Equal("fora", File.ReadAllText(alvoFora));
+            Assert.Equal(0, ArquivoExportacaoPlanilha.ApagarAnteriores(Path.Combine(cache, "nao-existe")));
+            Assert.Equal(0, ArquivoExportacaoPlanilha.ApagarAnteriores("/"));
+            Assert.Equal(0, ArquivoExportacaoPlanilha.ApagarAnteriores(null));
+        }
+        finally
+        {
+            raiz.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
+    public void AtalhoComONomeDaPlanilha_NaoApagaOAlvoForaDoCache()
+    {
+        var raiz = Directory.CreateTempSubdirectory("orca-planilha-atalho-");
+        try
+        {
+            var cache = Path.Combine(raiz.FullName, "cache");
+            var fora = Path.Combine(raiz.FullName, "fora");
+            Directory.CreateDirectory(cache);
+            Directory.CreateDirectory(fora);
+            var alvo = Path.Combine(fora, "dados.txt");
+            File.WriteAllText(alvo, "fica");
+            var link = Path.Combine(cache, ArquivoExportacaoPlanilha.Nome(Instante));
+            File.CreateSymbolicLink(link, alvo);
+
+            var apagados = ArquivoExportacaoPlanilha.ApagarAnteriores(cache);
+
+            Assert.Equal(0, apagados);
+            Assert.Equal("fica", File.ReadAllText(alvo));
+            Assert.True(File.Exists(link));
+        }
+        finally
+        {
+            raiz.Delete(recursive: true);
+        }
+    }
+}
+
+public class MensagemExportacaoPlanilhaTests
+{
+    [Fact]
+    public void AbaAcimaDoTeto_MostraAMensagemDoExportador()
+    {
+        var teto = PlanilhaPtBr.MaximoLinhas - 1;
+        var erro = Assert.Throws<InvalidOperationException>(
+            () => ExportadorPlanilha.ExigirLimiteDeDados("Lançamentos", teto + 1));
+
+        var texto = MensagemExportacaoPlanilha.Para(erro);
+        var embrulhada = MensagemExportacaoPlanilha.Para(new IOException("falha ao gravar", erro));
+
+        Assert.Equal(erro.Message, texto);
+        Assert.Equal(erro.Message, embrulhada);
+        Assert.Contains("Lançamentos", texto, StringComparison.Ordinal);
+        Assert.Contains((teto + 1).ToString(CultureInfo.InvariantCulture), texto, StringComparison.Ordinal);
+        Assert.Contains(teto.ToString(CultureInfo.InvariantCulture), texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(Environment.NewLine, texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(erro.StackTrace ?? "STACK", texto, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CaminhoSenhaECancelamento_NaoVazam()
+    {
+        var caminho = new IOException("/data/user/0/com.pitthan.orcafacil/cache/segredo.xlsx");
+        var segredo = new InvalidOperationException("A aba Categorias tem senha content://token e Espelho.Pasta.Uri");
+        var rastreio = new InvalidOperationException("A aba Categorias tem 1 linha\n   at OrcaFacil.Exportador");
+
+        var textoCaminho = MensagemExportacaoPlanilha.Para(caminho);
+        var textoSegredo = MensagemExportacaoPlanilha.Para(segredo);
+        var textoRastreio = MensagemExportacaoPlanilha.Para(rastreio);
+
+        Assert.Equal(MensagemExportacaoPlanilha.Generica, textoCaminho);
+        Assert.Equal(MensagemExportacaoPlanilha.Generica, textoSegredo);
+        Assert.Equal(MensagemExportacaoPlanilha.Generica, textoRastreio);
+        Assert.DoesNotContain("segredo", textoCaminho, StringComparison.Ordinal);
+        Assert.DoesNotContain("/data", textoCaminho, StringComparison.Ordinal);
+        Assert.DoesNotContain("senha", textoSegredo, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("content://", textoSegredo, StringComparison.Ordinal);
+        Assert.DoesNotContain("Espelho.Pasta.Uri", textoSegredo, StringComparison.Ordinal);
+        Assert.DoesNotContain("at OrcaFacil", textoRastreio, StringComparison.Ordinal);
+        Assert.Null(MensagemExportacaoPlanilha.Para(new OperationCanceledException()));
+        Assert.Null(MensagemExportacaoPlanilha.Para(null));
+        Assert.Equal(
+            "Não foi possível compartilhar a planilha. Tente de novo.",
+            MensagemExportacaoPlanilha.Compartilhamento);
+        Assert.DoesNotContain("espelho", MensagemExportacaoPlanilha.Compartilhamento, StringComparison.OrdinalIgnoreCase);
+    }
+}

@@ -1,0 +1,118 @@
+@using Microsoft.EntityFrameworkCore
+@using OrcaFacil.Core.Armazenamento.Espelho.Pasta
+@using OrcaFacil.Core.Exportacao
+@using OrcaFacil.Core.Llm
+@implements IDisposable
+@inject IDbContextFactory<AppDbContext> ContextoFactory
+@inject IConfiguracaoService Configuracao
+@inject ICompartilhadorArquivoLocal Compartilhador
+
+<MudPaper Class="pa-4 mt-4" Elevation="2">
+    <MudText Typo="Typo.subtitle1" Class="mb-2">Planilha</MudText>
+    <p class="mb-3" role="note">O arquivo exportado não é criptografado e contém os dados financeiros em claro.</p>
+
+    @if (_exportando)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-3" />
+    }
+
+    @if (!string.IsNullOrEmpty(_erro))
+    {
+        <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3">@_erro</MudAlert>
+    }
+
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_exportando" OnClick="ExportarAsync">
+        @(_exportando ? "Exportando…" : "Exportar para Excel")
+    </MudButton>
+</MudPaper>
+
+@code {
+    private bool _exportando;
+    private bool _vivo = true;
+    private string? _erro;
+
+    public void Dispose() => _vivo = false;
+
+    private string Gravar(string cache, ConfiguracaoExportavel configuracao)
+    {
+        ArquivoExportacaoPlanilha.ApagarAnteriores(cache);
+        Directory.CreateDirectory(cache);
+        var arquivo = ArquivoExportacaoPlanilha.Caminho(cache, DateTime.Now);
+        try
+        {
+            using (var contexto = ContextoFactory.CreateDbContext())
+            using (var destino = new FileStream(arquivo, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                ExportadorPlanilha.Exportar(contexto, configuracao, destino);
+                destino.Flush();
+            }
+
+            return arquivo;
+        }
+        catch
+        {
+            ArquivoExportacaoPlanilha.ApagarSeForDesteApp(arquivo, cache);
+            throw;
+        }
+    }
+
+    private async Task ExportarAsync()
+    {
+        if (_exportando || !_vivo)
+            return;
+
+        _exportando = true;
+        _erro = null;
+        var configuracao = MontarConfiguracao();
+        var cache = FileSystem.CacheDirectory;
+        await Task.Yield();
+
+        string? caminho = null;
+        var manter = false;
+        try
+        {
+            caminho = await Task.Run(() => Gravar(cache, configuracao));
+            if (!_vivo)
+                return;
+
+            // ShareFile(caminho) no Android lê o MIME da extensão .xlsx:
+            // application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+            var resultado = await Compartilhador.CompartilharAsync(caminho, "Exportar para Excel");
+            if (!_vivo)
+                return;
+
+            manter = resultado.Sucesso;
+            if (!resultado.Sucesso && resultado.Codigo != CodigoFalhaPastaEspelho.Cancelado)
+                _erro = MensagemExportacaoPlanilha.Compartilhamento;
+        }
+        catch (Exception ex)
+        {
+            if (_vivo)
+                _erro = MensagemExportacaoPlanilha.Para(ex);
+        }
+        finally
+        {
+            if (!manter)
+                ArquivoExportacaoPlanilha.ApagarSeForDesteApp(caminho, cache);
+            if (_vivo)
+                _exportando = false;
+        }
+    }
+
+    private ConfiguracaoExportavel MontarConfiguracao()
+    {
+        return new ConfiguracaoExportavel
+        {
+            Tema = Configuracao.Tema,
+            NotificacoesAtivas = Configuracao.NotificacoesAtivas,
+            SomAtivo = Configuracao.SomAtivo,
+            GraficoLancamentosExpandido = Configuracao.GraficoLancamentosExpandido,
+            PrazosAviso = Configuracao.PrazosAviso,
+            Provedor = Configuracao.ProvedorInteligencia is { } provedor
+                ? ChipsInteligencia.Texto(provedor)
+                : null,
+            Url = Configuracao.UrlInteligencia,
+            Modelo = Configuracao.ModeloInteligencia
+        };
+    }
+}
