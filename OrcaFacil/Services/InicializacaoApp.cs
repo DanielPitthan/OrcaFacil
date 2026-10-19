@@ -1,6 +1,7 @@
 using Microsoft.Maui.ApplicationModel;
 using OrcaFacil.Core.Armazenamento;
 using OrcaFacil.Core.Data;
+using OrcaFacil.Data;
 using OrcaFacil.Services.Interfaces;
 using Serilog;
 
