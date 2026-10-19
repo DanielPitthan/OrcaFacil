@@ -1,10 +1,11 @@
 using System.Globalization;
+using System.Security.Cryptography;
 
 namespace OrcaFacil.Core.Armazenamento.Partida;
 
 /// <summary>
 /// Copia o banco e os laterais e só aceita o resultado se cada arquivo
-/// existir no destino, tiver o mesmo tamanho e puder ser lido por inteiro.
+/// existir no destino, tiver o mesmo tamanho e o mesmo SHA-256 da origem.
 /// </summary>
 internal static class CopiaConfirmada
 {
@@ -28,7 +29,7 @@ internal static class CopiaConfirmada
             depoisDeCopiar?.Invoke(alvo);
             cancellationToken.ThrowIfCancellationRequested();
             if (!Confere(arquivo.Caminho, alvo))
-                throw new IOException("A cópia não conferiu em tamanho ou não pôde ser lida. Nada foi apagado.");
+                throw new IOException("A cópia não conferiu em tamanho ou conteúdo. Nada foi apagado.");
         }
 
         return destino;
@@ -66,14 +67,25 @@ internal static class CopiaConfirmada
         if (!infoOrigem.Exists || !infoDestino.Exists || infoDestino.Length != infoOrigem.Length)
             return false;
 
-        using var leitura = new FileStream(destino, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        var buffer = new byte[81920];
-        long total = 0;
-        int lidos;
-        while ((lidos = leitura.Read(buffer, 0, buffer.Length)) > 0)
-            total += lidos;
+        try
+        {
+            using var origemFluxo = new FileStream(origem, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            using var destinoFluxo = new FileStream(destino, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            if (origemFluxo.Length != destinoFluxo.Length)
+                return false;
 
-        return total == infoOrigem.Length && total == infoDestino.Length;
+            var hashOrigem = SHA256.HashData(origemFluxo);
+            var hashDestino = SHA256.HashData(destinoFluxo);
+            return CryptographicOperations.FixedTimeEquals(hashOrigem, hashDestino);
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     public static void ApagarIncompletos(List<string> criados)

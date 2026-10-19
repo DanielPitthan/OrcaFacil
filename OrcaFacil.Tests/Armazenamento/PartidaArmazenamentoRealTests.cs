@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.Armazenamento;
@@ -322,15 +323,17 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
     }
 
     [Fact]
-    public async Task BancoIlegivel_ComWalEShm_ConfereACopiaAntesDeMudarOVivo()
+    public async Task BancoIlegivel_ComWalShmEJournal_ConfereACopiaAntesDeMudarOVivo()
     {
         using var area = new Area();
         var lixo = "banco-ilegivel-original"u8.ToArray();
         var wal = "wal-original-123"u8.ToArray();
         var shm = "shm-original"u8.ToArray();
+        var journal = "journal-original"u8.ToArray();
         await File.WriteAllBytesAsync(area.Banco, lixo);
         await File.WriteAllBytesAsync(area.Banco + "-wal", wal);
         await File.WriteAllBytesAsync(area.Banco + "-shm", shm);
+        await File.WriteAllBytesAsync(area.Banco + "-journal", journal);
         var backup = area.GravarBackup([9, 8, 7]);
         var preservacao = await new PreservacaoBancoArquivo(new CaminhoBancoVivo(area.Banco)).PreservarAsync();
         Assert.True(preservacao.Sucesso);
@@ -338,9 +341,10 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
         Assert.Equal(lixo, await File.ReadAllBytesAsync(preservado));
         Assert.Equal(wal, await File.ReadAllBytesAsync(preservado + "-wal"));
         Assert.Equal(shm, await File.ReadAllBytesAsync(preservado + "-shm"));
+        Assert.Equal(journal, await File.ReadAllBytesAsync(preservado + "-journal"));
         Assert.StartsWith(Path.Combine(area.Raiz, "backups", "orcafacil-preservado-"), preservado, StringComparison.Ordinal);
-        using (var leitura = File.OpenRead(preservado + "-shm"))
-            Assert.Equal(shm.Length, leitura.Length);
+        using (var leitura = File.OpenRead(preservado + "-journal"))
+            Assert.Equal(journal.Length, leitura.Length);
 
         var volume = VolumeComEspelho(_espelhos.Valido);
         var semeadura = new SemeaduraMarcador(area.Banco);
@@ -351,6 +355,7 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
         Assert.Equal(lixo, await File.ReadAllBytesAsync(preservado));
         Assert.Equal(wal, await File.ReadAllBytesAsync(preservado + "-wal"));
         Assert.Equal(shm, await File.ReadAllBytesAsync(preservado + "-shm"));
+        Assert.Equal(journal, await File.ReadAllBytesAsync(preservado + "-journal"));
         Assert.Equal(backup, await File.ReadAllBytesAsync(area.Backup));
         Assert.Equal(_espelhos.Valido, volume.Arquivos[volume.NomeArquivo]);
         Assert.Equal(0, semeadura.Chamadas);
@@ -425,6 +430,27 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
         {
             using var fluxo = new FileStream(alvo, FileMode.Open, FileAccess.Write, FileShare.Read);
             fluxo.SetLength(0);
+        });
+
+        var resultado = await preservacao.PreservarAsync();
+
+        Assert.False(resultado.Sucesso);
+        Assert.Equal(lixo, await File.ReadAllBytesAsync(area.Banco));
+        Assert.Empty(CopiasComPrefixo(area.Raiz, "orcafacil-preservado-"));
+    }
+
+    [Fact]
+    public async Task CopiaComMesmoTamanhoEBytesDiferentes_NaoContaComoPreservada()
+    {
+        using var area = new Area();
+        var lixo = "original-inteiro"u8.ToArray();
+        await File.WriteAllBytesAsync(area.Banco, lixo);
+        var preservacao = new PreservacaoBancoArquivo(new CaminhoBancoVivo(area.Banco), null, alvo =>
+        {
+            var bytes = File.ReadAllBytes(alvo);
+            Assert.Equal(lixo.Length, bytes.Length);
+            bytes[0] ^= 0xFF;
+            File.WriteAllBytes(alvo, bytes);
         });
 
         var resultado = await preservacao.PreservarAsync();
@@ -600,12 +626,13 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
         await CriarLancamentoSemMembroAsync(area.Banco);
         var volume = VolumeComEspelho(_espelhos.Valido);
         var log = new LogCaptura();
-        var semeadura = new SemeaduraComPolitica(area.Banco, log);
+        var demonstracao = new DemonstracaoMarcador();
+        var semeadura = new SemeaduraDadosApp(new CaminhoBancoVivo(area.Banco), log, demonstracao.Executar);
 
         var resultado = await Montar(area, volume, new SenhaFixa(EspelhosReais.Senha), semeadura, new LimpezaQueConta()).PrepararAsync();
 
         Assert.Equal(AcaoArmazenamento.Semear, resultado.Acao);
-        Assert.Equal(0, semeadura.Demonstracoes);
+        Assert.Equal(0, demonstracao.Chamadas);
         Assert.Equal(PoliticaSemeadura.NomePerfilMinimo, await NomeUnicoAsync(area.Banco));
         await using var ctx = ConexaoBancoArquivo.AbrirLeitura(area.Banco);
         var descricoes = await ctx.Transacoes.Select(transacao => transacao.Descricao).ToListAsync();
@@ -628,13 +655,73 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
         }
 
         var log = new LogCaptura();
-        var semeadura = new SemeaduraComPolitica(area.Banco, log);
+        var demonstracao = new DemonstracaoMarcador();
+        var semeadura = new SemeaduraDadosApp(new CaminhoBancoVivo(area.Banco), log, demonstracao.Executar);
         var resultado = await Montar(area, VolumeComFoto(), new SenhaFixa(null), semeadura, new LimpezaQueConta()).PrepararAsync();
 
         Assert.Equal(AcaoArmazenamento.Semear, resultado.Acao);
-        Assert.Equal(1, semeadura.Demonstracoes);
+        Assert.Equal(1, demonstracao.Chamadas);
         Assert.Equal(SemeaduraMarcador.Nome, await NomeUnicoAsync(area.Banco));
         Assert.Empty(log.Mensagens);
+    }
+
+    public static IEnumerable<object[]> ConjuntosDoUsuario()
+        => PoliticaSemeadura.ConjuntosObservados.Select(nome => new object[] { nome });
+
+    [Fact]
+    public void Politica_ObservaTodosOsDbSets()
+    {
+        var conjuntos = typeof(AppDbContext).GetProperties()
+            .Where(propriedade => propriedade.PropertyType.IsGenericType
+                && propriedade.PropertyType.GetGenericTypeDefinition() == typeof(DbSet<>))
+            .Select(propriedade => propriedade.Name)
+            .OrderBy(nome => nome, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(conjuntos, PoliticaSemeadura.ConjuntosObservados.OrderBy(nome => nome, StringComparer.Ordinal).ToArray());
+    }
+
+    [Theory]
+    [MemberData(nameof(ConjuntosDoUsuario))]
+    public async Task SemPerfil_ComDadoEmCadaTabela_UsaSemeaduraDaDi_ENaoDemonstra(string conjunto)
+    {
+        using var area = new Area();
+        await InserirDadoDoUsuarioAsync(area.Banco, conjunto);
+        var log = new LogCaptura();
+        var demonstracao = new DemonstracaoMarcador();
+        var semeadura = new SemeaduraDadosApp(new CaminhoBancoVivo(area.Banco), log, demonstracao.Executar);
+
+        await semeadura.SemearAsync();
+
+        Assert.Equal(0, demonstracao.Chamadas);
+        Assert.Contains(PoliticaSemeadura.MensagemPerfilMinimo, log.Mensagens);
+        await using var ctx = ConexaoBancoArquivo.AbrirLeitura(area.Banco);
+        Assert.False(await ctx.MembrosFamilia.AnyAsync(membro => membro.Nome == SemeaduraMarcador.Nome));
+        Assert.False(await ctx.Transacoes.AnyAsync(transacao => transacao.Descricao == "Salário"));
+        if (conjunto == nameof(AppDbContext.MembrosFamilia))
+            Assert.Equal("Marina", (await ctx.MembrosFamilia.SingleAsync()).Nome);
+        else
+            Assert.Equal(PoliticaSemeadura.NomePerfilMinimo, (await ctx.MembrosFamilia.SingleAsync()).Nome);
+
+        Assert.True(await AindaTemODadoAsync(ctx, conjunto));
+    }
+
+    [Fact]
+    public async Task SemPerfil_SoComCategoriaPadrao_AindaSemeiaDemonstracao()
+    {
+        using var area = new Area();
+        await InserirCategoriaAsync(area.Banco, "Alimentação", padrao: true);
+        var log = new LogCaptura();
+        var demonstracao = new DemonstracaoMarcador();
+        var semeadura = new SemeaduraDadosApp(new CaminhoBancoVivo(area.Banco), log, demonstracao.Executar);
+
+        await semeadura.SemearAsync();
+
+        Assert.Equal(1, demonstracao.Chamadas);
+        Assert.Empty(log.Mensagens);
+        await using var ctx = ConexaoBancoArquivo.AbrirLeitura(area.Banco);
+        Assert.Equal(SemeaduraMarcador.Nome, (await ctx.MembrosFamilia.SingleAsync()).Nome);
+        Assert.True(await ctx.Categorias.AnyAsync(categoria => categoria.Nome == "Alimentação" && categoria.EhPadraoDoSistema));
     }
 
     [Fact]
@@ -857,6 +944,164 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
         await using var checkpoint = conexao.CreateCommand();
         checkpoint.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
         await checkpoint.ExecuteNonQueryAsync();
+    }
+
+    private static async Task InserirCategoriaAsync(string caminho, string nome, bool padrao)
+    {
+        await using var banco = await MigrarAsync(caminho);
+        var ctx = banco.Contexto;
+        ctx.Categorias.Add(new Categoria
+        {
+            Nome = nome,
+            Icone = "M",
+            CorHex = "#112233",
+            TipoPadrao = TipoTransacao.Despesa,
+            EhPadraoDoSistema = padrao
+        });
+        await ctx.SaveChangesAsync();
+    }
+
+    private static async Task InserirDadoDoUsuarioAsync(string caminho, string conjunto)
+    {
+        await using var banco = await MigrarAsync(caminho);
+        var ctx = banco.Contexto;
+        await using (var comando = ctx.Database.GetDbConnection().CreateCommand())
+        {
+            if (comando.Connection!.State != System.Data.ConnectionState.Open)
+                await comando.Connection.OpenAsync();
+
+            comando.CommandText = "PRAGMA foreign_keys = OFF;";
+            await comando.ExecuteNonQueryAsync();
+        }
+
+        var quando = new DateTime(2026, 4, 2, 0, 0, 0, DateTimeKind.Utc);
+        switch (conjunto)
+        {
+            case nameof(AppDbContext.MembrosFamilia):
+                ctx.MembrosFamilia.Add(new MembroFamilia { Nome = "Marina", Avatar = "M", Ativo = true, CriadoEm = quando });
+                break;
+            case nameof(AppDbContext.Categorias):
+                ctx.Categorias.Add(new Categoria
+                {
+                    Nome = "Padaria do usuário",
+                    Icone = "P",
+                    CorHex = "#112233",
+                    TipoPadrao = TipoTransacao.Despesa,
+                    EhPadraoDoSistema = false
+                });
+                break;
+            case nameof(AppDbContext.Transacoes):
+                ctx.Transacoes.Add(new Transacao
+                {
+                    Descricao = "dado-real",
+                    Valor = 10m,
+                    Data = quando,
+                    Tipo = TipoTransacao.Despesa,
+                    CategoriaId = 1,
+                    MembroFamiliaId = 1,
+                    Pago = true
+                });
+                break;
+            case nameof(AppDbContext.ItensLancamento):
+                ctx.ItensLancamento.Add(new ItemLancamento
+                {
+                    Descricao = "dado-real",
+                    Valor = 10m,
+                    TransacaoId = 1,
+                    CategoriaId = 1
+                });
+                break;
+            case nameof(AppDbContext.Orcamentos):
+                ctx.Orcamentos.Add(new Orcamento { CategoriaId = 1, ValorLimite = 42.5m, Mes = 4, Ano = 2026 });
+                break;
+            case nameof(AppDbContext.Metas):
+                ctx.Metas.Add(new Meta { Nome = "dado-real", ValorAlvo = 10m, MembroFamiliaId = 1, Icone = "M" });
+                break;
+            case nameof(AppDbContext.FechamentosPeriodo):
+                ctx.FechamentosPeriodo.Add(new FechamentoPeriodo { Mes = 9, Ano = 2026, Fechado = true, AtualizadoEm = quando });
+                break;
+            case nameof(AppDbContext.LogsEvento):
+                ctx.LogsEvento.Add(new LogEvento { Tipo = TipoLogEvento.Sistema, Mensagem = "dado-real", CriadoEm = quando });
+                break;
+            case nameof(AppDbContext.AtivosFinanceiros):
+                ctx.AtivosFinanceiros.Add(new AtivoFinanceiro { Ticker = "PETR4", Nome = "dado-real", Tipo = TipoAtivo.Acao });
+                break;
+            case nameof(AppDbContext.OperacoesAtivo):
+                ctx.OperacoesAtivo.Add(new OperacaoAtivo
+                {
+                    AtivoId = 1,
+                    MembroFamiliaId = 1,
+                    Tipo = TipoOperacao.Compra,
+                    Data = quando,
+                    Quantidade = 3m,
+                    PrecoUnitario = 7m
+                });
+                break;
+            case nameof(AppDbContext.ProdutosCesta):
+                ctx.ProdutosCesta.Add(new ProdutoCesta { Nome = "dado-real", CategoriaId = 1 });
+                break;
+            case nameof(AppDbContext.LocaisCompra):
+                ctx.LocaisCompra.Add(new LocalCompra { Nome = "dado-real" });
+                break;
+            case nameof(AppDbContext.ComprasCesta):
+                ctx.ComprasCesta.Add(new CompraCesta { Mes = 8, Ano = 2026, Data = quando, LocalCompraId = 1 });
+                break;
+            case nameof(AppDbContext.ItensCompraCesta):
+                ctx.ItensCompraCesta.Add(new CompraCestaItem { CompraCestaId = 1, ProdutoCestaId = 1, Preco = 4.5m });
+                break;
+            case nameof(AppDbContext.Cartoes):
+                ctx.Cartoes.Add(new Cartao { Nome = "dado-real", Bandeira = "Visa", UltimosDigitos = "4242", Tipo = TipoCartao.Credito });
+                break;
+            case nameof(AppDbContext.RecargasCartao):
+                ctx.RecargasCartao.Add(new RecargaCartao { CartaoId = 1, Data = quando, Valor = 42.5m });
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(conjunto), conjunto, "Conjunto sem inserção de teste.");
+        }
+
+        await ctx.SaveChangesAsync();
+    }
+
+    private static async Task<bool> AindaTemODadoAsync(AppDbContext ctx, string conjunto)
+        => conjunto switch
+        {
+            nameof(AppDbContext.MembrosFamilia) => await ctx.MembrosFamilia.AnyAsync(membro => membro.Nome == "Marina"),
+            nameof(AppDbContext.Categorias) => await ctx.Categorias.AnyAsync(categoria => categoria.Nome == "Padaria do usuário" && !categoria.EhPadraoDoSistema),
+            nameof(AppDbContext.Transacoes) => await ctx.Transacoes.AnyAsync(transacao => transacao.Descricao == "dado-real"),
+            nameof(AppDbContext.ItensLancamento) => await ctx.ItensLancamento.AnyAsync(item => item.Descricao == "dado-real"),
+            nameof(AppDbContext.Orcamentos) => await ctx.Orcamentos.AnyAsync(orcamento => orcamento.ValorLimite == 42.5m),
+            nameof(AppDbContext.Metas) => await ctx.Metas.AnyAsync(meta => meta.Nome == "dado-real"),
+            nameof(AppDbContext.FechamentosPeriodo) => await ctx.FechamentosPeriodo.AnyAsync(fechamento => fechamento.Mes == 9 && fechamento.Ano == 2026),
+            nameof(AppDbContext.LogsEvento) => await ctx.LogsEvento.AnyAsync(log => log.Mensagem == "dado-real"),
+            nameof(AppDbContext.AtivosFinanceiros) => await ctx.AtivosFinanceiros.AnyAsync(ativo => ativo.Ticker == "PETR4"),
+            nameof(AppDbContext.OperacoesAtivo) => await ctx.OperacoesAtivo.AnyAsync(operacao => operacao.Quantidade == 3m && operacao.PrecoUnitario == 7m),
+            nameof(AppDbContext.ProdutosCesta) => await ctx.ProdutosCesta.AnyAsync(produto => produto.Nome == "dado-real"),
+            nameof(AppDbContext.LocaisCompra) => await ctx.LocaisCompra.AnyAsync(local => local.Nome == "dado-real"),
+            nameof(AppDbContext.ComprasCesta) => await ctx.ComprasCesta.AnyAsync(compra => compra.Mes == 8 && compra.Ano == 2026),
+            nameof(AppDbContext.ItensCompraCesta) => await ctx.ItensCompraCesta.AnyAsync(item => item.Preco == 4.5m),
+            nameof(AppDbContext.Cartoes) => await ctx.Cartoes.AnyAsync(cartao => cartao.Nome == "dado-real"),
+            nameof(AppDbContext.RecargasCartao) => await ctx.RecargasCartao.AnyAsync(recarga => recarga.Valor == 42.5m),
+            _ => false
+        };
+
+    private static async Task<BancoMigrado> MigrarAsync(string caminho)
+    {
+        var conexao = await AbrirCriandoAsync(caminho);
+        var opcoes = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(conexao).Options;
+        var ctx = new AppDbContext(opcoes);
+        await ctx.Database.MigrateAsync();
+        return new BancoMigrado(conexao, ctx);
+    }
+
+    private sealed class BancoMigrado(SqliteConnection conexao, AppDbContext contexto) : IAsyncDisposable
+    {
+        public AppDbContext Contexto { get; } = contexto;
+
+        public async ValueTask DisposeAsync()
+        {
+            await Contexto.DisposeAsync();
+            await conexao.DisposeAsync();
+        }
     }
 
     private static async Task CriarLancamentoSemMembroAsync(string caminho)
@@ -1106,25 +1351,21 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
         }
     }
 
-    private sealed class SemeaduraComPolitica(string caminho, IRegistroLog? log) : ISemeaduraDados
+    private sealed class DemonstracaoMarcador
     {
-        public int Demonstracoes { get; private set; }
+        public int Chamadas { get; private set; }
 
-        public async Task SemearAsync(CancellationToken cancellationToken = default)
+        public Task Executar(AppDbContext contexto, CancellationToken cancellationToken)
         {
-            await using var ctx = ConexaoBancoArquivo.AbrirEscrita(caminho);
-            if (await PoliticaSemeadura.CriarPerfilMinimoSeHaLancamentoAsync(ctx, log, cancellationToken))
-                return;
-
-            Demonstracoes++;
-            ctx.MembrosFamilia.Add(new MembroFamilia
+            Chamadas++;
+            contexto.MembrosFamilia.Add(new MembroFamilia
             {
                 Nome = SemeaduraMarcador.Nome,
                 Avatar = "X",
                 Ativo = true,
                 CriadoEm = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
             });
-            await ctx.SaveChangesAsync(cancellationToken);
+            return contexto.SaveChangesAsync(cancellationToken);
         }
     }
 

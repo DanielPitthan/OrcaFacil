@@ -103,6 +103,111 @@ public class FotoPathTests
     }
 
     [Fact]
+    public void CaminhoAbsolutoDeOutroAparelho_UsaONomeDentroDaPastaAtual()
+    {
+        using var area = new AreaFoto();
+        var antigo = Path.Combine(area.Raiz, "outro-aparelho", "foto-20261017.jpg");
+        Directory.CreateDirectory(Path.GetDirectoryName(antigo)!);
+        File.WriteAllBytes(antigo, [1]);
+        var atual = Path.Combine(area.Pasta, "foto-20261017.jpg");
+        File.WriteAllBytes(atual, [2]);
+
+        var achou = FotoPath.CaminhoDentroDaPasta(area.Pasta, antigo);
+        Assert.Equal(Path.GetFullPath(atual), achou);
+        Assert.Equal(new byte[] { 2 }, File.ReadAllBytes(achou!));
+        Assert.Equal(new byte[] { 1 }, File.ReadAllBytes(antigo));
+    }
+
+    [Fact]
+    public void PastaIrmaPerfil2_NaoAbre()
+    {
+        using var area = new AreaFoto();
+        var irma = Path.Combine(area.Raiz, "perfil2");
+        Directory.CreateDirectory(irma);
+        var arquivo = Path.Combine(irma, "a.jpg");
+        File.WriteAllBytes(arquivo, [7]);
+
+        Assert.True(File.Exists(arquivo));
+        Assert.Null(FotoPath.CaminhoDentroDaPasta(area.Pasta, arquivo));
+    }
+
+    [Fact]
+    public void PastaComOutraCaixa_NaoAbre()
+    {
+        using var area = new AreaFoto();
+        var outra = Path.Combine(area.Raiz, "Perfil");
+        Directory.CreateDirectory(outra);
+        var arquivo = Path.Combine(outra, "foto.jpg");
+        File.WriteAllBytes(arquivo, [3]);
+
+        Assert.NotEqual(area.Pasta, outra);
+        Assert.True(File.Exists(arquivo));
+        Assert.Null(FotoPath.CaminhoDentroDaPasta(area.Pasta, arquivo));
+    }
+
+    [Fact]
+    public void LinkSimbolicoParaFora_NaoAbre()
+    {
+        using var area = new AreaFoto();
+        var segredo = Path.Combine(area.Raiz, "segredo.bin");
+        File.WriteAllBytes(segredo, [1, 2, 3]);
+        var link = Path.Combine(area.Pasta, "foto.jpg");
+        if (!TentarLink(link, segredo, diretorio: false))
+            return;
+
+        Assert.Null(FotoPath.CaminhoDentroDaPasta(area.Pasta, link));
+        Assert.Null(FotoPath.CaminhoDentroDaPasta(area.Pasta, "foto.jpg"));
+        Assert.Equal(new byte[] { 1, 2, 3 }, File.ReadAllBytes(segredo));
+    }
+
+    [Fact]
+    public void LinkDeDiretorioParaFora_NaoAbre()
+    {
+        using var area = new AreaFoto();
+        var fora = Path.Combine(area.Raiz, "fora");
+        Directory.CreateDirectory(fora);
+        var segredo = Path.Combine(fora, "segredo.bin");
+        File.WriteAllBytes(segredo, [8]);
+        var atalho = Path.Combine(area.Pasta, "atalho");
+        if (!TentarLink(atalho, fora, diretorio: true))
+            return;
+
+        Assert.Null(FotoPath.CaminhoDentroDaPasta(area.Pasta, Path.Combine(atalho, "segredo.bin")));
+        Assert.Equal(new byte[] { 8 }, File.ReadAllBytes(segredo));
+    }
+
+    [Fact]
+    public void LinkSimbolicoParaArquivoDentro_AbreOAlvo()
+    {
+        using var area = new AreaFoto();
+        var real = Path.Combine(area.Pasta, "foto-real.jpg");
+        File.WriteAllBytes(real, [9]);
+        var link = Path.Combine(area.Pasta, "foto.jpg");
+        if (!TentarLink(link, real, diretorio: false))
+            return;
+
+        Assert.Equal(Path.GetFullPath(real), FotoPath.CaminhoDentroDaPasta(area.Pasta, "foto.jpg"));
+    }
+
+    private static bool TentarLink(string link, string alvo, bool diretorio)
+    {
+        try
+        {
+            if (diretorio)
+                Directory.CreateSymbolicLink(link, alvo);
+            else
+                File.CreateSymbolicLink(link, alvo);
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or PlatformNotSupportedException or NotSupportedException)
+        {
+            // O sistema de arquivos recusou o link. O caso fica sem execução neste ambiente.
+            Console.WriteLine("Link simbólico indisponível (" + ex.GetType().Name + "). Teste não executado.");
+            return false;
+        }
+    }
+
+    [Fact]
     public void PastaIrmaComOMesmoPrefixo_NaoAbre()
     {
         using var area = new AreaFoto();

@@ -7,9 +7,10 @@ namespace OrcaFacil.Core.Armazenamento;
 /// </summary>
 /// <remarks>
 /// A restauração do espelho grava só o nome, pela <see cref="ExtrairNomeArquivo"/>.
-/// Valor que não vira nome permanece. A leitura só abre arquivo dentro da pasta
-/// <c>perfil</c>, depois de normalizar o caminho. Null é "sem foto"; qualquer outro
-/// valor persistido é só o nome.
+/// Valor que não vira nome permanece. A leitura só abre arquivo cujo caminho final
+/// está dentro da pasta <c>perfil</c>. Caminho absoluto de outro aparelho tenta o
+/// mesmo nome nessa pasta. Link simbólico que aponta para fora é recusado.
+/// Null é "sem foto"; qualquer outro valor persistido é só o nome.
 /// </remarks>
 public static class FotoPath
 {
@@ -93,19 +94,38 @@ public static class FotoPath
     }
 
     /// <summary>
-    /// Caminho absoluto dentro de <paramref name="pastaFotos"/>, ou null.
+    /// Caminho final dentro de <paramref name="pastaFotos"/>, ou null.
     /// O prefixo da pasta, com separador no fim, é exigido antes de <see cref="File.Exists"/>.
     /// Nome sem diretório é lido nessa pasta, não na pasta corrente.
+    /// Caminho absoluto de outro aparelho, fora da pasta atual, cai no nome do arquivo
+    /// dentro dela (caso do Auto Backup). Link simbólico é resolvido com
+    /// <see cref="FileSystemInfo.ResolveLinkTarget(bool)"/>; o alvo final também
+    /// precisa ficar sob o prefixo. Pasta irmã (<c>perfil2</c>) e outra caixa não entram.
     /// </summary>
     public static string? CaminhoDentroDaPasta(string pastaFotos, string? valor)
     {
         if (string.IsNullOrWhiteSpace(valor) || string.IsNullOrWhiteSpace(pastaFotos))
             return null;
 
-        var candidato = EhSomenteNomeArquivo(valor)
-            ? Path.Combine(pastaFotos, valor)
-            : valor;
+        if (EhSomenteNomeArquivo(valor))
+            return AbrirSeDentro(pastaFotos, Path.Combine(pastaFotos, valor));
 
+        if (AbrirSeDentro(pastaFotos, valor) is string direto)
+            return direto;
+
+        try
+        {
+            var nome = ExtrairNomeArquivo(valor);
+            return AbrirSeDentro(pastaFotos, Path.Combine(pastaFotos, nome));
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    private static string? AbrirSeDentro(string pastaFotos, string candidato)
+    {
         string cheio;
         string prefixo;
         try
@@ -124,15 +144,69 @@ public static class FotoPath
         if (!cheio.StartsWith(prefixo, StringComparison.Ordinal))
             return null;
 
+        var final = ResolverSobPrefixo(prefixo, cheio);
+        if (final is null)
+            return null;
+
         try
         {
-            return File.Exists(cheio) ? cheio : null;
+            return File.Exists(final) ? final : null;
         }
         catch (IOException)
         {
             return null;
         }
         catch (UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// <see cref="Path.GetFullPath"/> não segue link. Cada segmento é conferido;
+    /// se for link, o alvo final precisa continuar sob o prefixo.
+    /// </summary>
+    private static string? ResolverSobPrefixo(string prefixo, string cheio)
+    {
+        var raiz = prefixo[..^1];
+        var relativo = cheio[prefixo.Length..];
+        if (relativo.Length == 0)
+            return null;
+
+        var atual = raiz;
+        foreach (var parte in relativo.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (parte is "." or "..")
+                return null;
+
+            atual = Path.Combine(atual, parte);
+            atual = ResolverLink(atual, prefixo) ?? "";
+            if (atual.Length == 0)
+                return null;
+        }
+
+        return atual.StartsWith(prefixo, StringComparison.Ordinal) ? atual : null;
+    }
+
+    private static string? ResolverLink(string caminho, string prefixo)
+    {
+        try
+        {
+            var info = new FileInfo(caminho);
+            if (info.LinkTarget is null)
+            {
+                var direto = Path.GetFullPath(caminho);
+                return direto.StartsWith(prefixo, StringComparison.Ordinal) ? direto : null;
+            }
+
+            var alvo = info.ResolveLinkTarget(returnFinalTarget: true);
+            if (alvo is null)
+                return null;
+
+            var final = Path.GetFullPath(alvo.FullName);
+            return final.StartsWith(prefixo, StringComparison.Ordinal) ? final : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {
             return null;
         }

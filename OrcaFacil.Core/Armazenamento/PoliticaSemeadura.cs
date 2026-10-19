@@ -5,27 +5,49 @@ using OrcaFacil.Core.Entities;
 namespace OrcaFacil.Core.Armazenamento;
 
 /// <summary>
-/// Semear dados de demonstração só vale para um banco realmente vazio.
-/// Schema íntegro sem perfil, mas com lançamento já gravado, fica como está:
-/// o espelho não é restaurado por cima e o único acréscimo é um perfil vazio.
+/// Semear a demonstração só vale para um banco sem dado do usuário.
+/// Categoria padrão do sistema não conta. Qualquer outra linha — membro, categoria
+/// criada pela pessoa, lançamento, cartão, orçamento, meta, cesta, ativo, recarga,
+/// fechamento, log — mantém o banco, não restaura o espelho e só cria o perfil vazio.
 /// </summary>
 public static class PoliticaSemeadura
 {
     public const string MensagemPerfilMinimo =
-        "SemPerfil com lançamentos reais. O banco vivo foi mantido, o espelho não foi restaurado e só um perfil mínimo foi criado. Nenhum dado de demonstração foi semeado.";
+        "SemPerfil com dados do usuário. O banco vivo foi mantido, o espelho não foi restaurado e só um perfil mínimo foi criado. Nenhum dado de demonstração foi semeado.";
 
     public const string NomePerfilMinimo = "Usuário";
+
+    /// <summary>Cada <see cref="DbSet{TEntity}"/> de <see cref="AppDbContext"/> entra nesta lista.</summary>
+    public static readonly string[] ConjuntosObservados =
+    [
+        nameof(AppDbContext.MembrosFamilia),
+        nameof(AppDbContext.Categorias),
+        nameof(AppDbContext.Transacoes),
+        nameof(AppDbContext.ItensLancamento),
+        nameof(AppDbContext.Orcamentos),
+        nameof(AppDbContext.Metas),
+        nameof(AppDbContext.FechamentosPeriodo),
+        nameof(AppDbContext.LogsEvento),
+        nameof(AppDbContext.AtivosFinanceiros),
+        nameof(AppDbContext.OperacoesAtivo),
+        nameof(AppDbContext.ProdutosCesta),
+        nameof(AppDbContext.LocaisCompra),
+        nameof(AppDbContext.ComprasCesta),
+        nameof(AppDbContext.ItensCompraCesta),
+        nameof(AppDbContext.Cartoes),
+        nameof(AppDbContext.RecargasCartao)
+    ];
 
     /// <summary>
     /// Devolve true quando a semeadura de demonstração não deve rodar.
     /// </summary>
-    public static async Task<bool> CriarPerfilMinimoSeHaLancamentoAsync(
+    public static async Task<bool> CriarPerfilMinimoSeHaDadoDoUsuarioAsync(
         AppDbContext contexto,
         IRegistroLog? log,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(contexto);
-        if (!await contexto.Transacoes.AnyAsync(cancellationToken))
+        if (!await HaDadoDoUsuarioAsync(contexto, cancellationToken))
             return false;
 
         log?.Informacao(MensagemPerfilMinimo, []);
@@ -42,5 +64,55 @@ public static class PoliticaSemeadura
         });
         await contexto.SaveChangesAsync(cancellationToken);
         return true;
+    }
+
+    private static async Task<bool> HaDadoDoUsuarioAsync(AppDbContext contexto, CancellationToken cancellationToken)
+    {
+        if (await contexto.MembrosFamilia.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.Categorias.AnyAsync(categoria => !categoria.EhPadraoDoSistema, cancellationToken))
+            return true;
+
+        if (await contexto.Transacoes.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.ItensLancamento.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.Orcamentos.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.Metas.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.FechamentosPeriodo.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.LogsEvento.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.AtivosFinanceiros.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.OperacoesAtivo.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.ProdutosCesta.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.LocaisCompra.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.ComprasCesta.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.ItensCompraCesta.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.Cartoes.AnyAsync(cancellationToken))
+            return true;
+
+        return await contexto.RecargasCartao.AnyAsync(cancellationToken);
     }
 }

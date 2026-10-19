@@ -26,7 +26,10 @@ public static class RegistroCoordenadorArmazenamento
             provedor.GetRequiredService<IRegistroLog>()));
         services.AddSingleton<IPreservacaoBancoVivo, PreservacaoBancoArquivo>();
         services.AddSingleton<IRestauracaoEspelho, RestauracaoEspelhoDaPasta>();
-        services.AddSingleton<ISemeaduraDados, SemeaduraDadosApp>();
+        services.AddSingleton<ISemeaduraDados>(provedor => new SemeaduraDadosApp(
+            provedor.GetRequiredService<CaminhoBancoVivo>(),
+            provedor.GetRequiredService<IRegistroLog>(),
+            static (contexto, _) => SeedData.PopularAsync(contexto)));
         services.AddSingleton<ILimpezaTotalDados, LimpezaTotalForaDaAbertura>();
         services.AddSingleton<CoordenadorArmazenamento>();
     }
@@ -72,27 +75,3 @@ public static class RegistroCoordenadorArmazenamento
     }
 }
 
-/// <summary>
-/// Dados iniciais só depois que o coordenador criou o schema. Restauração que falha não chega aqui.
-/// </summary>
-public sealed class SemeaduraDadosApp : ISemeaduraDados
-{
-    private readonly CaminhoBancoVivo _caminho;
-    private readonly IRegistroLog _log;
-
-    public SemeaduraDadosApp(CaminhoBancoVivo caminho, IRegistroLog log)
-    {
-        _caminho = caminho ?? throw new ArgumentNullException(nameof(caminho));
-        _log = log ?? throw new ArgumentNullException(nameof(log));
-    }
-
-    public async Task SemearAsync(CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        await using var contexto = ConexaoBancoArquivo.AbrirEscrita(_caminho.Valor);
-        if (await PoliticaSemeadura.CriarPerfilMinimoSeHaLancamentoAsync(contexto, _log, cancellationToken))
-            return;
-
-        await SeedData.PopularAsync(contexto);
-    }
-}

@@ -121,7 +121,8 @@ public class FotoPerfilService : IFotoPerfilService
     }
 
     /// <summary>
-    /// Só abre arquivo dentro de <see cref="PastaFotos"/>. Nome sem pasta é resolvido ali.
+    /// Só abre arquivo cujo alvo final está em <see cref="PastaFotos"/>.
+    /// Nome sem pasta e caminho absoluto antigo caem nessa pasta. Link para fora é recusado.
     /// </summary>
     private string? ResolverArquivo(string? valor)
         => FotoPath.CaminhoDentroDaPasta(PastaFotos, valor);

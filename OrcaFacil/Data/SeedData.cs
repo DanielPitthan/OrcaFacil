@@ -20,7 +20,12 @@ public static class SeedData
     /// <summary>Mínimo para o app funcionar: categorias padrão e o perfil do usuário.</summary>
     public static async Task<MembroFamilia> PopularEssencialAsync(AppDbContext ctx)
     {
-        ctx.Categorias.AddRange(CriarCategoriasPadrao());
+        var nomes = ctx.Categorias.Select(categoria => categoria.Nome).ToList();
+        var novas = CriarCategoriasPadrao()
+            .Where(categoria => !nomes.Any(nome => string.Equals(nome, categoria.Nome, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+        if (novas.Count > 0)
+            ctx.Categorias.AddRange(novas);
 
         var perfil = new MembroFamilia { Nome = "Usuário", Avatar = "👤", Ativo = true };
         ctx.MembrosFamilia.Add(perfil);
