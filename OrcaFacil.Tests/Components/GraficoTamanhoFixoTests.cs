@@ -21,7 +21,7 @@ public class GraficoTamanhoFixoTests
         var chart = BlocoDoSeletor(css, $".{classe} ::deep .mud-chart");
         var svg = BlocoDoSeletor(css, $".{classe} ::deep .mud-chart svg");
 
-        Assert.Contains($"height: {altura};", bloco, StringComparison.Ordinal);
+        AssertTemAltura(bloco, altura);
         Assert.Contains("width: 100%;", bloco, StringComparison.Ordinal);
         Assert.Contains("max-width: 100%;", bloco, StringComparison.Ordinal);
         Assert.Contains("min-width: 0;", bloco, StringComparison.Ordinal);
@@ -61,7 +61,7 @@ public class GraficoTamanhoFixoTests
         var css = SemComentarios(File.ReadAllText(CaminhoCss("MonthEvolutionChart")));
         var bloco = BlocoDoSeletor(css, ".of-evolucao-plot");
 
-        Assert.Contains("height: 168px;", bloco, StringComparison.Ordinal);
+        AssertTemAltura(bloco, "168px");
         Assert.Contains("width: 100%;", bloco, StringComparison.Ordinal);
         Assert.Contains("max-width: 100%;", bloco, StringComparison.Ordinal);
         Assert.Contains("min-width: 0;", bloco, StringComparison.Ordinal);
@@ -69,10 +69,17 @@ public class GraficoTamanhoFixoTests
         Assert.DoesNotContain("overflow", bloco, StringComparison.Ordinal);
     }
 
+    private static void AssertTemAltura(string bloco, string altura)
+    {
+        Assert.True(
+            Regex.IsMatch(bloco, $@"(?<![\w-])height: {Regex.Escape(altura)};"),
+            $"Falta height: {altura} fora de min/max-height.");
+    }
+
     private static void AssertCaixaEstavel(string bloco, string altura)
     {
         Assert.Contains("display: block;", bloco, StringComparison.Ordinal);
-        Assert.Contains($"height: {altura};", bloco, StringComparison.Ordinal);
+        AssertTemAltura(bloco, altura);
         Assert.Contains("min-height: 0;", bloco, StringComparison.Ordinal);
         Assert.Contains($"max-height: {altura};", bloco, StringComparison.Ordinal);
         Assert.Contains("width: 100%;", bloco, StringComparison.Ordinal);
@@ -84,7 +91,7 @@ public class GraficoTamanhoFixoTests
     private static void AssertCssEstavel(string css)
     {
         Assert.DoesNotContain("overflow", css, StringComparison.Ordinal);
-        Assert.DoesNotMatch(new Regex(@"(?<![\w-])(?:d|s|l)?vh\b", RegexOptions.IgnoreCase), css);
+        Assert.DoesNotMatch(new Regex(@"(?<![\w-])\d*(?:\.\d+)?(?:d|s|l)?vh\b", RegexOptions.IgnoreCase), css);
         Assert.DoesNotContain("aspect-ratio", css, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("container-type", css, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("@container", css, StringComparison.OrdinalIgnoreCase);
