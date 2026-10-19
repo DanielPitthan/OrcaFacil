@@ -350,32 +350,43 @@
         if (_lendo || _descartada)
             return;
 
+        _lendo = true;
+        StateHasChanged();
         try
         {
-            if (!await ConfirmarAvisoAsync() || _descartada)
-                return;
-
-            if (!await TemConfiguracaoAsync())
-            {
-                if (_descartada)
-                    return;
-
-                _jpeg = null;
-                _comprovante = null;
-                _exibicao = MensagensLeituraComprovante.SemConfiguracao();
-                return;
-            }
-
-            var origem = await EscolherOrigemAsync();
-            if (origem is null || _descartada)
-                return;
-
-            await CapturarEEnviarAsync(origem.Value);
+            await FluxoLeituraAsync();
         }
         catch (OperationCanceledException)
         {
             // Sair da página não é erro e não apaga a chave.
         }
+        finally
+        {
+            LiberarLeitura();
+        }
+    }
+
+    private async Task FluxoLeituraAsync()
+    {
+        if (!await ConfirmarAvisoAsync() || _descartada)
+            return;
+
+        if (!await TemConfiguracaoAsync())
+        {
+            if (_descartada)
+                return;
+
+            _jpeg = null;
+            _comprovante = null;
+            _exibicao = MensagensLeituraComprovante.SemConfiguracao();
+            return;
+        }
+
+        var origem = await EscolherOrigemAsync();
+        if (origem is null || _descartada)
+            return;
+
+        await CapturarEEnviarAsync(origem.Value);
     }
 
     private async Task<bool> TemConfiguracaoAsync()
@@ -408,13 +419,35 @@
         if (_lendo || _descartada)
             return;
 
-        if (_jpeg is { Length: > 0 } jpeg)
+        _lendo = true;
+        StateHasChanged();
+        try
         {
-            await EnviarJpegAsync(jpeg);
-            return;
+            if (_jpeg is { Length: > 0 } jpeg && jpeg.Length <= ClienteMensagens.TamanhoMaximoImagem)
+                await EnviarJpegAsync(jpeg);
+            else
+            {
+                _jpeg = null;
+                await FluxoLeituraAsync();
+            }
         }
+        catch (OperationCanceledException)
+        {
+            // Sair da página não é erro e não apaga a chave.
+        }
+        finally
+        {
+            LiberarLeitura();
+        }
+    }
 
-        await IniciarLeituraAsync();
+    private void LiberarLeitura()
+    {
+        if (_descartada)
+            return;
+
+        _lendo = false;
+        StateHasChanged();
     }
 
     private async Task<bool> ConfirmarAvisoAsync()
@@ -445,25 +478,31 @@
     private async Task CapturarEEnviarAsync(OrigemFotoComprovante origem)
     {
         var geracao = ++_geracao;
-        _lendo = true;
         try
         {
-            var arquivo = origem == OrigemFotoComprovante.Camera
-                ? await Fotos.CapturarFotoAsync("Ler comprovante")
-                : await Fotos.EscolherFotoAsync("Escolher comprovante");
-            if (arquivo is null || Cancelada(geracao))
+            var foto = await Fotos.PrepararComprovanteAsync(
+                origem == OrigemFotoComprovante.Camera,
+                async () =>
+                {
+                    if (Cancelada(geracao))
+                        return;
+
+                    _jpeg = null;
+                    _comprovante = null;
+                    _exibicao = MensagensLeituraComprovante.Carregando();
+                    await InvokeAsync(StateHasChanged);
+                },
+                _pagina.Token);
+            if (foto.Cancelada || Cancelada(geracao))
                 return;
 
-            _exibicao = MensagensLeituraComprovante.Carregando();
-            _comprovante = null;
-            var jpeg = await Fotos.ReduzirArquivoEmMemoriaAsync(
-                arquivo,
-                PreparoFotoComprovante.LadoMaximoComprovante,
-                _pagina.Token);
-            if (Cancelada(geracao) || jpeg.Length == 0)
+            var jpeg = foto.Jpeg;
+            if (foto.PedirOutraFoto || jpeg is null || jpeg.Length == 0 || jpeg.Length > ClienteMensagens.TamanhoMaximoImagem)
             {
-                if (!Cancelada(geracao))
-                    _exibicao = MensagensLeituraComprovante.FotoInvalida();
+                _jpeg = null;
+                _exibicao = foto.PedirOutraFoto
+                    ? MensagensLeituraComprovante.FotoGrandeDemais()
+                    : MensagensLeituraComprovante.FotoInvalida();
                 return;
             }
 
@@ -476,6 +515,7 @@
         }
         catch (Exception ex) when (ex is InvalidOperationException or PermissionException or FeatureNotSupportedException)
         {
+            _jpeg = null;
             if (Cancelada(geracao))
                 return;
 
@@ -486,16 +526,9 @@
         }
         catch (Exception)
         {
+            _jpeg = null;
             if (!Cancelada(geracao))
                 _exibicao = MensagensLeituraComprovante.FotoInvalida();
-        }
-        finally
-        {
-            if (geracao == _geracao && !_descartada)
-            {
-                _lendo = false;
-                StateHasChanged();
-            }
         }
     }
 
@@ -503,9 +536,16 @@
     {
         geracao ??= ++_geracao;
         var atual = geracao.Value;
-        _lendo = true;
+        if (jpeg.Length > ClienteMensagens.TamanhoMaximoImagem)
+        {
+            _jpeg = null;
+            _exibicao = MensagensLeituraComprovante.FotoGrandeDemais();
+            return;
+        }
+
         _exibicao = MensagensLeituraComprovante.Carregando();
         _comprovante = null;
+        StateHasChanged();
         string? chave = null;
         try
         {
@@ -557,10 +597,7 @@
         {
             chave = null;
             if (atual == _geracao && !_descartada)
-            {
-                _lendo = false;
                 StateHasChanged();
-            }
         }
     }
 

@@ -180,6 +180,7 @@ public sealed class ClienteMensagens : IDisposable
     private static bool FraseFixa(string texto) => texto is
         ResultadoMensagem.TextoConexaoOk or
         ResultadoMensagem.TextoNaoAutorizado or
+        ResultadoMensagem.TextoSemPermissao or
         ResultadoMensagem.TextoLimite or
         ResultadoMensagem.TextoSobrecarga or
         ResultadoMensagem.TextoTimeout or
@@ -366,6 +367,7 @@ public sealed class ClienteMensagens : IDisposable
         return (int)resposta.StatusCode switch
         {
             401 => ResultadoMensagem.Falha(TipoResultadoMensagem.NaoAutorizado, ResultadoMensagem.TextoNaoAutorizado),
+            403 => ResultadoMensagem.Falha(TipoResultadoMensagem.SemPermissao, ResultadoMensagem.TextoSemPermissao),
             429 => ResultadoMensagem.Falha(
                 TipoResultadoMensagem.Limite,
                 ResultadoMensagem.TextoLimite,

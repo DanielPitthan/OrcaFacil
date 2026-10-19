@@ -1,3 +1,4 @@
+using OrcaFacil.Core.Armazenamento;
 using OrcaFacil.Core.Llm;
 
 namespace OrcaFacil.Tests.Llm;
@@ -81,32 +82,109 @@ public class PreparoFotoComprovanteTests
     }
 
     [Fact]
-    public void Avatar_MantemOLado512_ENaoUsaOTetoDoComprovante()
+    public void Avatar_ForaDePerfilERecusado_ENomeSalvoAindaAbre()
     {
-        var fonte = File.ReadAllText(CaminhoFotoPerfil());
+        var raiz = Directory.CreateTempSubdirectory("orca-foto-");
+        try
+        {
+            var perfil = Path.Combine(raiz.FullName, "perfil");
+            Directory.CreateDirectory(perfil);
+            var foto = Path.Combine(perfil, "foto-20261017.jpg");
+            File.WriteAllBytes(foto, [0xFF, 0xD8]);
+            var fora = Path.Combine(raiz.FullName, "segredo.bin");
+            File.WriteAllBytes(fora, [1]);
 
-        Assert.Contains("private const float LadoMaximo = 512f;", fonte, StringComparison.Ordinal);
-        Assert.Contains("ReduzirJpegAsync(origem, LadoMaximo, CancellationToken.None)", fonte, StringComparison.Ordinal);
-        Assert.Contains("Reduzir(imagem, LadoMaximo)", fonte, StringComparison.Ordinal);
-        Assert.Contains("FileSystem.AppDataDirectory, \"perfil\"", fonte, StringComparison.Ordinal);
-        Assert.Contains("foto-{DateTime.Now:yyyyMMddHHmmss}.jpg", fonte, StringComparison.Ordinal);
-        Assert.DoesNotContain("LadoMaximoComprovante", fonte, StringComparison.Ordinal);
-        Assert.DoesNotContain("2576", fonte, StringComparison.Ordinal);
-        Assert.Equal(512, PreparoFotoComprovante.CalcularTamanho(1800, 1200).LadoLongo);
+            Assert.Null(FotoPath.CaminhoDentroDaPasta(perfil, fora));
+            Assert.Null(FotoPath.CaminhoDentroDaPasta(perfil, Path.Combine(raiz.FullName, "perfil2", "foto.jpg")));
+            Assert.Equal(Path.GetFullPath(foto), FotoPath.CaminhoDentroDaPasta(perfil, "foto-20261017.jpg"));
+            Assert.Equal(512, PreparoFotoComprovante.CalcularTamanho(1800, 1200).LadoLongo);
+        }
+        finally
+        {
+            raiz.Delete(recursive: true);
+        }
     }
 
-    private static string CaminhoFotoPerfil()
+    [Theory]
+    [InlineData(8000, 6000, 2576, 2)]
+    [InlineData(5152, 1000, 2576, 2)]
+    [InlineData(5151, 1000, 2576, 1)]
+    [InlineData(400, 300, 2576, 1)]
+    [InlineData(100, 100, 512, 1)]
+    [InlineData(200000, 100, 2576, 64)]
+    public void CalcularAmostra_UsaPotenciaDeDoisSemCairAbaixoDoTeto(
+        int largura,
+        int altura,
+        int teto,
+        int amostra)
     {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            var caminho = Path.Combine(dir.FullName, "OrcaFacil", "Services", "FotoPerfilService.cs");
-            if (File.Exists(caminho))
-                return caminho;
+        var valor = PreparoFotoComprovante.CalcularAmostra(largura, altura, teto);
 
-            dir = dir.Parent;
-        }
+        Assert.Equal(amostra, valor);
+        Assert.True(valor >= 1);
+        Assert.Equal(0, valor & (valor - 1));
+        if (Math.Max(largura, altura) > teto && valor < 64)
+            Assert.True(Math.Max(largura, altura) / (valor * 2) < teto);
+    }
 
-        throw new InvalidOperationException("Não foi possível localizar FotoPerfilService.cs.");
+    [Theory]
+    [InlineData(0, 10, 512)]
+    [InlineData(10, 0, 512)]
+    [InlineData(10, 10, 0)]
+    public void CalcularAmostra_RecusaMedidaInvalida(int largura, int altura, int teto)
+    {
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(() =>
+            PreparoFotoComprovante.CalcularAmostra(largura, altura, teto));
+    }
+
+    [Fact]
+    public void DecidirEnvio_Ate5MbEnvia_AcimaReduzPara2048_ENaoReenvia()
+    {
+        var limite = ClienteMensagens.TamanhoMaximoImagem;
+        Assert.Equal(5 * 1024 * 1024, limite);
+        Assert.Equal(2048, PreparoFotoComprovante.LadoNovaTentativa);
+        Assert.Equal(0.85f, PreparoFotoComprovante.QualidadeJpeg);
+
+        var cabe = PreparoFotoComprovante.DecidirEnvio(limite, 1800);
+        Assert.True(cabe.Enviar);
+        Assert.False(cabe.PedirOutraFoto);
+        Assert.Equal(1800, cabe.LadoMaximo);
+        Assert.Equal(0.85f, cabe.Qualidade);
+        Assert.Equal("Enviar", cabe.ToString());
+
+        var grande = limite + 1;
+        var reduzir = PreparoFotoComprovante.DecidirEnvio(grande, 4000);
+        Assert.False(reduzir.Enviar);
+        Assert.False(reduzir.PedirOutraFoto);
+        Assert.Equal(2048, reduzir.LadoMaximo);
+        Assert.Equal(0.85f, reduzir.Qualidade);
+        Assert.Equal(85, (int)Math.Round(reduzir.Qualidade * 100f, MidpointRounding.AwayFromZero));
+        Assert.Equal("ReduzirDeNovo", reduzir.ToString());
+        Assert.DoesNotContain(grande.ToString(System.Globalization.CultureInfo.InvariantCulture), reduzir.ToString(), StringComparison.Ordinal);
+
+        var ainda = PreparoFotoComprovante.DecidirEnvio(grande, reduzir.LadoMaximo);
+        Assert.False(ainda.Enviar);
+        Assert.True(ainda.PedirOutraFoto);
+        Assert.Equal("PedirOutraFoto", ainda.ToString());
+
+        var noLimiteDoLado = PreparoFotoComprovante.DecidirEnvio(grande, 2048);
+        Assert.True(noLimiteDoLado.PedirOutraFoto);
+        Assert.False(noLimiteDoLado.Enviar);
+
+        var umPixelAcima = PreparoFotoComprovante.DecidirEnvio(grande, 2049);
+        Assert.False(umPixelAcima.PedirOutraFoto);
+        Assert.Equal(2048, umPixelAcima.LadoMaximo);
+
+        var jaPequena = PreparoFotoComprovante.DecidirEnvio(grande, 800);
+        Assert.True(jaPequena.PedirOutraFoto);
+        Assert.False(jaPequena.Enviar);
+    }
+
+    [Theory]
+    [InlineData(-1, 100)]
+    [InlineData(10, 0)]
+    public void DecidirEnvio_RecusaMedidaInvalida(int bytes, int lado)
+    {
+        Assert.ThrowsAny<ArgumentOutOfRangeException>(() => PreparoFotoComprovante.DecidirEnvio(bytes, lado));
     }
 }

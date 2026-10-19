@@ -64,7 +64,7 @@ internal static class PonteResultadoPastaEspelho
                 }
             }
 
-            if (Android.OS.Looper.MainLooper is { } principal && Android.OS.Looper.MyLooper() == principal)
+            if (global::Android.OS.Looper.MainLooper is { } principal && global::Android.OS.Looper.MyLooper() == principal)
                 Abrir();
             else
                 activity.RunOnUiThread(Abrir);
@@ -110,7 +110,7 @@ internal static class PonteResultadoPastaEspelho
 
         try
         {
-            var inicial = Android.Net.Uri.Parse(uriInicial);
+            var inicial = global::Android.Net.Uri.Parse(uriInicial);
             if (inicial is not null)
                 intent.PutExtra(DocumentsContract.ExtraInitialUri, inicial);
         }

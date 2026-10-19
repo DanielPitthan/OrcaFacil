@@ -11,7 +11,7 @@ namespace OrcaFacil.Core.Armazenamento;
 /// Esse caminho não chama <see cref="ISemeaduraDados"/> e não chama <see cref="ILimpezaTotalDados"/>.
 /// Espelho mais antigo, depois de restaurado, é migrado com as <see cref="OpcoesPreparoBanco"/>.
 /// Semear cria o schema por essa mesma migração e só então grava os dados iniciais.
-/// Schema íntegro sem membro vira <see cref="SituacaoBancoVivo.SemPerfil"/> por <see cref="PoliticaSeed"/> e semeia de novo.
+/// Schema íntegro sem membro vira <see cref="SituacaoBancoVivo.SemPerfil"/> por <see cref="PoliticaSeed"/>. A semeadura cria o perfil vazio e só grava a demonstração quando não há dado do usuário.
 /// Banco ilegível só é substituído depois de <see cref="IPreservacaoBancoVivo"/>; se a cópia falha, a recuperação abre.
 /// <see cref="PrepararAsync"/> e <see cref="LimparTudoAsync"/> não correm ao mesmo tempo.
 /// </remarks>

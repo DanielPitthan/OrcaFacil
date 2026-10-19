@@ -56,12 +56,61 @@ public class MensagensLeituraComprovanteTests
         Assert.Equal("A leitura demorou demais e foi interrompida.", tempo.Mensagem);
         Assert.Equal(SituacaoLeituraComprovante.NaoAutorizado, recusada.Situacao);
         Assert.Equal("A chave da API foi recusada.", recusada.Mensagem);
+        Assert.DoesNotContain("401", recusada.Mensagem, StringComparison.Ordinal);
         Assert.All(new[] { semRede, tempo, recusada }, item =>
         {
             Assert.True(item.PodeTentarDeNovo);
             Assert.False(item.LevaParaInteligenciaArtificial);
             Assert.DoesNotContain("R$", item.Mensagem, StringComparison.Ordinal);
         });
+    }
+
+    [Fact]
+    public void SemPermissao403_TemFrasePropria_DiferenteDo401()
+    {
+        var recusada = Exibir(TipoResultadoMensagem.NaoAutorizado, "corpo 401 " + Chave);
+        var semPermissao = Exibir(TipoResultadoMensagem.SemPermissao, "corpo 403 " + Chave);
+
+        Assert.Equal(SituacaoLeituraComprovante.NaoAutorizado, recusada.Situacao);
+        Assert.Equal(ResultadoMensagem.TextoNaoAutorizado, recusada.Mensagem);
+        Assert.Equal(SituacaoLeituraComprovante.SemPermissao, semPermissao.Situacao);
+        Assert.Equal(ResultadoMensagem.TextoSemPermissao, semPermissao.Mensagem);
+        Assert.NotEqual(recusada.Mensagem, semPermissao.Mensagem);
+        Assert.False(semPermissao.LevaParaInteligenciaArtificial);
+        Assert.True(semPermissao.PodeTentarDeNovo);
+        Assert.DoesNotContain("403", semPermissao.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain("401", semPermissao.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain(Chave, semPermissao.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain("corpo", semPermissao.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void FotoGrandeDemais_PedeOutra_ENaoLevaAChave()
+    {
+        var exibicao = MensagensLeituraComprovante.FotoGrandeDemais();
+
+        Assert.Equal(MensagensLeituraComprovante.TextoFotoGrandeDemais, exibicao.Mensagem);
+        Assert.Equal("A foto ficou grande demais. Escolha outra.", exibicao.Mensagem);
+        Assert.True(exibicao.PodeTentarDeNovo);
+        Assert.False(exibicao.LevaParaInteligenciaArtificial);
+        Assert.DoesNotContain(Chave, exibicao.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AbaInteligencia_UsaIndiceNomeado()
+    {
+        Assert.Equal(2, MensagensLeituraComprovante.IndiceAbaInteligencia);
+
+        var razor = File.ReadAllText(Path.Combine(
+            EncontrarRaiz(),
+            "OrcaFacil",
+            "Components",
+            "Pages",
+            "Configuracoes",
+            "Configuracoes.razor"));
+
+        Assert.Contains("MensagensLeituraComprovante.IndiceAbaInteligencia", razor, StringComparison.Ordinal);
+        Assert.DoesNotContain("_aba = 2", razor, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -219,6 +268,20 @@ public class MensagensLeituraComprovanteTests
     public void Diagnostico_NaoConfundeOutroErroComFaltaDeVisao(string? corpo)
     {
         Assert.False(DiagnosticoErroProvedor.IndicaModeloSemVisao(corpo));
+    }
+
+    private static string EncontrarRaiz()
+    {
+        var diretorio = new DirectoryInfo(AppContext.BaseDirectory);
+        while (diretorio is not null)
+        {
+            if (File.Exists(Path.Combine(diretorio.FullName, "OrcaFacil.slnx")))
+                return diretorio.FullName;
+
+            diretorio = diretorio.Parent;
+        }
+
+        throw new InvalidOperationException("Raiz do repositório não encontrada.");
     }
 
     private static ExibicaoLeituraComprovante Exibir(TipoResultadoMensagem tipo, string mensagem) =>

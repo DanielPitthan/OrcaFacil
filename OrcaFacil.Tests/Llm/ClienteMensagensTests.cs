@@ -95,6 +95,7 @@ public class ClienteMensagensTests
 
     [Theory]
     [InlineData(401, TipoResultadoMensagem.NaoAutorizado, ResultadoMensagem.TextoNaoAutorizado)]
+    [InlineData(403, TipoResultadoMensagem.SemPermissao, ResultadoMensagem.TextoSemPermissao)]
     [InlineData(429, TipoResultadoMensagem.Limite, ResultadoMensagem.TextoLimite)]
     [InlineData(529, TipoResultadoMensagem.Sobrecarga, ResultadoMensagem.TextoSobrecarga)]
     [InlineData(504, TipoResultadoMensagem.Timeout, ResultadoMensagem.TextoTimeout)]
@@ -140,6 +141,13 @@ public class ClienteMensagensTests
         Assert.NotEqual(ResultadoMensagem.TextoLimite, ResultadoMensagem.TextoSobrecarga);
         Assert.NotEqual(ResultadoMensagem.TextoTimeout, ResultadoMensagem.TextoLimite);
         Assert.NotEqual(ResultadoMensagem.TextoNaoAutorizado, ResultadoMensagem.TextoPedidoInvalido);
+        Assert.NotEqual(ResultadoMensagem.TextoNaoAutorizado, ResultadoMensagem.TextoSemPermissao);
+        Assert.Equal("A chave da API foi recusada.", ResultadoMensagem.TextoNaoAutorizado);
+        Assert.Equal(
+            "A chave foi aceita, mas não tem permissão para este uso. Confira sua conta no provedor.",
+            ResultadoMensagem.TextoSemPermissao);
+        Assert.DoesNotContain("401", ResultadoMensagem.TextoNaoAutorizado, StringComparison.Ordinal);
+        Assert.DoesNotContain("403", ResultadoMensagem.TextoSemPermissao, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -904,6 +912,7 @@ public class ClienteMensagensTests
             ResultadoMensagem.TextoModeloNaoInformado,
             ResultadoMensagem.TextoUrlInvalida,
             ResultadoMensagem.TextoNaoAutorizado,
+            ResultadoMensagem.TextoSemPermissao,
             ResultadoMensagem.TextoSemRede,
             ResultadoMensagem.TextoTimeout,
             ResultadoMensagem.TextoPedidoInvalido
@@ -931,6 +940,7 @@ public class ClienteMensagensTests
             ResultadoMensagem.TextoModeloNaoInformado,
             ResultadoMensagem.TextoUrlInvalida,
             ResultadoMensagem.TextoNaoAutorizado,
+            ResultadoMensagem.TextoSemPermissao,
             ResultadoMensagem.TextoSemRede,
             ResultadoMensagem.TextoTimeout
         };

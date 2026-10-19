@@ -24,9 +24,11 @@ public sealed record DecisaoArmazenamento(AcaoArmazenamento Acao, string Motivo)
 /// O parcial de AddCartoes migra para passar em <see cref="OrcaFacil.Core.Data.ReconciliadorAddCartoes"/>.
 ///
 /// Semear existe quando não há dado utilizável e não há espelho: banco ausente, ou
-/// SQLite vazio. Também semeia de novo quando o schema já está íntegro e não há
-/// membro/perfil (<see cref="SituacaoBancoVivo.SemPerfil"/>), com ou sem espelho:
-/// o espelho não substitui esse arquivo e nada é apagado. Espelho presente, mesmo
+/// SQLite vazio. Com schema íntegro e sem membro/perfil
+/// (<see cref="SituacaoBancoVivo.SemPerfil"/>), a ação também é semear, com ou sem
+/// espelho: o espelho não substitui esse arquivo e nada é apagado. A demonstração
+/// só entra se não houver dado do usuário; categoria padrão não conta. Se houver,
+/// a semeadura cria só o perfil vazio. Espelho presente, mesmo
 /// corrompido, não semeia por cima de banco ausente ou vazio. SQLite vazio com
 /// espelho legível restaura; com espelho corrompido abre a recuperação.
 ///
@@ -78,7 +80,7 @@ public static class MatrizDecisaoArmazenamento
     private static LinhaMatrizArmazenamento[] Montar()
     {
         const string usar = "O banco vivo está íntegro. Ele é a fonte desta execução; o espelho não o substitui.";
-        const string semPerfil = "O schema está íntegro e não há membro/perfil. A semeadura é repetida; o espelho não substitui este arquivo e nada é apagado.";
+        const string semPerfil = "O schema está íntegro e não há membro/perfil. O espelho não substitui este arquivo. Se já houver dado do usuário, só o perfil vazio é criado; a demonstração só entra num banco sem esse dado. Nada é apagado.";
         const string migrar = "O banco vivo é de um schema anterior e segue coerente. A migração ocorre nele; o espelho não é copiado por cima.";
         const string parcial = "A migration AddCartoes está pela metade. A migração passa pelo reconciliador; o espelho não é copiado por cima.";
         const string bancoMaisNovo = "O banco vivo foi gravado por uma versão mais nova do app. Pare e peça a atualização; não restaure o espelho por cima.";

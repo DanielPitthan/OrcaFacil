@@ -366,6 +366,10 @@ internal sealed class VolumeMemoria : IVolumePastaEspelho
 
         public bool EfetuarPromocaoEFalhar { get; set; }
 
+        public int FalharCopiaDefinitivoAPartirDa { get; set; }
+
+        private int _copiasDefinitivo;
+
         public Action? DepoisDoParque { get; set; }
 
         public TaskCompletionSource<bool>? SegurarCriacao { get; set; }
@@ -556,6 +560,13 @@ internal sealed class VolumeMemoria : IVolumePastaEspelho
 
             if (!Arquivos.TryGetValue(nome, out var bytes))
                 return Task.FromResult(ResultadoOperacaoPasta.Falha(CodigoFalhaPastaEspelho.ArquivoAusente));
+
+            if (string.Equals(nome, NomeArquivo, StringComparison.Ordinal))
+            {
+                _copiasDefinitivo++;
+                if (FalharCopiaDefinitivoAPartirDa > 0 && _copiasDefinitivo >= FalharCopiaDefinitivoAPartirDa)
+                    return Task.FromResult(ResultadoOperacaoPasta.Falha(CodigoFalhaPastaEspelho.Indisponivel));
+            }
 
             File.WriteAllBytes(caminhoLocal, bytes);
             return Task.FromResult(ResultadoOperacaoPasta.Ok());

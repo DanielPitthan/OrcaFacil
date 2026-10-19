@@ -169,7 +169,7 @@ public sealed class ProtocoloPublicacaoEspelho
                 : FalhaDeRenome(renome);
 
         if (renome.TrocaEfetuada)
-            return FalhaDeRenome(renome);
+            return FalhaDeRenome(renome, promocaoEfetuada: publicado);
 
         return null;
     }
@@ -207,12 +207,12 @@ public sealed class ProtocoloPublicacaoEspelho
         }
     }
 
-    private static ResultadoOperacaoPasta FalhaDeRenome(ResultadoRenomeacaoVolume renome)
+    private static ResultadoOperacaoPasta FalhaDeRenome(ResultadoRenomeacaoVolume renome, bool promocaoEfetuada = false)
     {
         if (renome.Codigo != CodigoFalhaPastaEspelho.Nenhuma)
-            return ResultadoOperacaoPasta.Falha(renome.Codigo);
+            return ResultadoOperacaoPasta.Falha(renome.Codigo, promocaoEfetuada);
 
-        return ResultadoOperacaoPasta.Falha(CodigoFalhaPastaEspelho.ProvedorSemTroca);
+        return ResultadoOperacaoPasta.Falha(CodigoFalhaPastaEspelho.ProvedorSemTroca, promocaoEfetuada);
     }
 
     private readonly record struct Promocao(ResultadoOperacaoPasta Resultado, bool ManterTemporario);

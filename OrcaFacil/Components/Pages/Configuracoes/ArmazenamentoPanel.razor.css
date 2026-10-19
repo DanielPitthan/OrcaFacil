@@ -1,0 +1,49 @@
+.of-espelho {
+    display: flex;
+    flex-direction: column;
+    gap: var(--of-space-section);
+    min-width: 0;
+    margin-bottom: var(--of-space-section);
+    color: var(--of-text);
+}
+
+.of-secao-bloco {
+    padding: 12px 16px;
+}
+
+.of-espelho-apoio {
+    margin: 0;
+    color: var(--of-text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.4;
+}
+
+.of-espelho-apoio + .of-espelho-apoio {
+    margin-top: 8px;
+}
+
+.of-espelho-aviso {
+    margin: 0;
+    padding: 12px 16px;
+    border: 1px solid var(--of-border);
+    border-left: 4px solid var(--of-warning);
+    border-radius: var(--of-radius-control);
+    background: var(--of-surface);
+    color: var(--of-text);
+    font-size: 0.875rem;
+    line-height: 1.45;
+}
+
+.of-espelho-acoes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.of-secao-bloco .of-espelho-acoes {
+    margin-top: 12px;
+}
+
+.of-espelho-acoes ::deep .mud-button-root {
+    min-height: var(--of-touch);
+}

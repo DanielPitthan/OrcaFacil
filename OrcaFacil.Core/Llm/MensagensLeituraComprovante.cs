@@ -9,6 +9,7 @@ public enum SituacaoLeituraComprovante
     SemRede,
     TempoEsgotado,
     NaoAutorizado,
+    SemPermissao,
     LimiteProvedor,
     RespostaForaDoSchema,
     IlegivelOuSemItens,
@@ -53,7 +54,12 @@ public static class MensagensLeituraComprovante
 
     public const string TextoFotoInvalida = "Não foi possível ler essa foto.";
 
+    public const string TextoFotoGrandeDemais = "A foto ficou grande demais. Escolha outra.";
+
     public const string ConsultaAba = "ia";
+
+    /// <summary>Terceira aba de Configurações, a de Inteligência artificial.</summary>
+    public const int IndiceAbaInteligencia = 2;
 
     public const string RotaInteligencia = "/configuracoes?aba=ia";
 
@@ -75,6 +81,9 @@ public static class MensagensLeituraComprovante
     public static ExibicaoLeituraComprovante FotoInvalida() =>
         Erro(SituacaoLeituraComprovante.Falha, TextoFotoInvalida, levaParaInteligencia: false);
 
+    public static ExibicaoLeituraComprovante FotoGrandeDemais() =>
+        Erro(SituacaoLeituraComprovante.Falha, TextoFotoGrandeDemais, levaParaInteligencia: false);
+
     /// <summary>
     /// URL https sem usuário nem parâmetros, modelo e chave preenchidos.
     /// Não guarda a chave: só responde se os três estão prontos.
@@ -94,6 +103,8 @@ public static class MensagensLeituraComprovante
                 return DeSucesso(normalizado);
             case TipoResultadoMensagem.NaoAutorizado:
                 return Erro(SituacaoLeituraComprovante.NaoAutorizado, ResultadoMensagem.TextoNaoAutorizado, false);
+            case TipoResultadoMensagem.SemPermissao:
+                return Erro(SituacaoLeituraComprovante.SemPermissao, ResultadoMensagem.TextoSemPermissao, false);
             case TipoResultadoMensagem.Limite:
             case TipoResultadoMensagem.Sobrecarga:
                 return Erro(SituacaoLeituraComprovante.LimiteProvedor, ResultadoMensagem.TextoLimite, false);

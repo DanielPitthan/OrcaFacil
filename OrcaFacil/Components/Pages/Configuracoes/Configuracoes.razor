@@ -67,7 +67,7 @@
     protected override void OnParametersSet()
     {
         if (string.Equals(AbaConsulta, MensagensLeituraComprovante.ConsultaAba, StringComparison.OrdinalIgnoreCase))
-            _aba = 2;
+            _aba = MensagensLeituraComprovante.IndiceAbaInteligencia;
     }
 
     protected override void OnInitialized()
