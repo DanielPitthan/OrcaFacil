@@ -32,8 +32,16 @@ public class LancamentoCartaoFonteTests
         var sessao = ExtrairBloco(formulario, "Task AbrirSessaoAsync()");
 
         Assert.Contains("AbrirSessaoAsync", parameters, StringComparison.Ordinal);
-        var trava = IndiceDaCondicao(parameters, "_sessaoPronta && _idAplicado == Id");
+        var trava = parameters.IndexOf("if (_sessaoPronta && _idAplicado == Id)", StringComparison.Ordinal);
+        var arma = parameters.IndexOf("_sessaoPronta = true;", StringComparison.Ordinal);
+        var id = parameters.IndexOf("_idAplicado = Id;", StringComparison.Ordinal);
+        var abreSessao = parameters.IndexOf("await AbrirSessaoAsync()", StringComparison.Ordinal);
         Assert.True(trava >= 0);
+        Assert.True(arma >= 0);
+        Assert.True(id >= 0);
+        Assert.True(abreSessao >= 0);
+        Assert.True(trava < arma && arma < id && id < abreSessao);
+        Assert.True(IndiceDaCondicao(parameters, "_sessaoPronta && _idAplicado == Id") >= 0);
         var abre = parameters.IndexOf('(', trava);
         var corpo = ConteudoParenteses(parameters, abre);
         var resto = parameters[(abre + corpo.Length + 2)..].TrimStart();
@@ -72,6 +80,9 @@ public class LancamentoCartaoFonteTests
         Assert.DoesNotContain("IniciarNovo", sucesso, StringComparison.Ordinal);
         Assert.Contains("FluxoLancamento.IniciarNovo(", senao, StringComparison.Ordinal);
         Assert.Contains("Lançamento não encontrado.", senao, StringComparison.Ordinal);
+        Assert.Contains("NavigateTo(\"/lancamentos\")", senao, StringComparison.Ordinal);
+        Assert.DoesNotContain("CriarAsync", senao, StringComparison.Ordinal);
+        Assert.DoesNotContain("AtualizarAsync", senao, StringComparison.Ordinal);
     }
 
     [Fact]
