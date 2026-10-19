@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.IO.Compression;
+using System.Text;
 using ClosedXML.Excel;
 using OrcaFacil.Core.Planilha;
 
@@ -15,7 +17,7 @@ public class PlanilhaPtBrTests
         {
             var aba = PlanilhaPtBr.CriarAba(pasta, "Lançamentos");
             PlanilhaPtBr.GravarData(aba.Cell(2, 1), entrada);
-            PlanilhaPtBr.GravarData(aba.Cell(3, 1), null);
+            PlanilhaPtBr.GravarData(aba.Cell(3, 1), (DateTime?)null);
         }, pasta =>
         {
             var aba = pasta.Worksheet("Lançamentos");
@@ -274,6 +276,178 @@ public class PlanilhaPtBrTests
 
         var fonte = File.ReadAllText(Path.Combine(EncontrarRaiz(), "OrcaFacil.Core", "Planilha", "PlanilhaPtBr.cs"));
         Assert.DoesNotContain("AdjustToContents", fonte, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("0.01")]
+    [InlineData("10.50")]
+    [InlineData("1234.56")]
+    [InlineData("999999.99")]
+    [InlineData("-40.25")]
+    public void MoedaRealista_ReabreComOCentavoExato(string texto)
+    {
+        var valor = decimal.Parse(texto, CultureInfo.InvariantCulture);
+
+        Reabrir(pasta =>
+        {
+            var aba = PlanilhaPtBr.CriarAba(pasta, "Lançamentos");
+            PlanilhaPtBr.GravarMoeda(aba.Cell(2, 1), valor);
+        }, pasta =>
+        {
+            var celula = pasta.Worksheet("Lançamentos").Cell(2, 1);
+            Assert.Equal(XLDataType.Number, celula.DataType);
+            Assert.Equal(valor, (decimal)celula.GetDouble());
+            Assert.Equal(PlanilhaPtBr.FormatoMoeda, celula.Style.NumberFormat.Format);
+        });
+    }
+
+    [Fact]
+    public void MoedaAcimaDoDouble_EntraComoTextoExato()
+    {
+        var valor = 1234567890123456m;
+
+        Reabrir(pasta =>
+        {
+            var aba = PlanilhaPtBr.CriarAba(pasta, "Lançamentos");
+            PlanilhaPtBr.GravarMoeda(aba.Cell(2, 1), valor);
+        }, pasta =>
+        {
+            var celula = pasta.Worksheet("Lançamentos").Cell(2, 1);
+            Assert.Equal(XLDataType.Text, celula.DataType);
+            Assert.Contains("1234567890123456", celula.GetText(), StringComparison.Ordinal);
+            Assert.DoesNotContain("1234567890123460", celula.GetText(), StringComparison.Ordinal);
+            Assert.StartsWith("R$ ", celula.GetText(), StringComparison.Ordinal);
+        });
+    }
+
+    [Theory]
+    [InlineData("\u00A0=1+1")]
+    [InlineData("\u3000=1")]
+    [InlineData("\uFEFF=1")]
+    [InlineData("\u200B=1")]
+    [InlineData("\u200C=1")]
+    [InlineData("\u200D+1")]
+    [InlineData("\u2060-1")]
+    [InlineData("\uFF1D1+1")]
+    [InlineData("\uFF0B1")]
+    [InlineData("\uFF0D1")]
+    [InlineData("\uFF20soma")]
+    [InlineData("\u22121")]
+    public void TextoComBrancoOuFullwidth_ReabreComoTextoInerte(string texto)
+        => ConferirTextoInerte(texto, texto);
+
+    [Fact]
+    public void Controle_ViraEspacoENaoViraCodigoDoExcel()
+    {
+        using var stream = new MemoryStream();
+        using (var pasta = new XLWorkbook())
+        {
+            var aba = PlanilhaPtBr.CriarAba(pasta, "Texto");
+            PlanilhaPtBr.GravarTexto(aba.Cell(1, 1), "a\u0001b");
+            PlanilhaPtBr.GravarTexto(aba.Cell(2, 1), "\u0001=1");
+            pasta.SaveAs(stream);
+        }
+
+        stream.Position = 0;
+        using (var reaberta = new XLWorkbook(stream))
+        {
+            var aba = reaberta.Worksheet("Texto");
+            Assert.Equal("a b", aba.Cell(1, 1).GetText());
+            Assert.Equal(" =1", aba.Cell(2, 1).GetText());
+            Assert.Equal(XLDataType.Text, aba.Cell(2, 1).DataType);
+            Assert.True(aba.Cell(2, 1).Style.IncludeQuotePrefix);
+            Assert.False(aba.Cell(2, 1).HasFormula);
+        }
+
+        stream.Position = 0;
+        using var zip = new ZipArchive(stream, ZipArchiveMode.Read);
+        foreach (var entrada in zip.Entries)
+        {
+            using var leitor = new StreamReader(entrada.Open(), Encoding.UTF8);
+            var xml = leitor.ReadToEnd();
+            Assert.DoesNotContain("_x0001_", xml, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void DataOnly_ReabreComoDateTime()
+    {
+        Reabrir(pasta =>
+        {
+            var aba = PlanilhaPtBr.CriarAba(pasta, "Metas");
+            PlanilhaPtBr.GravarData(aba.Cell(2, 1), new DateOnly(2026, 10, 19));
+            PlanilhaPtBr.GravarData(aba.Cell(3, 1), DateOnly.MinValue);
+            PlanilhaPtBr.GravarData(aba.Cell(4, 1), (DateOnly?)null);
+        }, pasta =>
+        {
+            var aba = pasta.Worksheet("Metas");
+            Assert.Equal(XLDataType.DateTime, aba.Cell(2, 1).DataType);
+            Assert.Equal(new DateTime(2026, 10, 19), aba.Cell(2, 1).GetDateTime());
+            Assert.Equal(PlanilhaPtBr.FormatoData, aba.Cell(2, 1).Style.DateFormat.Format);
+            Assert.Equal(XLDataType.Blank, aba.Cell(3, 1).DataType);
+            Assert.Equal(XLDataType.Blank, aba.Cell(4, 1).DataType);
+        });
+    }
+
+    [Fact]
+    public void DataUtc_ViraHorarioDeSaoPaulo()
+    {
+        var utc = new DateTime(2026, 10, 19, 2, 30, 45, DateTimeKind.Utc);
+
+        Reabrir(pasta =>
+        {
+            var aba = PlanilhaPtBr.CriarAba(pasta, "Perfis");
+            PlanilhaPtBr.GravarDataHora(aba.Cell(2, 1), utc);
+            PlanilhaPtBr.GravarData(aba.Cell(3, 1), utc);
+        }, pasta =>
+        {
+            var aba = pasta.Worksheet("Perfis");
+            Assert.Equal(new DateTime(2026, 10, 18, 23, 30, 0), aba.Cell(2, 1).GetDateTime());
+            Assert.Equal(PlanilhaPtBr.FormatoDataHora, aba.Cell(2, 1).Style.DateFormat.Format);
+            Assert.Equal(new DateTime(2026, 10, 18), aba.Cell(3, 1).GetDateTime());
+        });
+    }
+
+    [Fact]
+    public void DataMinima_SaiVazia()
+    {
+        Reabrir(pasta =>
+        {
+            var aba = PlanilhaPtBr.CriarAba(pasta, "Metas");
+            PlanilhaPtBr.GravarData(aba.Cell(2, 1), DateTime.MinValue);
+            PlanilhaPtBr.GravarDataHora(aba.Cell(3, 1), DateTime.MinValue);
+            PlanilhaPtBr.GravarDataHora(aba.Cell(4, 1), new DateTime(1, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        }, pasta =>
+        {
+            var aba = pasta.Worksheet("Metas");
+            Assert.Equal(XLDataType.Blank, aba.Cell(2, 1).DataType);
+            Assert.Equal(XLDataType.Blank, aba.Cell(3, 1).DataType);
+            Assert.Equal(XLDataType.Blank, aba.Cell(4, 1).DataType);
+        });
+    }
+
+    [Theory]
+    [InlineData("History")]
+    [InlineData("history")]
+    [InlineData("HISTORY")]
+    public void NomeHistory_EReservado(string nome)
+    {
+        using var pasta = new XLWorkbook();
+        var erro = Assert.Throws<ArgumentException>(() => PlanilhaPtBr.CriarAba(pasta, nome));
+        Assert.Contains("History", erro.Message, StringComparison.Ordinal);
+        Assert.Empty(pasta.Worksheets);
+    }
+
+    [Fact]
+    public void LinhaAcimaDoTeto_FalhaENaUltimaPassa()
+    {
+        using var pasta = new XLWorkbook();
+        var aba = PlanilhaPtBr.CriarAba(pasta, "Limite");
+        Assert.Throws<ArgumentOutOfRangeException>(() => PlanilhaPtBr.Celula(aba, PlanilhaPtBr.MaximoLinhas + 1, 1));
+
+        var ultima = PlanilhaPtBr.Celula(aba, PlanilhaPtBr.MaximoLinhas, 1);
+        PlanilhaPtBr.GravarTexto(ultima, "cabe");
+        Assert.Equal("cabe", ultima.GetText());
     }
 
     private static double? ValorSeNumero(IXLCell celula)
