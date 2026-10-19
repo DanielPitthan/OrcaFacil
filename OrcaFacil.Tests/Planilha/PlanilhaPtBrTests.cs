@@ -352,6 +352,32 @@ public class PlanilhaPtBrTests
         ConferirSurrogate(new string(['\uDE00', 'f', 'o', 't', 'o']), "\uFFFDfoto");
         ConferirSurrogate(new string(['f', 'o', '\uD800', 't', 'o']), "fo\uFFFDto");
         ConferirSurrogate(new string(['f', 'o', '\uDE00', 't', 'o']), "fo\uFFFDto");
+        ConferirSurrogate(new string(['f', 'o', 't', 'o', '\uD800']), "foto\uFFFD");
+        ConferirSurrogate(new string(['f', 'o', 't', 'o', '\uDE00']), "foto\uFFFD");
+        ConferirSurrogate(new string(['\uD800']) + "😀", "\uFFFD😀");
+        ConferirSurrogate("😀" + new string(['\uDE00']), "😀\uFFFD");
+    }
+
+    [Fact]
+    public void SubstituicaoNoInicio_NeutralizaFormulaEEmojiFica()
+    {
+        ConferirTextoInerte(new string(['\uD800', '=', '1', '+', '1']), "\uFFFD=1+1");
+        ConferirTextoInerte("\uFFFD=1+1", "\uFFFD=1+1");
+
+        Reabrir(pasta =>
+        {
+            var aba = PlanilhaPtBr.CriarAba(pasta, "Perfis");
+            PlanilhaPtBr.GravarTexto(aba.Cell(2, 1), "foto😀");
+            PlanilhaPtBr.GravarTexto(aba.Cell(3, 1), "😀=1+1");
+        }, pasta =>
+        {
+            var aba = pasta.Worksheet("Perfis");
+            Assert.Equal("foto😀", aba.Cell(2, 1).GetText());
+            Assert.False(aba.Cell(2, 1).Style.IncludeQuotePrefix);
+            Assert.Equal("😀=1+1", aba.Cell(3, 1).GetText());
+            Assert.False(aba.Cell(3, 1).Style.IncludeQuotePrefix);
+            Assert.False(aba.Cell(3, 1).HasFormula);
+        });
     }
 
     private void ConferirSurrogate(string texto, string esperado)

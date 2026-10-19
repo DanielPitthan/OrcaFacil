@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using ClosedXML.Excel;
 using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.Data;
@@ -523,8 +525,8 @@ public static class ExportadorPlanilha
     }
 
     /// <summary>
-    /// O branco da ponta, inclusive NBSP, tab e quebra de linha, sai antes do teste.
-    /// Sem isso, um espaço na frente esconde a pasta.
+    /// Branco e formato (Cf) das pontas saem antes do teste. Sem isso, um espaço,
+    /// NBSP, tab, quebra, U+200B ou BOM na frente esconde a pasta.
     /// </summary>
     private static bool EhCaminhoAbsoluto(string valor)
     {
@@ -544,17 +546,45 @@ public static class ExportadorPlanilha
         return Path.IsPathRooted(valor);
     }
 
+    /// <summary>
+    /// Tira das pontas qualquer branco (<see cref="Rune.IsWhiteSpace"/>) e qualquer
+    /// formato (Cf), inclusive U+200B e U+FEFF. O miolo fica como está.
+    /// </summary>
     private static string SemBrancoNasPontas(string valor)
     {
-        var inicio = 0;
-        var fim = valor.Length;
-        while (inicio < fim && char.IsWhiteSpace(valor[inicio]))
-            inicio++;
-        while (fim > inicio && char.IsWhiteSpace(valor[fim - 1]))
-            fim--;
+        var inicio = -1;
+        var fim = 0;
+        for (var i = 0; i < valor.Length;)
+        {
+            if (!Rune.TryGetRuneAt(valor, i, out var rune))
+            {
+                if (inicio < 0)
+                    inicio = i;
 
-        return valor[inicio..fim];
+                i++;
+                fim = i;
+                continue;
+            }
+
+            var proximo = i + rune.Utf16SequenceLength;
+            if (EhBrancoOuFormato(rune))
+            {
+                i = proximo;
+                continue;
+            }
+
+            if (inicio < 0)
+                inicio = i;
+
+            fim = proximo;
+            i = proximo;
+        }
+
+        return inicio < 0 ? "" : valor[inicio..fim];
     }
+
+    private static bool EhBrancoOuFormato(Rune rune)
+        => Rune.IsWhiteSpace(rune) || Rune.GetUnicodeCategory(rune) == UnicodeCategory.Format;
 
     /// <summary>
     /// URI sem segmento depois da autoridade (<c>content://X</c>) não tem nome de arquivo.
@@ -589,35 +619,38 @@ public static class ExportadorPlanilha
 
     /// <summary>
     /// Esquema, host, porta e caminho. Sem userinfo, também quando não há esquema
-    /// (<c>//user:senha@host</c> ou <c>user:senha@host</c>). Corta em <c>;</c>, <c>?</c> e <c>#</c>.
+    /// (<c>//user:senha@host</c> ou <c>user:senha@host</c>). A senha pode ter <c>@</c>:
+    /// o corte é o último arroba antes do primeiro <c>/</c>, <c>?</c>, <c>#</c> ou <c>;</c>.
+    /// Branco e Cf das pontas saem antes. Sem <c>://</c> o <see cref="Uri"/> não entra,
+    /// porque ele lê <c>//host</c> como arquivo.
     /// </summary>
     internal static string? UrlSemSegredo(string? url)
     {
         if (string.IsNullOrWhiteSpace(url))
             return url;
 
-        if (Uri.TryCreate(url, UriKind.Absolute, out var absoluta)
+        url = SemBrancoNasPontas(url);
+        if (url.Length == 0)
+            return "";
+
+        if (url.Contains("://", StringComparison.Ordinal)
+            && Uri.TryCreate(url, UriKind.Absolute, out var absoluta)
             && absoluta.IsAbsoluteUri
             && !string.IsNullOrEmpty(absoluta.Host))
         {
-            var autoridade = absoluta.Authority;
-            var arroba = autoridade.LastIndexOf('@');
-            if (arroba >= 0)
-                autoridade = autoridade[(arroba + 1)..];
-
             var caminho = absoluta.AbsolutePath;
             var corte = caminho.IndexOfAny([';', '?', '#']);
             if (corte >= 0)
                 caminho = caminho[..corte];
 
-            return absoluta.Scheme + "://" + autoridade + caminho;
+            return absoluta.Scheme + "://" + SemArrobaNaAutoridade(absoluta.Authority) + caminho;
         }
 
         return SemUserinfoEParametros(url);
     }
 
     /// <summary>
-    /// Tira <c>user:senha@</c> antes do host e corta parâmetros. Vale para URL sem esquema.
+    /// Tira o userinfo inteiro e corta parâmetros. Vale com esquema e sem esquema.
     /// </summary>
     private static string SemUserinfoEParametros(string url)
     {
@@ -639,16 +672,23 @@ public static class ExportadorPlanilha
             resto = url[barras..];
         }
 
-        var arroba = resto.IndexOf('@');
         var fimDaAutoridade = resto.IndexOfAny(['/', '?', '#', ';']);
-        if (arroba >= 0 && (fimDaAutoridade < 0 || arroba < fimDaAutoridade))
-            resto = resto[(arroba + 1)..];
+        var autoridade = fimDaAutoridade < 0 ? resto : resto[..fimDaAutoridade];
+        var semUserinfo = SemArrobaNaAutoridade(autoridade);
+        resto = semUserinfo + (fimDaAutoridade < 0 ? "" : resto[fimDaAutoridade..]);
 
         var corte = resto.IndexOfAny([';', '?', '#']);
         if (corte >= 0)
             resto = resto[..corte];
 
         return prefixo + resto;
+    }
+
+    /// <summary>O userinfo acaba no último <c>@</c> da autoridade. Um arroba no caminho fica.</summary>
+    private static string SemArrobaNaAutoridade(string autoridade)
+    {
+        var arroba = autoridade.LastIndexOf('@');
+        return arroba >= 0 ? autoridade[(arroba + 1)..] : autoridade;
     }
 
     internal static string TextoPrazos(PrazoAviso prazos)

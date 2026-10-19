@@ -316,8 +316,9 @@ public static class PlanilhaPtBr
     /// = + - @ no início, ou tab, CR e LF, fazem o Excel tratar a célula como fórmula.
     /// O mesmo vale para os fullwidth ＝ ＋ － ＠ e para o menos U+2212.
     /// Antes do gatilho, espaço em branco (<see cref="Rune.IsWhiteSpace"/>),
-    /// formato (Cf) e separadores Zs, Zl e Zp são ignorados. Assim um NBSP,
-    /// U+2000–U+200A, U+202F, U+205F, U+1680, U+2028 ou U+2029 não esconde o =.
+    /// formato (Cf), separadores Zs, Zl e Zp e o U+FFFD são ignorados. Assim um NBSP,
+    /// U+2000–U+200A, U+202F, U+205F, U+1680, U+2028, U+2029 ou um surrogate solto
+    /// (que vira U+FFFD) não esconde o =.
     /// </summary>
     private static bool PrecisaNeutralizar(string texto)
     {
@@ -395,6 +396,10 @@ public static class PlanilhaPtBr
     {
         if (GatilhoDeFormula(rune))
             return false;
+
+        // U+FFFD é So. Sem isto, o substituto de um surrogate solto esconde o =.
+        if (rune.Value == Rune.ReplacementChar.Value)
+            return true;
 
         if (Rune.IsWhiteSpace(rune))
             return true;

@@ -259,6 +259,14 @@ public class ExportadorPlanilhaTests
     [InlineData("//user:SENTINELA-SENHA@host/v1?token=SENTINELA-TOKEN", "//host/v1")]
     [InlineData("user:SENTINELA-SENHA@host/v1;token=SENTINELA-TOKEN", "host/v1")]
     [InlineData("//user:SENTINELA-SENHA@host/v1;token=SENTINELA-TOKEN#frag", "//host/v1")]
+    [InlineData("//host/caminho/a@b.txt", "//host/caminho/a@b.txt")]
+    [InlineData("//host/v1?q=a@b", "//host/v1")]
+    [InlineData("//host/v1?token=SENTINELA-TOKEN", "//host/v1")]
+    [InlineData(" //user:SENTINELA-SENHA@host/v1?token=X", "//host/v1")]
+    [InlineData("\u00A0//user:SENTINELA-SENHA@host/v1?token=X", "//host/v1")]
+    [InlineData("https://user:SENTINELA-SEGRE@SENTINELA-DO@host/v1", "https://host/v1")]
+    [InlineData("//user:SENTINELA-SEGRE@SENTINELA-DO@host/v1", "//host/v1")]
+    [InlineData(" https://user:SENTINELA-SEGRE@SENTINELA-DO@host/v1", "https://host/v1")]
     public void UrlSemSegredo_TiraUserinfoConsultaEMatriz(string url, string esperado)
     {
         var limpa = ExportadorPlanilha.UrlSemSegredo(url);
@@ -306,6 +314,9 @@ public class ExportadorPlanilhaTests
     [InlineData("content://X", "")]
     [InlineData("\u00A0content://X", "")]
     [InlineData("content://midia/bia.jpg", "bia.jpg")]
+    [InlineData("\u200B/var/fotos/duda.jpg", "duda.jpg")]
+    [InlineData("\uFEFF/var/fotos/duda.jpg", "duda.jpg")]
+    [InlineData("/var/fotos/duda.jpg\u200B", "duda.jpg")]
     public void NomeDeFoto_BrancoNaoEscondePasta_EUriSemSegmentoSaiVazia(string valor, string esperado)
         => Assert.Equal(esperado, ExportadorPlanilha.NomeDeFoto(valor));
 
