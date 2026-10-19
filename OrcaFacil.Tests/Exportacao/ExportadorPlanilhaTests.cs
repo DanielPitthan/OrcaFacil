@@ -412,6 +412,13 @@ public class ExportadorPlanilhaTests
     [InlineData("bia.jpg%253Ftoken=SEGREDO", "bia.jpg")]
     [InlineData("bia.jpg%3bx=SEGREDO", "bia.jpg")]
     [InlineData("bia.jpg%23SEGREDO", "bia.jpg")]
+    [InlineData("bia.jpg?token=/SEGREDO", "bia.jpg")]
+    [InlineData("bia.jpg%3Ftoken=%2FSEGREDO", "bia.jpg")]
+    [InlineData("foto.jpg#/SEGREDO", "foto.jpg")]
+    [InlineData("foto.jpg;x=/SEGREDO", "foto.jpg")]
+    [InlineData("foto.jpg?a:SEGREDO", "foto.jpg")]
+    [InlineData("foto.jpg?x=\\\\SEGREDO", "foto.jpg")]
+    [InlineData("pasta/foto.jpg?x=/etc/SEGREDO.jpg", "foto.jpg")]
     [InlineData("pasta%2Fdaniel%2Ffoto.jpg", "foto.jpg")]
     [InlineData("fo\u200Blder/SENTINELA-CF/foto.jpg", "foto.jpg")]
     [InlineData("/home/daniel/\u200B", "")]
@@ -505,6 +512,54 @@ public class ExportadorPlanilhaTests
         }
 
         Assert.Equal("https://host", pasta.Worksheet("Configurações").Cell(8, 2).GetText());
+    }
+
+    [Fact]
+    public void NomeDeFoto_SeparadorNaConsultaNaoVazaNoXml()
+    {
+        (string Foto, string Esperado)[] fotos =
+        [
+            ("bia.jpg?token=/SEGREDO", "bia.jpg"),
+            ("bia.jpg%3Ftoken=%2FSEGREDO", "bia.jpg"),
+            ("foto.jpg#/SEGREDO", "foto.jpg"),
+            ("foto.jpg;x=/SEGREDO", "foto.jpg"),
+            ("foto.jpg?a:SEGREDO", "foto.jpg"),
+            ("foto.jpg?x=\\\\SEGREDO", "foto.jpg"),
+            ("pasta/foto.jpg?x=/etc/SEGREDO.jpg", "foto.jpg")
+        ];
+
+        foreach (var (foto, esperado) in fotos)
+        {
+            var nome = ExportadorPlanilha.NomeDeFoto(foto);
+            Assert.Equal(esperado, nome);
+            Assert.DoesNotContain("SEGREDO", nome, StringComparison.Ordinal);
+        }
+
+        using var fabrica = new TestDbContextFactory();
+        using var contexto = fabrica.CreateDbContext();
+        var quando = DateTime.UtcNow;
+        for (var i = 0; i < fotos.Length; i++)
+        {
+            contexto.MembrosFamilia.Add(new MembroFamilia
+            {
+                Nome = $"Pessoa {i + 1}",
+                FotoPath = fotos[i].Foto,
+                CriadoEm = quando
+            });
+        }
+
+        contexto.SaveChanges();
+        using var destino = new MemoryStream();
+        ExportadorPlanilha.Exportar(contexto, new ConfiguracaoExportavel(), destino);
+        var bytes = destino.ToArray();
+        var xml = XmlDasPartes(bytes);
+        Assert.DoesNotContain("SEGREDO", Parte(bytes, "xl/sharedStrings.xml"), StringComparison.Ordinal);
+        Assert.DoesNotContain("SEGREDO", xml, StringComparison.Ordinal);
+
+        using var pasta = new XLWorkbook(destino);
+        var aba = pasta.Worksheet("Perfis");
+        for (var i = 0; i < fotos.Length; i++)
+            Assert.Equal(fotos[i].Esperado, aba.Cell(i + 2, 5).GetText());
     }
 
     private static string EsperadoDaFoto(string foto)

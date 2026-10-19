@@ -542,6 +542,8 @@ public static class ExportadorPlanilha
 
     /// <summary>
     /// Só o nome do arquivo. Pasta, relativa ou absoluta, não entra.
+    /// A consulta, o fragmento e a matriz saem antes do último segmento,
+    /// senão um <c>/</c>, <c>\</c> ou <c>:</c> ali vira nome.
     /// <c>content://</c> sem segmento fica vazio: o host não vira nome.
     /// </summary>
     internal static string NomeDeFoto(string? valor)
@@ -549,7 +551,16 @@ public static class ExportadorPlanilha
         if (string.IsNullOrEmpty(valor))
             return "";
 
-        var texto = NormalizarPontas(valor).Replace('\\', '/');
+        var texto = NormalizarPontas(valor);
+        if (texto.Length == 0)
+            return "";
+
+        texto = DecodificarPercent(texto);
+        var corte = texto.IndexOfAny(['?', '#', ';']);
+        if (corte >= 0)
+            texto = texto[..corte];
+
+        texto = NormalizarPontas(texto);
         if (texto.Length == 0)
             return "";
 
@@ -563,24 +574,7 @@ public static class ExportadorPlanilha
             texto = resto[(barra + 1)..];
         }
 
-        return NomeDepoisDosEscapes(UltimoSegmento(texto));
-    }
-
-    /// <summary>
-    /// Decodifica <c>%XX</c> até a string parar de encolher. Normaliza as pontas de novo
-    /// e refaz o último segmento: <c>/</c>, <c>\</c> e <c>:</c> separam, como no valor literal.
-    /// </summary>
-    private static string NomeDepoisDosEscapes(string segmento)
-    {
-        var nome = DecodificarPercent(segmento);
-        nome = NormalizarPontas(nome).Replace('\\', '/');
-        nome = UltimoSegmento(nome);
-
-        var corte = nome.IndexOfAny(['?', '#', ';']);
-        if (corte >= 0)
-            nome = nome[..corte];
-
-        nome = NormalizarPontas(nome);
+        var nome = NormalizarPontas(UltimoSegmento(texto));
         if (nome.Length == 0 || nome is "." or ".." || TemControle(nome))
             return "";
 
@@ -631,19 +625,19 @@ public static class ExportadorPlanilha
     }
 
     /// <summary>
-    /// <c>/</c> e <c>:</c> separam segmento. Se o texto termina num separador, não há nome:
-    /// o segmento anterior não entra no lugar.
+    /// <c>/</c>, <c>\</c> e <c>:</c> separam segmento. Se o texto termina num separador,
+    /// não há nome: o segmento anterior não entra no lugar.
     /// </summary>
     private static string UltimoSegmento(string texto)
     {
-        if (texto.Length == 0 || texto[^1] is '/' or ':')
+        if (texto.Length == 0 || texto[^1] is '/' or '\\' or ':')
             return "";
 
         var nome = "";
         var inicio = 0;
         for (var i = 0; i <= texto.Length; i++)
         {
-            if (i < texto.Length && texto[i] is not '/' and not ':')
+            if (i < texto.Length && texto[i] is not '/' and not '\\' and not ':')
                 continue;
 
             if (i > inicio)
