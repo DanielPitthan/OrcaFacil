@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 using ClosedXML.Excel;
 using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.Data;
@@ -541,128 +542,48 @@ public static class ExportadorPlanilha
     }
 
     /// <summary>
-    /// Só o nome do arquivo. Pasta, relativa ou absoluta, não entra.
-    /// Se o primeiro <c>?</c>, <c>#</c> ou <c>;</c> vem antes do último
-    /// separador (<c>/</c>, <c>\</c> ou <c>:</c>), a célula fica vazia.
-    /// <c>content://</c> sem segmento fica vazio: o host não vira nome.
+    /// ASCII imprimível, sem <c>%</c>, <c>?</c>, <c>#</c> nem <c>;</c>.
+    /// O último segmento de <c>/</c>, <c>\</c> ou <c>:</c> só entra se casar
+    /// com <c>^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$</c>. O resto sai vazio.
     /// </summary>
     internal static string NomeDeFoto(string? valor)
     {
-        if (string.IsNullOrEmpty(valor))
-            return "";
-
-        var texto = NormalizarPontas(valor);
-        if (texto.Length == 0)
-            return "";
-
-        texto = DecodificarPercent(texto);
-        var corte = texto.IndexOfAny(['?', '#', ';']);
-        var ultimoSeparador = texto.LastIndexOfAny(['/', '\\', ':']);
-        if (corte >= 0 && corte < ultimoSeparador)
-            return "";
-
-        if (corte >= 0)
-            texto = texto[..corte];
-
-        texto = NormalizarPontas(texto);
-        if (texto.Length == 0)
-            return "";
-
-        if (IndiceDoEsquema(texto) is int esquema)
-        {
-            var resto = texto[(esquema + 3)..];
-            var barra = resto.IndexOf('/');
-            if (barra < 0)
-                return "";
-
-            texto = resto[(barra + 1)..];
-        }
-
-        var nome = NormalizarPontas(UltimoSegmento(texto));
-        if (nome.Length == 0 || nome is "." or ".." || TemControle(nome))
-            return "";
-
-        if (nome[^1] is '/' or '\\' or ':')
-            return "";
-
-        return nome;
-    }
-
-    /// <summary>Cada volta encolhe a string. Sem teto: para quando o escape acaba.</summary>
-    private static string DecodificarPercent(string texto)
-    {
-        while (true)
-        {
-            string proximo;
-            try
-            {
-                proximo = Uri.UnescapeDataString(texto);
-            }
-            catch (UriFormatException)
-            {
-                break;
-            }
-
-            if (proximo.Length >= texto.Length)
-                break;
-
-            texto = proximo;
-        }
-
-        return texto;
-    }
-
-    /// <summary>Esquema RFC 3986 no início. Devolve o índice do <c>:</c>.</summary>
-    private static int? IndiceDoEsquema(string texto)
-    {
-        if (texto.Length == 0 || !char.IsAsciiLetter(texto[0]))
-            return null;
-
-        var i = 1;
-        while (i < texto.Length && (char.IsAsciiLetterOrDigit(texto[i]) || texto[i] is '+' or '-' or '.'))
-            i++;
-
-        if (i + 2 < texto.Length && texto[i] == ':' && texto[i + 1] == '/' && texto[i + 2] == '/')
-            return i;
-
-        return null;
-    }
-
-    /// <summary>
-    /// <c>/</c>, <c>\</c> e <c>:</c> separam segmento. Se o texto termina num separador,
-    /// não há nome: o segmento anterior não entra no lugar.
-    /// </summary>
-    private static string UltimoSegmento(string texto)
-    {
-        if (texto.Length == 0 || texto[^1] is '/' or '\\' or ':')
+        if (string.IsNullOrEmpty(valor) || !AsciiImprimivelSemMarca(valor))
             return "";
 
         var nome = "";
         var inicio = 0;
-        for (var i = 0; i <= texto.Length; i++)
+        for (var i = 0; i <= valor.Length; i++)
         {
-            if (i < texto.Length && texto[i] is not '/' and not '\\' and not ':')
+            if (i < valor.Length && valor[i] is not '/' and not '\\' and not ':')
                 continue;
 
-            if (i > inicio)
-                nome = texto[inicio..i];
-
+            nome = i > inicio ? valor[inicio..i] : "";
             inicio = i + 1;
         }
 
-        return nome;
+        return NomePermitido.IsMatch(nome) ? nome : "";
     }
 
-    private static bool TemControle(string texto)
+    /// <summary>0x20–0x7E, menos <c>%</c>, <c>?</c>, <c>#</c> e <c>;</c>.</summary>
+    private static bool AsciiImprimivelSemMarca(string valor)
     {
-        foreach (var caractere in texto)
+        foreach (var caractere in valor)
         {
-            if (char.IsControl(caractere))
-                return true;
+            if (caractere is < ' ' or > '~' or '%' or '?' or '#' or ';')
+                return false;
         }
 
-        return false;
+        return true;
     }
+
+    /// <summary>
+    /// Sem <see cref="RegexOptions.IgnoreCase"/> e sem backtracking.
+    /// <c>Compiled</c> não combina com <c>NonBacktracking</c>.
+    /// </summary>
+    private static readonly Regex NomePermitido = new(
+        "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+        RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
 
     private static string TextoItemFatura(ItemLancamento? item)
     {

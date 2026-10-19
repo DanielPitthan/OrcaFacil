@@ -365,24 +365,24 @@ public class ExportadorPlanilhaTests
         var aba = pasta.Worksheet("Perfis");
         Assert.DoesNotContain("pasta/", xml, StringComparison.Ordinal);
         Assert.Equal("foto-ana.jpg", aba.Cell(2, 5).GetText());
-        Assert.Equal("bia.jpg", aba.Cell(3, 5).GetText());
+        Assert.Equal(XLDataType.Blank, aba.Cell(3, 5).DataType);
         Assert.Equal("cris.jpg", aba.Cell(4, 5).GetText());
         Assert.Equal("duda.jpg", aba.Cell(5, 5).GetText());
     }
 
     [Theory]
     [InlineData("pasta/foto-ana.jpg", "foto-ana.jpg")]
-    [InlineData("\u00A0/var/fotos/duda.jpg", "duda.jpg")]
-    [InlineData("\n/var/fotos/duda.jpg", "duda.jpg")]
-    [InlineData("\r/var/fotos/duda.jpg", "duda.jpg")]
-    [InlineData("\t/var/fotos/duda.jpg", "duda.jpg")]
+    [InlineData("\u00A0/var/fotos/duda.jpg", "")]
+    [InlineData("\n/var/fotos/duda.jpg", "")]
+    [InlineData("\r/var/fotos/duda.jpg", "")]
+    [InlineData("\t/var/fotos/duda.jpg", "")]
     [InlineData(" /var/fotos/duda.jpg", "duda.jpg")]
-    [InlineData("content://X", "")]
+    [InlineData("content://X", "X")]
     [InlineData("\u00A0content://X", "")]
     [InlineData("content://midia/bia.jpg", "bia.jpg")]
-    [InlineData("\u200B/var/fotos/duda.jpg", "duda.jpg")]
-    [InlineData("\uFEFF/var/fotos/duda.jpg", "duda.jpg")]
-    [InlineData("/var/fotos/duda.jpg\u200B", "duda.jpg")]
+    [InlineData("\u200B/var/fotos/duda.jpg", "")]
+    [InlineData("\uFEFF/var/fotos/duda.jpg", "")]
+    [InlineData("/var/fotos/duda.jpg\u200B", "")]
     [InlineData("C:Users\\daniel\\foto.jpg", "foto.jpg")]
     [InlineData("foto\u0001.jpg", "")]
     [InlineData("C:\\Users\\daniel\\", "")]
@@ -393,25 +393,25 @@ public class ExportadorPlanilhaTests
     [InlineData(".", "")]
     [InlineData("   ", "")]
     [InlineData("C:foto.jpg", "foto.jpg")]
-    [InlineData("C%3Afoto.jpg", "foto.jpg")]
-    [InlineData("foto%3Aana.jpg", "ana.jpg")]
+    [InlineData("C%3Afoto.jpg", "")]
+    [InlineData("foto%3Aana.jpg", "")]
     [InlineData("pasta/%2F%20", "")]
     [InlineData("%2E", "")]
     [InlineData("%2E%2E", "")]
     [InlineData("%20", "")]
     [InlineData("%E2%80%8B", "")]
-    [InlineData("Users%2525252Fdaniel%2525252Ffoto.jpg", "foto.jpg")]
-    [InlineData("Users%25252525252Fdaniel%25252525252Ffoto.jpg", "foto.jpg")]
-    [InlineData("bia.jpg%2525253Ftoken=SEGREDO", "bia.jpg")]
-    [InlineData("bia.jpg%25252525253Ftoken=SEGREDO", "bia.jpg")]
+    [InlineData("Users%2525252Fdaniel%2525252Ffoto.jpg", "")]
+    [InlineData("Users%25252525252Fdaniel%25252525252Ffoto.jpg", "")]
+    [InlineData("bia.jpg%2525253Ftoken=SEGREDO", "")]
+    [InlineData("bia.jpg%25252525253Ftoken=SEGREDO", "")]
     [InlineData("pasta/%2525252F", "")]
     [InlineData("pasta/%25252525252F", "")]
-    [InlineData("content://a/b/c.jpg?x", "c.jpg")]
-    [InlineData("content://midia/bia.jpg%3Ftoken=SEGREDO", "bia.jpg")]
-    [InlineData("bia.jpg%3Ftoken=SEGREDO", "bia.jpg")]
-    [InlineData("bia.jpg%253Ftoken=SEGREDO", "bia.jpg")]
-    [InlineData("bia.jpg%3bx=SEGREDO", "bia.jpg")]
-    [InlineData("bia.jpg%23SEGREDO", "bia.jpg")]
+    [InlineData("content://a/b/c.jpg?x", "")]
+    [InlineData("content://midia/bia.jpg%3Ftoken=SEGREDO", "")]
+    [InlineData("bia.jpg%3Ftoken=SEGREDO", "")]
+    [InlineData("bia.jpg%253Ftoken=SEGREDO", "")]
+    [InlineData("bia.jpg%3bx=SEGREDO", "")]
+    [InlineData("bia.jpg%23SEGREDO", "")]
     [InlineData("bia.jpg?token=/SEGREDO", "")]
     [InlineData("bia.jpg%3Ftoken=%2FSEGREDO", "")]
     [InlineData("bia.jpg%253Ftoken=%252FSEGREDO", "")]
@@ -449,11 +449,30 @@ public class ExportadorPlanilhaTests
     [InlineData("content://media/x%3By/foto.jpg", "")]
     [InlineData("content://media/x%253By/foto.jpg", "")]
     [InlineData("content://media/x%2525253By/foto.jpg", "")]
-    [InlineData("foto.jpg?x=1", "foto.jpg")]
-    [InlineData("pasta%2Fdaniel%2Ffoto.jpg", "foto.jpg")]
-    [InlineData("fo\u200Blder/SENTINELA-CF/foto.jpg", "foto.jpg")]
+    [InlineData("foto.jpg?x=1", "")]
+    [InlineData("pasta/foto.jpg?x=1", "")]
+    [InlineData("pasta%2Fdaniel%2Ffoto.jpg", "")]
+    [InlineData("fo\u200Blder/SENTINELA-CF/foto.jpg", "")]
     [InlineData("/home/daniel/\u200B", "")]
-    [InlineData("foto.jpg\u200B", "foto.jpg")]
+    [InlineData("foto.jpg\u200B", "")]
+    [InlineData("bia.jpg\uFF1Ftoken=/SEGREDO", "")]
+    [InlineData("bia.jpg\uFF03token=/SEGREDO", "")]
+    [InlineData("bia.jpg\uFF1Btoken=/SEGREDO", "")]
+    [InlineData("bia.jpg%EF%BC%9Ftoken=/SEGREDO", "")]
+    [InlineData("bia.jpg\uFF053Ftoken=/SEGREDO", "")]
+    [InlineData("bia.jpg\uFF05\uFF13\uFF26token=/SEGREDO", "")]
+    [InlineData("bia.jpg%3\u200BFtoken=/SEGREDO", "")]
+    [InlineData("/home/da?niel\uFF0Ffoto.jpg", "")]
+    [InlineData("/home/da?niel\uFF3Cfoto.jpg", "")]
+    [InlineData("foto-20261017120000.jpg", "foto-20261017120000.jpg")]
+    [InlineData("pasta/foto.jpg", "foto.jpg")]
+    [InlineData("C:\\Fotos\\foto.jpg", "foto.jpg")]
+    [InlineData("content://media/foto.jpg", "foto.jpg")]
+    [InlineData(".foto.jpg", "")]
+    [InlineData("-foto.jpg", "")]
+    [InlineData("_foto.jpg", "")]
+    [InlineData("...", "")]
+    [InlineData(". .", "")]
     public void NomeDeFoto_SaiSoONomeDoArquivo(string valor, string esperado)
     {
         var nome = ExportadorPlanilha.NomeDeFoto(valor);
@@ -461,6 +480,17 @@ public class ExportadorPlanilhaTests
         Assert.DoesNotContain("SEGREDO", nome, StringComparison.Ordinal);
         Assert.DoesNotContain("SENTINELA", nome, StringComparison.Ordinal);
         Assert.DoesNotContain("daniel", nome, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void NomeDeFoto_LimiteDe128Caracteres()
+    {
+        var passa = new string('a', 128);
+        var longo = new string('a', 129);
+        Assert.Equal(passa, ExportadorPlanilha.NomeDeFoto(passa));
+        Assert.Equal(passa, ExportadorPlanilha.NomeDeFoto("pasta/" + passa));
+        Assert.Equal("", ExportadorPlanilha.NomeDeFoto(longo));
+        Assert.Equal("", ExportadorPlanilha.NomeDeFoto("C:\\Fotos\\" + longo));
     }
 
     [Fact]
@@ -600,15 +630,7 @@ public class ExportadorPlanilhaTests
     }
 
     private static string EsperadoDaFoto(string foto)
-    {
-        if (foto is "/home/daniel/\u200B" or "/home/daniel/\u200B\uFEFF")
-            return "";
-
-        if (foto.Contains("bia.jpg", StringComparison.Ordinal))
-            return "bia.jpg";
-
-        return "foto.jpg";
-    }
+        => foto == "C:Users\\daniel\\foto.jpg" ? "foto.jpg" : "";
 
     [Fact]
     public void FotoComBrancoOuUriSemSegmento_NaoVazaPastaNemHost()
@@ -632,7 +654,7 @@ public class ExportadorPlanilhaTests
         using var pasta = new XLWorkbook(destino);
         var aba = pasta.Worksheet("Perfis");
         Assert.Equal("foto-ana.jpg", aba.Cell(2, 5).GetText());
-        Assert.Equal("eva.jpg", aba.Cell(3, 5).GetText());
+        Assert.Equal(XLDataType.Blank, aba.Cell(3, 5).DataType);
         Assert.Equal(XLDataType.Blank, aba.Cell(4, 5).DataType);
     }
 
