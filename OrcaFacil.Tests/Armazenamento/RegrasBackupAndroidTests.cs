@@ -45,13 +45,36 @@ public class RegrasBackupAndroidTests
         Assert.Equal("com.pitthan.orcafacil_preferences.xml", RegrasBackupAndroid.ArquivoPreferenciasPadrao);
         Assert.NotEqual(RegrasBackupAndroid.ArquivoPreferenciasPadrao, RegrasBackupAndroid.ArquivoSecureStorage);
 
+        var exclusao = Assert.Single(
+            RegrasBackupAndroid.Exclusoes,
+            regra => regra.Caminho.Contains("microsoft.maui.essentials.preferences", StringComparison.Ordinal));
+        Assert.Equal(RegrasBackupAndroid.NomeSecureStorage, exclusao.Caminho);
+        Assert.Equal(RegrasBackupAndroid.DominioPreferencias, exclusao.Dominio);
+        Assert.False(exclusao.Diretorio);
+        Assert.NotEqual(RegrasBackupAndroid.ArquivoSecureStorage, exclusao.Caminho);
+        Assert.True(exclusao.Casa(
+            RegrasBackupAndroid.DominioPreferencias,
+            RegrasBackupAndroid.NomeSecureStorage));
+        Assert.True(exclusao.Casa(
+            RegrasBackupAndroid.DominioPreferencias,
+            RegrasBackupAndroid.ArquivoSecureStorage));
+
         Assert.False(RegrasBackupAndroid.DeveIncluir(
             RegrasBackupAndroid.DominioPreferencias,
             RegrasBackupAndroid.ArquivoSecureStorage));
         Assert.False(RegrasBackupAndroid.DeveIncluir(
             RegrasBackupAndroid.DominioPreferencias,
             RegrasBackupAndroid.NomeSecureStorage));
+        Assert.False(RegrasBackupAndroid.CopiadoPeloXml(
+            RegrasBackupAndroid.DominioPreferencias,
+            RegrasBackupAndroid.ArquivoSecureStorage));
+        Assert.False(RegrasBackupAndroid.CopiadoPeloXml(
+            RegrasBackupAndroid.DominioPreferencias,
+            RegrasBackupAndroid.NomeSecureStorage));
         Assert.True(RegrasBackupAndroid.DeveIncluir(
+            RegrasBackupAndroid.DominioPreferencias,
+            RegrasBackupAndroid.ArquivoPreferenciasPadrao));
+        Assert.True(RegrasBackupAndroid.CopiadoPeloXml(
             RegrasBackupAndroid.DominioPreferencias,
             RegrasBackupAndroid.ArquivoPreferenciasPadrao));
 
@@ -159,7 +182,10 @@ public class RegrasBackupAndroidTests
     public void Tabela_NaoUsaCuringa_EExclusaoNaoRepeteInclusao()
     {
         Assert.NotEmpty(RegrasBackupAndroid.Inclusoes);
-        Assert.Contains(RegrasBackupAndroid.Exclusoes, regra => regra.Caminho == RegrasBackupAndroid.ArquivoSecureStorage);
+        Assert.Contains(RegrasBackupAndroid.Exclusoes, regra => regra.Caminho == RegrasBackupAndroid.NomeSecureStorage);
+        Assert.DoesNotContain(
+            RegrasBackupAndroid.Exclusoes,
+            regra => regra.Caminho == RegrasBackupAndroid.ArquivoSecureStorage);
 
         foreach (var regra in RegrasBackupAndroid.Inclusoes.Concat(RegrasBackupAndroid.Exclusoes))
         {

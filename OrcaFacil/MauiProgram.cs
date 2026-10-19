@@ -121,13 +121,13 @@ public static class MauiProgram
         builder.Services.AddSingleton<IFotoPerfilService, FotoPerfilService>();
         builder.Services.AddSingleton<IPreferenciasSimples, PreferenciasMaui>();
         RegistroServicosPastaEspelho.Registrar(builder.Services);
+        builder.Services.AddSingleton<ICofreChaveApi, CofreChaveApiSecureStorage>();
         builder.Services.AddSingleton<PreferenciasTema>();
         builder.Services.AddSingleton<IConfiguracaoService, ConfiguracaoService>();
         builder.Services.AddSingleton<ITemaAppService, TemaAppService>();
         builder.Services.AddSingleton<INoticiaService, NoticiaService>();
         // Produção da IA nasce só em Criar: sem redirect e com o prazo no token de 60 s.
         builder.Services.AddSingleton(_ => ClienteMensagens.Criar());
-        builder.Services.AddSingleton<ICofreChaveApi, CofreChaveApiSecureStorage>();
         builder.Services.AddSingleton<InicializacaoApp>();
 
         var app = builder.Build();

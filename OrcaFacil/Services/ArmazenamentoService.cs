@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using OrcaFacil.Core.Armazenamento;
 using OrcaFacil.Core.Data;
 using OrcaFacil.Core.Enums;
 using OrcaFacil.Core.Repositories;
@@ -47,10 +48,10 @@ public class ArmazenamentoService : IArmazenamentoService
         };
     }
 
-    public async Task LimparAsync(TipoLimpezaDados tipo)
+    public async Task<ResultadoLimpeza> LimparAsync(TipoLimpezaDados tipo)
     {
         if (tipo == TipoLimpezaDados.Nenhum)
-            return;
+            return ResultadoLimpeza.Nada();
 
         _notificationScheduler.CancelarTodas();
         await _manutencaoRepository.LimparAsync(tipo);
@@ -58,18 +59,21 @@ public class ArmazenamentoService : IArmazenamentoService
         if (tipo.HasFlag(TipoLimpezaDados.Tudo))
         {
             _fotoPerfilService.Remover();
-            _configuracao.Redefinir();
+            var chaveApagada = await _configuracao.Redefinir();
 
             await using var context = await _contextFactory.CreateDbContextAsync();
             await SeedData.PopularEssencialAsync(context);
             await _perfilContext.InicializarAsync();
 
-            await _logRepository.RegistrarAsync(TipoLogEvento.LimpezaDados, "Aplicação zerada (todos os dados removidos)");
-            return;
+            var resultado = ResultadoLimpeza.Total(chaveApagada);
+            await _logRepository.RegistrarAsync(TipoLogEvento.LimpezaDados, resultado.TextoRegistro);
+            return resultado;
         }
 
         await _notificationScheduler.ReagendarTodasAsync();
-        await _logRepository.RegistrarAsync(TipoLogEvento.LimpezaDados, $"Dados removidos: {Descrever(tipo)}");
+        var parcial = ResultadoLimpeza.Parcial(Descrever(tipo));
+        await _logRepository.RegistrarAsync(TipoLogEvento.LimpezaDados, parcial.TextoRegistro);
+        return parcial;
     }
 
     private static string Descrever(TipoLimpezaDados tipo)

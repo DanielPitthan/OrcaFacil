@@ -17,7 +17,8 @@
     -->
     <include domain="file" path="perfil" />
     <include domain="sharedpref" path="com.pitthan.orcafacil_preferences.xml" />
-    <exclude domain="sharedpref" path="com.pitthan.orcafacil.microsoft.maui.essentials.preferences.xml" />
+    <!-- Nome do SecureStorage, sem .xml. O Android também exclui o arquivo .xml. -->
+    <exclude domain="sharedpref" path="com.pitthan.orcafacil.microsoft.maui.essentials.preferences" />
     <exclude domain="file" path="logs" />
     <exclude domain="file" path="backups" />
     <exclude domain="file" path="orcafacil-espelho" />
