@@ -523,7 +523,7 @@ public sealed class VolumePastaEspelhoAndroid : IVolumePastaEspelho
         if (atividade?.ContentResolver is not null)
             return atividade.ContentResolver;
 
-        return Android.App.Application.Context?.ContentResolver;
+        return global::Android.App.Application.Context?.ContentResolver;
     }
 
     private static CodigoFalhaPastaEspelho Classificar(

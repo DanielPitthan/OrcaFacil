@@ -88,6 +88,11 @@ public sealed class VolumePastaEspelhoIndisponivel : IVolumePastaEspelho
 public interface ILeitorEspelhoLocal
 {
     Task<LeituraEspelho> LerAsync(string caminhoLocal, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Sem senha, a pasta não é lida. Null significa que a cópia local pode seguir.
+    /// </summary>
+    LeituraEspelho? RecusaSemAbrirArquivo() => null;
 }
 
 public sealed class LeitorEspelhoLocal : ILeitorEspelhoLocal
@@ -100,6 +105,11 @@ public sealed class LeitorEspelhoLocal : ILeitorEspelhoLocal
         _senha = senha ?? throw new ArgumentNullException(nameof(senha));
         _versao = versao ?? throw new ArgumentNullException(nameof(versao));
     }
+
+    public LeituraEspelho? RecusaSemAbrirArquivo()
+        => string.IsNullOrEmpty(_senha.Obter())
+            ? LeituraEspelho.Ilegivel("Senha do espelho ausente.")
+            : null;
 
     public Task<LeituraEspelho> LerAsync(string caminhoLocal, CancellationToken cancellationToken = default)
         => new EspelhoArquivo(caminhoLocal, _senha, _versao).LerAsync(cancellationToken);

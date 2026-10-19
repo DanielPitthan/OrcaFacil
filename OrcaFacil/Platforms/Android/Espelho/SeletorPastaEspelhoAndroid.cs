@@ -33,7 +33,7 @@ public sealed class SeletorPastaEspelhoAndroid : ISeletorPastaEspelho
         var persistiu = false;
         if (entrega.Confirmou)
         {
-            var resolver = Android.App.Application.Context?.ContentResolver ?? activity.ContentResolver;
+            var resolver = global::Android.App.Application.Context?.ContentResolver ?? activity.ContentResolver;
             (leitura, escrita, persistiu) = PermissaoPastaEspelho.TentarPersistir(resolver, entrega.UriTexto);
         }
 
@@ -53,7 +53,7 @@ public sealed class SeletorPastaEspelhoAndroid : ISeletorPastaEspelho
     public ResultadoOperacaoPasta EsquecerEscolhaSemApagarArquivos()
     {
         var resolver = Platform.CurrentActivity?.ContentResolver
-            ?? Android.App.Application.Context?.ContentResolver;
+            ?? global::Android.App.Application.Context?.ContentResolver;
         PermissaoPastaEspelho.Liberar(resolver, _memoria.LerUri());
         _memoria.Esquecer();
         return ResultadoOperacaoPasta.Ok();
