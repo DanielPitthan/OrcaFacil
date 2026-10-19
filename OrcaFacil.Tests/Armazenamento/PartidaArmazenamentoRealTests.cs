@@ -681,11 +681,115 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
         Assert.Equal(conjuntos, PoliticaSemeadura.ConjuntosObservados.OrderBy(nome => nome, StringComparer.Ordinal).ToArray());
 
         var fonte = File.ReadAllText(Path.Combine(EncontrarRaiz(), "OrcaFacil.Core", "Armazenamento", "PoliticaSemeadura.cs"));
-        var inicio = fonte.IndexOf("HaDadoDoUsuarioAsync", StringComparison.Ordinal);
+        const string amostra = """
+            // contexto.Fantasma
+            /* contexto.Fantasma */
+            var texto = "contexto.Fantasma";
+            contexto.MembrosFamilia.Any()
+            """;
+        var amostraLimpa = CodigoExecutavel(amostra);
+        Assert.DoesNotContain("Fantasma", amostraLimpa, StringComparison.Ordinal);
+        Assert.Contains("contexto.MembrosFamilia", amostraLimpa, StringComparison.Ordinal);
+
+        Assert.Contains("TabelaQueNaoExiste", fonte, StringComparison.Ordinal);
+        var codigo = CodigoExecutavel(fonte);
+        Assert.DoesNotContain("TabelaQueNaoExiste", codigo, StringComparison.Ordinal);
+        var inicio = codigo.IndexOf("HaDadoDoUsuarioAsync", StringComparison.Ordinal);
         Assert.True(inicio >= 0);
-        var corpo = fonte[inicio..];
+        var corpo = codigo[inicio..];
         foreach (var nome in conjuntos)
             Assert.Contains("contexto." + nome, corpo, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Politica_ComparaTodaColunaForaDeIdECriadoEm()
+    {
+        ConferirColunas(typeof(Transacao), PoliticaSemeadura.CamposTransacaoComparados);
+        ConferirColunas(typeof(Orcamento), PoliticaSemeadura.CamposOrcamentoComparados);
+        ConferirColunas(typeof(Meta), PoliticaSemeadura.CamposMetaComparados);
+        ConferirColunas(typeof(MembroFamilia), PoliticaSemeadura.CamposPerfilComparados);
+        ConferirColunas(typeof(Categoria), PoliticaSemeadura.CamposCategoriaComparados);
+    }
+
+    private static void ConferirColunas(Type tipo, string[] comparados)
+    {
+        var escalares = tipo.GetProperties()
+            .Where(propriedade => propriedade.GetMethod is not null
+                && propriedade.SetMethod is not null
+                && EhEscalar(propriedade.PropertyType))
+            .Select(propriedade => propriedade.Name)
+            .Where(nome => nome is not "Id" and not "CriadoEm")
+            .OrderBy(nome => nome, StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.Equal(escalares, comparados.OrderBy(nome => nome, StringComparer.Ordinal).ToArray());
+    }
+
+    private static bool EhEscalar(Type tipo)
+    {
+        var nucleo = Nullable.GetUnderlyingType(tipo) ?? tipo;
+        return nucleo == typeof(string) || nucleo.IsValueType;
+    }
+
+    private static string CodigoExecutavel(string fonte)
+    {
+        var texto = new System.Text.StringBuilder(fonte.Length);
+        for (var i = 0; i < fonte.Length; i++)
+        {
+            var c = fonte[i];
+            if (c == '"')
+            {
+                i++;
+                while (i < fonte.Length)
+                {
+                    if (fonte[i] == '\\')
+                    {
+                        i += 2;
+                        continue;
+                    }
+
+                    if (fonte[i] == '"')
+                        break;
+
+                    i++;
+                }
+
+                continue;
+            }
+
+            if (c == '\'')
+            {
+                i++;
+                while (i < fonte.Length && fonte[i] != '\'')
+                {
+                    if (fonte[i] == '\\')
+                        i++;
+                    i++;
+                }
+
+                continue;
+            }
+
+            if (c == '/' && i + 1 < fonte.Length && fonte[i + 1] == '/')
+            {
+                while (i < fonte.Length && fonte[i] != '\n')
+                    i++;
+                continue;
+            }
+
+            if (c == '/' && i + 1 < fonte.Length && fonte[i + 1] == '*')
+            {
+                i += 2;
+                while (i + 1 < fonte.Length && !(fonte[i] == '*' && fonte[i + 1] == '/'))
+                    i++;
+                i++;
+                continue;
+            }
+
+            texto.Append(c);
+        }
+
+        return texto.ToString();
     }
 
     [Theory]

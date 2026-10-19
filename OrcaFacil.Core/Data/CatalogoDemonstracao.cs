@@ -104,7 +104,8 @@ public static class CatalogoDemonstracao
 
     /// <summary>
     /// Lançamentos que <see cref="AdicionarDemonstracao"/> grava para <paramref name="hoje"/>.
-    /// A data é o dia do mês de referência mais <see cref="LancamentoDemonstracao.Dia"/>.
+    /// Cada data é <c>mesRef.AddDays(item.Dia)</c>. O dia de "hoje" não entra no lançamento;
+    /// ele só entra no prazo das metas.
     /// </summary>
     public static IReadOnlyList<LancamentoSemeado> LancamentosSemeados(DateTime hoje)
     {

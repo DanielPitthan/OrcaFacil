@@ -132,9 +132,173 @@ public class PresencaDadosReaisUsuarioTests
         });
         await banco.Contexto.SaveChangesAsync();
 
-        Assert.Equal(SituacaoConteudoBanco.SoDemonstracao, await PoliticaSemeadura.ClassificarConteudoAsync(banco.Contexto));
+        Assert.Equal(SituacaoConteudoBanco.DadoReal, await PoliticaSemeadura.ClassificarConteudoAsync(banco.Contexto));
         Assert.True(await PoliticaSemeadura.HaDadoDoUsuarioAsync(banco.Contexto));
-        Assert.Equal(LeituraDadosReais.SemDadosReais, await PresencaDadosReaisUsuario.ClassificarAsync(banco.Contexto));
+        Assert.Equal(LeituraDadosReais.ComDadosReais, await PresencaDadosReaisUsuario.ClassificarAsync(banco.Contexto));
+    }
+
+    [Fact]
+    public async Task LinhaUnicaNoFormatoDaSemente_EDadoReal()
+    {
+        await using var salario = await Banco.AbrirAsync();
+        var perfil = await salario.EssencialAsync();
+        var renda = salario.Contexto.Categorias.Single(categoria => categoria.Nome == "Renda");
+        salario.Contexto.Transacoes.Add(new Transacao
+        {
+            Descricao = "Salário",
+            Valor = 6500m,
+            Data = new DateTime(2026, 10, 5),
+            Tipo = TipoTransacao.Receita,
+            Recorrencia = TipoRecorrencia.Mensal,
+            CategoriaId = renda.Id,
+            MembroFamiliaId = perfil.Id
+        });
+        await salario.Contexto.SaveChangesAsync();
+        Assert.Equal(SituacaoConteudoBanco.DadoReal, await PoliticaSemeadura.ClassificarConteudoAsync(salario.Contexto));
+
+        await using var orcamento = await Banco.AbrirAsync();
+        orcamento.Contexto.Categorias.AddRange(CatalogoDemonstracao.CriarCategorias());
+        await orcamento.Contexto.SaveChangesAsync();
+        var alimentacao = orcamento.Contexto.Categorias.Single(categoria => categoria.Nome == "Alimentação");
+        orcamento.Contexto.Orcamentos.Add(new Orcamento
+        {
+            CategoriaId = alimentacao.Id,
+            ValorLimite = 800m,
+            Mes = 3,
+            Ano = 2024
+        });
+        await orcamento.Contexto.SaveChangesAsync();
+        Assert.Equal(SituacaoConteudoBanco.DadoReal, await PoliticaSemeadura.ClassificarConteudoAsync(orcamento.Contexto));
+        Assert.Equal(LeituraDadosReais.ComDadosReais, await PresencaDadosReaisUsuario.ClassificarAsync(orcamento.Contexto));
+    }
+
+    [Fact]
+    public async Task FaltaDeLancamentoOrcamentoOuMeta_ViraDadoReal()
+    {
+        await using var semFeira = await Banco.AbrirAsync();
+        await SemearAsync(semFeira);
+        semFeira.Contexto.Transacoes.Remove(semFeira.Contexto.Transacoes.First(item => item.Descricao == "Feira"));
+        await semFeira.Contexto.SaveChangesAsync();
+        Assert.Equal(SituacaoConteudoBanco.DadoReal, await PoliticaSemeadura.ClassificarConteudoAsync(semFeira.Contexto));
+
+        await using var semOrcamento = await Banco.AbrirAsync();
+        await SemearAsync(semOrcamento);
+        var alimentacao = semOrcamento.Contexto.Categorias.Single(categoria => categoria.Nome == "Alimentação");
+        semOrcamento.Contexto.Orcamentos.Remove(
+            semOrcamento.Contexto.Orcamentos.First(item => item.CategoriaId == alimentacao.Id));
+        await semOrcamento.Contexto.SaveChangesAsync();
+        Assert.Equal(SituacaoConteudoBanco.DadoReal, await PoliticaSemeadura.ClassificarConteudoAsync(semOrcamento.Contexto));
+
+        await using var semMeta = await Banco.AbrirAsync();
+        await SemearAsync(semMeta);
+        semMeta.Contexto.Metas.Remove(semMeta.Contexto.Metas.First());
+        await semMeta.Contexto.SaveChangesAsync();
+        Assert.Equal(SituacaoConteudoBanco.DadoReal, await PoliticaSemeadura.ClassificarConteudoAsync(semMeta.Contexto));
+        Assert.True(await PoliticaSemeadura.HaDadoDoUsuarioAsync(semMeta.Contexto));
+    }
+
+    [Fact]
+    public async Task FracaoDeSegundoNaData_ViraDadoReal()
+    {
+        await using var prazo = await Banco.AbrirAsync();
+        await SemearAsync(prazo);
+        var meta = prazo.Contexto.Metas.First();
+        meta.Prazo = meta.Prazo!.Value.AddMilliseconds(1);
+        await prazo.Contexto.SaveChangesAsync();
+        Assert.Equal(SituacaoConteudoBanco.DadoReal, await PoliticaSemeadura.ClassificarConteudoAsync(prazo.Contexto));
+
+        await using var lancamento = await Banco.AbrirAsync();
+        await SemearAsync(lancamento);
+        var salario = lancamento.Contexto.Transacoes.First(item => item.Descricao == "Salário");
+        salario.Data = salario.Data.AddTicks(1);
+        await lancamento.Contexto.SaveChangesAsync();
+        Assert.Equal(SituacaoConteudoBanco.DadoReal, await PoliticaSemeadura.ClassificarConteudoAsync(lancamento.Contexto));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(10000)]
+    public async Task AnoDeOrcamentoForaDoCalendario_NaoLanca_EViraDadoReal(int ano)
+    {
+        await using var banco = await Banco.AbrirAsync();
+        banco.Contexto.Categorias.AddRange(CatalogoDemonstracao.CriarCategorias());
+        await banco.Contexto.SaveChangesAsync();
+        var alimentacao = banco.Contexto.Categorias.Single(categoria => categoria.Nome == "Alimentação");
+        banco.Contexto.Orcamentos.Add(new Orcamento
+        {
+            CategoriaId = alimentacao.Id,
+            ValorLimite = 800m,
+            Mes = 3,
+            Ano = ano
+        });
+        await banco.Contexto.SaveChangesAsync();
+
+        var situacao = await PoliticaSemeadura.ClassificarConteudoAsync(banco.Contexto);
+        Assert.Equal(SituacaoConteudoBanco.DadoReal, situacao);
+    }
+
+    [Theory]
+    [InlineData("nome")]
+    [InlineData("icone")]
+    [InlineData("cor")]
+    [InlineData("inativo")]
+    [InlineData("ausente")]
+    public async Task CategoriaPadraoDiferente_BackupVeDadoReal_AberturaNaoVe(string ajuste)
+    {
+        await using var banco = await Banco.AbrirAsync();
+        banco.Contexto.Categorias.AddRange(CatalogoDemonstracao.CriarCategorias());
+        await banco.Contexto.SaveChangesAsync();
+        var alimentacao = banco.Contexto.Categorias.Single(categoria => categoria.Nome == "Alimentação");
+        switch (ajuste)
+        {
+            case "nome":
+                alimentacao.Nome = "Comida";
+                break;
+            case "icone":
+                alimentacao.Icone = "🍎";
+                break;
+            case "cor":
+                alimentacao.CorHex = "#010203";
+                break;
+            case "inativo":
+                alimentacao.Ativo = false;
+                break;
+            default:
+                banco.Contexto.Categorias.Remove(alimentacao);
+                break;
+        }
+
+        await banco.Contexto.SaveChangesAsync();
+        Assert.Equal(SituacaoConteudoBanco.DadoReal, await PoliticaSemeadura.ClassificarConteudoAsync(banco.Contexto));
+        Assert.Equal(LeituraDadosReais.ComDadosReais, await PresencaDadosReaisUsuario.ClassificarAsync(banco.Contexto));
+        Assert.False(await PoliticaSemeadura.HaDadoDoUsuarioAsync(banco.Contexto));
+    }
+
+    [Fact]
+    public async Task Abertura_CategoriaPadraoRenomeada_AindaSemeiaComoHoje()
+    {
+        await using var banco = await Banco.AbrirAsync();
+        banco.Contexto.Categorias.AddRange(CatalogoDemonstracao.CriarCategorias());
+        await banco.Contexto.SaveChangesAsync();
+        banco.Contexto.Categorias.Single(categoria => categoria.Nome == "Alimentação").Nome = "Comida";
+        await banco.Contexto.SaveChangesAsync();
+        Assert.False(await PoliticaSemeadura.HaDadoDoUsuarioAsync(banco.Contexto));
+        await banco.FecharContextoAsync();
+
+        var chamadas = 0;
+        var log = new LogMudo();
+        var semeadura = new SemeaduraDadosApp(
+            new CaminhoBancoVivo(banco.Caminho),
+            log,
+            (_, _) =>
+            {
+                chamadas++;
+                return Task.CompletedTask;
+            });
+        await semeadura.SemearAsync();
+
+        Assert.Equal(1, chamadas);
+        Assert.DoesNotContain(PoliticaSemeadura.MensagemPerfilMinimo, log.Mensagens);
     }
 
     [Fact]

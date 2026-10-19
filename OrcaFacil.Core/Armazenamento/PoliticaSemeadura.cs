@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.Data;
 using OrcaFacil.Core.Entities;
@@ -18,13 +19,11 @@ public enum SituacaoConteudoBanco
 }
 
 /// <summary>
-/// Uma função e uma lista de tabelas. A abertura semeia apenas em
-/// <see cref="SituacaoConteudoBanco.Vazio"/> e nunca semeia por cima. Sem perfil e com
-/// dado real, cria só o perfil mínimo. O backup, quando já existe espelho, recusa em
-/// vazio e em <see cref="SituacaoConteudoBanco.SoDemonstracao"/> e pede confirmação em
-/// <see cref="SituacaoConteudoBanco.DadoReal"/>. Para o backup, demonstração é a linha
-/// idêntica à semente, datas incluídas. A data de referência sai das próprias linhas,
-/// não do relógio: a abertura do app grava <c>DateTime.Today</c> uma vez.
+/// A abertura usa <see cref="HaDadoDoUsuarioAsync"/>: semeia só no vazio e nunca por cima.
+/// Categoria com <c>EhPadraoDoSistema</c> não conta para ela, mesmo alterada.
+/// O backup usa <see cref="ClassificarConteudoAsync"/>. Recusa no vazio e na demonstração
+/// idêntica à semente; qualquer diferença pede confirmação. O lançamento guarda
+/// <c>mesRef.AddDays(dia)</c>. O dia de "hoje" só entra no prazo das metas.
 /// </summary>
 public static class PoliticaSemeadura
 {
@@ -32,6 +31,8 @@ public static class PoliticaSemeadura
         "SemPerfil com dados do usuário. O banco vivo foi mantido, o espelho não foi restaurado e só um perfil mínimo foi criado. Nenhum dado de demonstração foi semeado.";
 
     public const string NomePerfilMinimo = "Usuário";
+
+    // contexto.TabelaQueNaoExiste fica só neste comentário para o teste da política ignorar texto comentado.
 
     /// <summary>Cada <see cref="DbSet{TEntity}"/> de <see cref="AppDbContext"/> entra nesta lista.</summary>
     public static readonly string[] ConjuntosObservados =
@@ -52,6 +53,68 @@ public static class PoliticaSemeadura
         nameof(AppDbContext.ItensCompraCesta),
         nameof(AppDbContext.Cartoes),
         nameof(AppDbContext.RecargasCartao)
+    ];
+
+    /// <summary>Colunas de <see cref="Transacao"/> que o backup compara com a semente. Fora Id e CriadoEm.</summary>
+    public static readonly string[] CamposTransacaoComparados =
+    [
+        nameof(Transacao.Descricao),
+        nameof(Transacao.Valor),
+        nameof(Transacao.Data),
+        nameof(Transacao.Tipo),
+        nameof(Transacao.Recorrencia),
+        nameof(Transacao.Pago),
+        nameof(Transacao.Observacao),
+        nameof(Transacao.CategoriaId),
+        nameof(Transacao.MembroFamiliaId),
+        nameof(Transacao.TransacaoOrigemId),
+        nameof(Transacao.CartaoId),
+        nameof(Transacao.AtualizadoEm)
+    ];
+
+    /// <summary>Colunas de <see cref="Orcamento"/> que o backup compara com a semente. Fora Id e CriadoEm.</summary>
+    public static readonly string[] CamposOrcamentoComparados =
+    [
+        nameof(Orcamento.CategoriaId),
+        nameof(Orcamento.ValorLimite),
+        nameof(Orcamento.MetaReducaoPercentual),
+        nameof(Orcamento.Mes),
+        nameof(Orcamento.Ano)
+    ];
+
+    /// <summary>Colunas de <see cref="Meta"/> que o backup compara com a semente. Fora Id e CriadoEm.</summary>
+    public static readonly string[] CamposMetaComparados =
+    [
+        nameof(Meta.Nome),
+        nameof(Meta.ValorAlvo),
+        nameof(Meta.ValorAtual),
+        nameof(Meta.Prazo),
+        nameof(Meta.Icone),
+        nameof(Meta.Concluida),
+        nameof(Meta.MembroFamiliaId)
+    ];
+
+    /// <summary>Colunas de <see cref="MembroFamilia"/> que o backup compara com o perfil mínimo. Fora Id e CriadoEm.</summary>
+    public static readonly string[] CamposPerfilComparados =
+    [
+        nameof(MembroFamilia.Nome),
+        nameof(MembroFamilia.Apelido),
+        nameof(MembroFamilia.FotoPath),
+        nameof(MembroFamilia.Avatar),
+        nameof(MembroFamilia.Role),
+        nameof(MembroFamilia.Ativo)
+    ];
+
+    /// <summary>Colunas de <see cref="Categoria"/> que o backup compara com a semente. Fora Id.</summary>
+    public static readonly string[] CamposCategoriaComparados =
+    [
+        nameof(Categoria.Nome),
+        nameof(Categoria.Icone),
+        nameof(Categoria.CorHex),
+        nameof(Categoria.TipoPadrao),
+        nameof(Categoria.EhPadraoDoSistema),
+        nameof(Categoria.PermiteItensFatura),
+        nameof(Categoria.Ativo)
     ];
 
     /// <summary>
@@ -83,21 +146,66 @@ public static class PoliticaSemeadura
     }
 
     /// <summary>
-    /// A abertura semeia só quando a classificação é <see cref="SituacaoConteudoBanco.Vazio"/>.
+    /// Critério da abertura, inalterado. Categoria com <c>EhPadraoDoSistema</c> não conta,
+    /// mesmo renomeada ou incompleta. Qualquer outra linha impede a semeadura.
     /// </summary>
     public static async Task<bool> HaDadoDoUsuarioAsync(AppDbContext contexto, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(contexto);
-        return await ClassificarConteudoAsync(contexto, cancellationToken) != SituacaoConteudoBanco.Vazio;
+
+        if (await contexto.MembrosFamilia.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.Categorias.AnyAsync(categoria => !categoria.EhPadraoDoSistema, cancellationToken))
+            return true;
+
+        if (await contexto.Transacoes.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.ItensLancamento.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.Orcamentos.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.Metas.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.FechamentosPeriodo.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.LogsEvento.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.AtivosFinanceiros.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.OperacoesAtivo.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.ProdutosCesta.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.LocaisCompra.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.ComprasCesta.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.ItensCompraCesta.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.Cartoes.AnyAsync(cancellationToken))
+            return true;
+
+        return await contexto.RecargasCartao.AnyAsync(cancellationToken);
     }
 
     /// <summary>
-    /// Categoria padrão do sistema não conta, mesmo com os outros campos diferentes.
-    /// No backup, lançamento, orçamento, meta e o perfil "Usuário" só ficam em
-    /// <see cref="SituacaoConteudoBanco.SoDemonstracao"/> quando repetem a semente em
-    /// todos os campos persistidos, fora o Id e o <c>CriadoEm</c> (o relógio da inserção).
-    /// Qualquer diferença, inclusive mês, dia ou uma linha a mais, é
-    /// <see cref="SituacaoConteudoBanco.DadoReal"/>. A abertura não muda: semeia só no vazio.
+    /// Critério do backup. A semente inteira tem de estar presente, campo a campo.
+    /// Linha a mais, linha a menos, data diferente ou categoria padrão diferente é
+    /// <see cref="SituacaoConteudoBanco.DadoReal"/>. O perfil mínimo sozinho continua
+    /// <see cref="SituacaoConteudoBanco.SoDemonstracao"/>.
     /// </summary>
     public static async Task<SituacaoConteudoBanco> ClassificarConteudoAsync(
         AppDbContext contexto,
@@ -145,8 +253,13 @@ public static class PoliticaSemeadura
         if (!PerfisSoMinimos(membros))
             return SituacaoConteudoBanco.DadoReal;
 
-        var nomesCategoria = await contexto.Categorias.AsNoTracking()
-            .ToDictionaryAsync(categoria => categoria.Id, categoria => categoria.Nome, cancellationToken);
+        var categorias = await contexto.Categorias.AsNoTracking().ToListAsync(cancellationToken);
+        if (categorias.Count > 0 && !CategoriasIdenticasASemente(categorias))
+            return SituacaoConteudoBanco.DadoReal;
+
+        var nomesCategoria = new Dictionary<int, string>();
+        foreach (var categoria in categorias)
+            nomesCategoria[categoria.Id] = categoria.Nome;
 
         var transacoes = await contexto.Transacoes.AsNoTracking().ToListAsync(cancellationToken);
         var orcamentos = await contexto.Orcamentos.AsNoTracking().ToListAsync(cancellationToken);
@@ -169,14 +282,33 @@ public static class PoliticaSemeadura
     }
 
     private static bool EhPerfilMinimo(MembroFamilia membro)
+        => CamposIguais(membro, CatalogoDemonstracao.CriarPerfil(), CamposPerfilComparados);
+
+    private static bool CategoriasIdenticasASemente(IReadOnlyList<Categoria> gravadas)
     {
-        var semente = CatalogoDemonstracao.CriarPerfil();
-        return membro.Nome == semente.Nome
-            && membro.Avatar == semente.Avatar
-            && membro.Ativo == semente.Ativo
-            && membro.Role == semente.Role
-            && membro.Apelido == semente.Apelido
-            && membro.FotoPath == semente.FotoPath;
+        var esperadas = CatalogoDemonstracao.CriarCategorias();
+        var usados = new bool[esperadas.Count];
+        foreach (var gravada in gravadas)
+        {
+            var achou = false;
+            for (var i = 0; i < esperadas.Count; i++)
+            {
+                if (usados[i])
+                    continue;
+
+                if (CamposIguais(gravada, esperadas[i], CamposCategoriaComparados))
+                {
+                    usados[i] = true;
+                    achou = true;
+                    break;
+                }
+            }
+
+            if (!achou)
+                return false;
+        }
+
+        return VagasPreenchidas(usados);
     }
 
     private static bool LinhasIdenticasASemente(
@@ -193,13 +325,11 @@ public static class PoliticaSemeadura
         if ((transacoes.Count > 0 || metas.Count > 0) && perfilId is null)
             return false;
 
-        foreach (var hoje in ReferenciasPossiveis(transacoes, orcamentos, metas, nomesCategoria, perfilId))
-        {
-            if (EncaixaNaSemente(hoje, transacoes, orcamentos, metas, nomesCategoria, perfilId))
-                return true;
-        }
+        var referencias = ReferenciasPossiveis(transacoes, orcamentos, metas, nomesCategoria, perfilId);
+        if (referencias.Count != 1)
+            return false;
 
-        return false;
+        return EncaixaNaSemente(referencias[0], transacoes, orcamentos, metas, nomesCategoria, perfilId);
     }
 
     private static List<DateTime> ReferenciasPossiveis(
@@ -282,7 +412,7 @@ public static class PoliticaSemeadura
     {
         var mes = orcamentos[0].Mes;
         var ano = orcamentos[0].Ano;
-        if (mes is < 1 or > 12 || orcamentos.Any(orcamento => orcamento.Mes != mes || orcamento.Ano != ano))
+        if (ano is < 1 or > 9999 || mes is < 1 or > 12 || orcamentos.Any(orcamento => orcamento.Mes != mes || orcamento.Ano != ano))
             return [];
 
         return [new DateTime(ano, mes, 1)];
@@ -363,26 +493,31 @@ public static class PoliticaSemeadura
         IReadOnlyDictionary<int, string> nomesCategoria,
         int? perfilId)
     {
+        if (!TryIdsPorNome(nomesCategoria, out var idsPorNome))
+            return false;
+
         var esperados = CatalogoDemonstracao.LancamentosSemeados(hoje);
         var usados = new bool[esperados.Count];
         foreach (var transacao in transacoes)
         {
-            if (perfilId is null || !CabeNoLancamento(transacao, perfilId.Value, nomesCategoria, out var nomeCategoria))
-                return false;
-
             var achou = false;
-            for (var i = 0; i < esperados.Count; i++)
+            for (var i = 0; i < esperados.Count && perfilId is not null; i++)
             {
-                if (usados[i])
+                if (usados[i] || !idsPorNome.TryGetValue(esperados[i].Categoria, out var categoriaId))
                     continue;
 
-                var esperado = esperados[i];
-                if (esperado.Descricao == transacao.Descricao
-                    && esperado.Valor == transacao.Valor
-                    && MesmaData(transacao.Data, esperado.Data)
-                    && esperado.Tipo == transacao.Tipo
-                    && esperado.Recorrencia == transacao.Recorrencia
-                    && esperado.Categoria == nomeCategoria)
+                var modelo = new Transacao
+                {
+                    Descricao = esperados[i].Descricao,
+                    Valor = esperados[i].Valor,
+                    Data = esperados[i].Data,
+                    Tipo = esperados[i].Tipo,
+                    Recorrencia = esperados[i].Recorrencia,
+                    Pago = true,
+                    CategoriaId = categoriaId,
+                    MembroFamiliaId = perfilId.Value
+                };
+                if (CamposIguais(transacao, modelo, CamposTransacaoComparados))
                 {
                     usados[i] = true;
                     achou = true;
@@ -394,7 +529,7 @@ public static class PoliticaSemeadura
                 return false;
         }
 
-        return true;
+        return VagasPreenchidas(usados);
     }
 
     private static bool CabeNoLancamento(
@@ -421,26 +556,27 @@ public static class PoliticaSemeadura
         IReadOnlyList<Orcamento> orcamentos,
         IReadOnlyDictionary<int, string> nomesCategoria)
     {
+        if (!TryIdsPorNome(nomesCategoria, out var idsPorNome))
+            return false;
+
         var esperados = CatalogoDemonstracao.OrcamentosSemeados(hoje);
         var usados = new bool[esperados.Count];
         foreach (var orcamento in orcamentos)
         {
-            if (orcamento.MetaReducaoPercentual is not null
-                || !nomesCategoria.TryGetValue(orcamento.CategoriaId, out var nomeCategoria)
-                || string.IsNullOrEmpty(nomeCategoria))
-                return false;
-
             var achou = false;
             for (var i = 0; i < esperados.Count; i++)
             {
-                if (usados[i])
+                if (usados[i] || !idsPorNome.TryGetValue(esperados[i].Categoria, out var categoriaId))
                     continue;
 
-                var esperado = esperados[i];
-                if (esperado.Categoria == nomeCategoria
-                    && esperado.ValorLimite == orcamento.ValorLimite
-                    && esperado.Mes == orcamento.Mes
-                    && esperado.Ano == orcamento.Ano)
+                var modelo = new Orcamento
+                {
+                    CategoriaId = categoriaId,
+                    ValorLimite = esperados[i].ValorLimite,
+                    Mes = esperados[i].Mes,
+                    Ano = esperados[i].Ano
+                };
+                if (CamposIguais(orcamento, modelo, CamposOrcamentoComparados))
                 {
                     usados[i] = true;
                     achou = true;
@@ -452,7 +588,7 @@ public static class PoliticaSemeadura
                 return false;
         }
 
-        return true;
+        return VagasPreenchidas(usados);
     }
 
     private static bool EncaixaMetas(DateTime hoje, IReadOnlyList<Meta> metas, int? perfilId)
@@ -461,24 +597,23 @@ public static class PoliticaSemeadura
         var usados = new bool[esperados.Count];
         foreach (var meta in metas)
         {
-            if (perfilId is null
-                || meta.MembroFamiliaId != perfilId
-                || meta.Concluida
-                || meta.Prazo is null)
-                return false;
-
             var achou = false;
-            for (var i = 0; i < esperados.Count; i++)
+            for (var i = 0; i < esperados.Count && perfilId is not null; i++)
             {
                 if (usados[i])
                     continue;
 
-                var esperado = esperados[i];
-                if (esperado.Nome == meta.Nome
-                    && esperado.ValorAlvo == meta.ValorAlvo
-                    && esperado.ValorAtual == meta.ValorAtual
-                    && esperado.Icone == meta.Icone
-                    && MesmaData(meta.Prazo.Value, esperado.Prazo))
+                var modelo = new Meta
+                {
+                    Nome = esperados[i].Nome,
+                    ValorAlvo = esperados[i].ValorAlvo,
+                    ValorAtual = esperados[i].ValorAtual,
+                    Prazo = esperados[i].Prazo,
+                    Icone = esperados[i].Icone,
+                    Concluida = false,
+                    MembroFamiliaId = perfilId.Value
+                };
+                if (CamposIguais(meta, modelo, CamposMetaComparados))
                 {
                     usados[i] = true;
                     achou = true;
@@ -490,14 +625,56 @@ public static class PoliticaSemeadura
                 return false;
         }
 
+        return VagasPreenchidas(usados);
+    }
+
+    private static bool TryIdsPorNome(IReadOnlyDictionary<int, string> nomesCategoria, out Dictionary<string, int> idsPorNome)
+    {
+        idsPorNome = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var par in nomesCategoria)
+        {
+            if (!idsPorNome.TryAdd(par.Value, par.Key))
+                return false;
+        }
+
+        return true;
+    }
+
+    private static bool VagasPreenchidas(bool[] usados)
+    {
+        foreach (var usada in usados)
+        {
+            if (!usada)
+                return false;
+        }
+
+        return true;
+    }
+
+    private static bool CamposIguais<T>(T gravado, T semente, string[] campos)
+    {
+        foreach (var campo in campos)
+        {
+            var propriedade = typeof(T).GetProperty(campo, BindingFlags.Instance | BindingFlags.Public);
+            if (propriedade is null)
+                return false;
+
+            var atual = propriedade.GetValue(gravado);
+            var esperado = propriedade.GetValue(semente);
+            if (atual is DateTime dataAtual && esperado is DateTime dataEsperada)
+            {
+                if (!MesmaData(dataAtual, dataEsperada))
+                    return false;
+                continue;
+            }
+
+            if (!Equals(atual, esperado))
+                return false;
+        }
+
         return true;
     }
 
     private static bool MesmaData(DateTime gravada, DateTime esperada)
-        => gravada.Year == esperada.Year
-            && gravada.Month == esperada.Month
-            && gravada.Day == esperada.Day
-            && gravada.Hour == esperada.Hour
-            && gravada.Minute == esperada.Minute
-            && gravada.Second == esperada.Second;
+        => gravada.Date == esperada.Date && gravada.TimeOfDay.Ticks == esperada.TimeOfDay.Ticks;
 }
