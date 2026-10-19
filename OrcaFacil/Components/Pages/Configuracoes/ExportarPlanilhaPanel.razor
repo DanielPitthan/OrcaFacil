@@ -1,0 +1,118 @@
+@using Microsoft.EntityFrameworkCore
+@using OrcaFacil.Core.Armazenamento.Espelho.Pasta
+@using OrcaFacil.Core.Exportacao
+@using OrcaFacil.Core.Llm
+@implements IDisposable
+@inject IDbContextFactory<AppDbContext> ContextoFactory
+@inject IConfiguracaoService Configuracao
+@inject ICompartilhadorArquivoLocal Compartilhador
+
+<MudPaper Class="pa-4 mt-4" Elevation="2">
+    <MudText Typo="Typo.subtitle1" Class="mb-2">Planilha</MudText>
+    <p id="aviso-planilha-clara" class="mb-3" role="note">O arquivo exportado não é criptografado e contém os dados financeiros em claro.</p>
+
+    @if (Orquestrador.Exportando)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-3" aria-label="Exportando a planilha" />
+    }
+
+    @if (!string.IsNullOrEmpty(Orquestrador.Aviso))
+    {
+        <MudAlert Severity="@(Orquestrador.FolhaAberta ? Severity.Info : Severity.Error)" Dense="true" Class="mb-3">@Orquestrador.Aviso</MudAlert>
+    }
+
+    <MudButton Variant="Variant.Filled"
+               Color="Color.Primary"
+               Disabled="@Orquestrador.Exportando"
+               aria-describedby="aviso-planilha-clara"
+               OnClick="ExportarAsync">
+        @(Orquestrador.Exportando ? "Exportando…" : "Exportar para Excel")
+    </MudButton>
+</MudPaper>
+
+@code {
+    private static readonly OrquestradorExportacaoPlanilha Orquestrador = new(TimeProvider.System);
+    private AcompanhamentoExportacaoPlanilha? _acompanhamento;
+
+    protected override void OnInitialized()
+    {
+        _acompanhamento = new AcompanhamentoExportacaoPlanilha(Orquestrador, () => InvokeAsync(StateHasChanged));
+    }
+
+    public void Dispose() => _acompanhamento?.Dispose();
+
+    private async Task ExportarAsync()
+    {
+        try
+        {
+            var tarefa = Orquestrador.ExportarAsync(
+                MontarConfiguracao,
+                () => FileSystem.CacheDirectory,
+                Gravar,
+                AbrirFolha);
+            if (tarefa.IsCompletedSuccessfully && !tarefa.Result.Executou)
+                return;
+
+            await tarefa;
+        }
+        catch (Exception ex)
+        {
+            await AvisarFalhaAsync(ex);
+        }
+    }
+
+    private async Task AvisarFalhaAsync(Exception ex)
+    {
+        _acompanhamento?.RegistrarFalha(ex);
+        try
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (Exception falha)
+        {
+            _acompanhamento?.RegistrarFalha(falha);
+        }
+    }
+
+    private void Gravar(string caminho, ConfiguracaoExportavel configuracao)
+    {
+        using var contexto = ContextoFactory.CreateDbContext();
+        using (var destino = new FileStream(caminho, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        {
+            ExportadorPlanilha.Exportar(contexto, configuracao, destino);
+            destino.Flush();
+        }
+    }
+
+    private async Task<DesfechoCompartilhamentoPlanilha> AbrirFolha(string caminho)
+    {
+        var resultado = await Compartilhador.CompartilharAsync(caminho, "Exportar para Excel");
+        if (resultado.Sucesso)
+            return DesfechoCompartilhamentoPlanilha.FolhaAberta;
+
+        if (resultado.Codigo == CodigoFalhaPastaEspelho.Cancelado)
+            return DesfechoCompartilhamentoPlanilha.Cancelado;
+
+        return DesfechoCompartilhamentoPlanilha.Falhou;
+    }
+
+    private ConfiguracaoExportavel MontarConfiguracao()
+    {
+        return new ConfiguracaoExportavel
+        {
+            Tema = Configuracao.Tema,
+            NotificacoesAtivas = Configuracao.NotificacoesAtivas,
+            SomAtivo = Configuracao.SomAtivo,
+            GraficoLancamentosExpandido = Configuracao.GraficoLancamentosExpandido,
+            PrazosAviso = Configuracao.PrazosAviso,
+            Provedor = Configuracao.ProvedorInteligencia is { } provedor
+                ? ChipsInteligencia.Texto(provedor)
+                : null,
+            Url = Configuracao.UrlInteligencia,
+            Modelo = Configuracao.ModeloInteligencia
+        };
+    }
+}

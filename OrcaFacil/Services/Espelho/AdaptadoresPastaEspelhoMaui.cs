@@ -1,4 +1,5 @@
 using OrcaFacil.Core.Armazenamento.Espelho.Pasta;
+using OrcaFacil.Core.Exportacao;
 
 namespace OrcaFacil.Services.Espelho;
 
@@ -26,7 +27,7 @@ public sealed class CompartilhadorArquivoMaui : ICompartilhadorArquivoLocal
             await Share.Default.RequestAsync(new ShareFileRequest
             {
                 Title = titulo,
-                File = new ShareFile(caminhoLocal)
+                File = Arquivo(caminhoLocal)
             });
             return ResultadoOperacaoPasta.Ok();
         }
@@ -39,6 +40,14 @@ public sealed class CompartilhadorArquivoMaui : ICompartilhadorArquivoLocal
             return ResultadoOperacaoPasta.Falha(
                 ClassificadorFalhaPastaEspelho.Classificar(SinalFalhaPasta.De(ex)));
         }
+    }
+
+    private static ShareFile Arquivo(string caminho)
+    {
+        if (ArquivoExportacaoPlanilha.NomeEhDesteApp(Path.GetFileName(caminho)))
+            return new ShareFile(caminho, ArquivoExportacaoPlanilha.Mime);
+
+        return new ShareFile(caminho);
     }
 }
 
