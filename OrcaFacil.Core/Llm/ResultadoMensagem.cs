@@ -10,7 +10,8 @@ public enum TipoResultadoMensagem
     PedidoInvalido,
     RespostaInvalida,
     SemRede,
-    Falha
+    Falha,
+    ModeloSemVisao
 }
 
 public enum ConfiancaLeitura
@@ -66,6 +67,8 @@ public sealed record ResultadoMensagem(
     public const string TextoSemRede = "Não foi possível conectar ao provedor.";
     public const string TextoFalha = "O provedor não concluiu a leitura.";
     public const string TextoConexaoOk = "A conexão com o provedor foi estabelecida.";
+    public const string TextoModeloSemVisao =
+        "Este modelo não lê imagens. Troque o modelo na aba Inteligência artificial.";
 
     public bool Sucesso => Tipo == TipoResultadoMensagem.Ok;
 

@@ -117,6 +117,24 @@ public class ClienteMensagensTests
     }
 
     [Fact]
+    public async Task ModeloSemVisao_ViraFraseFixaSemCorpoNemChave()
+    {
+        var corpo = "{\"error\":{\"message\":\"The model does not support image content blocks. " + Chave + "\"}}";
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.BadRequest, corpo));
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
+
+        Assert.Equal(TipoResultadoMensagem.ModeloSemVisao, resultado.Tipo);
+        Assert.Equal(ResultadoMensagem.TextoModeloSemVisao, resultado.Mensagem);
+        Assert.Contains("Troque o modelo", resultado.Mensagem, StringComparison.Ordinal);
+        Assert.Null(resultado.Comprovante);
+        Assert.DoesNotContain(Chave, resultado.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain("content blocks", resultado.Mensagem, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(Imagem, resultado.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MensagensDeLimiteESobrecargaSaoDistintas()
     {
         Assert.NotEqual(ResultadoMensagem.TextoLimite, ResultadoMensagem.TextoSobrecarga);

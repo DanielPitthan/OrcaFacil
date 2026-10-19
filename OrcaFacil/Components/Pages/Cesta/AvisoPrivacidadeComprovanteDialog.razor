@@ -1,0 +1,19 @@
+@using OrcaFacil.Core.Llm
+
+<MudDialog>
+    <DialogContent>
+        <p class="of-leitura-texto">@MensagensLeituraComprovante.TextoAvisoPrivacidade</p>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Class="of-tentar" Variant="Variant.Outlined" Color="Color.Default" OnClick="AgoraNao">Agora não</MudButton>
+        <MudButton Class="of-tentar" Variant="Variant.Outlined" Color="Color.Default" OnClick="Continuar">Continuar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private void AgoraNao() => MudDialog.Cancel();
+
+    private void Continuar() => MudDialog.Close(DialogResult.Ok(true));
+}

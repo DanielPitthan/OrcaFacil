@@ -1,0 +1,53 @@
+@using OrcaFacil.Core.Llm
+
+@if (Exibicao is not null)
+{
+    <section class="of-leitura" role="status" aria-live="polite">
+        @if (Exibicao.Situacao == SituacaoLeituraComprovante.Carregando)
+        {
+            <div class="of-leitura-linha">
+                <MudProgressCircular Indeterminate="true" Size="Size.Small" AriaLabel="@Exibicao.Mensagem" />
+                <p class="of-leitura-texto">@Exibicao.Mensagem</p>
+            </div>
+        }
+        else if (Exibicao.Situacao == SituacaoLeituraComprovante.Pronta && Comprovante is not null)
+        {
+            <p class="of-leitura-texto">@Exibicao.Resumo</p>
+        }
+        else
+        {
+            <p class="of-leitura-erro">@Exibicao.Mensagem</p>
+            <div class="of-leitura-acoes">
+                @if (Exibicao.LevaParaInteligenciaArtificial)
+                {
+                    <MudButton Class="of-tentar" Variant="Variant.Outlined" Color="Color.Default"
+                               Disabled="Ocupado" OnClick="AbrirInteligencia">
+                        Abrir Inteligência artificial
+                    </MudButton>
+                }
+                @if (Exibicao.PodeTentarDeNovo)
+                {
+                    <MudButton Class="of-tentar" Variant="Variant.Outlined" Color="Color.Default"
+                               Disabled="Ocupado" OnClick="Tentar">
+                        Tentar de novo
+                    </MudButton>
+                }
+            </div>
+        }
+    </section>
+}
+
+@code {
+    [Parameter] public ExibicaoLeituraComprovante? Exibicao { get; set; }
+
+    /// <summary>Resultado normalizado, só na memória. A prévia editável é a etapa seguinte.</summary>
+    [Parameter] public ComprovanteNormalizado? Comprovante { get; set; }
+
+    [Parameter] public bool Ocupado { get; set; }
+    [Parameter] public EventCallback TentarDeNovo { get; set; }
+    [Parameter] public EventCallback AbrirInteligenciaArtificial { get; set; }
+
+    private Task Tentar() => TentarDeNovo.InvokeAsync();
+
+    private Task AbrirInteligencia() => AbrirInteligenciaArtificial.InvokeAsync();
+}
