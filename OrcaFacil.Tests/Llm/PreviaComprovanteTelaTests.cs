@@ -46,7 +46,9 @@ public class PreviaComprovanteTelaTests
         Assert.Contains("ProdutoCestaDialog", dialog, StringComparison.Ordinal);
         Assert.Contains("IniciarCadastro", dialog, StringComparison.Ordinal);
         Assert.Contains("CancelarCadastro", dialog, StringComparison.Ordinal);
-        Assert.Contains("ConfirmarCadastro", dialog, StringComparison.Ordinal);
+        Assert.Matches(
+            @"Previa\s*\.\s*ConfirmarCadastro\s*\(\s*salvo\s*,\s*_preco\s*,\s*categoria\s*\)\s*;",
+            dialog);
         Assert.DoesNotContain("SalvarCompraAsync", dialog, StringComparison.Ordinal);
 
         Assert.Contains("SalvarCompraAsync(\"Nova compra\", modelo)", pagina, StringComparison.Ordinal);

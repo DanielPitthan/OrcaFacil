@@ -61,6 +61,7 @@ public class CestaLeituraFonteTests
         Assert.True(retorno > guarda);
         Assert.True(trava > retorno);
         Assert.True(primeiroAwait > trava);
+        ExigirReabilitacaoNoFinally(metodo, trava, "_cadastrando");
     }
 
     [Fact]
@@ -82,6 +83,7 @@ public class CestaLeituraFonteTests
         Assert.True(retorno > guarda);
         Assert.True(trava > retorno);
         Assert.True(primeiroAwait < 0 || primeiroAwait > trava);
+        ExigirReabilitacaoNoFinally(metodo, trava, "_cadastrandoTudo");
     }
 
     [Fact]
@@ -121,6 +123,25 @@ public class CestaLeituraFonteTests
         Assert.True(retorno > guarda);
         Assert.True(trava > retorno);
         Assert.True(primeiroAwait > trava);
+        ExigirReabilitacaoNoFinally(metodo, trava, "_previaAberta");
+    }
+
+    [Fact]
+    public void Previa_TituloQuebra_ListaGlobalMantemReticencia()
+    {
+        var raiz = EncontrarRaiz();
+        var previa = File.ReadAllText(Path.Combine(
+            raiz, "OrcaFacil", "Components", "Pages", "Cesta", "PreviaComprovanteDialog.razor.css"));
+        var lista = File.ReadAllText(Path.Combine(
+            raiz, "OrcaFacil", "Components", "Shared", "ItemList.razor.css"));
+
+        var regra = ExtrairRegra(previa, ".of-previa ::deep .of-lista-titulo");
+        Assert.Contains("white-space: normal;", regra, StringComparison.Ordinal);
+        Assert.DoesNotContain("white-space: nowrap", regra, StringComparison.Ordinal);
+
+        var titulo = ExtrairRegra(lista, ".of-lista-titulo");
+        Assert.Contains("white-space: nowrap;", titulo, StringComparison.Ordinal);
+        Assert.Contains("text-overflow: ellipsis;", titulo, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -221,6 +242,15 @@ public class CestaLeituraFonteTests
         Assert.True(Razao("#C9D1DD", "#12151B") >= 4.5);
         Assert.True(Razao("#9B2C3A", "#ffffff") >= 4.5);
         Assert.True(Razao("#F59A9A", "#1B1F27") >= 4.5);
+    }
+
+    private static void ExigirReabilitacaoNoFinally(string metodo, int trava, string variavel)
+    {
+        var indiceFinally = metodo.IndexOf("finally", trava, StringComparison.Ordinal);
+        Assert.True(indiceFinally > trava, variavel);
+        var bloco = ExtrairChaves(metodo, metodo.IndexOf('{', indiceFinally));
+        var padrao = $@"(?<![\w]){System.Text.RegularExpressions.Regex.Escape(variavel)}\s*=\s*false\s*;";
+        Assert.Matches(padrao, bloco);
     }
 
     private static string ExtrairRegra(string css, string seletor)

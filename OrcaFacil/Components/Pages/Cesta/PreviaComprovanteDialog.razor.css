@@ -11,6 +11,10 @@
     background: var(--of-background);
 }
 
+.of-previa ::deep .of-lista-titulo {
+    white-space: normal;
+}
+
 .of-previa-miolo {
     padding: var(--of-space-page) var(--of-space-page) 0;
     min-width: 0;
