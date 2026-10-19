@@ -56,9 +56,11 @@
                     <MudMenu ActivationEvent="@MouseEvent.LeftClick" AnchorOrigin="Origin.BottomCenter"
                              TransformOrigin="Origin.TopCenter" MaxHeight="320">
                         <ActivatorContent Context="menu">
-                            <FormRow Icone="@Icons.Material.Outlined.CreditCard" Rotulo="Cartão"
-                                     Valor="@CartaoAtual?.Rotulo" Chevron="true" Embutido="true"
-                                     AriaLabel="Selecionar cartão" />
+                            <button type="button" class="of-seletor-toque" @onclick="menu.ToggleAsync">
+                                <FormRow Icone="@Icons.Material.Outlined.CreditCard" Rotulo="Cartão"
+                                         Valor="@CartaoAtual?.Rotulo" Chevron="true" Embutido="true"
+                                         AriaLabel="Selecionar cartão" />
+                            </button>
                         </ActivatorContent>
                         <ChildContent>
                             @foreach (var cartao in Cartoes)
@@ -97,14 +99,16 @@
                 <MudMenu ActivationEvent="@MouseEvent.LeftClick" AnchorOrigin="Origin.BottomCenter"
                          TransformOrigin="Origin.TopCenter">
                     <ActivatorContent Context="menu">
-                        <FormRow Icone="@Icons.Material.Outlined.Repeat" Rotulo="Recorrência"
-                                 Valor="@FaturaCartaoEditor.RotuloRecorrencia(Modelo.Recorrencia)"
-                                 Chevron="true" Embutido="true" AriaLabel="Selecionar recorrência" />
+                        <button type="button" class="of-seletor-toque" @onclick="menu.ToggleAsync">
+                            <FormRow Icone="@Icons.Material.Outlined.Repeat" Rotulo="Recorrência"
+                                     Valor="@FaturaCartaoEditor.RotuloRecorrencia(Modelo.Recorrencia)"
+                                     Chevron="true" Embutido="true" AriaLabel="Selecionar recorrência" />
+                        </button>
                     </ActivatorContent>
                     <ChildContent>
                         @foreach (var recorrencia in Enum.GetValues<TipoRecorrencia>())
                         {
-                            <MudMenuItem OnClick="@(() => Modelo.Recorrencia = recorrencia)">
+                            <MudMenuItem OnClick="@(() => EscolherRecorrencia(recorrencia))">
                                 @FaturaCartaoEditor.RotuloRecorrencia(recorrencia)
                             </MudMenuItem>
                         }
@@ -303,8 +307,13 @@
 
     private async Task SelecionarCartaoAsync(Cartao cartao)
     {
-        Modelo.CartaoId = cartao.Id;
+        FluxoLancamento.EscolherCartao(Modelo, cartao.Id);
         await OnAlterouCartao.InvokeAsync();
+    }
+
+    private void EscolherRecorrencia(TipoRecorrencia recorrencia)
+    {
+        FluxoLancamento.EscolherRecorrencia(Modelo, recorrencia);
     }
 
     private void GarantirCategoria()
