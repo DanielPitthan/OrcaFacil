@@ -29,9 +29,6 @@ public static class PreparoFotoComprovante
     /// </summary>
     public const int TetoBytesAntesDoDecode = 20 * 1024 * 1024;
 
-    /// <summary>Bytes lidos para o tipo, antes do restante do arquivo.</summary>
-    public const int TamanhoCabecalhoTipo = 32;
-
     public static bool CabeAntesDoDecode(long bytes) =>
         bytes >= 0 && bytes <= TetoBytesAntesDoDecode;
 

@@ -98,6 +98,69 @@ public class DiagnosticoRespostaTests
         Assert.Contains(DiagnosticoResposta.MarcaBase64, diagnostico.Texto, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(@"data:image\u002Fjpeg")]
+    [InlineData(@"DATA:IMAGE\u002fJPEG")]
+    public void BarraUnicode_NaoVazaBase64Curto(string prefixo)
+    {
+        var base64 = new string('Q', 40);
+        var corpo = prefixo + ";base64," + base64;
+
+        var diagnostico = DiagnosticoResposta.Criar(
+            400,
+            "https://api.anthropic.com/v1/messages",
+            "deepseek-v4-flash",
+            "PedidoInvalido",
+            "O pedido foi recusado.",
+            "JSON inválido",
+            "end_turn",
+            null,
+            corpo,
+            corpoIncompleto: false,
+            segredos: null);
+
+        var log = new StringBuilder();
+        RegistroDiagnosticoLeitura.Registrar(diagnostico, texto => log.Append(texto));
+
+        var dialog = File.ReadAllText(Caminho("OrcaFacil", "Components", "Pages", "Cesta", "DiagnosticoLeituraDialog.razor"));
+        var painel = File.ReadAllText(Caminho("OrcaFacil", "Components", "Pages", "Cesta", "LeituraComprovantePainel.razor"));
+        Assert.Contains("@Texto", dialog, StringComparison.Ordinal);
+        Assert.Contains("Clipboard.Default.SetTextAsync(Texto)", dialog, StringComparison.Ordinal);
+        Assert.Contains("RegistroDiagnosticoLeitura.Registrar", painel, StringComparison.Ordinal);
+
+        Assert.Equal(diagnostico.Texto, log.ToString());
+        AssertNaoVazaBarraUnicode(diagnostico.Texto, base64);
+        AssertNaoVazaBarraUnicode(log.ToString(), base64);
+        Assert.Contains(DiagnosticoResposta.MarcaBase64, diagnostico.Texto, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ControleUnicode_DepoisDoDesescape_NaoSobrevive()
+    {
+        var diagnostico = DiagnosticoResposta.Criar(
+            200,
+            "https://api.anthropic.com",
+            "haiku\u2028Endpoint: https://evil.test",
+            "Falha",
+            "O provedor não concluiu a leitura.",
+            "motivo",
+            "end_turn",
+            "stop",
+            @"erro\u0000linha\u2028fim",
+            false,
+            segredos: null);
+
+        Assert.DoesNotContain("\0", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"\u0000", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("\u2028", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"\u2028", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("\u2029", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains("erro", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains("linha", diagnostico.Texto, StringComparison.Ordinal);
+        var endpoints = diagnostico.Texto.Split('\n').Where(linha => linha.StartsWith("Endpoint:", StringComparison.Ordinal)).ToArray();
+        Assert.Single(endpoints);
+    }
+
     [Fact]
     public void AuthorizationEApiKey_PerdemOValorInteiroEmQualquerCaixa()
     {
@@ -281,6 +344,13 @@ public class DiagnosticoRespostaTests
         Assert.Contains("@Texto", dialog, StringComparison.Ordinal);
         Assert.DoesNotContain("x-api-key", painel, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Authorization", dialog, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void AssertNaoVazaBarraUnicode(string texto, string base64)
+    {
+        Assert.DoesNotContain(base64, texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("data:image", texto, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(@"\u002", texto, StringComparison.Ordinal);
     }
 
     private static void AssertNaoVaza(string texto)

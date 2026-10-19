@@ -495,28 +495,9 @@ public class FotoPerfilService : IFotoPerfilService
         if (origem.CanSeek && !PreparoFotoComprovante.CabeAntesDoDecode(origem.Length))
             throw new FotoAcimaDoTetoException();
 
-        var cabecalho = new byte[PreparoFotoComprovante.TamanhoCabecalhoTipo];
-        var noCabecalho = 0;
-        while (noCabecalho < cabecalho.Length)
-        {
-            var lidos = await origem.ReadAsync(
-                cabecalho.AsMemory(noCabecalho, cabecalho.Length - noCabecalho),
-                cancellationToken);
-            if (lidos == 0)
-                break;
-
-            noCabecalho += lidos;
-        }
-
-        _ = PreparoFotoComprovante.EscolherMediaType(cabecalho.AsSpan(0, noCabecalho));
-        if (noCabecalho == 0)
-            return [];
-
-        using var memoria = new MemoryStream(noCabecalho);
-        memoria.Write(cabecalho, 0, noCabecalho);
-
+        using var memoria = new MemoryStream();
         var buffer = new byte[81920];
-        while (memoria.Length <= teto)
+        while (true)
         {
             var lidos = await origem.ReadAsync(buffer, cancellationToken);
             if (lidos == 0)
@@ -527,14 +508,12 @@ public class FotoPerfilService : IFotoPerfilService
 
             memoria.Write(buffer, 0, lidos);
         }
-
-        throw new FotoAcimaDoTetoException();
     }
 
     private sealed class FotoAcimaDoTetoException : InvalidOperationException
     {
         public FotoAcimaDoTetoException()
-            : base(MensagensLeituraComprovante.TextoFotoAcimaDoTeto)
+            : base($"A foto passa de {PreparoFotoComprovante.TetoBytesAntesDoDecode / (1024 * 1024)} MB. Escolha outra.")
         {
         }
     }

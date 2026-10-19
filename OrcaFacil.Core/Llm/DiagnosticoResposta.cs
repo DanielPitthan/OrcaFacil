@@ -37,6 +37,10 @@ public sealed class DiagnosticoResposta
         """[A-Za-z0-9+/]{201,}={0,2}""",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    private static readonly Regex EscapeUnicode = new(
+        @"\\u([0-9a-fA-F]{4})",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private DiagnosticoResposta(
         int? statusHttp,
         string? origem,
@@ -241,7 +245,7 @@ public sealed class DiagnosticoResposta
         var precisa = false;
         foreach (var caractere in texto)
         {
-            if (!char.IsControl(caractere))
+            if (!EhControle(caractere))
                 continue;
 
             precisa = true;
@@ -253,9 +257,26 @@ public sealed class DiagnosticoResposta
 
         var saida = new StringBuilder(texto.Length);
         foreach (var caractere in texto)
-            saida.Append(char.IsControl(caractere) ? ' ' : caractere);
+            saida.Append(EhControle(caractere) ? ' ' : caractere);
 
         return saida.ToString();
+    }
+
+    private static bool EhControle(char caractere) =>
+        char.IsControl(caractere) || caractere is '\u2028' or '\u2029';
+
+    private static string DesescaparJson(string texto)
+    {
+        var limpo = EscapeUnicode.Replace(texto, match =>
+        {
+            var codigo = Convert.ToInt32(match.Groups[1].Value, 16);
+            if (codigo is >= 0xD800 and <= 0xDFFF)
+                return " ";
+
+            return char.ConvertFromUtf32(codigo);
+        });
+
+        return limpo.Replace("\\/", "/", StringComparison.Ordinal).Replace("\\\"", "\"", StringComparison.Ordinal);
     }
 
     private static string Sanitizar(string? texto, List<string> segredos)
@@ -263,7 +284,7 @@ public sealed class DiagnosticoResposta
         if (string.IsNullOrEmpty(texto))
             return string.Empty;
 
-        var limpo = texto.Replace("\\/", "/", StringComparison.Ordinal).Replace("\\\"", "\"", StringComparison.Ordinal);
+        var limpo = DesescaparJson(texto);
         limpo = ValorCredencial.Replace(limpo, MarcaCabecalho);
         limpo = CabecalhoPedido.Replace(limpo, MarcaCabecalho);
         limpo = Bearer.Replace(limpo, MarcaCabecalho);

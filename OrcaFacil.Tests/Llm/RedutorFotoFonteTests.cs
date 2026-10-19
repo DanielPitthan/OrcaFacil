@@ -73,10 +73,12 @@ public class RedutorFotoFonteTests
         Assert.Contains("FotoComprovantePronta.AcimaDoTetoBruto()", fonte, StringComparison.Ordinal);
 
         var copiar = ExtrairBloco(fonte, "Task<byte[]> CopiarAsync(");
-        var tipo = copiar.IndexOf("EscolherMediaType(", StringComparison.Ordinal);
-        var restante = copiar.IndexOf("var buffer", StringComparison.Ordinal);
-        Assert.True(tipo >= 0 && tipo < restante);
+        Assert.DoesNotContain("EscolherMediaType(", copiar, StringComparison.Ordinal);
+        Assert.Contains("var buffer", copiar, StringComparison.Ordinal);
         Assert.Contains("TetoBytesAntesDoDecode", copiar, StringComparison.Ordinal);
+        Assert.Contains("Escolha outra.", fonte, StringComparison.Ordinal);
+        Assert.DoesNotContain("TextoFotoAcimaDoTeto", fonte, StringComparison.Ordinal);
+        Assert.DoesNotContain("A leitura não foi enviada.", fonte, StringComparison.Ordinal);
         Assert.Contains("FotoComprovantePronta.FormatoNaoConvertido()", fonte, StringComparison.Ordinal);
         Assert.Contains("EscolherMediaType(jpeg) is null", fonte, StringComparison.Ordinal);
     }

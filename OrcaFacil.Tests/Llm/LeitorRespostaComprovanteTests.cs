@@ -328,6 +328,106 @@ public class LeitorRespostaComprovanteTests
         Assert.Equal(12.90m, Assert.Single(comprovante.Itens).Preco);
     }
 
+    [Fact]
+    public void FerramentaInvalida_NaoEncerraEUsaAProxima()
+    {
+        const string json = """
+            {
+              "content": [
+                {
+                  "type": "tool_use",
+                  "name": "registrar_comprovante",
+                  "input": {
+                    "legivel": true,
+                    "itens": [ { "descricao_lida": "A", "preco": "12," } ]
+                  }
+                },
+                {
+                  "type": "tool_use",
+                  "name": "registrar_comprovante",
+                  "input": {
+                    "loja": "Segunda",
+                    "legivel": true,
+                    "itens": [ { "descricao_lida": "ARROZ", "preco": 4 } ]
+                  }
+                }
+              ]
+            }
+            """;
+
+        var comprovante = LeitorRespostaComprovante.Ler(json);
+
+        Assert.NotNull(comprovante);
+        Assert.Equal("Segunda", comprovante.Loja);
+        Assert.Equal(4m, Assert.Single(comprovante.Itens).Preco);
+    }
+
+    [Fact]
+    public void FerramentaInvalida_CaiNoJsonDoTexto()
+    {
+        const string json = """
+            {
+              "content": [
+                {
+                  "type": "tool_use",
+                  "name": "registrar_comprovante",
+                  "input": {
+                    "legivel": true,
+                    "itens": [ { "descricao_lida": "A", "preco": "12," } ]
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": "{\"loja\":\"Texto\",\"legivel\":true,\"itens\":[{\"descricao_lida\":\"B\",\"preco\":9}]}"
+                }
+              ]
+            }
+            """;
+
+        var comprovante = LeitorRespostaComprovante.Ler(json);
+
+        Assert.NotNull(comprovante);
+        Assert.Equal("Texto", comprovante.Loja);
+        Assert.Equal(9m, Assert.Single(comprovante.Itens).Preco);
+    }
+
+    [Fact]
+    public void SemToolUse_ItensQueNaoEArray_NaoApagaOCupomAnterior()
+    {
+        const string json = """
+            {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"loja\":\"Mercado\",\"legivel\":true,\"itens\":[{\"descricao_lida\":\"ARROZ\",\"preco\":\"12,90\"}]}\n{\"itens\":\"x\"}"
+                }
+              ]
+            }
+            """;
+
+        var comprovante = LeitorRespostaComprovante.Ler(json);
+
+        Assert.NotNull(comprovante);
+        Assert.Equal("Mercado", comprovante.Loja);
+        Assert.Equal(12.90m, Assert.Single(comprovante.Itens).Preco);
+    }
+
+    [Fact]
+    public void ObjetosSemItens_NaoContamNoTeto()
+    {
+        var ruido = string.Join(string.Empty, Enumerable.Repeat("{\"n\":1}", 40));
+        var cupom = "{\"loja\":\"Mercado\",\"legivel\":true,\"itens\":[{\"descricao_lida\":\"ARROZ\",\"preco\":1}]}";
+        var json = "{\"content\":[{\"type\":\"text\",\"text\":" +
+            System.Text.Json.JsonSerializer.Serialize(ruido + cupom) +
+            "}]}";
+
+        var comprovante = LeitorRespostaComprovante.Ler(json);
+
+        Assert.NotNull(comprovante);
+        Assert.Equal("Mercado", comprovante.Loja);
+        Assert.Equal(1m, Assert.Single(comprovante.Itens).Preco);
+    }
+
     [Theory]
     [InlineData("12,")]
     [InlineData("12.")]

@@ -116,6 +116,7 @@ public static class LeitorRespostaComprovante
             return false;
         }
 
+        string? motivoFerramenta = null;
         foreach (var bloco in content.EnumerateArray())
         {
             if (!EhFerramenta(bloco))
@@ -124,32 +125,67 @@ public static class LeitorRespostaComprovante
             if (!bloco.TryGetProperty("input", out var candidato) ||
                 candidato.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
             {
-                motivo = MotivoCampoAusente("input");
-                return false;
+                motivoFerramenta ??= MotivoCampoAusente("input");
+                continue;
             }
 
             if (candidato.ValueKind == JsonValueKind.Object)
             {
-                input = candidato;
-                return true;
+                var lido = LerComoInput(candidato, null, null);
+                if (lido.Comprovante is not null)
+                {
+                    input = candidato;
+                    return true;
+                }
+
+                motivoFerramenta ??= lido.Motivo;
+                continue;
             }
 
             if (candidato.ValueKind == JsonValueKind.String)
-                return PayloadDeTexto(candidato.GetString(), cancellationToken, out input, out motivo);
+            {
+                if (!PayloadDeTexto(candidato.GetString(), cancellationToken, out var textoInput, out var motivoTexto))
+                {
+                    motivoFerramenta ??= motivoTexto;
+                    continue;
+                }
 
-            motivo = MotivoCampoInvalido("input");
-            return false;
+                var lido = LerComoInput(textoInput, null, null);
+                if (lido.Comprovante is not null)
+                {
+                    input = textoInput;
+                    return true;
+                }
+
+                motivoFerramenta ??= lido.Motivo;
+                continue;
+            }
+
+            motivoFerramenta ??= MotivoCampoInvalido("input");
         }
 
         var texto = JuntarTextos(content);
         if (texto is null)
         {
-            motivo = MotivoCampoAusente("content");
+            motivo = motivoFerramenta ?? MotivoCampoAusente("content");
             return false;
         }
 
-        return PayloadDeTexto(texto, cancellationToken, out input, out motivo);
+        if (!PayloadDeTexto(texto, cancellationToken, out input, out var motivoDoTexto))
+        {
+            motivo = motivoFerramenta ?? motivoDoTexto;
+            return false;
+        }
+
+        if (EntradaValida(input))
+            return true;
+
+        motivo = LerComoInput(input, null, null).Motivo ?? motivoFerramenta ?? motivoDoTexto;
+        return false;
     }
+
+    private static bool EntradaValida(JsonElement candidato) =>
+        LerComoInput(candidato, null, null).Comprovante is not null;
 
     private static bool PareceComprovante(JsonElement raiz) =>
         raiz.TryGetProperty("legivel", out _) || raiz.TryGetProperty("itens", out _);
@@ -235,8 +271,8 @@ public static class LeitorRespostaComprovante
     }
 
     /// <summary>
-    /// Uma passagem. O último objeto completo que tem <c>itens</c> vence.
-    /// Para no teto de objetos, na profundidade e no cancelamento.
+    /// Uma passagem. Só entra no teto o objeto cujo <c>itens</c> é um array.
+    /// Desses, o último que passa na validação vence. Se nenhum passar, fica o último array.
     /// </summary>
     private static bool TentarRecortarObjeto(
         string texto,
@@ -246,7 +282,8 @@ public static class LeitorRespostaComprovante
     {
         json = string.Empty;
         truncado = false;
-        string? ultimo = null;
+        string? ultimoValido = null;
+        string? ultimoCandidato = null;
         var busca = 0;
         var vistos = 0;
         while (busca < texto.Length && vistos < ObjetosMaximos)
@@ -262,31 +299,41 @@ public static class LeitorRespostaComprovante
                 break;
             }
 
-            vistos++;
             var candidato = texto[inicio..(fim + 1)];
-            if (ObjetoComItens(candidato))
-                ultimo = candidato;
-
             busca = fim + 1;
+            if (!ClassificarObjeto(candidato, out var valido))
+                continue;
+
+            vistos++;
+            ultimoCandidato = candidato;
+            if (valido)
+                ultimoValido = candidato;
         }
 
-        if (ultimo is null)
+        var escolhido = ultimoValido ?? ultimoCandidato;
+        if (escolhido is null)
             return false;
 
-        json = ultimo;
+        json = escolhido;
         truncado = false;
         return true;
     }
 
-    private static bool ObjetoComItens(string json)
+    private static bool ClassificarObjeto(string json, out bool valido)
     {
+        valido = false;
         try
         {
             using var documento = JsonDocument.Parse(json);
-            return documento.RootElement.ValueKind == JsonValueKind.Object &&
-                documento.RootElement.TryGetProperty("itens", out var itens) &&
-                itens.ValueKind != JsonValueKind.Null &&
-                itens.ValueKind != JsonValueKind.Undefined;
+            if (documento.RootElement.ValueKind != JsonValueKind.Object ||
+                !documento.RootElement.TryGetProperty("itens", out var itens) ||
+                itens.ValueKind != JsonValueKind.Array)
+            {
+                return false;
+            }
+
+            valido = EntradaValida(documento.RootElement);
+            return true;
         }
         catch (JsonException)
         {
