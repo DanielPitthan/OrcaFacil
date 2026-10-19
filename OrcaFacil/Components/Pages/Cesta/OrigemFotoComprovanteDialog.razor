@@ -1,0 +1,20 @@
+<MudDialog>
+    <DialogContent>
+        <p class="of-leitura-texto">A foto pode vir da câmera ou da galeria. Ela não fica salva no OrcaFacil.</p>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Class="of-tentar" Variant="Variant.Outlined" Color="Color.Default" OnClick="Cancelar">Cancelar</MudButton>
+        <MudButton Class="of-tentar" Variant="Variant.Outlined" Color="Color.Default" OnClick="Galeria">Galeria</MudButton>
+        <MudButton Class="of-tentar" Variant="Variant.Outlined" Color="Color.Default" OnClick="Camera">Câmera</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private void Cancelar() => MudDialog.Cancel();
+
+    private void Camera() => MudDialog.Close(DialogResult.Ok(OrigemFotoComprovante.Camera));
+
+    private void Galeria() => MudDialog.Close(DialogResult.Ok(OrigemFotoComprovante.Galeria));
+}

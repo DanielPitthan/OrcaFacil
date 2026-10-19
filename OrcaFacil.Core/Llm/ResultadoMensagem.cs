@@ -10,7 +10,9 @@ public enum TipoResultadoMensagem
     PedidoInvalido,
     RespostaInvalida,
     SemRede,
-    Falha
+    Falha,
+    ModeloSemVisao,
+    SemPermissao
 }
 
 public enum ConfiancaLeitura
@@ -54,6 +56,8 @@ public sealed record ResultadoMensagem(
     TimeSpan? RetryAfter = null)
 {
     public const string TextoNaoAutorizado = "A chave da API foi recusada.";
+    public const string TextoSemPermissao =
+        "A chave foi aceita, mas não tem permissão para este uso. Confira sua conta no provedor.";
     public const string TextoLimite = "O provedor limitou o uso agora.";
     public const string TextoSobrecarga = "O provedor está sobrecarregado agora.";
     public const string TextoTimeout = "A leitura demorou demais e foi interrompida.";
@@ -66,6 +70,8 @@ public sealed record ResultadoMensagem(
     public const string TextoSemRede = "Não foi possível conectar ao provedor.";
     public const string TextoFalha = "O provedor não concluiu a leitura.";
     public const string TextoConexaoOk = "A conexão com o provedor foi estabelecida.";
+    public const string TextoModeloSemVisao =
+        "Este modelo não lê imagens. Troque o modelo na aba Inteligência artificial.";
 
     public bool Sucesso => Tipo == TipoResultadoMensagem.Ok;
 

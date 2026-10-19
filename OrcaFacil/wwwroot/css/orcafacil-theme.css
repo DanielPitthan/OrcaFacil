@@ -472,3 +472,69 @@ html.of-tema-escuro .mud-snackbar.of-snack-chave .mud-icon-root {
 html.of-tema-escuro .mud-snackbar.of-snack-chave {
     background-color: #E07171;
 }
+
+/* Leitura do comprovante. Texto e botão no tom do tema, acima de 4,5:1.
+   Claro: #1E2A33 e #9B2C3A sobre #ffffff. Escuro: #E8EAF0 e #F59A9A sobre #1B1F27. */
+.of-leitura {
+    margin: 12px 16px 0;
+    padding: 12px 16px;
+    border: 1px solid var(--of-border);
+    border-radius: var(--of-radius-card);
+}
+
+.of-leitura-linha {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.of-leitura-texto,
+.of-leitura-erro {
+    margin: 0;
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+.of-leitura-acoes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.of-leitura .of-tentar,
+.mud-dialog .of-tentar {
+    min-height: var(--of-touch);
+}
+
+html.of-tema-claro .of-leitura {
+    background: #ffffff;
+}
+
+html.of-tema-claro .of-leitura-texto,
+html.of-tema-claro .mud-dialog .of-leitura-texto,
+html.of-tema-claro .of-leitura .mud-button-root.mud-button-outlined.of-tentar,
+html.of-tema-claro .mud-dialog .mud-button-root.mud-button-outlined.of-tentar {
+    color: #1E2A33;
+    border-color: #1E2A33;
+}
+
+html.of-tema-claro .of-leitura-erro {
+    color: #9B2C3A;
+}
+
+html.of-tema-escuro .of-leitura {
+    background: #1B1F27;
+}
+
+html.of-tema-escuro .of-leitura-texto,
+html.of-tema-escuro .mud-dialog .of-leitura-texto,
+html.of-tema-escuro .of-leitura .mud-button-root.mud-button-outlined.of-tentar,
+html.of-tema-escuro .mud-dialog .mud-button-root.mud-button-outlined.of-tentar {
+    color: #E8EAF0;
+    border-color: #E8EAF0;
+}
+
+html.of-tema-escuro .of-leitura-erro {
+    color: #F59A9A;
+}

@@ -1,8 +1,16 @@
 @page "/cesta"
+@using OrcaFacil.Core.Llm
+@implements IDisposable
 @inject ICestaService CestaService
 @inject ICategoriaService CategoriaService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@inject IFotoPerfilService Fotos
+@inject ICofreChaveApi Cofre
+@inject IConfiguracaoService Configuracao
+@inject IPreferenciasSimples Preferencias
+@inject ClienteMensagens Cliente
 
 <div class="pro-sticky-header">
     <div class="d-flex justify-space-between align-center">
@@ -14,6 +22,9 @@
         </div>
     </div>
 </div>
+
+<LeituraComprovantePainel Exibicao="_exibicao" Comprovante="_comprovante" Ocupado="_lendo"
+                           TentarDeNovo="TentarDeNovoAsync" AbrirInteligenciaArtificial="AbrirInteligencia" />
 
 <MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true" Class="mb-2" @bind-ActivePanelIndex="_aba">
     <MudTabPanel Text="Compras" Icon="@Icons.Material.Filled.Receipt">
@@ -295,6 +306,7 @@
 
 <FabMenu>
     <FabMenuItem Text="Nova compra" Icon="@Icons.Material.Filled.AddShoppingCart" Color="Color.Primary" Click="NovaCompraAsync" />
+    <FabMenuItem Text="Ler comprovante" Icon="@Icons.Material.Filled.PhotoCamera" Color="Color.Secondary" Disabled="@_lendo" Click="IniciarLeituraAsync" />
     <FabMenuItem Text="Trazer cesta do mês anterior" Icon="@Icons.Material.Filled.ContentCopy" Color="Color.Secondary" Click="TrazerMesAnteriorAsync" />
     <FabMenuItem Text="Novo produto" Icon="@Icons.Material.Filled.ShoppingBasket" Color="Color.Secondary" Click="NovoProdutoAsync" />
     <FabMenuItem Text="Importar CSV" Icon="@Icons.Material.Filled.Upload" Color="Color.Secondary" Disabled="@_importando" Click="ImportarProdutosAsync" />
@@ -302,9 +314,17 @@
 </FabMenu>
 
 @code {
+    private readonly CancellationTokenSource _pagina = new();
+
     private bool _carregando = true;
     private bool _importando;
+    private bool _lendo;
+    private bool _descartada;
+    private int _geracao;
     private int _aba;
+    private byte[]? _jpeg;
+    private ExibicaoLeituraComprovante? _exibicao;
+    private ComprovanteNormalizado? _comprovante;
     private DateTime _referencia = new(DateTime.Today.Year, DateTime.Today.Month, 1);
     private List<CompraCesta> _compras = new();
     private List<ProdutoCesta> _produtos = new();
@@ -313,6 +333,276 @@
     private ComparativoCesta _comparativo = new();
 
     protected override async Task OnInitializedAsync() => await CarregarAsync();
+
+    public void Dispose()
+    {
+        _descartada = true;
+        _jpeg = null;
+        _comprovante = null;
+        _pagina.Cancel();
+        _pagina.Dispose();
+    }
+
+    private void AbrirInteligencia() => Navigation.NavigateTo(MensagensLeituraComprovante.RotaInteligencia);
+
+    private async Task IniciarLeituraAsync()
+    {
+        if (_lendo || _descartada)
+            return;
+
+        _lendo = true;
+        StateHasChanged();
+        try
+        {
+            await FluxoLeituraAsync();
+        }
+        catch (OperationCanceledException)
+        {
+            // Sair da página não é erro e não apaga a chave.
+        }
+        finally
+        {
+            LiberarLeitura();
+        }
+    }
+
+    private async Task FluxoLeituraAsync()
+    {
+        if (!await ConfirmarAvisoAsync() || _descartada)
+            return;
+
+        if (!await TemConfiguracaoAsync())
+        {
+            if (_descartada)
+                return;
+
+            _jpeg = null;
+            _comprovante = null;
+            _exibicao = MensagensLeituraComprovante.SemConfiguracao();
+            return;
+        }
+
+        var origem = await EscolherOrigemAsync();
+        if (origem is null || _descartada)
+            return;
+
+        await CapturarEEnviarAsync(origem.Value);
+    }
+
+    private async Task<bool> TemConfiguracaoAsync()
+    {
+        string? chave = null;
+        try
+        {
+            chave = await Cofre.LerAsync(_pagina.Token);
+            return MensagensLeituraComprovante.TemUrlModeloEChave(
+                Configuracao.UrlInteligencia,
+                Configuracao.ModeloInteligencia,
+                chave);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+        finally
+        {
+            chave = null;
+        }
+    }
+
+    private async Task TentarDeNovoAsync()
+    {
+        if (_lendo || _descartada)
+            return;
+
+        _lendo = true;
+        StateHasChanged();
+        try
+        {
+            if (_jpeg is { Length: > 0 } jpeg && jpeg.Length <= ClienteMensagens.TamanhoMaximoImagem)
+                await EnviarJpegAsync(jpeg);
+            else
+            {
+                _jpeg = null;
+                await FluxoLeituraAsync();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Sair da página não é erro e não apaga a chave.
+        }
+        finally
+        {
+            LiberarLeitura();
+        }
+    }
+
+    private void LiberarLeitura()
+    {
+        if (_descartada)
+            return;
+
+        _lendo = false;
+        StateHasChanged();
+    }
+
+    private async Task<bool> ConfirmarAvisoAsync()
+    {
+        if (AvisoPrivacidadeComprovante.JaVisto(Preferencias))
+            return true;
+
+        var dialog = await DialogService.ShowAsync<AvisoPrivacidadeComprovanteDialog>(
+            "Privacidade",
+            Opcoes(MaxWidth.ExtraSmall));
+        var resultado = await dialog.Result;
+        if (resultado is not { Canceled: false })
+            return false;
+
+        AvisoPrivacidadeComprovante.MarcarVisto(Preferencias);
+        return true;
+    }
+
+    private async Task<OrigemFotoComprovante?> EscolherOrigemAsync()
+    {
+        var dialog = await DialogService.ShowAsync<OrigemFotoComprovanteDialog>(
+            "Ler comprovante",
+            Opcoes(MaxWidth.ExtraSmall));
+        var resultado = await dialog.Result;
+        return resultado is { Canceled: false, Data: OrigemFotoComprovante origem } ? origem : null;
+    }
+
+    private async Task CapturarEEnviarAsync(OrigemFotoComprovante origem)
+    {
+        var geracao = ++_geracao;
+        try
+        {
+            var foto = await Fotos.PrepararComprovanteAsync(
+                origem == OrigemFotoComprovante.Camera,
+                async () =>
+                {
+                    if (Cancelada(geracao))
+                        return;
+
+                    _jpeg = null;
+                    _comprovante = null;
+                    _exibicao = MensagensLeituraComprovante.Carregando();
+                    await InvokeAsync(StateHasChanged);
+                },
+                _pagina.Token);
+            if (foto.Cancelada || Cancelada(geracao))
+                return;
+
+            var jpeg = foto.Jpeg;
+            if (foto.PedirOutraFoto || jpeg is null || jpeg.Length == 0 || jpeg.Length > ClienteMensagens.TamanhoMaximoImagem)
+            {
+                _jpeg = null;
+                _exibicao = foto.PedirOutraFoto
+                    ? MensagensLeituraComprovante.FotoGrandeDemais()
+                    : MensagensLeituraComprovante.FotoInvalida();
+                return;
+            }
+
+            _jpeg = jpeg;
+            await EnviarJpegAsync(jpeg, geracao);
+        }
+        catch (OperationCanceledException)
+        {
+            // Sair da página não é erro e não apaga a chave.
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or PermissionException or FeatureNotSupportedException)
+        {
+            _jpeg = null;
+            if (Cancelada(geracao))
+                return;
+
+            if (ex.Message is "Este dispositivo não suporta captura de fotos." or "Permissão de câmera negada.")
+                Snackbar.Add(ex.Message, Severity.Warning);
+            else
+                _exibicao = MensagensLeituraComprovante.FotoInvalida();
+        }
+        catch (Exception)
+        {
+            _jpeg = null;
+            if (!Cancelada(geracao))
+                _exibicao = MensagensLeituraComprovante.FotoInvalida();
+        }
+    }
+
+    private async Task EnviarJpegAsync(byte[] jpeg, int? geracao = null)
+    {
+        geracao ??= ++_geracao;
+        var atual = geracao.Value;
+        if (jpeg.Length > ClienteMensagens.TamanhoMaximoImagem)
+        {
+            _jpeg = null;
+            _exibicao = MensagensLeituraComprovante.FotoGrandeDemais();
+            return;
+        }
+
+        _exibicao = MensagensLeituraComprovante.Carregando();
+        _comprovante = null;
+        StateHasChanged();
+        string? chave = null;
+        try
+        {
+            chave = await Cofre.LerAsync(_pagina.Token);
+            if (Cancelada(atual))
+                return;
+
+            if (!MensagensLeituraComprovante.TemUrlModeloEChave(
+                    Configuracao.UrlInteligencia,
+                    Configuracao.ModeloInteligencia,
+                    chave))
+            {
+                _exibicao = MensagensLeituraComprovante.SemConfiguracao();
+                return;
+            }
+
+            var media = PreparoFotoComprovante.EscolherMediaType(jpeg);
+            var resultado = await Cliente.LerComprovanteAsync(
+                Configuracao.UrlInteligencia,
+                chave,
+                Configuracao.ModeloInteligencia,
+                media,
+                Convert.ToBase64String(jpeg),
+                _pagina.Token);
+            if (Cancelada(atual))
+                return;
+
+            var normalizado = resultado.Comprovante is null
+                ? null
+                : NormalizadorComprovante.Normalizar(resultado.Comprovante, _produtos);
+            var exibicao = MensagensLeituraComprovante.De(resultado, normalizado);
+            _exibicao = exibicao;
+            _comprovante = exibicao.Situacao == SituacaoLeituraComprovante.Pronta ? normalizado : null;
+            if (_comprovante is not null)
+                _jpeg = null;
+        }
+        catch (OperationCanceledException)
+        {
+            // Sair da página não é erro e não apaga a chave.
+        }
+        catch (Exception)
+        {
+            if (!Cancelada(atual))
+                _exibicao = MensagensLeituraComprovante.De(
+                    ResultadoMensagem.Falha(TipoResultadoMensagem.Falha, ResultadoMensagem.TextoFalha),
+                    null);
+        }
+        finally
+        {
+            chave = null;
+            if (atual == _geracao && !_descartada)
+                StateHasChanged();
+        }
+    }
+
+    private bool Cancelada(int geracao) =>
+        _descartada || geracao != _geracao || _pagina.IsCancellationRequested;
 
     private async Task CarregarAsync()
     {

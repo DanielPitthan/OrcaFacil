@@ -95,6 +95,7 @@ public class ClienteMensagensTests
 
     [Theory]
     [InlineData(401, TipoResultadoMensagem.NaoAutorizado, ResultadoMensagem.TextoNaoAutorizado)]
+    [InlineData(403, TipoResultadoMensagem.SemPermissao, ResultadoMensagem.TextoSemPermissao)]
     [InlineData(429, TipoResultadoMensagem.Limite, ResultadoMensagem.TextoLimite)]
     [InlineData(529, TipoResultadoMensagem.Sobrecarga, ResultadoMensagem.TextoSobrecarga)]
     [InlineData(504, TipoResultadoMensagem.Timeout, ResultadoMensagem.TextoTimeout)]
@@ -117,11 +118,36 @@ public class ClienteMensagensTests
     }
 
     [Fact]
+    public async Task ModeloSemVisao_ViraFraseFixaSemCorpoNemChave()
+    {
+        var corpo = "{\"error\":{\"message\":\"The model does not support image content blocks. " + Chave + "\"}}";
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.BadRequest, corpo));
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
+
+        Assert.Equal(TipoResultadoMensagem.ModeloSemVisao, resultado.Tipo);
+        Assert.Equal(ResultadoMensagem.TextoModeloSemVisao, resultado.Mensagem);
+        Assert.Contains("Troque o modelo", resultado.Mensagem, StringComparison.Ordinal);
+        Assert.Null(resultado.Comprovante);
+        Assert.DoesNotContain(Chave, resultado.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain("content blocks", resultado.Mensagem, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(Imagem, resultado.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void MensagensDeLimiteESobrecargaSaoDistintas()
     {
         Assert.NotEqual(ResultadoMensagem.TextoLimite, ResultadoMensagem.TextoSobrecarga);
         Assert.NotEqual(ResultadoMensagem.TextoTimeout, ResultadoMensagem.TextoLimite);
         Assert.NotEqual(ResultadoMensagem.TextoNaoAutorizado, ResultadoMensagem.TextoPedidoInvalido);
+        Assert.NotEqual(ResultadoMensagem.TextoNaoAutorizado, ResultadoMensagem.TextoSemPermissao);
+        Assert.Equal("A chave da API foi recusada.", ResultadoMensagem.TextoNaoAutorizado);
+        Assert.Equal(
+            "A chave foi aceita, mas não tem permissão para este uso. Confira sua conta no provedor.",
+            ResultadoMensagem.TextoSemPermissao);
+        Assert.DoesNotContain("401", ResultadoMensagem.TextoNaoAutorizado, StringComparison.Ordinal);
+        Assert.DoesNotContain("403", ResultadoMensagem.TextoSemPermissao, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -886,6 +912,7 @@ public class ClienteMensagensTests
             ResultadoMensagem.TextoModeloNaoInformado,
             ResultadoMensagem.TextoUrlInvalida,
             ResultadoMensagem.TextoNaoAutorizado,
+            ResultadoMensagem.TextoSemPermissao,
             ResultadoMensagem.TextoSemRede,
             ResultadoMensagem.TextoTimeout,
             ResultadoMensagem.TextoPedidoInvalido
@@ -913,6 +940,7 @@ public class ClienteMensagensTests
             ResultadoMensagem.TextoModeloNaoInformado,
             ResultadoMensagem.TextoUrlInvalida,
             ResultadoMensagem.TextoNaoAutorizado,
+            ResultadoMensagem.TextoSemPermissao,
             ResultadoMensagem.TextoSemRede,
             ResultadoMensagem.TextoTimeout
         };

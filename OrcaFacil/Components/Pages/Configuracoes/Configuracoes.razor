@@ -1,4 +1,5 @@
 @page "/configuracoes"
+@using OrcaFacil.Core.Llm
 @inject IConfiguracaoService Configuracao
 @inject INotificationSchedulerService NotificationScheduler
 @inject ISnackbar Snackbar
@@ -9,7 +10,7 @@
     </div>
 </div>
 
-<MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pt-4">
+<MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pt-4" @bind-ActivePanelIndex="_aba">
     <MudTabPanel Text="Notificações" Icon="@Icons.Material.Filled.Notifications">
         <MudPaper Class="pa-4" Elevation="2">
             <MudSwitch T="bool" @bind-Value="_notificacoesAtivas" Color="Color.Primary" Label="Ativar notificações de despesas" />
@@ -58,6 +59,16 @@
     private bool _somAtivo;
     private PrazoAviso _prazos;
     private bool _salvando;
+    private int _aba;
+
+    [SupplyParameterFromQuery(Name = "aba")]
+    public string? AbaConsulta { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        if (string.Equals(AbaConsulta, MensagensLeituraComprovante.ConsultaAba, StringComparison.OrdinalIgnoreCase))
+            _aba = MensagensLeituraComprovante.IndiceAbaInteligencia;
+    }
 
     protected override void OnInitialized()
     {

@@ -180,6 +180,7 @@ public sealed class ClienteMensagens : IDisposable
     private static bool FraseFixa(string texto) => texto is
         ResultadoMensagem.TextoConexaoOk or
         ResultadoMensagem.TextoNaoAutorizado or
+        ResultadoMensagem.TextoSemPermissao or
         ResultadoMensagem.TextoLimite or
         ResultadoMensagem.TextoSobrecarga or
         ResultadoMensagem.TextoTimeout or
@@ -190,7 +191,8 @@ public sealed class ClienteMensagens : IDisposable
         ResultadoMensagem.TextoUrlInvalida or
         ResultadoMensagem.TextoRespostaInvalida or
         ResultadoMensagem.TextoSemRede or
-        ResultadoMensagem.TextoFalha;
+        ResultadoMensagem.TextoFalha or
+        ResultadoMensagem.TextoModeloSemVisao;
 
     /// <summary>
     /// Falhas locais do teste, antes da rede. Cada uma tem frase própria,
@@ -265,7 +267,7 @@ public sealed class ClienteMensagens : IDisposable
                 return ResultadoMensagem.Falha(TipoResultadoMensagem.Falha, ResultadoMensagem.TextoFalha);
 
             if (resposta.StatusCode != HttpStatusCode.OK)
-                return MapearStatus(resposta);
+                return await MapearStatusAsync(resposta, limite.Token);
 
             // 200 do teste de conexão é sucesso sem ler o corpo: não é um comprovante,
             // e o texto da resposta não entra na mensagem.
@@ -350,11 +352,22 @@ public sealed class ClienteMensagens : IDisposable
         return Encoding.UTF8.GetString(memoria.GetBuffer(), 0, (int)memoria.Length);
     }
 
-    private static ResultadoMensagem MapearStatus(HttpResponseMessage resposta)
+    private static async Task<ResultadoMensagem> MapearStatusAsync(
+        HttpResponseMessage resposta,
+        CancellationToken cancellationToken)
     {
+        if ((int)resposta.StatusCode == 400 &&
+            await CorpoIndicaModeloSemVisaoAsync(resposta.Content, cancellationToken))
+        {
+            return ResultadoMensagem.Falha(
+                TipoResultadoMensagem.ModeloSemVisao,
+                ResultadoMensagem.TextoModeloSemVisao);
+        }
+
         return (int)resposta.StatusCode switch
         {
             401 => ResultadoMensagem.Falha(TipoResultadoMensagem.NaoAutorizado, ResultadoMensagem.TextoNaoAutorizado),
+            403 => ResultadoMensagem.Falha(TipoResultadoMensagem.SemPermissao, ResultadoMensagem.TextoSemPermissao),
             429 => ResultadoMensagem.Falha(
                 TipoResultadoMensagem.Limite,
                 ResultadoMensagem.TextoLimite,
@@ -364,6 +377,38 @@ public sealed class ClienteMensagens : IDisposable
             400 => ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoPedidoInvalido),
             _ => ResultadoMensagem.Falha(TipoResultadoMensagem.Falha, ResultadoMensagem.TextoFalha)
         };
+    }
+
+    /// <summary>
+    /// Lê só o começo do corpo do 400. O texto serve para classificar e é descartado.
+    /// Não entra na mensagem nem em log.
+    /// </summary>
+    private static async Task<bool> CorpoIndicaModeloSemVisaoAsync(
+        HttpContent? content,
+        CancellationToken cancellationToken)
+    {
+        if (content is null)
+            return false;
+
+        try
+        {
+            await using var fluxo = await content.ReadAsStreamAsync(cancellationToken);
+            var buffer = new byte[8192];
+            var lidos = await fluxo.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken);
+            if (lidos <= 0)
+                return false;
+
+            var texto = Encoding.UTF8.GetString(buffer, 0, lidos);
+            return DiagnosticoErroProvedor.IndicaModeloSemVisao(texto);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     private static TimeSpan? LerRetryAfter(HttpResponseMessage resposta)
