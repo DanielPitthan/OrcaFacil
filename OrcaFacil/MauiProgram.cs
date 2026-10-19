@@ -80,6 +80,9 @@ public static class MauiProgram
         builder.Services.AddDbContextFactory<AppDbContext>(options =>
             options.UseSqlite(conexaoSqlite));
 
+        // Partida do banco e do espelho. A pasta SAF entra em RegistroServicosPastaEspelho, mais abaixo.
+        RegistroCoordenadorArmazenamento.Registrar(builder.Services);
+
         // Repositórios — stateless (só guardam o IDbContextFactory, que já é Singleton),
         // por isso registrados como Singleton também: evita capturar um serviço "Scoped"
         // dentro dos serviços Singleton (NotificationSchedulerService, ISyncService) que os usam.

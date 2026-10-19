@@ -10,16 +10,16 @@ using OrcaFacil.Platforms.Android.Espelho;
 namespace OrcaFacil.Services.Espelho;
 
 /// <summary>
-/// Registra a pasta do espelho. Nada aqui é resolvido em <c>CreateMauiApp</c>:
-/// <c>InicializacaoApp</c> não depende destes serviços e o startup segue como estava.
+/// Registra a pasta do espelho. A abertura resolve estes serviços pelo coordenador.
 /// A tela que chama o seletor fica para o PR seguinte.
 /// </summary>
 /// <remarks>
-/// O <see cref="CoordenadorArmazenamento"/> não entra neste registro. Quando o PR da tela
-/// o montar, o construtor exige dez argumentos, nesta ordem: sonda, espelho, versão,
-/// restauração, migração, semeadura, limpeza, <see cref="OpcoesPreparoBanco"/>
+/// O <see cref="CoordenadorArmazenamento"/> não entra neste registro. A abertura o monta
+/// em <see cref="RegistroCoordenadorArmazenamento"/>, com dez argumentos, nesta ordem: sonda,
+/// espelho, versão, restauração, migração, semeadura, limpeza, <see cref="OpcoesPreparoBanco"/>
 /// (com <see cref="OpcoesPreparoBanco.VersaoAplicativo"/>), <see cref="IPreservacaoBancoVivo"/>
 /// e <see cref="IPresencaPerfil"/>. Null lança <see cref="ArgumentNullException"/>.
+/// A senha continua <see cref="ProvedorSenhaEspelhoAindaNaoInformada"/> até a tela de Armazenamento.
 /// <see cref="IMigracaoBancoVivo.MigrarEVerificarAsync"/> recebe as opções.
 /// <see cref="IPresencaPerfil.HaMembroAsync"/> só é consultada com schema íntegro;
 /// <see cref="ClassificacaoBancoVivo.AplicarPoliticaSeed"/> pode virar
