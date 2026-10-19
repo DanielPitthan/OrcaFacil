@@ -558,6 +558,22 @@
 
     private bool AplicarRascunho()
     {
+        if (_editando is not null
+            && !string.IsNullOrEmpty(_editando.ProdutoNovoChave)
+            && (_produtoId <= 0 || _produtoId == _editando.ProdutoCestaId))
+        {
+            if (_precoItem <= 0)
+            {
+                _erroItem = "Informe o preço do item.";
+                return false;
+            }
+
+            CompraCestaEditor.AplicarEdicao(_linhas, _editando, _produtoId, _precoItem);
+            _erroItem = null;
+            _erro = null;
+            return true;
+        }
+
         var erro = CompraCestaEditor.ValidarItem(_produtoId, _precoItem);
         if (erro is not null)
         {

@@ -264,13 +264,20 @@ public class PreviaComprovanteTests
             Item("FEIJAO", "Feijão", reconhecido: true, 5m));
         previa = outra;
         previa.Classificar(previa.Linhas[1], arroz);
-        Assert.Equal(PreviaComprovante.MensagemProdutoRepetido, previa.MensagemBloqueio);
+        Assert.Null(previa.MensagemBloqueio);
+        Assert.True(previa.PodeConfirmar);
+        Assert.Equal(2, previa.Linhas.Count);
+        Assert.All(previa.Linhas, linha => Assert.Contains(PreviaComprovante.EtiquetaSeraSomado, linha.Titulo, StringComparison.Ordinal));
+        Assert.Equal(13m, previa.ParaCompra().Itens.Sum(item => item.Preco));
 
         previa.AlterarPreco(previa.Linhas[0], 0m);
         Assert.Equal(PreviaComprovante.MensagemPreco, previa.MensagemBloqueio);
         previa.AlterarPreco(previa.Linhas[0], 3.005m);
         Assert.Equal(3.01m, previa.Linhas[0].Preco);
-        Assert.Equal(PreviaComprovante.MensagemProdutoRepetido, previa.MensagemBloqueio);
+        Assert.Null(previa.MensagemBloqueio);
+        Assert.Contains(PreviaComprovante.EtiquetaSeraSomado, previa.Linhas[0].Titulo, StringComparison.Ordinal);
+        previa.Remover(previa.Linhas[1]);
+        Assert.DoesNotContain(PreviaComprovante.EtiquetaSeraSomado, Assert.Single(previa.Linhas).Titulo, StringComparison.Ordinal);
 
         var inativo = Produto(6, "Óleo", 2, "Alimentos", ativo: false);
         var bloqueado = Previa([inativo], Item("OLEO", "Óleo", reconhecido: true, 9m));
@@ -394,6 +401,9 @@ public class PreviaComprovanteTests
         Assert.Equal("1", previa.Linhas[1].Quantidade);
         Assert.Equal(2.5m, previa.Linhas[0].Preco);
         Assert.Equal(3m, previa.Linhas[1].Preco);
+        Assert.Contains(PreviaComprovante.EtiquetaSeraSomado, previa.Linhas[0].Titulo, StringComparison.Ordinal);
+        Assert.Contains(PreviaComprovante.EtiquetaNovoSeraCriado, previa.Linhas[0].Titulo, StringComparison.Ordinal);
+        Assert.Contains(PreviaComprovante.EtiquetaSeraSomado, previa.Linhas[1].Titulo, StringComparison.Ordinal);
         Assert.True(previa.PodeConfirmar);
         Assert.Null(previa.MensagemBloqueio);
 
@@ -521,9 +531,13 @@ public class PreviaComprovanteTests
         Assert.Equal("Açúcar", repetido.NomeGravado);
         Assert.True(sabao.NovoSeraCriado);
         Assert.Equal("sabão  líquido", sabao.NomeGravado);
-        Assert.Equal(PreviaComprovante.MensagemProdutoRepetido, previa.MensagemBloqueio);
+        Assert.True(previa.PodeConfirmar);
+        Assert.Contains(PreviaComprovante.EtiquetaSeraSomado, acucar.Titulo, StringComparison.Ordinal);
+        Assert.Contains(PreviaComprovante.EtiquetaSeraSomado, repetido.Titulo, StringComparison.Ordinal);
+        Assert.DoesNotContain(PreviaComprovante.EtiquetaSeraSomado, sabao.Titulo, StringComparison.Ordinal);
 
         previa.Remover(repetido);
+        Assert.DoesNotContain(PreviaComprovante.EtiquetaSeraSomado, acucar.Titulo, StringComparison.Ordinal);
         var compra = previa.ParaCompra();
         Assert.Equal(4, compra.Itens[0].ProdutoCestaId);
         var novo = Assert.Single(compra.ProdutosNovos);

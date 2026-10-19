@@ -13,7 +13,7 @@ public class CestaCadastroService
 {
     public const string MensagemNomeProdutoRepetido = "Já existe um produto com esse nome.";
 
-    public const string MensagemProdutoRepetidoNaCompra = "Cada produto só pode aparecer uma vez na compra.";
+    public const string MensagemFalhaAoGravar = "Não foi possível gravar a compra.";
 
     private readonly ICestaRepository _cestas;
     private readonly ICartaoRepository? _cartoes;
@@ -284,9 +284,6 @@ public class CestaCadastroService
             fundidos.Add(primeiro);
         }
 
-        if (fundidos.GroupBy(item => item.Identidade, StringComparer.Ordinal).Any(grupo => grupo.Count() > 1))
-            throw new InvalidOperationException(MensagemProdutoRepetidoNaCompra);
-
         var precos = fundidos
             .Select(item => new ItemPrecoCategoria { Nome = item.Nome, CategoriaId = item.CategoriaId, Preco = item.Preco })
             .ToList();
@@ -430,6 +427,10 @@ public class CestaCadastroService
         {
             throw new InvalidOperationException(MensagemNomeProdutoRepetido);
         }
+        catch (DbUpdateException)
+        {
+            throw new InvalidOperationException(MensagemFalhaAoGravar);
+        }
     }
 
     public Task ExcluirCompraAsync(int id) => _cestas.ExcluirCompraAsync(id);
@@ -446,7 +447,7 @@ public class CestaCadastroService
         return texto;
     }
 
-    private static bool NomeDeProdutoRepetido(DbUpdateException ex)
+    public static bool NomeDeProdutoRepetido(DbUpdateException ex)
     {
         for (Exception? atual = ex; atual is not null; atual = atual.InnerException)
         {

@@ -278,8 +278,140 @@ public class ProdutoNovoNaCompraTests : IDisposable
         var produto = Assert.Single(await contexto.ProdutosCesta.ToListAsync());
         Assert.Equal("Açúcar", produto.Nome);
         Assert.Equal(5.35m, Assert.Single(compra.Itens).Preco);
-        Assert.Equal(5.35m, compra.Transacao!.Valor);
+        Assert.Equal(previa.Linhas.Sum(linha => linha.Preco), compra.Itens.Sum(item => item.Preco));
+        Assert.Equal(previa.Linhas.Sum(linha => linha.Preco), compra.Transacao!.Valor);
+        Assert.All(previa.Linhas, linha => Assert.Contains(PreviaComprovante.EtiquetaSeraSomado, linha.Titulo, StringComparison.Ordinal));
         Assert.Equal(2, previa.Linhas.Count);
+    }
+
+    [Fact]
+    public async Task CadastrarTudo_NoCatalogo_SomaExataENaoCriaOutroProduto()
+    {
+        var acucar = await _service.SalvarProdutoAsync(new ProdutoCestaFormModel
+        {
+            Nome = "Açúcar",
+            CategoriaId = _alimentacao.Id
+        });
+        acucar.Categoria = _alimentacao;
+        var local = await _service.SalvarLocalAsync(new LocalCompraFormModel { Nome = "Mercado" });
+        var previa = PreviaNoCatalogo(
+            local,
+            acucar,
+            ("Não identificado: Açúcar", "Doce", 2.10m, "2"),
+            ("Não identificado: acucar", "Outro", 3.25m, "1"));
+
+        Assert.True(previa.PodeCadastrarTudo);
+        previa.CadastrarTudo(_alimentacao.Id, _alimentacao.Nome);
+
+        Assert.Equal(2, previa.Linhas.Count);
+        Assert.True(previa.PodeConfirmar);
+        Assert.All(previa.Linhas, linha =>
+        {
+            Assert.Equal(acucar.Id, linha.ProdutoCestaId);
+            Assert.False(linha.NovoSeraCriado);
+            Assert.Contains(PreviaComprovante.EtiquetaSeraSomado, linha.Titulo, StringComparison.Ordinal);
+        });
+        Assert.Equal("2", previa.Linhas[0].Quantidade);
+        Assert.Equal("1", previa.Linhas[1].Quantidade);
+
+        var soma = previa.Linhas.Sum(linha => linha.Preco);
+        var compra = await _service.SalvarCompraAsync(Copiar(previa.ParaCompra()), _membroId);
+
+        await using var contexto = _factory.CreateDbContext();
+        Assert.Equal("Açúcar", Assert.Single(await contexto.ProdutosCesta.ToListAsync()).Nome);
+        Assert.Equal(soma, Assert.Single(compra.Itens).Preco);
+        Assert.Equal(acucar.Id, compra.Itens.Single().ProdutoCestaId);
+        Assert.Equal(soma, compra.Transacao!.Valor);
+    }
+
+    [Fact]
+    public async Task CasamentoNoCatalogo_SomaExata()
+    {
+        var acucar = await _service.SalvarProdutoAsync(new ProdutoCestaFormModel
+        {
+            Nome = "Açúcar",
+            CategoriaId = _alimentacao.Id
+        });
+        acucar.Categoria = _alimentacao;
+        var local = await _service.SalvarLocalAsync(new LocalCompraFormModel { Nome = "Mercado" });
+        var previa = PreviaNoCatalogo(
+            local,
+            acucar,
+            ("pacote doce", "Doce", 1.10m, "1"),
+            ("outro pacote", "Outro", 2.25m, "3"));
+        var primeiro = previa.IniciarCadastro(previa.Linhas[0]);
+        Assert.NotNull(primeiro);
+        primeiro.Nome = "acucar";
+        primeiro.CategoriaId = 9;
+        previa.ConfirmarCadastro(primeiro, previa.Linhas[0].Preco, "Outra");
+        var segundo = previa.IniciarCadastro(previa.Linhas[1]);
+        Assert.NotNull(segundo);
+        segundo.Nome = "Açúcar";
+        segundo.CategoriaId = 9;
+        previa.ConfirmarCadastro(segundo, previa.Linhas[1].Preco, "Outra");
+
+        Assert.Equal(2, previa.Linhas.Count);
+        Assert.True(previa.PodeConfirmar);
+        Assert.All(previa.Linhas, linha =>
+        {
+            Assert.Equal(acucar.Id, linha.ProdutoCestaId);
+            Assert.Equal("Açúcar", linha.NomeGravado);
+            Assert.Contains(PreviaComprovante.EtiquetaSeraSomado, linha.Titulo, StringComparison.Ordinal);
+        });
+
+        var soma = previa.Linhas.Sum(linha => linha.Preco);
+        var compra = await _service.SalvarCompraAsync(Copiar(previa.ParaCompra()), _membroId);
+
+        await using var contexto = _factory.CreateDbContext();
+        Assert.Equal("Açúcar", Assert.Single(await contexto.ProdutosCesta.ToListAsync()).Nome);
+        Assert.Equal(soma, Assert.Single(compra.Itens).Preco);
+        Assert.Equal(soma, compra.Transacao!.Valor);
+        Assert.Equal(3.35m, soma);
+    }
+
+    [Fact]
+    public void NomeDeProdutoRepetido_SoReconheceOIndiceDoNome()
+    {
+        var nome = new DbUpdateException("falha", new Exception("UNIQUE constraint failed: ProdutosCesta.Nome"));
+        var outro = new DbUpdateException("falha", new Exception("UNIQUE constraint failed: ItensCompraCesta.CompraCestaId"));
+
+        Assert.True(CestaCadastroService.NomeDeProdutoRepetido(nome));
+        Assert.False(CestaCadastroService.NomeDeProdutoRepetido(outro));
+    }
+
+    [Fact]
+    public async Task DbUpdateException_ForaDoNome_MensagemGenericaENaoGrava()
+    {
+        using var fabrica = new FabricaComFalhaAoGravar("Biscoito");
+        var cestas = new CestaRepository(fabrica);
+        var service = new CestaCadastroService(cestas);
+        var membros = new MembroFamiliaRepository(fabrica);
+        var membro = new MembroFamilia { Nome = "Usuário" };
+        await membros.AddAsync(membro);
+        int alimentacaoId;
+        await using (var contexto = fabrica.CreateDbContext())
+        {
+            var alimentacao = new Categoria { Nome = "Alimentação", Icone = "🛒", CorHex = "#B2CFE6" };
+            contexto.Categorias.Add(alimentacao);
+            await contexto.SaveChangesAsync();
+            alimentacaoId = alimentacao.Id;
+        }
+
+        var local = await service.SalvarLocalAsync(new LocalCompraFormModel { Nome = "Mercado" });
+        await service.SalvarCompraAsync(ModeloNovo(local.Id, alimentacaoId, "arroz", "Arroz", 4m), membro.Id);
+
+        var erro = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.SalvarCompraAsync(ModeloNovo(local.Id, alimentacaoId, "biscoito", "Biscoito", 3m), membro.Id));
+
+        Assert.Equal(CestaCadastroService.MensagemFalhaAoGravar, erro.Message);
+        Assert.DoesNotContain("UNIQUE", erro.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("Sqlite", erro.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProdutosCesta", erro.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(CestaCadastroService.MensagemNomeProdutoRepetido, erro.Message, StringComparison.Ordinal);
+
+        await using var depois = fabrica.CreateDbContext();
+        Assert.Equal("Arroz", Assert.Single(await depois.ProdutosCesta.ToListAsync()).Nome);
+        Assert.Single(await depois.ComprasCesta.ToListAsync());
     }
 
     [Fact]
@@ -318,6 +450,32 @@ public class ProdutoNovoNaCompraTests : IDisposable
     }
 
     public void Dispose() => _factory.Dispose();
+
+    private static CompraCestaFormModel Copiar(CompraCestaFormModel modelo) => new()
+    {
+        LocalCompraId = modelo.LocalCompraId,
+        Data = modelo.Data,
+        ProdutosNovos = modelo.ProdutosNovos,
+        Itens = CompraCestaItens.CopiarItens(modelo)
+    };
+
+    private static PreviaComprovante PreviaNoCatalogo(
+        LocalCompra local,
+        ProdutoCesta produto,
+        params (string Descricao, string NomeLido, decimal Preco, string Quantidade)[] linhas) =>
+        PreviaComprovante.Criar(
+            NormalizadorComprovante.Normalizar(
+                new ComprovanteLido(
+                    local.Nome,
+                    new DateOnly(2026, 10, 18),
+                    null,
+                    true,
+                    linhas.Select(linha => new ItemComprovanteLido(
+                        linha.Descricao, linha.NomeLido, true, linha.Preco, linha.Quantidade, "un", null, null)).ToList()),
+                [produto]),
+            [local],
+            [produto],
+            new DateTime(2026, 10, 1));
 
     private static PreviaComprovante PreviaDuasLinhas(
         LocalCompra local,
@@ -419,3 +577,58 @@ file sealed class FabricaComColisaoNoNome : IDbContextFactory<AppDbContext>, IDi
         }
     }
 }
+
+/// <summary>Uma falha de banco que não é o índice do nome, no meio da transação.</summary>
+file sealed class FabricaComFalhaAoGravar : IDbContextFactory<AppDbContext>, IDisposable
+{
+    private readonly SqliteConnection _conexao;
+    private readonly DbContextOptions<AppDbContext> _opcoes;
+
+    public FabricaComFalhaAoGravar(string nome)
+    {
+        _conexao = new SqliteConnection("DataSource=:memory:");
+        _conexao.Open();
+        _opcoes = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite(_conexao)
+            .AddInterceptors(new Falha(nome))
+            .Options;
+
+        using var contexto = new AppDbContext(_opcoes);
+        contexto.Database.EnsureCreated();
+    }
+
+    public AppDbContext CreateDbContext() => new(_opcoes);
+
+    public Task<AppDbContext> CreateDbContextAsync(CancellationToken cancellationToken = default)
+        => Task.FromResult(CreateDbContext());
+
+    public void Dispose() => _conexao.Dispose();
+
+    private sealed class Falha : SaveChangesInterceptor
+    {
+        private readonly string _nome;
+
+        public Falha(string nome) => _nome = nome;
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            var contexto = eventData.Context;
+            var entrada = contexto?.ChangeTracker.Entries<ProdutoCesta>()
+                .FirstOrDefault(item => item.State == EntityState.Added && item.Entity.Nome == _nome);
+            if (contexto is not null && entrada is not null)
+            {
+                contexto.Database.ExecuteSqlInterpolated(
+                    $"INSERT INTO ProdutosCesta (Nome, CategoriaId, Ativo, CriadoEm) VALUES ({entrada.Entity.Nome}, {entrada.Entity.CategoriaId}, {true}, {DateTime.UtcNow})");
+                throw new DbUpdateException(
+                    "Falha ao gravar.",
+                    new InvalidOperationException("UNIQUE constraint failed: ItensCompraCesta.CompraCestaId"));
+            }
+
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
+    }
+}
+

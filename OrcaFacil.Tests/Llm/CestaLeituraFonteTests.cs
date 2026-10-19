@@ -129,18 +129,48 @@ public class CestaLeituraFonteTests
         var pagina = File.ReadAllText(Path.Combine(
             EncontrarRaiz(), "OrcaFacil", "Components", "Pages", "Cesta", "CestaPage.razor"));
         var metodo = ExtrairBloco(pagina, "Task<bool> SalvarCompraAsync(");
-        var indice = metodo.IndexOf("catch (DbUpdateException)", StringComparison.Ordinal);
-        Assert.True(indice >= 0);
-        var bloco = ExtrairChaves(metodo, metodo.IndexOf('{', indice));
-        Assert.Contains("MensagemNomeProdutoRepetido", bloco, StringComparison.Ordinal);
+        var nome = metodo.IndexOf("when (CestaCadastroService.NomeDeProdutoRepetido(", StringComparison.Ordinal);
+        Assert.True(nome >= 0);
+        var blocoNome = ExtrairChaves(metodo, metodo.IndexOf('{', nome));
+        Assert.Contains("MensagemNomeProdutoRepetido", blocoNome, StringComparison.Ordinal);
+        Assert.DoesNotContain("MensagemFalhaAoGravar", blocoNome, StringComparison.Ordinal);
+        Assert.DoesNotContain("ex.Message", blocoNome, StringComparison.Ordinal);
+        Assert.DoesNotContain("StackTrace", blocoNome, StringComparison.Ordinal);
+        Assert.DoesNotContain("ToString()", blocoNome, StringComparison.Ordinal);
+
+        var generico = metodo.IndexOf("catch (DbUpdateException)", nome + blocoNome.Length, StringComparison.Ordinal);
+        Assert.True(generico > nome);
+        var blocoGenerico = ExtrairChaves(metodo, metodo.IndexOf('{', generico));
+        Assert.Contains("MensagemFalhaAoGravar", blocoGenerico, StringComparison.Ordinal);
+        Assert.DoesNotContain("MensagemNomeProdutoRepetido", blocoGenerico, StringComparison.Ordinal);
+        Assert.DoesNotContain("ex.Message", blocoGenerico, StringComparison.Ordinal);
+        Assert.DoesNotContain("StackTrace", blocoGenerico, StringComparison.Ordinal);
+        Assert.DoesNotContain("ToString()", blocoGenerico, StringComparison.Ordinal);
+
         var servico = File.ReadAllText(Path.Combine(EncontrarRaiz(), "OrcaFacil.Core", "Services", "CestaCadastroService.cs"));
         Assert.Contains(
             "public const string MensagemNomeProdutoRepetido = \"Já existe um produto com esse nome.\";",
             servico,
             StringComparison.Ordinal);
-        Assert.DoesNotContain("ex.Message", bloco, StringComparison.Ordinal);
-        Assert.DoesNotContain("StackTrace", bloco, StringComparison.Ordinal);
-        Assert.DoesNotContain("ToString()", bloco, StringComparison.Ordinal);
+        Assert.Contains(
+            "public const string MensagemFalhaAoGravar = \"Não foi possível gravar a compra.\";",
+            servico,
+            StringComparison.Ordinal);
+        Assert.Contains("when (NomeDeProdutoRepetido(ex))", servico, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DialogoDaCompra_CopiaPelaFuncaoPuraNosDoisPontos()
+    {
+        var dialog = File.ReadAllText(Path.Combine(
+            EncontrarRaiz(), "OrcaFacil", "Components", "Pages", "Cesta", "CompraCestaDialog.razor"));
+        var abertura = ExtrairBloco(dialog, "Task OnInitializedAsync()");
+        var salvar = ExtrairBloco(dialog, "void Salvar()");
+
+        Assert.Contains("CompraCestaItens.CopiarItens(", abertura, StringComparison.Ordinal);
+        Assert.Contains("CompraCestaItens.CopiarItens(", salvar, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProdutoCestaId = item.ProdutoCestaId", abertura, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProdutoCestaId = linha.ProdutoCestaId", salvar, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -173,8 +203,14 @@ public class CestaLeituraFonteTests
         var sub = ExtrairRegra(tema, ".of-appbar-sub");
         var categoria = ExtrairRegra(lista, ".of-lista-sub");
 
+        var titulo = ExtrairRegra(lista, ".of-lista-titulo");
         Assert.Contains("color: var(--of-text-secondary);", sub, StringComparison.Ordinal);
         Assert.Contains("color: var(--of-text-secondary);", categoria, StringComparison.Ordinal);
+        Assert.Contains("color: var(--of-text);", titulo, StringComparison.Ordinal);
+        Assert.True(Razao("#1E2A33", "#ffffff") >= 4.5);
+        Assert.True(Razao("#1E2A33", "#EFF3F7") >= 4.5);
+        Assert.True(Razao("#E8EAF0", "#1B1F27") >= 4.5);
+        Assert.True(Razao("#E8EAF0", "#12151B") >= 4.5);
         Assert.Contains("color: #9B2C3A;", sheet, StringComparison.Ordinal);
         Assert.Contains(".of-lista-item-erro", lista, StringComparison.Ordinal);
         Assert.Contains("#9B2C3A", lista, StringComparison.Ordinal);

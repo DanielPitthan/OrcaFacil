@@ -737,9 +737,14 @@
             Snackbar.Add(ex.Message, Severity.Warning);
             return false;
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex) when (CestaCadastroService.NomeDeProdutoRepetido(ex))
         {
             Snackbar.Add(CestaCadastroService.MensagemNomeProdutoRepetido, Severity.Warning);
+            return false;
+        }
+        catch (DbUpdateException)
+        {
+            Snackbar.Add(CestaCadastroService.MensagemFalhaAoGravar, Severity.Warning);
             return false;
         }
     }

@@ -120,8 +120,21 @@ public static class CompraCestaEditor
         IList<ItemCompraCestaFormModel> itens,
         ItemCompraCestaFormModel atual,
         int produtoId,
-        decimal preco)
+        decimal preco,
+        string? nomePendente = null)
     {
+        if (!string.IsNullOrEmpty(atual.ProdutoNovoChave)
+            && (produtoId <= 0 || produtoId == atual.ProdutoCestaId))
+        {
+            if (preco <= 0)
+                throw new InvalidOperationException("Informe o preço do item.");
+
+            atual.Preco = preco;
+            if (!string.IsNullOrWhiteSpace(nomePendente))
+                atual.NomePendente = nomePendente.Trim();
+            return;
+        }
+
         var erro = ValidarItem(produtoId, preco);
         if (erro is not null)
             throw new InvalidOperationException(erro);

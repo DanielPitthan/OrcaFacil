@@ -19,12 +19,12 @@ public sealed class PreviaComprovante
 
     public const string EtiquetaNovoSeraCriado = "novo, será criado ao confirmar";
 
+    public const string EtiquetaSeraSomado = "será somado a outro item igual";
+
     public const string MensagemSemProdutoOuCategoria =
         "Classifique os itens sem produto ou categoria antes de confirmar.";
 
     public const string MensagemPreco = "O preço precisa ser maior que zero.";
-
-    public const string MensagemProdutoRepetido = "Cada produto só pode aparecer uma vez na compra.";
 
     public const string MensagemSemItem = "Inclua ao menos um item.";
 
@@ -56,6 +56,7 @@ public sealed class PreviaComprovante
             linha,
             linha.ProdutoCestaId is int id && categorias.TryGetValue(id, out var nome) ? nome : null)).ToList();
         RecalcularSoma();
+        AtualizarSomas();
     }
 
     public string? Loja { get; }
@@ -112,13 +113,6 @@ public sealed class PreviaComprovante
             if (SomaExcedida || _linhas.Any(linha => linha.SomaExcedida))
                 return NormalizadorComprovante.MotivoSomaExcedida;
 
-            // O produto novo pode repetir a linha: cada uma guarda o próprio preço.
-            // Só o produto já cadastrado continua único na prévia.
-            if (_linhas.Where(linha => linha.ProdutoCestaId is > 0 && !linha.NovoSeraCriado)
-                .GroupBy(linha => linha.ProdutoCestaId)
-                .Any(grupo => grupo.Count() > 1))
-                return MensagemProdutoRepetido;
-
             return null;
         }
     }
@@ -160,6 +154,7 @@ public sealed class PreviaComprovante
 
         _linhas.Remove(linha);
         RecalcularSoma();
+        AtualizarSomas();
     }
 
     public void AlterarPreco(LinhaPreviaComprovante linha, decimal preco)
@@ -183,6 +178,7 @@ public sealed class PreviaComprovante
             _cadastroLinhaId = null;
 
         AplicarProduto(linha, produto);
+        AtualizarSomas();
     }
 
     /// <summary>
@@ -241,6 +237,7 @@ public sealed class PreviaComprovante
         }
 
         _cadastroLinhaId = null;
+        AtualizarSomas();
     }
 
     /// <summary>
@@ -268,6 +265,8 @@ public sealed class PreviaComprovante
 
             linha.PodeDesfazerNovo = true;
         }
+
+        AtualizarSomas();
     }
 
     /// <summary>A linha volta a "novo produto", sem produto pendente.</summary>
@@ -299,6 +298,8 @@ public sealed class PreviaComprovante
 
         if (chave is not null && _linhas.All(item => item.ProdutoNovoChave != chave))
             _pendentes.RemoveAll(produto => produto.Chave == chave);
+
+        AtualizarSomas();
     }
 
     public CompraCestaFormModel ParaCompra()
@@ -457,6 +458,32 @@ public sealed class PreviaComprovante
             throw new InvalidOperationException("A linha não está na prévia.");
     }
 
+    private void AtualizarSomas()
+    {
+        static string Chave(LinhaPreviaComprovante linha)
+        {
+            if (!string.IsNullOrEmpty(linha.ProdutoNovoChave))
+                return "n:" + linha.ProdutoNovoChave;
+
+            if (linha.ProdutoCestaId is > 0)
+                return "p:" + linha.ProdutoCestaId.Value;
+
+            return "u:" + linha.Id;
+        }
+
+        foreach (var linha in _linhas)
+            linha.SeraSomado = false;
+
+        foreach (var grupo in _linhas.GroupBy(Chave))
+        {
+            if (grupo.Key.StartsWith("u:", StringComparison.Ordinal) || grupo.Count() < 2)
+                continue;
+
+            foreach (var linha in grupo)
+                linha.SeraSomado = true;
+        }
+    }
+
     private void RecalcularSoma()
     {
         decimal soma = 0;
@@ -530,6 +557,8 @@ public sealed class LinhaPreviaComprovante
 
     public bool PodeDesfazerNovo { get; set; }
 
+    public bool SeraSomado { get; set; }
+
     public string? ProdutoNovoChave { get; set; }
 
     public bool ProdutoInativo { get; set; }
@@ -585,6 +614,8 @@ public sealed class LinhaPreviaComprovante
         }
     }
 
+    private string? AvisoSoma => SeraSomado ? PreviaComprovante.EtiquetaSeraSomado : null;
+
     public string Titulo
     {
         get
@@ -593,18 +624,18 @@ public sealed class LinhaPreviaComprovante
                 return Rotulo;
 
             if (NovoSeraCriado)
-                return Juntar(Nome, PreviaComprovante.EtiquetaNovoSeraCriado, DescricaoLida);
+                return Juntar(Nome, PreviaComprovante.EtiquetaNovoSeraCriado, AvisoSoma, DescricaoLida);
 
             if (CasadoPelaDescricao)
-                return Juntar(Nome, PreviaComprovante.EtiquetaCasadoPelaDescricao, DescricaoLida);
+                return Juntar(Nome, PreviaComprovante.EtiquetaCasadoPelaDescricao, AvisoSoma, DescricaoLida);
 
             if (Ambiguo)
-                return Juntar(Nome, PreviaComprovante.EtiquetaAmbiguo, DescricaoLida);
+                return Juntar(Nome, PreviaComprovante.EtiquetaAmbiguo, AvisoSoma, DescricaoLida);
 
             if (NomeNovo)
-                return Juntar(Nome, PreviaComprovante.EtiquetaNovoProduto, DescricaoLida);
+                return Juntar(Nome, PreviaComprovante.EtiquetaNovoProduto, AvisoSoma, DescricaoLida);
 
-            return Nome;
+            return Juntar(Nome, AvisoSoma);
         }
     }
 
