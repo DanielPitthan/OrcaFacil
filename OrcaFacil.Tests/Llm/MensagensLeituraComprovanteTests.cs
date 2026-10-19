@@ -133,6 +133,38 @@ public class MensagensLeituraComprovanteTests
     }
 
     [Fact]
+    public void RespostaCortada_MantemODiagnosticoSanitizado()
+    {
+        const string token = "sk-ant-ficticio-alibaba-9f3c2a7b1e";
+        var diagnostico = DiagnosticoResposta.Criar(
+            200,
+            "https://dashscope.aliyuncs.com/v1/messages",
+            "deepseek-v4-flash",
+            nameof(TipoResultadoMensagem.RespostaInvalida),
+            ResultadoMensagem.TextoRespostaCortada,
+            ResultadoMensagem.TextoRespostaCortada,
+            "max_tokens",
+            null,
+            "corpo " + token,
+            false,
+            [token]);
+        var resultado = ResultadoMensagem.Falha(
+            TipoResultadoMensagem.RespostaInvalida,
+            ResultadoMensagem.TextoRespostaCortada,
+            diagnostico: diagnostico);
+
+        var exibicao = MensagensLeituraComprovante.De(resultado, null);
+
+        Assert.Equal(SituacaoLeituraComprovante.RespostaForaDoSchema, exibicao.Situacao);
+        Assert.Equal("resposta cortada", exibicao.Mensagem);
+        Assert.Same(diagnostico, exibicao.Diagnostico);
+        Assert.DoesNotContain(token, exibicao.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain(token, exibicao.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(token, exibicao.Diagnostico!.Texto, StringComparison.Ordinal);
+        Assert.True(exibicao.PodeTentarDeNovo);
+    }
+
+    [Fact]
     public void RespostaForaDoSchema_TemAFraseFixa()
     {
         var exibicao = Exibir(TipoResultadoMensagem.RespostaInvalida, ResultadoMensagem.TextoRespostaInvalida + " " + Chave);

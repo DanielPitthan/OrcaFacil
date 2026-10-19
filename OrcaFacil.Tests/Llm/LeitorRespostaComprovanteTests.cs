@@ -148,12 +148,202 @@ public class LeitorRespostaComprovanteTests
     [InlineData("""{"content":[{"type":"tool_use","name":"registrar_comprovante","input":{"legivel":"true","itens":[]}}]}""")]
     [InlineData("""{"content":[{"type":"tool_use","name":"registrar_comprovante","input":{"legivel":true}}]}""")]
     [InlineData("""{"content":[{"type":"tool_use","name":"registrar_comprovante","input":{"legivel":true,"itens":[{"preco":1}]}}]}""")]
-    [InlineData("""{"content":[{"type":"tool_use","name":"registrar_comprovante","input":{"legivel":true,"itens":[{"descricao_lida":"A","preco":"1"}]}}]}""")]
     [InlineData("""{"content":[{"type":"tool_use","name":"registrar_comprovante","input":{"legivel":true,"data":"18/10/2026","itens":[]}}]}""")]
     [InlineData("""{"content":[{"type":"tool_use","name":"registrar_comprovante","input":{"legivel":true,"itens":[{"descricao_lida":"A","preco":1,"confianca":"altissima"}]}}]}""")]
     [InlineData("""{"content":[{"type":"tool_use","name":"registrar_comprovante","input":{"legivel":true,"itens":[{"descricao_lida":"A","preco":1,"reconhecido":"false"}]}}]}""")]
     public void ForaDoSchema_DevolveNulo(string? json)
     {
+        var excecao = Record.Exception(() => LeitorRespostaComprovante.Interpretar(json));
+
+        Assert.Null(excecao);
         Assert.Null(LeitorRespostaComprovante.Ler(json));
+    }
+
+    [Fact]
+    public void PrecoComoTextoOuVirgula_EntraNoItem()
+    {
+        const string json = """
+            {
+              "content": [
+                {
+                  "type": "tool_use",
+                  "name": "registrar_comprovante",
+                  "input": {
+                    "legivel": true,
+                    "total_cupom": "1.234,56",
+                    "itens": [
+                      { "descricao_lida": "A", "preco": "12,90" },
+                      { "descricao_lida": "B", "preco": "3.50" }
+                    ]
+                  }
+                }
+              ]
+            }
+            """;
+
+        var comprovante = LeitorRespostaComprovante.Ler(json);
+
+        Assert.NotNull(comprovante);
+        Assert.Equal(1234.56m, comprovante.TotalCupom);
+        Assert.Equal(12.90m, comprovante.Itens[0].Preco);
+        Assert.Equal(3.50m, comprovante.Itens[1].Preco);
+    }
+
+    [Fact]
+    public void CamposNulosOpcionais_NaoInvalidamOComprovante()
+    {
+        const string json = """
+            {
+              "content": [
+                {
+                  "type": "tool_use",
+                  "name": "registrar_comprovante",
+                  "input": {
+                    "loja": null,
+                    "data": null,
+                    "total_cupom": null,
+                    "legivel": true,
+                    "itens": [
+                      {
+                        "descricao_lida": "LEITE",
+                        "produto": null,
+                        "reconhecido": null,
+                        "preco": 4,
+                        "quantidade": null,
+                        "unidade": null,
+                        "desconto": null,
+                        "confianca": null
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+            """;
+
+        var comprovante = LeitorRespostaComprovante.Ler(json);
+
+        Assert.NotNull(comprovante);
+        Assert.Null(comprovante.Loja);
+        Assert.Null(comprovante.Data);
+        Assert.Null(comprovante.TotalCupom);
+        var item = Assert.Single(comprovante.Itens);
+        Assert.Equal(string.Empty, item.Produto);
+        Assert.False(item.Reconhecido);
+        Assert.Null(item.Quantidade);
+        Assert.Null(item.Confianca);
+    }
+
+    [Fact]
+    public void CampoAusente_ExplicaOMotivoSemExcecao()
+    {
+        const string json = """
+            {"content":[{"type":"tool_use","name":"registrar_comprovante","input":{"legivel":true,"itens":[{"descricao_lida":"A"}]}}]}
+            """;
+
+        var leitura = LeitorRespostaComprovante.Interpretar(json);
+
+        Assert.Null(leitura.Comprovante);
+        Assert.Equal("campo ausente: itens[0].preco", leitura.Motivo);
+        Assert.Null(LeitorRespostaComprovante.Ler(json));
+    }
+
+    [Theory]
+    [InlineData("json")]
+    [InlineData("")]
+    public void CercaETextoEmVolta_LeemOJsonDoBlocoText(string rotulo)
+    {
+        var cerca = string.IsNullOrEmpty(rotulo) ? "```" : "```" + rotulo;
+        var json = """
+            {
+              "stop_reason": "end_turn",
+              "finish_reason": "stop",
+              "content": [
+                { "type": "thinking", "thinking": "{\"loja\":\"nao-usar\",\"legivel\":false,\"itens\":[]}" },
+                { "type": "text", "text": "vou ignorar este bloco" },
+                { "type": "text", "text": "Antes da leitura.\nROTURO\n{\"loja\":\"Mercado\",\"legivel\":true,\"total_cupom\":\"12,90\",\"itens\":[{\"descricao_lida\":\"ARROZ\",\"preco\":\"12,90\"}]}\n```\nDepois." }
+              ]
+            }
+            """.Replace("ROTURO", cerca, StringComparison.Ordinal);
+
+        var leitura = LeitorRespostaComprovante.Interpretar(json);
+
+        Assert.Null(leitura.Motivo);
+        Assert.Equal("end_turn", leitura.StopReason);
+        Assert.Equal("stop", leitura.FinishReason);
+        Assert.NotNull(leitura.Comprovante);
+        Assert.Equal("Mercado", leitura.Comprovante.Loja);
+        Assert.Equal(12.90m, leitura.Comprovante.TotalCupom);
+        Assert.Equal(12.90m, Assert.Single(leitura.Comprovante.Itens).Preco);
+    }
+
+    [Fact]
+    public void TextoAntesEDepoisDoJson_SemCerca_LeOObjeto()
+    {
+        const string json = """
+            {
+              "content": [
+                { "type": "thinking", "thinking": "ignorar {\"legivel\":false,\"itens\":[]}" },
+                { "type": "text", "text": "Aqui está o cupom:\n{\"loja\":null,\"legivel\":true,\"itens\":[{\"descricao_lida\":\"FEIJAO\",\"preco\":\"4,50\"}]}\nObrigado." }
+              ]
+            }
+            """;
+
+        var comprovante = LeitorRespostaComprovante.Ler(json);
+
+        Assert.NotNull(comprovante);
+        Assert.Null(comprovante.Loja);
+        Assert.True(comprovante.Legivel);
+        Assert.Equal(4.50m, Assert.Single(comprovante.Itens).Preco);
+    }
+
+    [Fact]
+    public void StopReasonMaxTokens_ERespostaCortada()
+    {
+        const string json = """
+            {
+              "stop_reason": "max_tokens",
+              "finish_reason": "length",
+              "content": [
+                {
+                  "type": "tool_use",
+                  "name": "registrar_comprovante",
+                  "input": { "legivel": true, "itens": [] }
+                }
+              ]
+            }
+            """;
+
+        var leitura = LeitorRespostaComprovante.Interpretar(json);
+
+        Assert.Null(leitura.Comprovante);
+        Assert.Null(LeitorRespostaComprovante.Ler(json));
+        Assert.Equal("resposta cortada", leitura.Motivo);
+        Assert.Equal(LeitorRespostaComprovante.MotivoCortada, leitura.Motivo);
+        Assert.Equal("max_tokens", leitura.StopReason);
+        Assert.Equal("length", leitura.FinishReason);
+    }
+
+    [Fact]
+    public void RespostaTruncada_NaoLancaExcecao()
+    {
+        const string json = """{"content":[{"type":"text","text":"{\"legivel\":true,\"itens\":[{\"descricao_lida\":\"ARROZ\""}]""";
+
+        var excecao = Record.Exception(() => LeitorRespostaComprovante.Interpretar(json));
+        var leitura = LeitorRespostaComprovante.Interpretar(json);
+
+        Assert.Null(excecao);
+        Assert.Null(leitura.Comprovante);
+        Assert.Equal("resposta truncada", leitura.Motivo);
+    }
+
+    [Fact]
+    public void JsonInvalido_TemMotivoClaro()
+    {
+        var leitura = LeitorRespostaComprovante.Interpretar("nao-json");
+
+        Assert.Null(leitura.Comprovante);
+        Assert.Equal("JSON inválido", leitura.Motivo);
+        Assert.Equal("InterpretacaoComprovante(falha)", leitura.ToString());
     }
 }

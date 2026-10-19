@@ -53,7 +53,8 @@ public sealed record ResultadoMensagem(
     TipoResultadoMensagem Tipo,
     string Mensagem,
     ComprovanteLido? Comprovante = null,
-    TimeSpan? RetryAfter = null)
+    TimeSpan? RetryAfter = null,
+    DiagnosticoResposta? Diagnostico = null)
 {
     public const string TextoNaoAutorizado = "A chave da API foi recusada.";
     public const string TextoSemPermissao =
@@ -67,6 +68,7 @@ public sealed record ResultadoMensagem(
     public const string TextoModeloNaoInformado = "Informe o modelo.";
     public const string TextoUrlInvalida = "A URL da API precisa ser https, sem usuário nem parâmetros.";
     public const string TextoRespostaInvalida = "A resposta veio fora do formato esperado.";
+    public const string TextoRespostaCortada = "resposta cortada";
     public const string TextoSemRede = "Não foi possível conectar ao provedor.";
     public const string TextoFalha = "O provedor não concluiu a leitura.";
     public const string TextoConexaoOk = "A conexão com o provedor foi estabelecida.";
@@ -84,8 +86,9 @@ public sealed record ResultadoMensagem(
     public static ResultadoMensagem Falha(
         TipoResultadoMensagem tipo,
         string mensagem,
-        TimeSpan? retryAfter = null) =>
-        new(tipo, mensagem, null, retryAfter);
+        TimeSpan? retryAfter = null,
+        DiagnosticoResposta? diagnostico = null) =>
+        new(tipo, mensagem, null, retryAfter, diagnostico);
 
     public override string ToString() => $"ResultadoMensagem({Tipo})";
 }

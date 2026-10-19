@@ -1,4 +1,7 @@
+@using Microsoft.Extensions.Logging
 @using OrcaFacil.Core.Llm
+@inject IDialogService DialogService
+@inject ILogger<LeituraComprovantePainel> Logger
 
 @if (Exibicao is not null)
 {
@@ -32,6 +35,13 @@
                         Tentar de novo
                     </MudButton>
                 }
+                @if (Exibicao.Diagnostico is not null)
+                {
+                    <MudButton Class="of-tentar" Variant="Variant.Outlined" Color="Color.Default"
+                               Disabled="Ocupado" OnClick="VerErro">
+                        Ver erro detalhado
+                    </MudButton>
+                }
             </div>
         }
     </section>
@@ -47,7 +57,37 @@
     [Parameter] public EventCallback TentarDeNovo { get; set; }
     [Parameter] public EventCallback AbrirInteligenciaArtificial { get; set; }
 
+    private string? _diagnosticoRegistrado;
+
     private Task Tentar() => TentarDeNovo.InvokeAsync();
 
     private Task AbrirInteligencia() => AbrirInteligenciaArtificial.InvokeAsync();
+
+    protected override void OnParametersSet()
+    {
+        var diagnostico = Exibicao?.Diagnostico;
+        if (diagnostico is null || diagnostico.Texto == _diagnosticoRegistrado)
+            return;
+
+        _diagnosticoRegistrado = diagnostico.Texto;
+        RegistroDiagnosticoLeitura.Registrar(
+            diagnostico,
+            texto => Logger.LogWarning("Diagnóstico da leitura do comprovante: {Diagnostico}", texto));
+    }
+
+    private async Task VerErro()
+    {
+        var texto = Exibicao?.Diagnostico?.Texto;
+        if (string.IsNullOrEmpty(texto))
+            return;
+
+        var parametros = new DialogParameters<DiagnosticoLeituraDialog>
+        {
+            { x => x.Texto, texto }
+        };
+        await DialogService.ShowAsync<DiagnosticoLeituraDialog>(
+            "Erro detalhado",
+            parametros,
+            new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small, FullWidth = true });
+    }
 }

@@ -1,0 +1,32 @@
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <p class="of-leitura-texto" style="white-space:pre-wrap;word-break:break-word;">@Texto</p>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Class="of-tentar" Variant="Variant.Outlined" Color="Color.Default" OnClick="Copiar">Copiar</MudButton>
+        <MudButton Class="of-tentar" Variant="Variant.Outlined" Color="Color.Default" OnClick="Fechar">Fechar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public string Texto { get; set; } = "";
+
+    private void Fechar() => MudDialog.Cancel();
+
+    private async Task Copiar()
+    {
+        try
+        {
+            await Clipboard.Default.SetTextAsync(Texto);
+            Snackbar.Add("Diagnóstico copiado.", Severity.Success);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Não foi possível copiar o diagnóstico.", Severity.Error);
+        }
+    }
+}

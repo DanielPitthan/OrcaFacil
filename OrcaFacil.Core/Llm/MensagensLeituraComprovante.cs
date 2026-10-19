@@ -20,7 +20,8 @@ public enum SituacaoLeituraComprovante
 }
 
 /// <summary>
-/// Frases da leitura na Cesta. Não carrega chave, corpo, imagem, URL nem valor em reais do provedor.
+/// Frases da leitura na Cesta. A frase não carrega chave, corpo, imagem nem valor em reais.
+/// O diagnóstico, quando existe, já vem sanitizado.
 /// </summary>
 public sealed record ExibicaoLeituraComprovante
 {
@@ -29,6 +30,7 @@ public sealed record ExibicaoLeituraComprovante
     public string? Resumo { get; init; }
     public bool LevaParaInteligenciaArtificial { get; init; }
     public bool PodeTentarDeNovo { get; init; }
+    public DiagnosticoResposta? Diagnostico { get; init; }
 
     public override string ToString() => $"ExibicaoLeitura({Situacao})";
 }
@@ -102,20 +104,35 @@ public static class MensagensLeituraComprovante
             case TipoResultadoMensagem.Ok:
                 return DeSucesso(normalizado);
             case TipoResultadoMensagem.NaoAutorizado:
-                return Erro(SituacaoLeituraComprovante.NaoAutorizado, ResultadoMensagem.TextoNaoAutorizado, false);
+                return Erro(SituacaoLeituraComprovante.NaoAutorizado, ResultadoMensagem.TextoNaoAutorizado, false, resultado.Diagnostico);
             case TipoResultadoMensagem.SemPermissao:
-                return Erro(SituacaoLeituraComprovante.SemPermissao, ResultadoMensagem.TextoSemPermissao, false);
+                return Erro(SituacaoLeituraComprovante.SemPermissao, ResultadoMensagem.TextoSemPermissao, false, resultado.Diagnostico);
             case TipoResultadoMensagem.Limite:
             case TipoResultadoMensagem.Sobrecarga:
-                return Erro(SituacaoLeituraComprovante.LimiteProvedor, ResultadoMensagem.TextoLimite, false);
+                return Erro(SituacaoLeituraComprovante.LimiteProvedor, ResultadoMensagem.TextoLimite, false, resultado.Diagnostico);
             case TipoResultadoMensagem.Timeout:
-                return Erro(SituacaoLeituraComprovante.TempoEsgotado, ResultadoMensagem.TextoTimeout, false);
+                return Erro(SituacaoLeituraComprovante.TempoEsgotado, ResultadoMensagem.TextoTimeout, false, resultado.Diagnostico);
             case TipoResultadoMensagem.SemRede:
-                return Erro(SituacaoLeituraComprovante.SemRede, ResultadoMensagem.TextoSemRede, false);
+                return Erro(SituacaoLeituraComprovante.SemRede, ResultadoMensagem.TextoSemRede, false, resultado.Diagnostico);
+            case TipoResultadoMensagem.RespostaInvalida
+                when resultado.Mensagem == ResultadoMensagem.TextoRespostaCortada:
+                return Erro(
+                    SituacaoLeituraComprovante.RespostaForaDoSchema,
+                    ResultadoMensagem.TextoRespostaCortada,
+                    false,
+                    resultado.Diagnostico);
             case TipoResultadoMensagem.RespostaInvalida:
-                return Erro(SituacaoLeituraComprovante.RespostaForaDoSchema, ResultadoMensagem.TextoRespostaInvalida, false);
+                return Erro(
+                    SituacaoLeituraComprovante.RespostaForaDoSchema,
+                    ResultadoMensagem.TextoRespostaInvalida,
+                    false,
+                    resultado.Diagnostico);
             case TipoResultadoMensagem.ModeloSemVisao:
-                return Erro(SituacaoLeituraComprovante.ModeloSemVisao, ResultadoMensagem.TextoModeloSemVisao, true);
+                return Erro(
+                    SituacaoLeituraComprovante.ModeloSemVisao,
+                    ResultadoMensagem.TextoModeloSemVisao,
+                    true,
+                    resultado.Diagnostico);
             case TipoResultadoMensagem.PedidoInvalido
                 when resultado.Mensagem is ResultadoMensagem.TextoUrlNaoInformada
                     or ResultadoMensagem.TextoUrlInvalida
@@ -123,9 +140,13 @@ public static class MensagensLeituraComprovante
                     or ResultadoMensagem.TextoChaveNaoInformada:
                 return SemConfiguracao();
             case TipoResultadoMensagem.PedidoInvalido:
-                return Erro(SituacaoLeituraComprovante.PedidoRecusado, ResultadoMensagem.TextoPedidoInvalido, false);
+                return Erro(
+                    SituacaoLeituraComprovante.PedidoRecusado,
+                    ResultadoMensagem.TextoPedidoInvalido,
+                    false,
+                    resultado.Diagnostico);
             default:
-                return Erro(SituacaoLeituraComprovante.Falha, ResultadoMensagem.TextoFalha, false);
+                return Erro(SituacaoLeituraComprovante.Falha, ResultadoMensagem.TextoFalha, false, resultado.Diagnostico);
         }
     }
 
@@ -169,12 +190,14 @@ public static class MensagensLeituraComprovante
     private static ExibicaoLeituraComprovante Erro(
         SituacaoLeituraComprovante situacao,
         string mensagem,
-        bool levaParaInteligencia) =>
+        bool levaParaInteligencia,
+        DiagnosticoResposta? diagnostico = null) =>
         new()
         {
             Situacao = situacao,
             Mensagem = mensagem,
             LevaParaInteligenciaArtificial = levaParaInteligencia,
-            PodeTentarDeNovo = true
+            PodeTentarDeNovo = true,
+            Diagnostico = diagnostico
         };
 }

@@ -317,6 +317,94 @@ public class ClienteMensagensTests
     }
 
     [Fact]
+    public async Task TextoComCerca_NaoEFalsoNegativo()
+    {
+        const string corpo = """
+            {
+              "stop_reason": "end_turn",
+              "content": [
+                { "type": "thinking", "thinking": "rascunho" },
+                { "type": "text", "text": "Leitura:\n```json\n{\"loja\":\"Extra\",\"legivel\":true,\"total_cupom\":\"12,90\",\"itens\":[{\"descricao_lida\":\"ARROZ\",\"preco\":\"12,90\"}]}\n```" }
+              ]
+            }
+            """;
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, corpo));
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.LerComprovanteAsync(Base, Chave, "deepseek-v4-flash", Midia, Imagem);
+
+        Assert.True(resultado.Sucesso);
+        Assert.Null(resultado.Diagnostico);
+        Assert.Equal("Extra", resultado.Comprovante!.Loja);
+        Assert.Equal(12.90m, Assert.Single(resultado.Comprovante.Itens).Preco);
+    }
+
+    [Fact]
+    public async Task StopReasonMaxTokens_ViraRespostaCortada()
+    {
+        const string corpo = """
+            {"stop_reason":"max_tokens","content":[{"type":"text","text":"{\"legivel\":true"}]}
+            """;
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, corpo));
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.LerComprovanteAsync(Base, Chave, "deepseek-v4-flash", Midia, Imagem);
+
+        Assert.Equal(TipoResultadoMensagem.RespostaInvalida, resultado.Tipo);
+        Assert.Equal(ResultadoMensagem.TextoRespostaCortada, resultado.Mensagem);
+        Assert.Null(resultado.Comprovante);
+        Assert.NotNull(resultado.Diagnostico);
+        Assert.Contains("resposta cortada", resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains("stop_reason: max_tokens", resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Equal("https://api.anthropic.com", resultado.Diagnostico.Origem);
+        Assert.DoesNotContain(Chave, resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("/v1/messages", resultado.Diagnostico.Texto, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Diagnostico_NaoLevaTokenImagemNemCabecalhoNoTextoNemNoLog()
+    {
+        const string token = "sk-ant-ficticio-alibaba-9f3c2a7b1e";
+        var base64 = new string('B', 240);
+        var corpo = "falha " + token + "\nAuthorization: Bearer " + token + "\nx-api-key: " + token
+            + "\ndata:image/jpeg;base64," + base64 + "\n" + Imagem;
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, corpo));
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.LerComprovanteAsync(
+            "https://dashscope.aliyuncs.com/apps/anthropic",
+            token,
+            "deepseek-v4-flash",
+            Midia,
+            Imagem);
+
+        Assert.Equal(1, captura.Chamadas);
+        Assert.Equal(TipoResultadoMensagem.RespostaInvalida, resultado.Tipo);
+        Assert.Equal(ResultadoMensagem.TextoRespostaInvalida, resultado.Mensagem);
+        Assert.NotNull(resultado.Diagnostico);
+        Assert.Equal("https://dashscope.aliyuncs.com", resultado.Diagnostico.Origem);
+        Assert.Equal("deepseek-v4-flash", resultado.Diagnostico.Modelo);
+        Assert.Contains("JSON inválido", resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(token, resultado.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain(token, resultado.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(token, resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(token, resultado.Diagnostico.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(Imagem, resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(base64, resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("/apps/", resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("x-api-key", resultado.Diagnostico.Texto, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Authorization", resultado.Diagnostico.Texto, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("data:image", resultado.Diagnostico.Texto, StringComparison.OrdinalIgnoreCase);
+
+        var log = new StringBuilder();
+        RegistroDiagnosticoLeitura.Registrar(resultado.Diagnostico, texto => log.Append(texto));
+        Assert.Equal(resultado.Diagnostico.Texto, log.ToString());
+        Assert.DoesNotContain(token, log.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(Imagem, log.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(base64, log.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task FalhaDeRede_NaoIncluiEnderecoNemChave()
     {
         var captura = new CapturaHandler(_ =>
