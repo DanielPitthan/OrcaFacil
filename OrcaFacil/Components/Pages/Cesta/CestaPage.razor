@@ -23,8 +23,9 @@
     </div>
 </div>
 
-<LeituraComprovantePainel Exibicao="_exibicao" Comprovante="_comprovante" Ocupado="_lendo"
-                           TentarDeNovo="TentarDeNovoAsync" AbrirInteligenciaArtificial="AbrirInteligencia" />
+<LeituraComprovantePainel Exibicao="_exibicao" Comprovante="_comprovante" Ocupado="@(_lendo || _previaAberta)"
+                           TentarDeNovo="TentarDeNovoAsync" AbrirInteligenciaArtificial="AbrirInteligencia"
+                           AbrirPrevia="AbrirPreviaAsync" />
 
 <MudTabs Elevation="1" Rounded="true" ApplyEffectsToContainer="true" Class="mb-2" @bind-ActivePanelIndex="_aba">
     <MudTabPanel Text="Compras" Icon="@Icons.Material.Filled.Receipt">
@@ -319,12 +320,14 @@
     private bool _carregando = true;
     private bool _importando;
     private bool _lendo;
+    private bool _previaAberta;
     private bool _descartada;
     private int _geracao;
     private int _aba;
     private byte[]? _jpeg;
     private ExibicaoLeituraComprovante? _exibicao;
     private ComprovanteNormalizado? _comprovante;
+    private PreviaComprovante? _previa;
     private DateTime _referencia = new(DateTime.Today.Year, DateTime.Today.Month, 1);
     private List<CompraCesta> _compras = new();
     private List<ProdutoCesta> _produtos = new();
@@ -339,6 +342,7 @@
         _descartada = true;
         _jpeg = null;
         _comprovante = null;
+        _previa = null;
         _pagina.Cancel();
         _pagina.Dispose();
     }
@@ -545,6 +549,7 @@
 
         _exibicao = MensagensLeituraComprovante.Carregando();
         _comprovante = null;
+        _previa = null;
         StateHasChanged();
         string? chave = null;
         try
@@ -579,6 +584,7 @@
             var exibicao = MensagensLeituraComprovante.De(resultado, normalizado);
             _exibicao = exibicao;
             _comprovante = exibicao.Situacao == SituacaoLeituraComprovante.Pronta ? normalizado : null;
+            _previa = null;
             if (_comprovante is not null)
                 _jpeg = null;
         }
@@ -598,6 +604,71 @@
             chave = null;
             if (atual == _geracao && !_descartada)
                 StateHasChanged();
+        }
+
+        if (_comprovante is not null && !Cancelada(atual))
+            await AbrirPreviaAsync();
+    }
+
+    private async Task AbrirPreviaAsync()
+    {
+        if (_comprovante is null || _descartada || _previaAberta)
+            return;
+
+        _previaAberta = true;
+        try
+        {
+            _previa ??= PreviaComprovante.Criar(_comprovante, _locais, _produtos, DataNoMes());
+            var parametros = new DialogParameters<PreviaComprovanteDialog>
+            {
+                { x => x.Previa, _previa },
+                { x => x.Produtos, _produtos },
+                { x => x.Categorias, _categorias },
+                { x => x.SalvarProduto, SalvarProdutoDaPreviaAsync }
+            };
+            var dialog = await DialogService.ShowAsync<PreviaComprovanteDialog>(
+                "Prévia do comprovante", parametros, OpcoesCompra());
+            var resultado = await dialog.Result;
+            if (_descartada)
+                return;
+
+            if (resultado is not { Canceled: false, Data: CompraCestaFormModel modelo })
+            {
+                if (_previa?.Linhas.Count == 0)
+                    _previa = null;
+                return;
+            }
+
+            await CarregarAsync();
+            if (await SalvarCompraAsync("Nova compra", modelo))
+            {
+                _previa = null;
+                _comprovante = null;
+                _exibicao = null;
+            }
+        }
+        finally
+        {
+            _previaAberta = false;
+            if (!_descartada)
+                StateHasChanged();
+        }
+    }
+
+    private async Task<ProdutoCesta?> SalvarProdutoDaPreviaAsync(ProdutoCestaFormModel modelo)
+    {
+        try
+        {
+            var salvo = await CestaService.SalvarProdutoAsync(modelo);
+            _produtos = await CestaService.ListarProdutosAsync();
+            var completo = _produtos.FirstOrDefault(p => p.Id == salvo.Id) ?? salvo;
+            Snackbar.Add("Produto cadastrado", Severity.Success);
+            return completo;
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+            return null;
         }
     }
 

@@ -22,6 +22,7 @@ public class NormalizadorComprovanteTests
         Assert.False(linha.NomeNovo);
         Assert.Equal(4, linha.ProdutoCestaId);
         Assert.Equal("Arroz", linha.Nome);
+        Assert.False(linha.CasadoPelaDescricao);
         Assert.Equal("ARROZ T1 5KG", linha.DescricaoLida);
         Assert.Equal("Arroz", linha.Rotulo);
         Assert.True(linha.ProntaParaGravar);
@@ -462,6 +463,7 @@ public class NormalizadorComprovanteTests
         Assert.Equal(1, unico.ProdutoCestaId);
         Assert.Equal("Arroz", unico.Nome);
         Assert.True(unico.Reconhecido);
+        Assert.True(unico.CasadoPelaDescricao);
         Assert.False(unico.NomeNovo);
         Assert.False(unico.Revisar);
         Assert.True(unico.ProntaParaGravar);
@@ -472,6 +474,7 @@ public class NormalizadorComprovanteTests
 
         Assert.True(naoUnico.NomeNovo);
         Assert.False(naoUnico.Ambiguo);
+        Assert.False(naoUnico.CasadoPelaDescricao);
         Assert.Null(naoUnico.ProdutoCestaId);
         Assert.Equal("Doce", naoUnico.Nome);
         Assert.Equal("Doce", naoUnico.NomeLido);

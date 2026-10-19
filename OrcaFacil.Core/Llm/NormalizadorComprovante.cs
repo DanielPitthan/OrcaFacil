@@ -150,8 +150,9 @@ public static class NormalizadorComprovante
 
             var pelaDescricao = catalogo.Buscar(descricao);
             if (pelaDescricao.Unico is ProdutoCesta unico)
-                return DoCatalogo(item, descricao, descricao, unico, preco, precoInvalido);
+                return DoCatalogo(item, descricao, descricao, unico, preco, precoInvalido, casadoPelaDescricao: true);
 
+            // Descrição ambígua ou sem candidato: nome novo, com o texto lido. Quem confirma é o usuário.
             return NomeNovo(item, descricao, produto, preco, precoInvalido);
         }
 
@@ -171,7 +172,8 @@ public static class NormalizadorComprovante
         string nomeLido,
         ProdutoCesta produto,
         decimal preco,
-        bool precoInvalido)
+        bool precoInvalido,
+        bool casadoPelaDescricao = false)
     {
         var avisos = new List<string>();
         if (precoInvalido)
@@ -192,6 +194,7 @@ public static class NormalizadorComprovante
             Reconhecido = true,
             Revisar = !item.Reconhecido,
             ProdutoInativo = !produto.Ativo,
+            CasadoPelaDescricao = casadoPelaDescricao,
             NomeExcedeLimite = nomeLido.Length > TamanhoMaximoNome,
             ProdutoCestaId = produto.Id,
             CategoriaId = semCategoria ? null : produto.CategoriaId,
@@ -317,7 +320,7 @@ public static class NormalizadorComprovante
         return texto.Trim();
     }
 
-    private static string Cortar(string nome)
+    public static string Cortar(string nome)
     {
         if (nome.Length <= TamanhoMaximoNome)
             return nome;
@@ -398,6 +401,7 @@ public static class NormalizadorComprovante
         public bool Ambiguo { get; init; }
         public bool ProdutoInativo { get; init; }
         public bool ItemAusente { get; init; }
+        public bool CasadoPelaDescricao { get; init; }
         public bool CategoriaFaltando { get; init; }
         public bool NomeExcedeLimite { get; set; }
         public int? ProdutoCestaId { get; init; }
@@ -421,6 +425,7 @@ public static class NormalizadorComprovante
             Ambiguo = Ambiguo,
             ProdutoInativo = ProdutoInativo,
             ItemAusente = ItemAusente,
+            CasadoPelaDescricao = CasadoPelaDescricao,
             CategoriaFaltando = CategoriaFaltando,
             NomeExcedeLimite = NomeExcedeLimite,
             ProdutoCestaId = ProdutoCestaId,
@@ -507,6 +512,12 @@ public sealed record LinhaComprovanteNormalizada
     public bool ProdutoInativo { get; init; }
 
     public bool ItemAusente { get; init; }
+
+    /// <summary>
+    /// A 2ª tentativa, pela descrição, achou um único produto.
+    /// O nome gravado continua sendo o do catálogo (<see cref="Nome"/>), nunca o <see cref="Rotulo"/>.
+    /// </summary>
+    public bool CasadoPelaDescricao { get; init; }
 
     public bool CategoriaFaltando { get; init; }
 

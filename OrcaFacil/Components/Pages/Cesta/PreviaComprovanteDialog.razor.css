@@ -1,0 +1,70 @@
+.of-previa-cabeca {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    min-height: var(--of-touch);
+}
+
+.of-previa {
+    min-width: 0;
+    color: var(--of-text);
+    background: var(--of-background);
+}
+
+.of-previa-miolo {
+    padding: var(--of-space-page) var(--of-space-page) 0;
+    min-width: 0;
+}
+
+.of-previa-bloco + .of-previa-bloco {
+    margin-top: var(--of-space-section);
+}
+
+.of-previa-apoio,
+.of-previa-contagem,
+.of-previa-erro {
+    margin: 0;
+    padding: 12px 16px 0;
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+.of-previa-apoio {
+    color: var(--of-text);
+}
+
+.of-previa-totais {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px 0;
+    color: var(--of-text);
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+.of-previa-totais span + span {
+    text-align: right;
+}
+
+.of-previa-opcoes {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.of-previa-opcao {
+    width: 100%;
+    min-height: var(--of-touch);
+    margin-top: 8px;
+    padding: 8px 12px;
+    border: 1px solid;
+    border-radius: var(--of-radius-control);
+    text-align: left;
+    font: inherit;
+}
+
+.of-cadastrar {
+    width: 100%;
+    min-height: var(--of-touch);
+}

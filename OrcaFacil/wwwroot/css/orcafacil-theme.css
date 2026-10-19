@@ -538,3 +538,61 @@ html.of-tema-escuro .mud-dialog .mud-button-root.mud-button-outlined.of-tentar {
 html.of-tema-escuro .of-leitura-erro {
     color: #F59A9A;
 }
+
+/* Prévia do comprovante. O erro da paleta (#D64242) fica em 4,45:1 no claro,
+   então o destaque usa o mesmo tom já medido da leitura. */
+html.of-tema-claro .of-lista-titulo.of-lista-titulo-erro,
+html.of-tema-claro .of-previa-erro {
+    color: #9B2C3A;
+}
+
+html.of-tema-escuro .of-lista-titulo.of-lista-titulo-erro,
+html.of-tema-escuro .of-previa-erro {
+    color: #F59A9A;
+}
+
+html.of-tema-claro .mud-dialog-actions.of-previa-acoes .mud-button-root.mud-button-filled.of-action-botao:not(:disabled),
+html.of-tema-claro .mud-dialog-actions.of-previa-acoes .mud-button-root.mud-button-filled.of-action-botao:not(:disabled):hover,
+html.of-tema-claro .mud-dialog-actions.of-previa-acoes .mud-button-root.mud-button-filled.of-action-botao:not(:disabled):focus-visible {
+    background-color: #1E2A33;
+    color: #ffffff;
+}
+
+html.of-tema-claro .mud-dialog-actions.of-previa-acoes .mud-button-root.mud-button-outlined.of-action-botao:not(:disabled),
+html.of-tema-claro .mud-dialog-actions.of-previa-acoes .mud-button-root.mud-button-outlined.of-action-botao:not(:disabled):hover,
+html.of-tema-claro .mud-dialog-actions.of-previa-acoes .mud-button-root.mud-button-outlined.of-action-botao:not(:disabled):focus-visible,
+html.of-tema-claro .mud-button-root.mud-button-outlined.of-cadastrar,
+html.of-tema-claro .mud-button-root.mud-button-outlined.of-cadastrar:hover,
+html.of-tema-claro .mud-button-root.mud-button-outlined.of-cadastrar:focus-visible,
+html.of-tema-claro button.of-previa-opcao {
+    color: #1E2A33;
+    border-color: #1E2A33;
+    background-color: #ffffff;
+}
+
+html.of-tema-claro button.of-previa-opcao.of-previa-opcao-ativa {
+    color: #ffffff;
+    background-color: #1E2A33;
+    border-color: #1E2A33;
+}
+
+html.of-tema-escuro .mud-dialog-actions.of-previa-acoes .mud-button-root.mud-button-filled.of-action-botao:not(:disabled),
+html.of-tema-escuro .mud-dialog-actions.of-previa-acoes .mud-button-root.mud-button-filled.of-action-botao:not(:disabled):hover,
+html.of-tema-escuro .mud-dialog-actions.of-previa-acoes .mud-button-root.mud-button-filled.of-action-botao:not(:disabled):focus-visible,
+html.of-tema-escuro button.of-previa-opcao.of-previa-opcao-ativa {
+    background-color: #E8EAF0;
+    color: #1B1F27;
+    border-color: #E8EAF0;
+}
+
+html.of-tema-escuro .mud-dialog-actions.of-previa-acoes .mud-button-root.mud-button-outlined.of-action-botao:not(:disabled),
+html.of-tema-escuro .mud-dialog-actions.of-previa-acoes .mud-button-root.mud-button-outlined.of-action-botao:not(:disabled):hover,
+html.of-tema-escuro .mud-dialog-actions.of-previa-acoes .mud-button-root.mud-button-outlined.of-action-botao:not(:disabled):focus-visible,
+html.of-tema-escuro .mud-button-root.mud-button-outlined.of-cadastrar,
+html.of-tema-escuro .mud-button-root.mud-button-outlined.of-cadastrar:hover,
+html.of-tema-escuro .mud-button-root.mud-button-outlined.of-cadastrar:focus-visible,
+html.of-tema-escuro button.of-previa-opcao {
+    color: #E8EAF0;
+    border-color: #E8EAF0;
+    background-color: #1B1F27;
+}

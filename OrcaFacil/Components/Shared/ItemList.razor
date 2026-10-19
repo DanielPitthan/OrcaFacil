@@ -15,10 +15,11 @@
         <ul class="of-lista-itens">
             @foreach (var item in Itens)
             {
-                <li @key="Chave(item)" class="of-lista-item">
+                var emErro = EmErro?.Invoke(item) == true;
+                <li @key="Chave(item)" class="of-lista-item@(emErro ? " of-lista-item-erro" : null)">
                     <span class="of-lista-icone" style="@Fundo(item)" aria-hidden="true">@Icone(item)</span>
                     <span class="of-lista-texto">
-                        <span class="of-lista-titulo">@Titulo(item)</span>
+                        <span class="of-lista-titulo@(emErro ? " of-lista-titulo-erro" : null)">@Titulo(item)</span>
                         <span class="of-lista-sub">@Subtitulo(item)</span>
                     </span>
                     <span class="of-lista-valor of-moeda @(EhCredito?.Invoke(item) == true ? "of-lista-valor-credito" : null)">@Valor(item)</span>
@@ -54,7 +55,7 @@
             }
         </div>
     }
-    else
+    else if (MostrarAdicionar)
     {
         <MudButton Variant="Variant.Text" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add"
                    Class="of-lista-adicionar" OnClick="OnAdicionar">
@@ -84,6 +85,12 @@
     [Parameter] public string TextoEstorno { get; set; } = "Estorno";
     [Parameter] public EventCallback OnImportar { get; set; }
     [Parameter] public string TextoImportar { get; set; } = "Importar CSV";
+
+    /// <summary>Opcional. Sem o delegate, a lista continua igual às telas atuais.</summary>
+    [Parameter] public Func<TItem, bool>? EmErro { get; set; }
+
+    /// <summary>Opcional. Falso esconde só o botão de incluir, quando não há estorno.</summary>
+    [Parameter] public bool MostrarAdicionar { get; set; } = true;
 
     private object Chave(TItem item) => ChaveItem?.Invoke(item) ?? (object)item!;
 
