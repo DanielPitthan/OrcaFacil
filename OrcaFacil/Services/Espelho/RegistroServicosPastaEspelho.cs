@@ -31,7 +31,7 @@ public static class RegistroServicosPastaEspelho
     public static void Registrar(IServiceCollection services)
     {
         services.AddSingleton<IMemoriaPastaEspelho, MemoriaPastaEspelho>();
-        services.AddSingleton<IProvedorSenhaEspelho, ProvedorSenhaEspelhoAindaNaoInformada>();
+        services.AddSingleton<IProvedorSenhaEspelho, ProvedorSenhaEspelhoMemoria>();
         services.AddSingleton(_ => VersaoSchemaAplicacao.DoApp);
         services.AddSingleton<IVersaoSchemaApp>(provedor => provedor.GetRequiredService<VersaoSchemaAplicacao>());
         services.AddSingleton<IAreaTemporariaEspelho, AreaTemporariaEspelhoMaui>();
