@@ -17,7 +17,7 @@ public class BotaoExportarPlanilhaTests
 
         Assert.Contains("Exportar para Excel", painel, StringComparison.Ordinal);
         Assert.Contains("Exportando…", painel, StringComparison.Ordinal);
-        Assert.Contains("Disabled=\"_exportando\"", painel, StringComparison.Ordinal);
+        Assert.Contains("Disabled=\"@Orquestrador.Exportando\"", painel, StringComparison.Ordinal);
         Assert.Contains("MudProgressLinear", painel, StringComparison.Ordinal);
         Assert.Contains("MudAlert", painel, StringComparison.Ordinal);
         Assert.Contains("role=\"note\"", painel, StringComparison.Ordinal);
@@ -27,7 +27,13 @@ public class BotaoExportarPlanilhaTests
         Assert.Contains("static readonly OrquestradorExportacaoPlanilha Orquestrador", painel, StringComparison.Ordinal);
         Assert.Contains("Orquestrador.Aviso", painel, StringComparison.Ordinal);
         Assert.Contains("Orquestrador.Exportando", painel, StringComparison.Ordinal);
-        Assert.Contains("static Task<ResultadoExportacao>? _pendente", painel, StringComparison.Ordinal);
+        Assert.Contains("new AcompanhamentoExportacaoPlanilha(Orquestrador, () => InvokeAsync(StateHasChanged))", painel, StringComparison.Ordinal);
+        Assert.Contains("_acompanhamento?.Dispose()", painel, StringComparison.Ordinal);
+        Assert.Contains("Orquestrador.FolhaAberta", painel, StringComparison.Ordinal);
+        Assert.Contains("catch (ObjectDisposedException)", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("private bool _exportando", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("private string? _aviso", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("private bool _folha", painel, StringComparison.Ordinal);
         Assert.True(nota >= 0 && codigo > nota, "A nota precisa aparecer na tela, antes do código.");
         Assert.Contains("FileSystem.CacheDirectory", painel, StringComparison.Ordinal);
         Assert.Contains("IDbContextFactory<AppDbContext>", painel, StringComparison.Ordinal);
@@ -53,7 +59,7 @@ public class BotaoExportarPlanilhaTests
     {
         var painel = File.ReadAllText(CaminhoPainel());
         var gravar = Trecho(painel, "private void Gravar", "private async Task<DesfechoCompartilhamentoPlanilha> AbrirFolha");
-        var exportar = Trecho(painel, "private async Task ExportarAsync", "private async Task Acompanhar");
+        var exportar = Trecho(painel, "private async Task ExportarAsync", "private async Task AvisarFalhaAsync");
         var abrir = Trecho(painel, "private async Task<DesfechoCompartilhamentoPlanilha> AbrirFolha", "private ConfiguracaoExportavel MontarConfiguracao");
 
         var flush = gravar.IndexOf("destino.Flush()", StringComparison.Ordinal);
@@ -78,10 +84,20 @@ public class BotaoExportarPlanilhaTests
     {
         var app = File.ReadAllText(Path.Combine(EncontrarRaiz(), "OrcaFacil", "App.xaml.cs"));
 
-        Assert.Contains("janela.Created +=", app, StringComparison.Ordinal);
-        Assert.Contains("janela.Resumed +=", app, StringComparison.Ordinal);
-        Assert.Contains("ArquivoExportacaoPlanilha.ApagarAnteriores(FileSystem.CacheDirectory)", app, StringComparison.Ordinal);
+        Assert.Contains("janela.Created += (_, _) => Varredura.Disparar(LerCache);", app, StringComparison.Ordinal);
+        Assert.Contains("janela.Activated += (_, _) => Varredura.Disparar(LerCache);", app, StringComparison.Ordinal);
+        Assert.DoesNotContain("Resumed", app, StringComparison.Ordinal);
+        Assert.DoesNotContain("await", app, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Wait(", app, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Result", app, StringComparison.Ordinal);
+        Assert.Contains("Log.Error", app, StringComparison.Ordinal);
         Assert.DoesNotContain("Directory.Delete", app, StringComparison.Ordinal);
+
+        var varredura = File.ReadAllText(Path.Combine(
+            EncontrarRaiz(), "OrcaFacil.Core", "Exportacao", "VarreduraPlanilhaExportada.cs"));
+        Assert.Contains("Task.Run", varredura, StringComparison.Ordinal);
+        Assert.Contains("ApagarVencidos", varredura, StringComparison.Ordinal);
+        Assert.Contains("Interlocked.CompareExchange", varredura, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -204,7 +220,10 @@ public class ArquivoExportacaoPlanilhaTests
         Assert.True(ArquivoExportacaoPlanilha.NomeEhDesteApp(nome));
         Assert.True(ArquivoExportacaoPlanilha.NomeEhDesteApp(
             ArquivoExportacaoPlanilha.Nome(Instante, aleatorio)));
-        Assert.False(ArquivoExportacaoPlanilha.NomeEhDesteApp("orcafacil-20261019-163007.xlsx"));
+        Assert.True(ArquivoExportacaoPlanilha.NomeEhDesteApp("orcafacil-20261019-163007.xlsx"));
+        Assert.False(ArquivoExportacaoPlanilha.NomeEhDesteApp("orcafacil-2026101a-163007.xlsx"));
+        Assert.False(ArquivoExportacaoPlanilha.NomeEhDesteApp("orcafacil-20261019-16300.xlsx"));
+        Assert.False(ArquivoExportacaoPlanilha.NomeEhDesteApp("orcafacil-20261019-1630077.xlsx"));
         Assert.False(ArquivoExportacaoPlanilha.NomeEhDesteApp("orcafacil-20261019-163007-AB12CD34.xlsx"));
         Assert.False(ArquivoExportacaoPlanilha.NomeEhDesteApp("orcafacil-20261019-163007-ab12cd3g.xlsx"));
         Assert.False(ArquivoExportacaoPlanilha.NomeEhDesteApp("orcafacil-20261019-163007.XLSX"));
@@ -254,6 +273,8 @@ public class ArquivoExportacaoPlanilhaTests
 
             var antigo = Path.Combine(cache, ArquivoExportacaoPlanilha.Nome(new DateTime(2026, 10, 18, 9, 0, 0), "11223344"));
             var semSufixo = Path.Combine(cache, "orcafacil-20261018-090000.xlsx");
+            var comLetra = Path.Combine(cache, "orcafacil-2026101a-090000.xlsx");
+            var tamanhoErrado = Path.Combine(cache, "orcafacil-20261019-09000.xlsx");
             var atual = ArquivoExportacaoPlanilha.Caminho(cache, Instante, Sufixo);
             var csv = Path.Combine(cache, "orcafacil-relatorio-20261019-120000.csv");
             var outroXlsx = Path.Combine(cache, "orcafacil-espelho.xlsx");
@@ -267,6 +288,8 @@ public class ArquivoExportacaoPlanilhaTests
 
             File.WriteAllText(antigo, "antigo");
             File.WriteAllText(semSufixo, "antigo-sem-sufixo");
+            File.WriteAllText(comLetra, "letra");
+            File.WriteAllText(tamanhoErrado, "tamanho");
             File.WriteAllText(atual, "atual");
             File.WriteAllText(csv, "csv");
             File.WriteAllText(outroXlsx, "outro");
@@ -278,10 +301,12 @@ public class ArquivoExportacaoPlanilhaTests
 
             var apagados = ArquivoExportacaoPlanilha.ApagarAnteriores(cache);
 
-            Assert.Equal(2, apagados);
+            Assert.Equal(3, apagados);
             Assert.False(File.Exists(antigo));
             Assert.False(File.Exists(atual));
-            Assert.Equal("antigo-sem-sufixo", File.ReadAllText(semSufixo));
+            Assert.False(File.Exists(semSufixo));
+            Assert.Equal("letra", File.ReadAllText(comLetra));
+            Assert.Equal("tamanho", File.ReadAllText(tamanhoErrado));
             Assert.Equal("csv", File.ReadAllText(csv));
             Assert.Equal("outro", File.ReadAllText(outroXlsx));
             Assert.Equal("MAIUSCULO", File.ReadAllText(maiusculo));
@@ -364,6 +389,72 @@ public class ArquivoExportacaoPlanilhaTests
         {
             raiz.Delete(recursive: true);
         }
+    }
+
+    [Fact]
+    public void MargemDeDezMinutos_DosDoisLados_ENomeAntigo()
+    {
+        var raiz = Directory.CreateTempSubdirectory("orca-planilha-margem-");
+        try
+        {
+            var cache = Path.Combine(raiz.FullName, "cache");
+            var fora = Path.Combine(raiz.FullName, "fora");
+            var espelho = Path.Combine(cache, "orcafacil-espelho");
+            Directory.CreateDirectory(cache);
+            Directory.CreateDirectory(fora);
+            Directory.CreateDirectory(espelho);
+
+            var agora = new DateTimeOffset(2026, 10, 19, 16, 30, 7, TimeSpan.Zero);
+            var fica = Path.Combine(cache, "orcafacil-20261019-163000-ab12cd34.xlsx");
+            var sai = Path.Combine(cache, "orcafacil-20261019-120000-11223344.xlsx");
+            var antigoFica = Path.Combine(cache, "orcafacil-20261019-162000.xlsx");
+            var antigoSai = Path.Combine(cache, "orcafacil-20261018-090000.xlsx");
+            var comLetra = Path.Combine(cache, "orcafacil-2026101a-090000.xlsx");
+            var tamanhoErrado = Path.Combine(cache, "orcafacil-20261019-09000.xlsx");
+            var csv = Path.Combine(cache, "orcafacil-relatorio-20261019-120000.csv");
+            var aninhado = Path.Combine(espelho, "orcafacil-20200101-000000.xlsx");
+            var alvoFora = Path.Combine(fora, "orcafacil-20200101-000000.xlsx");
+
+            Gravar(fica, agora, TimeSpan.FromMinutes(10) - TimeSpan.FromSeconds(1));
+            Gravar(sai, agora, TimeSpan.FromMinutes(10) + TimeSpan.FromSeconds(1));
+            Gravar(antigoFica, agora, TimeSpan.FromMinutes(10) - TimeSpan.FromSeconds(1));
+            Gravar(antigoSai, agora, TimeSpan.FromMinutes(10) + TimeSpan.FromSeconds(1));
+            Gravar(comLetra, agora, TimeSpan.FromHours(2));
+            Gravar(tamanhoErrado, agora, TimeSpan.FromHours(2));
+            Gravar(csv, agora, TimeSpan.FromHours(2));
+            Gravar(aninhado, agora, TimeSpan.FromHours(2));
+            Gravar(alvoFora, agora, TimeSpan.FromHours(2));
+
+            var apagados = ArquivoExportacaoPlanilha.ApagarVencidos(cache, agora);
+
+            Assert.Equal(2, apagados);
+            Assert.Equal("x", File.ReadAllText(fica));
+            Assert.False(File.Exists(sai));
+            Assert.Equal("x", File.ReadAllText(antigoFica));
+            Assert.False(File.Exists(antigoSai));
+            Assert.Equal("x", File.ReadAllText(comLetra));
+            Assert.Equal("x", File.ReadAllText(tamanhoErrado));
+            Assert.Equal("x", File.ReadAllText(csv));
+            Assert.Equal("x", File.ReadAllText(aninhado));
+            Assert.Equal("x", File.ReadAllText(alvoFora));
+
+            Assert.Equal(2, ArquivoExportacaoPlanilha.ApagarAnteriores(cache));
+            Assert.False(File.Exists(fica));
+            Assert.False(File.Exists(antigoFica));
+            Assert.Equal("x", File.ReadAllText(comLetra));
+            Assert.Equal("x", File.ReadAllText(tamanhoErrado));
+            Assert.Equal("x", File.ReadAllText(csv));
+        }
+        finally
+        {
+            raiz.Delete(recursive: true);
+        }
+    }
+
+    private static void Gravar(string caminho, DateTimeOffset agora, TimeSpan idade)
+    {
+        File.WriteAllText(caminho, "x");
+        File.SetLastWriteTimeUtc(caminho, (agora - idade).UtcDateTime);
     }
 }
 

@@ -2,11 +2,16 @@
 using Microsoft.Maui.Storage;
 using OrcaFacil.Core.Exportacao;
 using OrcaFacil.Services.Interfaces;
+using Serilog;
 
 namespace OrcaFacil;
 
 public partial class App : Application
 {
+	private static readonly VarreduraPlanilhaExportada Varredura = new(
+		TimeProvider.System,
+		static excecao => Log.Error(excecao, "Falha ao limpar as planilhas exportadas."));
+
 	public App()
 	{
 		InitializeComponent();
@@ -19,20 +24,10 @@ public partial class App : Application
 		services?.GetService<ITemaAppService>()?.AplicarPreferenciaSalva();
 
 		var janela = new Window(new MainPage()) { Title = "OrcaFacil" };
-		janela.Created += (_, _) => LimparPlanilhasExportadas();
-		janela.Resumed += (_, _) => LimparPlanilhasExportadas();
+		janela.Created += (_, _) => Varredura.Disparar(LerCache);
+		janela.Activated += (_, _) => Varredura.Disparar(LerCache);
 		return janela;
 	}
 
-	private static void LimparPlanilhasExportadas()
-	{
-		try
-		{
-			ArquivoExportacaoPlanilha.ApagarAnteriores(FileSystem.CacheDirectory);
-		}
-		catch (Exception)
-		{
-			// A abertura segue mesmo se o cache da planilha não puder ser limpo.
-		}
-	}
+	private static string? LerCache() => FileSystem.CacheDirectory;
 }

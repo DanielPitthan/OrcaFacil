@@ -3,16 +3,18 @@ using System.Globalization;
 namespace OrcaFacil.Core.Exportacao;
 
 /// <summary>
-/// Nome e limpeza do xlsx no cache do app. Só entra o padrão
-/// <c>orcafacil-AAAAMMDD-HHmmss-hhhhhhhh.xlsx</c> (8 hex minúsculos) no topo da pasta.
-/// Subpastas, CSV, espelho e qualquer outro arquivo ficam de fora.
-/// Um arquivo reservado pela gravação em andamento também fica.
+/// Nome e limpeza do xlsx no cache do app. Entram dois padrões no topo da pasta:
+/// <c>orcafacil-AAAAMMDD-HHmmss-hhhhhhhh.xlsx</c> (8 hex minúsculos) e o formato
+/// anterior <c>orcafacil-AAAAMMDD-HHmmss.xlsx</c>. Subpastas, CSV, espelho e
+/// qualquer outro arquivo ficam de fora. Um arquivo reservado pela gravação
+/// em andamento também fica.
 /// </summary>
 public static class ArquivoExportacaoPlanilha
 {
     public const string Prefixo = "orcafacil-";
     public const string Sufixo = ".xlsx";
     public const int TamanhoSufixo = 8;
+    public static readonly TimeSpan MargemRetencao = TimeSpan.FromMinutes(10);
 
     private static readonly object PortaReserva = new();
     private static readonly HashSet<string> Reservados = new(StringComparer.Ordinal);
@@ -58,6 +60,9 @@ public static class ArquivoExportacaoPlanilha
             return false;
 
         var meio = nome[Prefixo.Length..^Sufixo.Length];
+        if (meio.Length == 15)
+            return MeioAntigoValido(meio);
+
         if (meio.Length != 24 || meio[8] != '-' || meio[15] != '-')
             return false;
 
@@ -76,6 +81,22 @@ public static class ArquivoExportacaoPlanilha
             {
                 return false;
             }
+        }
+
+        return true;
+    }
+
+    private static bool MeioAntigoValido(string meio)
+    {
+        if (meio.Length != 15 || meio[8] != '-')
+            return false;
+
+        for (var i = 0; i < meio.Length; i++)
+        {
+            if (i == 8)
+                continue;
+            if (meio[i] is < '0' or > '9')
+                return false;
         }
 
         return true;
@@ -140,10 +161,20 @@ public static class ArquivoExportacaoPlanilha
     }
 
     /// <summary>
-    /// Apaga os xlsx anteriores deste app. Não desce para subpastas e não
-    /// aceita a raiz do volume.
+    /// Apaga os xlsx anteriores deste app, sem olhar a idade. É o caminho da
+    /// exportação seguinte. Não desce para subpastas e não aceita a raiz do volume.
     /// </summary>
     public static int ApagarAnteriores(string? diretorioCache)
+        => Apagar(diretorioCache, _ => true);
+
+    /// <summary>
+    /// Apaga só o que foi gravado há mais de <see cref="MargemRetencao"/>.
+    /// <paramref name="agoraUtc"/> vem do <see cref="TimeProvider"/>.
+    /// </summary>
+    public static int ApagarVencidos(string? diretorioCache, DateTimeOffset agoraUtc)
+        => Apagar(diretorioCache, caminho => Vencido(caminho, agoraUtc));
+
+    private static int Apagar(string? diretorioCache, Func<string, bool> incluir)
     {
         if (!TryNormalizarPasta(diretorioCache, out var raiz) || EhRaizDeVolume(raiz))
             return 0;
@@ -154,7 +185,7 @@ public static class ArquivoExportacaoPlanilha
         var apagados = 0;
         foreach (var caminho in Directory.EnumerateFiles(raiz))
         {
-            if (EstaReservado(caminho))
+            if (EstaReservado(caminho) || !incluir(caminho))
                 continue;
 
             if (ApagarSeForDesteApp(caminho, raiz))
@@ -162,6 +193,23 @@ public static class ArquivoExportacaoPlanilha
         }
 
         return apagados;
+    }
+
+    private static bool Vencido(string caminho, DateTimeOffset agoraUtc)
+    {
+        try
+        {
+            var escrito = File.GetLastWriteTimeUtc(caminho);
+            if (escrito == DateTime.MinValue)
+                return false;
+
+            var instante = new DateTimeOffset(DateTime.SpecifyKind(escrito, DateTimeKind.Utc));
+            return agoraUtc - instante > MargemRetencao;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            return false;
+        }
     }
 
     public static bool ApagarSeForDesteApp(string? caminho, string? diretorioCache)

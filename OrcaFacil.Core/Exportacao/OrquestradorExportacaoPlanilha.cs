@@ -3,8 +3,10 @@ namespace OrcaFacil.Core.Exportacao;
 /// <summary>
 /// Uma exportação por vez, fora da thread de quem chamou.
 /// A flag liga antes de qualquer espera e o try cobre a montagem da
-/// configuração e a leitura do cache. O arquivo só some no Resume,
-/// na abertura ou no começo da exportação seguinte.
+/// configuração e a leitura do cache. No fim, quem estiver inscrito
+/// vê o estado já atualizado. O arquivo some na abertura, no retorno
+/// ao primeiro plano (se tiver mais de dez minutos) ou no começo da
+/// exportação seguinte.
 /// </summary>
 public sealed class OrquestradorExportacaoPlanilha
 {
@@ -25,6 +27,8 @@ public sealed class OrquestradorExportacaoPlanilha
     public bool FolhaAberta { get; private set; }
 
     public string? Caminho { get; private set; }
+
+    public event Action? EstadoMudou;
 
     public async Task<ResultadoExportacao> ExportarAsync(
         Func<ConfiguracaoExportavel> montar,
@@ -74,6 +78,26 @@ public sealed class OrquestradorExportacaoPlanilha
         {
             _exportando = false;
             ArquivoExportacaoPlanilha.Liberar(reservado);
+            Publicar();
+        }
+    }
+
+    private void Publicar()
+    {
+        var aviso = EstadoMudou;
+        if (aviso is null)
+            return;
+
+        foreach (var item in aviso.GetInvocationList())
+        {
+            try
+            {
+                ((Action)item).Invoke();
+            }
+            catch (Exception)
+            {
+                // Um painel descartado não impede os outros de saber do fim.
+            }
         }
     }
 

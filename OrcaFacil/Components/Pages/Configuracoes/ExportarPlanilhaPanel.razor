@@ -11,71 +11,70 @@
     <MudText Typo="Typo.subtitle1" Class="mb-2">Planilha</MudText>
     <p id="aviso-planilha-clara" class="mb-3" role="note">O arquivo exportado não é criptografado e contém os dados financeiros em claro.</p>
 
-    @if (_exportando)
+    @if (Orquestrador.Exportando)
     {
         <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-3" aria-label="Exportando a planilha" />
     }
 
-    @if (!string.IsNullOrEmpty(_aviso))
+    @if (!string.IsNullOrEmpty(Orquestrador.Aviso))
     {
-        <MudAlert Severity="@(_folha ? Severity.Info : Severity.Error)" Dense="true" Class="mb-3">@_aviso</MudAlert>
+        <MudAlert Severity="@(Orquestrador.FolhaAberta ? Severity.Info : Severity.Error)" Dense="true" Class="mb-3">@Orquestrador.Aviso</MudAlert>
     }
 
     <MudButton Variant="Variant.Filled"
                Color="Color.Primary"
-               Disabled="_exportando"
+               Disabled="@Orquestrador.Exportando"
                aria-describedby="aviso-planilha-clara"
                OnClick="ExportarAsync">
-        @(_exportando ? "Exportando…" : "Exportar para Excel")
+        @(Orquestrador.Exportando ? "Exportando…" : "Exportar para Excel")
     </MudButton>
 </MudPaper>
 
 @code {
     private static readonly OrquestradorExportacaoPlanilha Orquestrador = new(TimeProvider.System);
-    private static Task<ResultadoExportacao>? _pendente;
-
-    private bool _exportando;
-    private bool _folha;
-    private bool _vivo = true;
-    private string? _aviso;
+    private AcompanhamentoExportacaoPlanilha? _acompanhamento;
 
     protected override void OnInitialized()
     {
-        _exportando = Orquestrador.Exportando;
-        _aviso = Orquestrador.Aviso;
-        _folha = Orquestrador.FolhaAberta;
-        if (_pendente is { IsCompleted: false })
-            _ = Acompanhar(_pendente);
+        _acompanhamento = new AcompanhamentoExportacaoPlanilha(Orquestrador, () => InvokeAsync(StateHasChanged));
     }
 
-    public void Dispose() => _vivo = false;
+    public void Dispose() => _acompanhamento?.Dispose();
 
     private async Task ExportarAsync()
     {
-        var tarefa = Orquestrador.ExportarAsync(
-            MontarConfiguracao,
-            () => FileSystem.CacheDirectory,
-            Gravar,
-            AbrirFolha);
-        if (tarefa.IsCompletedSuccessfully && !tarefa.Result.Executou)
-            return;
+        try
+        {
+            var tarefa = Orquestrador.ExportarAsync(
+                MontarConfiguracao,
+                () => FileSystem.CacheDirectory,
+                Gravar,
+                AbrirFolha);
+            if (tarefa.IsCompletedSuccessfully && !tarefa.Result.Executou)
+                return;
 
-        _pendente = tarefa;
-        _exportando = true;
-        _aviso = null;
-        _folha = false;
-        await Acompanhar(tarefa);
+            await tarefa;
+        }
+        catch (Exception ex)
+        {
+            await AvisarFalhaAsync(ex);
+        }
     }
 
-    private async Task Acompanhar(Task<ResultadoExportacao> tarefa)
+    private async Task AvisarFalhaAsync(Exception ex)
     {
-        var resultado = await tarefa;
-        if (!_vivo || !resultado.Executou)
-            return;
-
-        _exportando = Orquestrador.Exportando;
-        _aviso = resultado.Aviso;
-        _folha = resultado.FolhaAberta;
+        _acompanhamento?.RegistrarFalha(ex);
+        try
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (Exception falha)
+        {
+            _acompanhamento?.RegistrarFalha(falha);
+        }
     }
 
     private void Gravar(string caminho, ConfiguracaoExportavel configuracao)
