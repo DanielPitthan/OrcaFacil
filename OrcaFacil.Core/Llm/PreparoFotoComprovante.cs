@@ -23,6 +23,18 @@ public static class PreparoFotoComprovante
     /// <summary>Qualidade JPEG da redução. No Android vira compressão 85.</summary>
     public const float QualidadeJpeg = 0.85f;
 
+    /// <summary>
+    /// Teto do arquivo antes do decode. Trocar este número muda o corte.
+    /// Acima dele a foto não é lida por inteiro e a chamada não sai.
+    /// </summary>
+    public const int TetoBytesAntesDoDecode = 20 * 1024 * 1024;
+
+    /// <summary>Bytes lidos para o tipo, antes do restante do arquivo.</summary>
+    public const int TamanhoCabecalhoTipo = 32;
+
+    public static bool CabeAntesDoDecode(long bytes) =>
+        bytes >= 0 && bytes <= TetoBytesAntesDoDecode;
+
     public const string MediaTypeJpeg = "image/jpeg";
     public const string MediaTypePng = "image/png";
     public const string MediaTypeGif = "image/gif";

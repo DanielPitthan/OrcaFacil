@@ -278,6 +278,109 @@ public class LeitorRespostaComprovanteTests
     }
 
     [Fact]
+    public void ToolUse_TemPreferenciaSobreOTexto()
+    {
+        const string json = """
+            {
+              "content": [
+                {
+                  "type": "tool_use",
+                  "name": "registrar_comprovante",
+                  "input": {
+                    "loja": "Ferramenta",
+                    "legivel": true,
+                    "itens": [ { "descricao_lida": "A", "preco": 2 } ]
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": "{\"loja\":\"Texto\",\"legivel\":true,\"itens\":[{\"descricao_lida\":\"B\",\"preco\":9}]}"
+                }
+              ]
+            }
+            """;
+
+        var comprovante = LeitorRespostaComprovante.Ler(json);
+
+        Assert.NotNull(comprovante);
+        Assert.Equal("Ferramenta", comprovante.Loja);
+        Assert.Equal(2m, Assert.Single(comprovante.Itens).Preco);
+    }
+
+    [Fact]
+    public void SemToolUse_VenceOUltimoObjetoComItens()
+    {
+        const string json = """
+            {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Exemplo:\n{\"loja\":\"Exemplo\",\"legivel\":true,\"itens\":[{\"descricao_lida\":\"X\",\"preco\":1}]}\nCupom:\n{\"loja\":\"Mercado\",\"legivel\":true,\"itens\":[{\"descricao_lida\":\"ARROZ\",\"preco\":\"12,90\"}]}"
+                }
+              ]
+            }
+            """;
+
+        var comprovante = LeitorRespostaComprovante.Ler(json);
+
+        Assert.NotNull(comprovante);
+        Assert.Equal("Mercado", comprovante.Loja);
+        Assert.Equal(12.90m, Assert.Single(comprovante.Itens).Preco);
+    }
+
+    [Theory]
+    [InlineData("12,")]
+    [InlineData("12.")]
+    [InlineData("nao-e-preco")]
+    public void PrecoInvalido_NaoViraNumero(string preco)
+    {
+        var json = """
+            {
+              "content": [
+                {
+                  "type": "tool_use",
+                  "name": "registrar_comprovante",
+                  "input": {
+                    "legivel": true,
+                    "itens": [ { "descricao_lida": "A", "preco": "PRECO" } ]
+                  }
+                }
+              ]
+            }
+            """.Replace("PRECO", preco, StringComparison.Ordinal);
+
+        var leitura = LeitorRespostaComprovante.Interpretar(json);
+
+        Assert.Null(leitura.Comprovante);
+        Assert.Equal("campo inválido: itens[0].preco", leitura.Motivo);
+        Assert.Null(LeitorRespostaComprovante.Ler(json));
+    }
+
+    [Fact]
+    public void Cancelado_NaoInterpreta()
+    {
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        var excecao = Record.Exception(() => LeitorRespostaComprovante.Interpretar(
+            """{"legivel":true,"itens":[]}""",
+            cts.Token));
+
+        Assert.IsAssignableFrom<OperationCanceledException>(excecao);
+    }
+
+    [Fact]
+    public void ObjetoProfundoDemais_NaoEstoura()
+    {
+        var json = new string('{', 80);
+
+        var leitura = LeitorRespostaComprovante.Interpretar(json);
+
+        Assert.Null(leitura.Comprovante);
+        Assert.Equal("resposta truncada", leitura.Motivo);
+    }
+
+    [Fact]
     public void TextoAntesEDepoisDoJson_SemCerca_LeOObjeto()
     {
         const string json = """

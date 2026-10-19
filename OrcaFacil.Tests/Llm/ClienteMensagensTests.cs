@@ -450,6 +450,35 @@ public class ClienteMensagensTests
     }
 
     [Fact]
+    public async Task ExcecaoDeRede_NaoEntraNoMotivoNemNaStack()
+    {
+        HttpRequestException falha;
+        try
+        {
+            throw new HttpRequestException("rastro-ex-tostring-9f3c-nao-pode-vazar");
+        }
+        catch (HttpRequestException ex)
+        {
+            falha = ex;
+        }
+
+        var captura = new CapturaHandler(_ => throw falha);
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
+
+        Assert.Equal(TipoResultadoMensagem.SemRede, resultado.Tipo);
+        Assert.Equal(ResultadoMensagem.TextoSemRede, resultado.Mensagem);
+        Assert.NotNull(resultado.Diagnostico);
+        Assert.DoesNotContain(falha.Message, resultado.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain(falha.Message, resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(falha.ToString(), resultado.Diagnostico.Motivo ?? "", StringComparison.Ordinal);
+        Assert.DoesNotContain(falha.ToString(), resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("HttpRequestException", resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("rastro-ex-tostring", resultado.Diagnostico.Texto, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task FalhaDeRede_NaoIncluiEnderecoNemChave()
     {
         var captura = new CapturaHandler(_ =>

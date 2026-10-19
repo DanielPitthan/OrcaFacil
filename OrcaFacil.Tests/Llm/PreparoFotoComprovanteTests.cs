@@ -114,6 +114,35 @@ public class PreparoFotoComprovanteTests
         Assert.Null(estranho.Bytes);
     }
 
+    [Fact]
+    public void TetoAntesDoDecode_EVinteMega_ECabeSoAteEle()
+    {
+        Assert.Equal(20 * 1024 * 1024, PreparoFotoComprovante.TetoBytesAntesDoDecode);
+        Assert.True(PreparoFotoComprovante.CabeAntesDoDecode(PreparoFotoComprovante.TetoBytesAntesDoDecode));
+        Assert.False(PreparoFotoComprovante.CabeAntesDoDecode(PreparoFotoComprovante.TetoBytesAntesDoDecode + 1));
+        Assert.False(PreparoFotoComprovante.CabeAntesDoDecode(-1));
+        Assert.Contains("20 MB", MensagensLeituraComprovante.TextoFotoAcimaDoTeto, StringComparison.Ordinal);
+        Assert.Contains("não foi enviada", MensagensLeituraComprovante.TextoFotoAcimaDoTeto, StringComparison.Ordinal);
+        Assert.Equal("AcimaDoTeto", FotoComprovantePronta.AcimaDoTetoBruto().ToString());
+    }
+
+    [Fact]
+    public void MediaType_Gif87aRiffAviEBufferCurto()
+    {
+        Assert.Equal(
+            PreparoFotoComprovante.MediaTypeGif,
+            PreparoFotoComprovante.EscolherMediaType("GIF87a"u8.ToArray(), "anim.png"));
+
+        var avi = new byte[12];
+        "RIFF"u8.CopyTo(avi);
+        "AVI "u8.CopyTo(avi.AsSpan(8));
+        Assert.Null(PreparoFotoComprovante.EscolherMediaType(avi, "filme.webp"));
+        Assert.False(PreparoFotoComprovante.EhHeic(avi));
+        Assert.Null(PreparoFotoComprovante.EscolherMediaType([0xFF, 0xD8], "curto.jpg"));
+        Assert.Null(PreparoFotoComprovante.EscolherMediaType([0x89, 0x50], "curto.png"));
+        Assert.Null(PreparoFotoComprovante.EscolherMediaType([], "vazio.png"));
+    }
+
     private static byte[] CaixaHeic(string marca)
     {
         var bytes = new byte[12];

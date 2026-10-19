@@ -377,7 +377,7 @@ public sealed class ClienteMensagens : IDisposable
                 motivo: LeitorRespostaComprovante.MotivoTruncada);
         }
 
-        var leitura = LeitorRespostaComprovante.Interpretar(corpo);
+        var leitura = LeitorRespostaComprovante.Interpretar(corpo, cancellationToken);
         if (leitura.Comprovante is not null)
             return ResultadoMensagem.Ok(leitura.Comprovante);
 

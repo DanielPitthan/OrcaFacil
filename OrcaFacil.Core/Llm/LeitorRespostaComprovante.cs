@@ -15,7 +15,14 @@ public static class LeitorRespostaComprovante
     public const string MotivoTruncada = "resposta truncada";
     public const string MotivoCortada = "resposta cortada";
 
+    private const int ObjetosMaximos = 32;
+    private const int ProfundidadeMaxima = 64;
+    private const int PassoCancelamento = 4096;
+
     private static readonly CultureInfo Invariante = CultureInfo.InvariantCulture;
+    private static readonly Regex DecimalExato = new(
+        @"^-?\d+(?:\.\d+)?$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex RazaoBruta = new(
         """"(stop_reason|finish_reason)"\s*:\s*"([^"]*)"""",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
@@ -26,8 +33,9 @@ public static class LeitorRespostaComprovante
 
     public static ComprovanteLido? Ler(string? json) => Interpretar(json).Comprovante;
 
-    public static InterpretacaoComprovante Interpretar(string? json)
+    public static InterpretacaoComprovante Interpretar(string? json, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (string.IsNullOrWhiteSpace(json))
             return Falha(MotivoJsonInvalido, null, null);
 
@@ -35,7 +43,7 @@ public static class LeitorRespostaComprovante
         try
         {
             using var documento = JsonDocument.Parse(texto);
-            return InterpretarRaiz(documento.RootElement);
+            return InterpretarRaiz(documento.RootElement, cancellationToken);
         }
         catch (JsonException)
         {
@@ -44,7 +52,7 @@ public static class LeitorRespostaComprovante
             if (string.Equals(stop, "max_tokens", StringComparison.OrdinalIgnoreCase))
                 return Falha(MotivoCortada, stop, finish);
 
-            if (!TentarRecortarObjeto(SemCerca(texto), out var objeto, out var truncado))
+            if (!TentarRecortarObjeto(SemCerca(texto), cancellationToken, out var objeto, out var truncado))
                 return Falha(truncado ? MotivoTruncada : MotivoJsonInvalido, stop, finish);
 
             try
@@ -62,7 +70,7 @@ public static class LeitorRespostaComprovante
         }
     }
 
-    private static InterpretacaoComprovante InterpretarRaiz(JsonElement raiz)
+    private static InterpretacaoComprovante InterpretarRaiz(JsonElement raiz, CancellationToken cancellationToken)
     {
         if (raiz.ValueKind != JsonValueKind.Object)
             return Falha(MotivoJsonInvalido, null, null);
@@ -72,13 +80,17 @@ public static class LeitorRespostaComprovante
         if (string.Equals(stop, "max_tokens", StringComparison.OrdinalIgnoreCase))
             return Falha(MotivoCortada, stop, finish);
 
-        if (!TentarPayload(raiz, out var input, out var motivo))
+        if (!TentarPayload(raiz, cancellationToken, out var input, out var motivo))
             return Falha(motivo ?? MotivoJsonInvalido, stop, finish);
 
         return LerComoInput(input, stop, finish);
     }
 
-    private static bool TentarPayload(JsonElement raiz, out JsonElement input, out string? motivo)
+    private static bool TentarPayload(
+        JsonElement raiz,
+        CancellationToken cancellationToken,
+        out JsonElement input,
+        out string? motivo)
     {
         input = default;
         motivo = null;
@@ -96,7 +108,7 @@ public static class LeitorRespostaComprovante
         }
 
         if (content.ValueKind == JsonValueKind.String)
-            return PayloadDeTexto(content.GetString(), out input, out motivo);
+            return PayloadDeTexto(content.GetString(), cancellationToken, out input, out motivo);
 
         if (content.ValueKind != JsonValueKind.Array)
         {
@@ -123,7 +135,7 @@ public static class LeitorRespostaComprovante
             }
 
             if (candidato.ValueKind == JsonValueKind.String)
-                return PayloadDeTexto(candidato.GetString(), out input, out motivo);
+                return PayloadDeTexto(candidato.GetString(), cancellationToken, out input, out motivo);
 
             motivo = MotivoCampoInvalido("input");
             return false;
@@ -136,7 +148,7 @@ public static class LeitorRespostaComprovante
             return false;
         }
 
-        return PayloadDeTexto(texto, out input, out motivo);
+        return PayloadDeTexto(texto, cancellationToken, out input, out motivo);
     }
 
     private static bool PareceComprovante(JsonElement raiz) =>
@@ -170,7 +182,11 @@ public static class LeitorRespostaComprovante
         return achou ? texto.ToString() : null;
     }
 
-    private static bool PayloadDeTexto(string? texto, out JsonElement input, out string? motivo)
+    private static bool PayloadDeTexto(
+        string? texto,
+        CancellationToken cancellationToken,
+        out JsonElement input,
+        out string? motivo)
     {
         input = default;
         motivo = null;
@@ -180,7 +196,7 @@ public static class LeitorRespostaComprovante
             return false;
         }
 
-        if (!TentarRecortarObjeto(SemCerca(texto), out var json, out var truncado))
+        if (!TentarRecortarObjeto(SemCerca(texto), cancellationToken, out var json, out var truncado))
         {
             motivo = truncado ? MotivoTruncada : MotivoJsonInvalido;
             return false;
@@ -218,45 +234,71 @@ public static class LeitorRespostaComprovante
         return fim < 0 ? texto[conteudo..] : texto[conteudo..fim];
     }
 
-    private static bool TentarRecortarObjeto(string texto, out string json, out bool truncado)
+    /// <summary>
+    /// Uma passagem. O último objeto completo que tem <c>itens</c> vence.
+    /// Para no teto de objetos, na profundidade e no cancelamento.
+    /// </summary>
+    private static bool TentarRecortarObjeto(
+        string texto,
+        CancellationToken cancellationToken,
+        out string json,
+        out bool truncado)
     {
         json = string.Empty;
         truncado = false;
+        string? ultimo = null;
         var busca = 0;
-        while (busca < texto.Length)
+        var vistos = 0;
+        while (busca < texto.Length && vistos < ObjetosMaximos)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var inicio = texto.IndexOf('{', busca);
             if (inicio < 0)
-                return false;
+                break;
 
-            if (!TentarFecharObjeto(texto, inicio, out var fim))
+            if (!TentarFecharObjeto(texto, inicio, cancellationToken, out var fim))
             {
                 truncado = true;
-                return false;
+                break;
             }
 
+            vistos++;
             var candidato = texto[inicio..(fim + 1)];
-            try
-            {
-                using var documento = JsonDocument.Parse(candidato);
-                if (documento.RootElement.ValueKind == JsonValueKind.Object)
-                {
-                    json = candidato;
-                    return true;
-                }
-            }
-            catch (JsonException)
-            {
-                // Um "{" no meio da frase não é o comprovante. Procura o próximo.
-            }
+            if (ObjetoComItens(candidato))
+                ultimo = candidato;
 
-            busca = inicio + 1;
+            busca = fim + 1;
         }
 
-        return false;
+        if (ultimo is null)
+            return false;
+
+        json = ultimo;
+        truncado = false;
+        return true;
     }
 
-    private static bool TentarFecharObjeto(string texto, int inicio, out int fim)
+    private static bool ObjetoComItens(string json)
+    {
+        try
+        {
+            using var documento = JsonDocument.Parse(json);
+            return documento.RootElement.ValueKind == JsonValueKind.Object &&
+                documento.RootElement.TryGetProperty("itens", out var itens) &&
+                itens.ValueKind != JsonValueKind.Null &&
+                itens.ValueKind != JsonValueKind.Undefined;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static bool TentarFecharObjeto(
+        string texto,
+        int inicio,
+        CancellationToken cancellationToken,
+        out int fim)
     {
         fim = -1;
         var profundidade = 0;
@@ -264,6 +306,9 @@ public static class LeitorRespostaComprovante
         var escape = false;
         for (var i = inicio; i < texto.Length; i++)
         {
+            if (((i - inicio) & (PassoCancelamento - 1)) == 0)
+                cancellationToken.ThrowIfCancellationRequested();
+
             var caractere = texto[i];
             if (emString)
             {
@@ -292,7 +337,11 @@ public static class LeitorRespostaComprovante
             }
 
             if (caractere == '{')
+            {
                 profundidade++;
+                if (profundidade > ProfundidadeMaxima)
+                    return false;
+            }
             else if (caractere == '}')
             {
                 profundidade--;
@@ -525,6 +574,7 @@ public static class LeitorRespostaComprovante
 
     private static bool TentarDecimalTexto(string texto, out decimal numero)
     {
+        numero = 0;
         texto = texto.Trim().Replace(" ", "", StringComparison.Ordinal).Replace("\u00a0", "", StringComparison.Ordinal);
         if (texto.StartsWith("R$", StringComparison.OrdinalIgnoreCase))
             texto = texto[2..];
@@ -541,6 +591,9 @@ public static class LeitorRespostaComprovante
         {
             texto = texto.Replace(',', '.');
         }
+
+        if (!DecimalExato.IsMatch(texto))
+            return false;
 
         return decimal.TryParse(texto, NumberStyles.Number, Invariante, out numero);
     }

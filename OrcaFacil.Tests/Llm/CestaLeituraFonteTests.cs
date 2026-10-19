@@ -72,6 +72,11 @@ public class CestaLeituraFonteTests
         Assert.Contains("ChipsInteligencia.ChaveMaxTokens", configuracao, StringComparison.Ordinal);
         Assert.Contains("PedidoMensagem.NormalizarMaxTokens", configuracao, StringComparison.Ordinal);
         Assert.Contains("PedidoMensagem.MaxTokensNaFaixa(value)", configuracao, StringComparison.Ordinal);
+
+        var capturar = ExtrairBloco(pagina, "Task CapturarEEnviarAsync(");
+        var acima = capturar.IndexOf("MensagensLeituraComprovante.FotoAcimaDoTeto()", StringComparison.Ordinal);
+        var envio = capturar.IndexOf("EnviarJpegAsync(", StringComparison.Ordinal);
+        Assert.True(acima >= 0 && acima < envio);
     }
 
     private static string ExtrairMembro(string fonte, string assinatura)

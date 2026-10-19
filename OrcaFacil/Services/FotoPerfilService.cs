@@ -74,7 +74,16 @@ public class FotoPerfilService : IFotoPerfilService
                 return FotoComprovantePronta.SemFoto();
 
             await using var origem = await arquivo.OpenReadAsync();
-            var bytes = await CopiarAsync(origem, cancellationToken);
+            byte[] bytes;
+            try
+            {
+                bytes = await CopiarAsync(origem, cancellationToken);
+            }
+            catch (FotoAcimaDoTetoException)
+            {
+                return FotoComprovantePronta.AcimaDoTetoBruto();
+            }
+
             if (bytes.Length == 0)
                 return FotoComprovantePronta.Ilegivel();
 
@@ -225,7 +234,7 @@ public class FotoPerfilService : IFotoPerfilService
                     await using var saida = File.Create(destino);
                     await saida.WriteAsync(jpeg.Bytes);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not FotoAcimaDoTetoException)
                 {
                     _logger.LogWarning(ex, "Falha ao redimensionar a foto; salvando o original.");
                     await using var origemNovamente = await arquivo.OpenReadAsync();
@@ -293,6 +302,7 @@ public class FotoPerfilService : IFotoPerfilService
         if (nativo is not null)
             return (nativo.Value.Bytes, nativo.Value.LadoLongo);
 #endif
+        // Fora do Android, e quando o BitmapFactory não abre o HEIC, o Graphics grava JPEG.
         return await CodificarGraphicsAsync(origem, ladoMaximo, qualidade, avatar, cancellationToken);
     }
 
@@ -481,9 +491,52 @@ public class FotoPerfilService : IFotoPerfilService
 
     private static async Task<byte[]> CopiarAsync(Stream origem, CancellationToken cancellationToken)
     {
-        using var memoria = new MemoryStream();
-        await origem.CopyToAsync(memoria, cancellationToken);
-        return memoria.ToArray();
+        var teto = PreparoFotoComprovante.TetoBytesAntesDoDecode;
+        if (origem.CanSeek && !PreparoFotoComprovante.CabeAntesDoDecode(origem.Length))
+            throw new FotoAcimaDoTetoException();
+
+        var cabecalho = new byte[PreparoFotoComprovante.TamanhoCabecalhoTipo];
+        var noCabecalho = 0;
+        while (noCabecalho < cabecalho.Length)
+        {
+            var lidos = await origem.ReadAsync(
+                cabecalho.AsMemory(noCabecalho, cabecalho.Length - noCabecalho),
+                cancellationToken);
+            if (lidos == 0)
+                break;
+
+            noCabecalho += lidos;
+        }
+
+        _ = PreparoFotoComprovante.EscolherMediaType(cabecalho.AsSpan(0, noCabecalho));
+        if (noCabecalho == 0)
+            return [];
+
+        using var memoria = new MemoryStream(noCabecalho);
+        memoria.Write(cabecalho, 0, noCabecalho);
+
+        var buffer = new byte[81920];
+        while (memoria.Length <= teto)
+        {
+            var lidos = await origem.ReadAsync(buffer, cancellationToken);
+            if (lidos == 0)
+                return memoria.ToArray();
+
+            if (memoria.Length + lidos > teto)
+                throw new FotoAcimaDoTetoException();
+
+            memoria.Write(buffer, 0, lidos);
+        }
+
+        throw new FotoAcimaDoTetoException();
+    }
+
+    private sealed class FotoAcimaDoTetoException : InvalidOperationException
+    {
+        public FotoAcimaDoTetoException()
+            : base(MensagensLeituraComprovante.TextoFotoAcimaDoTeto)
+        {
+        }
     }
 
     private static string? TentarCaminho(FileResult? arquivo)

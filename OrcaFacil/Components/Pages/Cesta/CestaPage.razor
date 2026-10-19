@@ -503,6 +503,13 @@
                 return;
             }
 
+            if (foto.AcimaDoTeto)
+            {
+                _jpeg = null;
+                _exibicao = MensagensLeituraComprovante.FotoAcimaDoTeto();
+                return;
+            }
+
             var jpeg = foto.Jpeg;
             if (foto.PedirOutraFoto || jpeg is null || jpeg.Length == 0 || jpeg.Length > ClienteMensagens.TamanhoMaximoImagem)
             {

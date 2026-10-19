@@ -15,6 +15,9 @@ public class RedutorFotoFonteTests
 
         Assert.Contains("PreparoFotoComprovante.CalcularAmostra", fonte, StringComparison.Ordinal);
         Assert.Contains("InSampleSize = amostra", fonte, StringComparison.Ordinal);
+        var bounds = fonte.IndexOf("InJustDecodeBounds = true", StringComparison.Ordinal);
+        var amostra = fonte.IndexOf("InSampleSize = amostra", StringComparison.Ordinal);
+        Assert.True(bounds >= 0 && bounds < amostra);
         Assert.Contains("Recycle()", fonte, StringComparison.Ordinal);
         Assert.Contains("global::Android.", fonte, StringComparison.Ordinal);
         Assert.Contains("global::Android.Graphics.BitmapFactory", fonte, StringComparison.Ordinal);
@@ -63,6 +66,17 @@ public class RedutorFotoFonteTests
         Assert.DoesNotContain("<<<<<<<", fonte, StringComparison.Ordinal);
         Assert.Equal(1, fonte.Split('\n').Count(linha => linha.Contains("LogWarning", StringComparison.Ordinal)));
         Assert.Contains("EscolherMediaType(bytes, arquivo.FileName)", fonte, StringComparison.Ordinal);
+        Assert.Contains("CodificarGraphicsAsync(", fonte, StringComparison.Ordinal);
+        Assert.Contains("ImageFormat.Jpeg", fonte, StringComparison.Ordinal);
+        Assert.Contains("TetoBytesAntesDoDecode", fonte, StringComparison.Ordinal);
+        Assert.Contains("CabeAntesDoDecode", fonte, StringComparison.Ordinal);
+        Assert.Contains("FotoComprovantePronta.AcimaDoTetoBruto()", fonte, StringComparison.Ordinal);
+
+        var copiar = ExtrairBloco(fonte, "Task<byte[]> CopiarAsync(");
+        var tipo = copiar.IndexOf("EscolherMediaType(", StringComparison.Ordinal);
+        var restante = copiar.IndexOf("var buffer", StringComparison.Ordinal);
+        Assert.True(tipo >= 0 && tipo < restante);
+        Assert.Contains("TetoBytesAntesDoDecode", copiar, StringComparison.Ordinal);
         Assert.Contains("FotoComprovantePronta.FormatoNaoConvertido()", fonte, StringComparison.Ordinal);
         Assert.Contains("EscolherMediaType(jpeg) is null", fonte, StringComparison.Ordinal);
     }

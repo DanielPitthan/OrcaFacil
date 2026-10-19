@@ -59,6 +59,180 @@ public class DiagnosticoRespostaTests
     }
 
     [Fact]
+    public void CorpoEscapado_NaoVazaTokenForaDaListaNemBase64Curto()
+    {
+        const string token = "sk-outro-nao-listado-9f3c";
+        var base64 = new string('Q', 40);
+        var corpo = "{\\\"x-api-key\\\":\\\"" + token + "\\\",\\\"img\\\":\\\"data:image\\/jpeg;base64," + base64 + "\\\"}";
+
+        var diagnostico = DiagnosticoResposta.Criar(
+            400,
+            "https://api.anthropic.com/v1/messages",
+            "deepseek-v4-flash",
+            "PedidoInvalido",
+            "O pedido foi recusado.",
+            "JSON inválido",
+            "end_turn",
+            null,
+            corpo,
+            corpoIncompleto: false,
+            segredos: null);
+
+        var log = new StringBuilder();
+        RegistroDiagnosticoLeitura.Registrar(diagnostico, texto => log.Append(texto));
+
+        var dialog = File.ReadAllText(Caminho("OrcaFacil", "Components", "Pages", "Cesta", "DiagnosticoLeituraDialog.razor"));
+        var painel = File.ReadAllText(Caminho("OrcaFacil", "Components", "Pages", "Cesta", "LeituraComprovantePainel.razor"));
+        Assert.Contains("@Texto", dialog, StringComparison.Ordinal);
+        Assert.Contains("Clipboard.Default.SetTextAsync(Texto)", dialog, StringComparison.Ordinal);
+        Assert.Contains("RegistroDiagnosticoLeitura.Registrar", painel, StringComparison.Ordinal);
+
+        Assert.Equal(diagnostico.Texto, log.ToString());
+        Assert.DoesNotContain(token, diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(base64, diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("x-api-key", diagnostico.Texto, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("data:image", diagnostico.Texto, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(token, log.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(base64, log.ToString(), StringComparison.Ordinal);
+        Assert.Contains(DiagnosticoResposta.MarcaCabecalho, diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains(DiagnosticoResposta.MarcaBase64, diagnostico.Texto, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AuthorizationEApiKey_PerdemOValorInteiroEmQualquerCaixa()
+    {
+        const string bearer = "sk-bearer-nao-listado";
+        const string basic = "dXNlcjpwYXNzZWNyZXRv";
+        const string chave = "sk-x-api-key-nao-listado";
+        var corpo = string.Join(
+            '\n',
+            "Authorization: Bearer " + bearer,
+            "AUTHORIZATION: BASIC " + basic,
+            "X-API-KEY: " + chave,
+            "seguiu");
+
+        var diagnostico = DiagnosticoResposta.Criar(
+            401,
+            "https://api.anthropic.com",
+            "claude-haiku-5-5",
+            "NaoAutorizado",
+            "A chave da API foi recusada.",
+            null,
+            null,
+            null,
+            corpo,
+            false,
+            segredos: null);
+
+        Assert.DoesNotContain(bearer, diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(basic, diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(chave, diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("Bearer", diagnostico.Texto, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Basic", diagnostico.Texto, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("x-api-key", diagnostico.Texto, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("seguiu", diagnostico.Texto, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Controles_NaoForjamLinhaDeEndpoint()
+    {
+        var diagnostico = DiagnosticoResposta.Criar(
+            200,
+            "https://api.anthropic.com/v1/messages",
+            "haiku\nEndpoint: https://evil.test",
+            "Falha",
+            "O provedor não concluiu a leitura.",
+            "motivo\r\nEndpoint: https://evil.test",
+            "end\u001b[0m\0turn",
+            "stop\nEndpoint: https://evil.test",
+            "corpo\nEndpoint: https://evil.test",
+            false,
+            segredos: null);
+
+        var linhas = diagnostico.Texto.Split('\n');
+        var endpoints = linhas.Where(linha => linha.StartsWith("Endpoint:", StringComparison.Ordinal)).ToArray();
+        Assert.Single(endpoints);
+        Assert.StartsWith("Endpoint: https://api.anthropic.com", endpoints[0], StringComparison.Ordinal);
+        Assert.DoesNotContain("\r", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("\0", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("\u001b", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("\nEndpoint: https://evil.test", diagnostico.Texto, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CorpoNoLimite_NaoParteParSubstituto()
+    {
+        var corpo = new string('á', DiagnosticoResposta.LimiteCorpo - 1) + "😀" + "z";
+        var diagnostico = DiagnosticoResposta.Criar(
+            200,
+            "https://api.anthropic.com",
+            "claude-haiku-5-5",
+            "RespostaInvalida",
+            "A resposta veio fora do formato esperado.",
+            "JSON inválido",
+            null,
+            null,
+            corpo,
+            false,
+            segredos: null);
+
+        Assert.True(diagnostico.CorpoTruncado);
+        Assert.Equal(DiagnosticoResposta.LimiteCorpo - 1, diagnostico.Corpo!.Length);
+        Assert.Equal('á', diagnostico.Corpo[^1]);
+        Assert.DoesNotContain(diagnostico.Corpo, caractere => char.IsSurrogate(caractere));
+        Assert.EndsWith(DiagnosticoResposta.MarcaTruncado, diagnostico.Texto, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CamposCurtos_TambemRespeitamOCorteESurrogate()
+    {
+        var longo = new string('á', DiagnosticoResposta.LimiteCorpo - 1) + "😀" + "z";
+        var diagnostico = DiagnosticoResposta.Criar(
+            200,
+            "https://api.anthropic.com",
+            longo,
+            "RespostaInvalida",
+            "A resposta veio fora do formato esperado.",
+            longo,
+            longo,
+            longo,
+            "ok",
+            false,
+            segredos: null);
+
+        Assert.Equal(DiagnosticoResposta.LimiteCorpo - 1, diagnostico.Modelo!.Length);
+        Assert.Equal(DiagnosticoResposta.LimiteCorpo - 1, diagnostico.Motivo!.Length);
+        Assert.Equal(DiagnosticoResposta.LimiteCorpo - 1, diagnostico.StopReason!.Length);
+        Assert.Equal(DiagnosticoResposta.LimiteCorpo - 1, diagnostico.FinishReason!.Length);
+        Assert.Equal('á', diagnostico.Motivo[^1]);
+        Assert.DoesNotContain(diagnostico.Motivo, caractere => char.IsSurrogate(caractere));
+        Assert.DoesNotContain(diagnostico.Texto, caractere => char.IsSurrogate(caractere));
+    }
+
+    [Fact]
+    public void Base64Longo_SemDataImageNemSegredo_EMascarado()
+    {
+        var bloco = new string('A', 80) + new string('b', 80) + new string('C', 50);
+        var diagnostico = DiagnosticoResposta.Criar(
+            200,
+            "https://api.anthropic.com",
+            "claude-haiku-5-5",
+            "RespostaInvalida",
+            "A resposta veio fora do formato esperado.",
+            "JSON inválido",
+            null,
+            null,
+            "antes " + bloco + " depois",
+            false,
+            segredos: null);
+
+        Assert.Contains(DiagnosticoResposta.MarcaBase64, diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(bloco, diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains("antes", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains("depois", diagnostico.Texto, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CorpoLongo_CortaEmOitoMilEMarcaTruncado()
     {
         var corpo = string.Concat(Enumerable.Repeat("erro de leitura. ", 600));

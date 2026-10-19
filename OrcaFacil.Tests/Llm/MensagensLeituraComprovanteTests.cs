@@ -9,6 +9,18 @@ public class MensagensLeituraComprovanteTests
     private const string Chave = "sk-ant-segredo-nao-pode-aparecer";
 
     [Fact]
+    public void FotoAcimaDoTeto_ExplicaQueALeituraNaoSaiu()
+    {
+        var exibicao = MensagensLeituraComprovante.FotoAcimaDoTeto();
+
+        Assert.Equal(MensagensLeituraComprovante.TextoFotoAcimaDoTeto, exibicao.Mensagem);
+        Assert.Contains("20 MB", exibicao.Mensagem, StringComparison.Ordinal);
+        Assert.Contains("não foi enviada", exibicao.Mensagem, StringComparison.Ordinal);
+        Assert.True(exibicao.PodeTentarDeNovo);
+        Assert.Null(exibicao.Diagnostico);
+    }
+
+    [Fact]
     public void FormatoNaoConvertido_ExplicaQueALeituraNaoSaiu()
     {
         var exibicao = MensagensLeituraComprovante.FormatoNaoConvertido();

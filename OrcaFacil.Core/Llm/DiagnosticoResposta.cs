@@ -17,8 +17,12 @@ public sealed class DiagnosticoResposta
 
     private const int TamanhoMinimoSegredo = 8;
 
+    private static readonly Regex ValorCredencial = new(
+        """(?i)(?:"|')?(?:authorization|x-api-key)(?:"|')?[ \t]*[:=][ \t]*(?:"[^"]*"|'[^']*'|[^\r\n]*)""",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     private static readonly Regex CabecalhoPedido = new(
-        """(?i)(?:"|')?(?:authorization|x-api-key|anthropic-version|anthropic-beta|proxy-authorization)(?:"|')?\s*[:=]\s*(?:bearer\s+)?(?:"[^"]*"|'[^']*'|\S+)""",
+        """(?i)(?:"|')?(?:anthropic-version|anthropic-beta|proxy-authorization)(?:"|')?[ \t]*[:=][ \t]*(?:"[^"]*"|'[^']*'|\S+)""",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex Bearer = new(
@@ -85,21 +89,17 @@ public sealed class DiagnosticoResposta
         IEnumerable<string?>? segredos)
     {
         var lista = NormalizarSegredos(segredos);
-        var origem = Sanitizar(SomenteOrigem(url), lista);
-        var modeloLimpo = Sanitizar(modelo?.Trim(), lista);
-        var tipoLimpo = Sanitizar(string.IsNullOrWhiteSpace(tipo) ? "Falha" : tipo.Trim(), lista);
-        var mensagemLimpa = Sanitizar(mensagem?.Trim(), lista);
-        var motivoLimpo = Sanitizar(motivo?.Trim(), lista);
-        var stopLimpo = Sanitizar(stopReason?.Trim(), lista);
-        var finishLimpo = Sanitizar(finishReason?.Trim(), lista);
+        var origem = PrepararCampo(SomenteOrigem(url), lista);
+        var modeloLimpo = PrepararCampo(modelo?.Trim(), lista);
+        var tipoLimpo = PrepararCampo(string.IsNullOrWhiteSpace(tipo) ? "Falha" : tipo.Trim(), lista);
+        var mensagemLimpa = PrepararCampo(mensagem?.Trim(), lista);
+        var motivoLimpo = PrepararCampo(motivo?.Trim(), lista);
+        var stopLimpo = PrepararCampo(stopReason?.Trim(), lista);
+        var finishLimpo = PrepararCampo(finishReason?.Trim(), lista);
 
-        var corpoLimpo = Sanitizar(corpo, lista);
-        var truncado = corpoIncompleto;
-        if (corpoLimpo.Length > LimiteCorpo)
-        {
-            corpoLimpo = corpoLimpo[..LimiteCorpo];
-            truncado = true;
-        }
+        var corpoLimpo = NeutralizarControles(Sanitizar(corpo, lista));
+        var truncado = corpoIncompleto || corpoLimpo.Length > LimiteCorpo;
+        corpoLimpo = Cortar(corpoLimpo);
 
         var corpoExibido = corpoLimpo.Length == 0 ? null : corpoLimpo;
         var texto = MontarTexto(
@@ -221,12 +221,51 @@ public sealed class DiagnosticoResposta
         return lista;
     }
 
+    private static string PrepararCampo(string? texto, List<string> segredos) =>
+        Cortar(NeutralizarControles(Sanitizar(texto, segredos)));
+
+    private static string Cortar(string texto)
+    {
+        if (texto.Length <= LimiteCorpo)
+            return texto;
+
+        var corte = LimiteCorpo;
+        if (char.IsHighSurrogate(texto[corte - 1]))
+            corte--;
+
+        return texto[..corte];
+    }
+
+    private static string NeutralizarControles(string texto)
+    {
+        var precisa = false;
+        foreach (var caractere in texto)
+        {
+            if (!char.IsControl(caractere))
+                continue;
+
+            precisa = true;
+            break;
+        }
+
+        if (!precisa)
+            return texto;
+
+        var saida = new StringBuilder(texto.Length);
+        foreach (var caractere in texto)
+            saida.Append(char.IsControl(caractere) ? ' ' : caractere);
+
+        return saida.ToString();
+    }
+
     private static string Sanitizar(string? texto, List<string> segredos)
     {
         if (string.IsNullOrEmpty(texto))
             return string.Empty;
 
-        var limpo = CabecalhoPedido.Replace(texto, MarcaCabecalho);
+        var limpo = texto.Replace("\\/", "/", StringComparison.Ordinal).Replace("\\\"", "\"", StringComparison.Ordinal);
+        limpo = ValorCredencial.Replace(limpo, MarcaCabecalho);
+        limpo = CabecalhoPedido.Replace(limpo, MarcaCabecalho);
         limpo = Bearer.Replace(limpo, MarcaCabecalho);
         limpo = DataImage.Replace(limpo, MarcaBase64);
         foreach (var segredo in segredos)
