@@ -40,7 +40,8 @@ public class PreviaComprovanteTelaTests
         Assert.Contains("StickyActionBar Contido=\"true\"", dialog, StringComparison.Ordinal);
         Assert.Contains("PrimarioDesabilitado", dialog, StringComparison.Ordinal);
         Assert.Contains("EmErro=\"EmErro\"", dialog, StringComparison.Ordinal);
-        Assert.Contains("MostrarAdicionar=\"false\"", dialog, StringComparison.Ordinal);
+        Assert.Contains("MostrarAdicionar=\"@Previa.PodeCadastrarTudo\"", dialog, StringComparison.Ordinal);
+        Assert.Contains("TextoAdicionar=\"Cadastrar tudo\"", dialog, StringComparison.Ordinal);
         Assert.Contains(">Cadastrar</MudButton>", dialog, StringComparison.Ordinal);
         Assert.Contains("ProdutoCestaDialog", dialog, StringComparison.Ordinal);
         Assert.Contains("IniciarCadastro", dialog, StringComparison.Ordinal);

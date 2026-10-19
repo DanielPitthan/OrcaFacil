@@ -9,11 +9,10 @@ public class CestaLeituraFonteTests
     {
         var pagina = File.ReadAllText(Path.Combine(EncontrarRaiz(), "OrcaFacil", "Components", "Pages", "Cesta", "CestaPage.razor"));
         var metodo = ExtrairBloco(pagina, assinatura);
-        var guardaMatch = System.Text.RegularExpressions.Regex.Match(metodo, @"_lendo\s*\|\|\s*_descartada");
-        var guarda = guardaMatch.Success ? guardaMatch.Index : -1;
+        var guarda = IndiceDaCondicao(metodo, "_lendo || _descartada");
         var retorno = guarda < 0
             ? -1
-            : metodo.IndexOf("return", guarda + guardaMatch.Length, StringComparison.Ordinal);
+            : metodo.IndexOf("return", guarda, StringComparison.Ordinal);
         var trava = metodo.IndexOf("_lendo = true;", StringComparison.Ordinal);
         var primeiroAwait = metodo.IndexOf("await", StringComparison.Ordinal);
 
@@ -49,11 +48,12 @@ public class CestaLeituraFonteTests
         var dialog = File.ReadAllText(Path.Combine(
             EncontrarRaiz(), "OrcaFacil", "Components", "Pages", "Cesta", "PreviaComprovanteDialog.razor"));
         var metodo = ExtrairBloco(dialog, "Task CadastrarAsync()");
-        var guardaMatch = System.Text.RegularExpressions.Regex.Match(metodo, @"_cadastrando\s*\|\|");
-        var guarda = guardaMatch.Success ? guardaMatch.Index : -1;
+        var guarda = IndiceDaCondicao(
+            metodo,
+            "_cadastrando || _cadastrandoTudo || _confirmando || _editando is null || !_editando.PodeCadastrar");
         var retorno = guarda < 0
             ? -1
-            : metodo.IndexOf("return", guarda + guardaMatch.Length, StringComparison.Ordinal);
+            : metodo.IndexOf("return", guarda, StringComparison.Ordinal);
         var trava = metodo.IndexOf("_cadastrando = true;", StringComparison.Ordinal);
         var primeiroAwait = metodo.IndexOf("await", StringComparison.Ordinal);
 
@@ -64,16 +64,36 @@ public class CestaLeituraFonteTests
     }
 
     [Fact]
+    public void CadastrarTudo_TravaAntesDoPrimeiroAwait()
+    {
+        var dialog = File.ReadAllText(Path.Combine(
+            EncontrarRaiz(), "OrcaFacil", "Components", "Pages", "Cesta", "PreviaComprovanteDialog.razor"));
+        var metodo = ExtrairBloco(dialog, "Task CadastrarTudoAsync()");
+        var guarda = IndiceDaCondicao(
+            metodo,
+            "_cadastrandoTudo || _cadastrando || _confirmando || !Previa.PodeCadastrarTudo");
+        var retorno = guarda < 0
+            ? -1
+            : metodo.IndexOf("return", guarda, StringComparison.Ordinal);
+        var trava = metodo.IndexOf("_cadastrandoTudo = true;", StringComparison.Ordinal);
+        var primeiroAwait = metodo.IndexOf("await", StringComparison.Ordinal);
+
+        Assert.True(guarda >= 0);
+        Assert.True(retorno > guarda);
+        Assert.True(trava > retorno);
+        Assert.True(primeiroAwait < 0 || primeiroAwait > trava);
+    }
+
+    [Fact]
     public void ConfirmarPrevia_TravaEFechaSemAwait()
     {
         var dialog = File.ReadAllText(Path.Combine(
             EncontrarRaiz(), "OrcaFacil", "Components", "Pages", "Cesta", "PreviaComprovanteDialog.razor"));
         var metodo = ExtrairBloco(dialog, "void Confirmar()");
-        var guardaMatch = System.Text.RegularExpressions.Regex.Match(metodo, @"_confirmando");
-        var guarda = guardaMatch.Success ? guardaMatch.Index : -1;
+        var guarda = IndiceDaCondicao(metodo, "!Previa.PodeConfirmar || _confirmando");
         var retorno = guarda < 0
             ? -1
-            : metodo.IndexOf("return", guarda + guardaMatch.Length, StringComparison.Ordinal);
+            : metodo.IndexOf("return", guarda, StringComparison.Ordinal);
         var trava = metodo.IndexOf("_confirmando = true;", StringComparison.Ordinal);
         var fechar = metodo.IndexOf("MudDialog.Close", StringComparison.Ordinal);
 
@@ -90,11 +110,10 @@ public class CestaLeituraFonteTests
         var pagina = File.ReadAllText(Path.Combine(
             EncontrarRaiz(), "OrcaFacil", "Components", "Pages", "Cesta", "CestaPage.razor"));
         var metodo = ExtrairBloco(pagina, "Task AbrirPreviaAsync()");
-        var guardaMatch = System.Text.RegularExpressions.Regex.Match(metodo, @"_previaAberta");
-        var guarda = guardaMatch.Success ? guardaMatch.Index : -1;
+        var guarda = IndiceDaCondicao(metodo, "_comprovante is null || _descartada || _previaAberta");
         var retorno = guarda < 0
             ? -1
-            : metodo.IndexOf("return", guarda + guardaMatch.Length, StringComparison.Ordinal);
+            : metodo.IndexOf("return", guarda, StringComparison.Ordinal);
         var trava = metodo.IndexOf("_previaAberta = true;", StringComparison.Ordinal);
         var primeiroAwait = metodo.IndexOf("await", StringComparison.Ordinal);
 
@@ -102,6 +121,46 @@ public class CestaLeituraFonteTests
         Assert.True(retorno > guarda);
         Assert.True(trava > retorno);
         Assert.True(primeiroAwait > trava);
+    }
+
+    [Fact]
+    public void SalvarCompra_DbUpdateException_ViraSnackbarSemStack()
+    {
+        var pagina = File.ReadAllText(Path.Combine(
+            EncontrarRaiz(), "OrcaFacil", "Components", "Pages", "Cesta", "CestaPage.razor"));
+        var metodo = ExtrairBloco(pagina, "Task<bool> SalvarCompraAsync(");
+        var indice = metodo.IndexOf("catch (DbUpdateException)", StringComparison.Ordinal);
+        Assert.True(indice >= 0);
+        var bloco = ExtrairChaves(metodo, metodo.IndexOf('{', indice));
+        Assert.Contains("MensagemNomeProdutoRepetido", bloco, StringComparison.Ordinal);
+        var servico = File.ReadAllText(Path.Combine(EncontrarRaiz(), "OrcaFacil.Core", "Services", "CestaCadastroService.cs"));
+        Assert.Contains(
+            "public const string MensagemNomeProdutoRepetido = \"Já existe um produto com esse nome.\";",
+            servico,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("ex.Message", bloco, StringComparison.Ordinal);
+        Assert.DoesNotContain("StackTrace", bloco, StringComparison.Ordinal);
+        Assert.DoesNotContain("ToString()", bloco, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("if (false && (_lendo || _descartada)) return;", "_lendo || _descartada")]
+    [InlineData("if (!(_lendo || _descartada)) return;", "_lendo || _descartada")]
+    [InlineData("if (!_lendo || _descartada) return;", "_lendo || _descartada")]
+    [InlineData("if (_cadastrandoTudo) return;", "_cadastrando")]
+    [InlineData("if (false && (_cadastrandoTudo || _cadastrando || _confirmando || !Previa.PodeCadastrarTudo)) return;", "_cadastrandoTudo || _cadastrando || _confirmando || !Previa.PodeCadastrarTudo")]
+    public void Guarda_RejeitaFalseNegacaoEPrefixo(string metodo, string condicao)
+    {
+        Assert.Equal(-1, IndiceDaCondicao("void M() { " + metodo + " }", condicao));
+    }
+
+    [Theory]
+    [InlineData("if (_lendo || _descartada) return;", "_lendo || _descartada")]
+    [InlineData("if (  _lendo   ||   _descartada  ) return;", "_lendo || _descartada")]
+    [InlineData("if (!Previa.PodeConfirmar || _confirmando) return;", "!Previa.PodeConfirmar || _confirmando")]
+    public void Guarda_AceitaOTextoExatoComEspaco(string metodo, string condicao)
+    {
+        Assert.True(IndiceDaCondicao("void M() { " + metodo + " }", condicao) >= 0);
     }
 
     [Fact]
@@ -154,6 +213,85 @@ public class CestaLeituraFonteTests
         }
 
         return (0.2126 * Canal(hex[..2])) + (0.7152 * Canal(hex.Substring(2, 2))) + (0.0722 * Canal(hex.Substring(4, 2)));
+    }
+
+    private static int IndiceDaCondicao(string metodo, string condicao)
+    {
+        foreach (var (indice, texto) in CondicoesIf(metodo))
+        {
+            if (CondicaoIgual(texto, condicao))
+                return indice;
+        }
+
+        return -1;
+    }
+
+    private static bool CondicaoIgual(string encontrada, string esperada)
+    {
+        var tokens = esperada.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        var padrao = string.Join(@"\s+", tokens.Select(TokenDeCondicao));
+        return System.Text.RegularExpressions.Regex.IsMatch(encontrada.Trim(), @"\A" + padrao + @"\z");
+    }
+
+    private static string TokenDeCondicao(string token)
+    {
+        if (token.StartsWith('!') && token.Length > 1 && (token[1] == '_' || char.IsLetter(token[1])))
+            return @"(?<![\w])!" + System.Text.RegularExpressions.Regex.Escape(token[1..]) + @"(?![\w])";
+
+        if (token[0] == '_' || char.IsLetter(token[0]))
+            return @"(?<![\w])" + System.Text.RegularExpressions.Regex.Escape(token) + @"(?![\w])";
+
+        return System.Text.RegularExpressions.Regex.Escape(token);
+    }
+
+    private static IEnumerable<(int Indice, string Texto)> CondicoesIf(string metodo)
+    {
+        var indice = 0;
+        while ((indice = metodo.IndexOf("if", indice, StringComparison.Ordinal)) >= 0)
+        {
+            if (indice > 0 && (char.IsLetterOrDigit(metodo[indice - 1]) || metodo[indice - 1] == '_'))
+            {
+                indice += 2;
+                continue;
+            }
+
+            var cursor = indice + 2;
+            if (cursor < metodo.Length && (char.IsLetterOrDigit(metodo[cursor]) || metodo[cursor] == '_'))
+            {
+                indice += 2;
+                continue;
+            }
+
+            while (cursor < metodo.Length && char.IsWhiteSpace(metodo[cursor]))
+                cursor++;
+
+            if (cursor >= metodo.Length || metodo[cursor] != '(')
+            {
+                indice += 2;
+                continue;
+            }
+
+            yield return (indice, ConteudoParenteses(metodo, cursor));
+            indice = cursor + 1;
+        }
+    }
+
+    private static string ConteudoParenteses(string fonte, int abre)
+    {
+        var profundidade = 0;
+        for (var i = abre; i < fonte.Length; i++)
+        {
+            if (fonte[i] == '(')
+                profundidade++;
+            else if (fonte[i] == ')')
+            {
+                profundidade--;
+                if (profundidade == 0)
+                    return fonte[(abre + 1)..i];
+            }
+        }
+
+        throw new InvalidOperationException("Condição sem fechamento.");
     }
 
     private static string ExtrairMembro(string fonte, string assinatura)

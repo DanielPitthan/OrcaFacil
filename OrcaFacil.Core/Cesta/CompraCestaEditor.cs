@@ -106,7 +106,7 @@ public static class CompraCestaEditor
         if (erro is not null)
             throw new InvalidOperationException(erro);
 
-        var existente = itens.FirstOrDefault(i => i.ProdutoCestaId == produtoId);
+        var existente = itens.FirstOrDefault(i => i.ProdutoCestaId == produtoId && string.IsNullOrEmpty(i.ProdutoNovoChave));
         if (existente is null)
         {
             itens.Add(new ItemCompraCestaFormModel { ProdutoCestaId = produtoId, Preco = preco });
@@ -126,7 +126,8 @@ public static class CompraCestaEditor
         if (erro is not null)
             throw new InvalidOperationException(erro);
 
-        var outro = itens.FirstOrDefault(i => !ReferenceEquals(i, atual) && i.ProdutoCestaId == produtoId);
+        var outro = itens.FirstOrDefault(i =>
+            !ReferenceEquals(i, atual) && i.ProdutoCestaId == produtoId && string.IsNullOrEmpty(i.ProdutoNovoChave));
         if (outro is not null)
         {
             outro.Preco = preco;
@@ -135,6 +136,9 @@ public static class CompraCestaEditor
         }
 
         atual.ProdutoCestaId = produtoId;
+        atual.ProdutoNovoChave = null;
+        atual.NomePendente = null;
+        atual.CategoriaPendente = null;
         atual.Preco = preco;
     }
 

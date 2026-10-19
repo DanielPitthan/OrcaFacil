@@ -570,6 +570,18 @@ html.of-tema-claro button.of-previa-opcao {
     background-color: #ffffff;
 }
 
+html.of-tema-claro .of-previa .mud-button-root.mud-button-text.of-lista-adicionar,
+html.of-tema-claro .of-previa .mud-button-root.mud-button-text.of-lista-adicionar:hover,
+html.of-tema-claro .of-previa .mud-button-root.mud-button-text.of-lista-adicionar:focus-visible {
+    color: #1E2A33;
+}
+
+html.of-tema-escuro .of-previa .mud-button-root.mud-button-text.of-lista-adicionar,
+html.of-tema-escuro .of-previa .mud-button-root.mud-button-text.of-lista-adicionar:hover,
+html.of-tema-escuro .of-previa .mud-button-root.mud-button-text.of-lista-adicionar:focus-visible {
+    color: #E8EAF0;
+}
+
 html.of-tema-claro button.of-previa-opcao.of-previa-opcao-ativa {
     color: #ffffff;
     background-color: #1E2A33;

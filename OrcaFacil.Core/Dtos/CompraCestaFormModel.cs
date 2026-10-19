@@ -38,6 +38,12 @@ public class ItemCompraCestaFormModel
     /// <summary>Chave do produto novo guardado na prévia. A gravação da compra resolve o id.</summary>
     public string? ProdutoNovoChave { get; set; }
 
+    /// <summary>Nome como foi digitado, para a compra mostrar o produto que ainda não tem id.</summary>
+    public string? NomePendente { get; set; }
+
+    /// <summary>Categoria do produto novo, no mesmo papel do nome pendente.</summary>
+    public string? CategoriaPendente { get; set; }
+
     public decimal Preco { get; set; }
 }
 
@@ -48,6 +54,8 @@ public class ProdutoNovoCompra
     public string Nome { get; set; } = string.Empty;
 
     public int CategoriaId { get; set; }
+
+    public string? CategoriaNome { get; set; }
 
     /// <summary>Posição do item na compra. A prévia deixa em zero; o serviço preenche ao gravar.</summary>
     public int IndiceItem { get; set; }

@@ -112,7 +112,11 @@ public sealed class PreviaComprovante
             if (SomaExcedida || _linhas.Any(linha => linha.SomaExcedida))
                 return NormalizadorComprovante.MotivoSomaExcedida;
 
-            if (_linhas.GroupBy(linha => linha.ProdutoCestaId).Any(grupo => grupo.Count() > 1))
+            // O produto novo pode repetir a linha: cada uma guarda o próprio preço.
+            // Só o produto já cadastrado continua único na prévia.
+            if (_linhas.Where(linha => linha.ProdutoCestaId is > 0 && !linha.NovoSeraCriado)
+                .GroupBy(linha => linha.ProdutoCestaId)
+                .Any(grupo => grupo.Count() > 1))
                 return MensagemProdutoRepetido;
 
             return null;
@@ -206,6 +210,9 @@ public sealed class PreviaComprovante
 
     public bool CadastroPendente => _cadastroLinhaId is not null;
 
+    /// <summary>Há pelo menos duas linhas "novo produto". Ambíguas e já pendentes não contam.</summary>
+    public bool PodeCadastrarTudo => _linhas.Count(EhNovoProduto) >= 2;
+
     /// <summary>
     /// Guarda o produto na prévia e casa a linha. Não grava no banco.
     /// Nome igual a um produto já existente reaproveita esse produto.
@@ -227,43 +234,71 @@ public sealed class PreviaComprovante
             throw new InvalidOperationException("Selecione a categoria do produto.");
 
         var linha = _linhas.First(item => item.Id == id);
-        var chave = NormalizadorComprovante.TextoComparacao(nome);
-        var existentes = _catalogo
-            .Where(produto => produto.Id > 0 && NormalizadorComprovante.TextoComparacao(produto.Nome) == chave)
-            .Take(2)
-            .ToList();
-
-        if (existentes.Count > 1)
+        if (AplicarNome(linha, nome, modelo.CategoriaId, categoriaNome, preco) == ResultadoNome.Ambiguo)
         {
             _cadastroLinhaId = null;
             throw new InvalidOperationException(NormalizadorComprovante.MotivoAmbiguo);
         }
 
-        if (existentes.Count == 1)
-        {
-            AplicarProduto(linha, existentes[0]);
-            AlterarPreco(linha, preco);
-            _cadastroLinhaId = null;
-            return;
-        }
-
-        var pendente = _pendentes.FirstOrDefault(produto => produto.Chave == chave);
-        if (pendente is null)
-        {
-            pendente = new ProdutoPendente
-            {
-                Id = --_sequenciaPendente,
-                Chave = chave,
-                Nome = nome,
-                CategoriaId = modelo.CategoriaId,
-                CategoriaNome = string.IsNullOrWhiteSpace(categoriaNome) ? null : categoriaNome.Trim()
-            };
-            _pendentes.Add(pendente);
-        }
-
-        AplicarPendente(linha, pendente);
-        AlterarPreco(linha, preco);
         _cadastroLinhaId = null;
+    }
+
+    /// <summary>
+    /// Marca de uma vez cada linha "novo produto". O nome sai da descrição lida,
+    /// com o mesmo corte e a mesma retirada de prefixo do cadastro de uma linha.
+    /// Não grava. Um segundo chamado, sem linhas novas, não cria outro produto.
+    /// </summary>
+    public void CadastrarTudo(int categoriaId, string? categoriaNome = null)
+    {
+        if (_cadastroLinhaId is not null || !PodeCadastrarTudo)
+            return;
+
+        if (categoriaId <= 0)
+            throw new InvalidOperationException("Selecione a categoria do produto.");
+
+        var nomeCategoria = string.IsNullOrWhiteSpace(categoriaNome) ? null : categoriaNome.Trim();
+        foreach (var linha in _linhas.Where(EhNovoProduto).ToList())
+        {
+            var nome = NomeParaCadastro(linha);
+            if (string.IsNullOrWhiteSpace(nome))
+                continue;
+
+            if (AplicarNome(linha, nome, categoriaId, nomeCategoria, null) == ResultadoNome.Ambiguo)
+                continue;
+
+            linha.PodeDesfazerNovo = true;
+        }
+    }
+
+    /// <summary>A linha volta a "novo produto", sem produto pendente.</summary>
+    public void DesfazerNovo(LinhaPreviaComprovante linha)
+    {
+        ArgumentNullException.ThrowIfNull(linha);
+        ExigirLinha(linha);
+        if (!linha.PodeDesfazerNovo)
+            return;
+
+        if (_cadastroLinhaId == linha.Id)
+            _cadastroLinhaId = null;
+
+        var chave = linha.ProdutoNovoChave;
+        linha.Nome = NormalizadorComprovante.Cortar(linha.NomeLido ?? string.Empty);
+        linha.ProdutoCestaId = null;
+        linha.ProdutoNovoChave = null;
+        linha.CategoriaId = null;
+        linha.CategoriaNome = null;
+        linha.CategoriaFaltando = true;
+        linha.ProdutoInativo = false;
+        linha.NaoIdentificado = false;
+        linha.NomeNovo = true;
+        linha.Ambiguo = false;
+        linha.ItemAusente = false;
+        linha.CasadoPelaDescricao = false;
+        linha.NovoSeraCriado = false;
+        linha.PodeDesfazerNovo = false;
+
+        if (chave is not null && _linhas.All(item => item.ProdutoNovoChave != chave))
+            _pendentes.RemoveAll(produto => produto.Chave == chave);
     }
 
     public CompraCestaFormModel ParaCompra()
@@ -284,13 +319,16 @@ public sealed class PreviaComprovante
                     {
                         Chave = pendente.Chave,
                         Nome = pendente.Nome,
-                        CategoriaId = pendente.CategoriaId
+                        CategoriaId = pendente.CategoriaId,
+                        CategoriaNome = pendente.CategoriaNome
                     });
                 }
 
                 itens.Add(new ItemCompraCestaFormModel
                 {
                     ProdutoNovoChave = pendente.Chave,
+                    NomePendente = pendente.Nome,
+                    CategoriaPendente = pendente.CategoriaNome,
                     Preco = linha.Preco
                 });
                 continue;
@@ -345,6 +383,7 @@ public sealed class PreviaComprovante
         linha.CasadoPelaDescricao = false;
         linha.NovoSeraCriado = false;
         linha.ProdutoNovoChave = null;
+        linha.PodeDesfazerNovo = false;
     }
 
     private static void AplicarPendente(LinhaPreviaComprovante linha, ProdutoPendente pendente)
@@ -362,7 +401,55 @@ public sealed class PreviaComprovante
         linha.ItemAusente = false;
         linha.CasadoPelaDescricao = false;
         linha.NovoSeraCriado = true;
+        linha.PodeDesfazerNovo = false;
     }
+
+    private ResultadoNome AplicarNome(
+        LinhaPreviaComprovante linha,
+        string nome,
+        int categoriaId,
+        string? categoriaNome,
+        decimal? preco)
+    {
+        var chave = NormalizadorComprovante.TextoComparacao(nome);
+        var existentes = _catalogo
+            .Where(produto => produto.Id > 0 && NormalizadorComprovante.TextoComparacao(produto.Nome) == chave)
+            .Take(2)
+            .ToList();
+
+        if (existentes.Count > 1)
+            return ResultadoNome.Ambiguo;
+
+        if (existentes.Count == 1)
+        {
+            AplicarProduto(linha, existentes[0]);
+            if (preco is decimal valor)
+                AlterarPreco(linha, valor);
+            return ResultadoNome.Casado;
+        }
+
+        var pendente = _pendentes.FirstOrDefault(produto => produto.Chave == chave);
+        if (pendente is null)
+        {
+            pendente = new ProdutoPendente
+            {
+                Id = --_sequenciaPendente,
+                Chave = chave,
+                Nome = nome,
+                CategoriaId = categoriaId,
+                CategoriaNome = string.IsNullOrWhiteSpace(categoriaNome) ? null : categoriaNome.Trim()
+            };
+            _pendentes.Add(pendente);
+        }
+
+        AplicarPendente(linha, pendente);
+        if (preco is decimal precoLinha)
+            AlterarPreco(linha, precoLinha);
+        return ResultadoNome.Pendente;
+    }
+
+    private static bool EhNovoProduto(LinhaPreviaComprovante linha) =>
+        linha.NomeNovo && !linha.Ambiguo && !linha.NaoIdentificado && !linha.NovoSeraCriado;
 
     private void ExigirLinha(LinhaPreviaComprovante linha)
     {
@@ -392,6 +479,13 @@ public sealed class PreviaComprovante
 
         SomaLinhas = soma;
         SomaExcedida = excedida;
+    }
+
+    private enum ResultadoNome
+    {
+        Casado,
+        Pendente,
+        Ambiguo
     }
 
     private sealed class ProdutoPendente
@@ -433,6 +527,8 @@ public sealed class LinhaPreviaComprovante
     public bool CasadoPelaDescricao { get; set; }
 
     public bool NovoSeraCriado { get; set; }
+
+    public bool PodeDesfazerNovo { get; set; }
 
     public string? ProdutoNovoChave { get; set; }
 

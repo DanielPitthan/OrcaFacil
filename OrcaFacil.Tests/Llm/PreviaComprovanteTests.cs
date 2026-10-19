@@ -367,9 +367,12 @@ public class PreviaComprovanteTests
     }
 
     [Fact]
-    public void DoisCadastrosComMesmoNomeNormalizado_UsamUmProdutoEBloqueiam()
+    public void DoisCadastrosComMesmoNomeNormalizado_MantemAsLinhasEUmProduto()
     {
-        var previa = Previa([], Item("açúcar", "", reconhecido: false, 2m), Item("acucar", "", reconhecido: false, 3m));
+        var previa = Previa(
+            [],
+            Item("açúcar", "", reconhecido: false, 2m, "2", "un"),
+            Item("acucar", "", reconhecido: false, 3m, "1", "kg"));
         var primeiro = previa.IniciarCadastro(previa.Linhas[0]);
         Assert.NotNull(primeiro);
         primeiro.Nome = "Açúcar";
@@ -382,11 +385,25 @@ public class PreviaComprovanteTests
         segundo.CategoriaId = 2;
         previa.ConfirmarCadastro(segundo, 3m, "Alimentos");
 
+        Assert.Equal(2, previa.Linhas.Count);
         Assert.Equal(previa.Linhas[0].ProdutoCestaId, previa.Linhas[1].ProdutoCestaId);
+        Assert.Equal(previa.Linhas[0].ProdutoNovoChave, previa.Linhas[1].ProdutoNovoChave);
         Assert.Equal("Açúcar", previa.Linhas[0].NomeGravado);
+        Assert.Equal("Açúcar", previa.Linhas[1].NomeGravado);
+        Assert.Equal("2", previa.Linhas[0].Quantidade);
+        Assert.Equal("1", previa.Linhas[1].Quantidade);
         Assert.Equal(2.5m, previa.Linhas[0].Preco);
-        Assert.Equal(PreviaComprovante.MensagemProdutoRepetido, previa.MensagemBloqueio);
-        Assert.Throws<InvalidOperationException>(() => previa.ParaCompra());
+        Assert.Equal(3m, previa.Linhas[1].Preco);
+        Assert.True(previa.PodeConfirmar);
+        Assert.Null(previa.MensagemBloqueio);
+
+        var compra = previa.ParaCompra();
+        Assert.Equal(2, compra.Itens.Count);
+        Assert.Equal(5.5m, compra.Itens.Sum(item => item.Preco));
+        var novo = Assert.Single(compra.ProdutosNovos);
+        Assert.Equal("Açúcar", novo.Nome);
+        Assert.All(compra.Itens, item => Assert.Equal(novo.Chave, item.ProdutoNovoChave));
+        Assert.All(compra.Itens, item => Assert.Equal("Açúcar", item.NomePendente));
     }
 
     [Fact]
@@ -409,6 +426,120 @@ public class PreviaComprovanteTests
         var compra = previa.ParaCompra();
         Assert.Empty(compra.ProdutosNovos);
         Assert.Equal(4, Assert.Single(compra.Itens).ProdutoCestaId);
+    }
+
+    [Fact]
+    public void CadastrarTudo_ApareceComDuasLinhasNovas_ESomeComUmaOuNenhuma()
+    {
+        Assert.False(Previa([], Item("BISC", "Doce", reconhecido: true, 2m)).PodeCadastrarTudo);
+        var catalogo = new List<ProdutoCesta>
+        {
+            Produto(1, "Arroz", 2, "Alimentos"),
+            Produto(2, "Feijão", 2, "Alimentos")
+        };
+        Assert.False(Previa(catalogo, Item("ARROZ", "Arroz", reconhecido: true, 2m), Item("FEIJAO", "Feijão", reconhecido: true, 3m)).PodeCadastrarTudo);
+
+        var duas = Previa([], Item("açúcar", "Doce", reconhecido: true, 2m), Item("sabão", "Limpeza X", reconhecido: true, 3m));
+        Assert.True(duas.PodeCadastrarTudo);
+        Assert.Equal(2, duas.Linhas.Count(linha => linha.NomeNovo));
+
+        duas.CadastrarTudo(2, "Alimentos");
+        Assert.False(duas.PodeCadastrarTudo);
+        Assert.All(duas.Linhas, linha => Assert.True(linha.NovoSeraCriado));
+        Assert.Equal("açúcar", duas.Linhas[0].NomeGravado);
+        Assert.Equal("sabão", duas.Linhas[1].NomeGravado);
+        Assert.Contains("novo, será criado ao confirmar", duas.Linhas[0].Titulo, StringComparison.Ordinal);
+        Assert.Equal(2m, duas.Linhas[0].Preco);
+
+        duas.CadastrarTudo(2, "Alimentos");
+        Assert.Equal(2, duas.ParaCompra().ProdutosNovos.Count);
+    }
+
+    [Fact]
+    public void CadastrarTudo_DeixaAmbiguoDeFora_EDesfazUmaLinha()
+    {
+        var catalogo = new List<ProdutoCesta>
+        {
+            Produto(1, "Açúcar", 2, "Alimentos"),
+            Produto(2, "AÇÚCAR", 3, "Mercearia")
+        };
+        var previa = Previa(
+            catalogo,
+            Item("açúcar", "Doce", reconhecido: true, 2m),
+            Item("biscoito", "Bolacha", reconhecido: true, 4m),
+            Item("sabão", "Detergente", reconhecido: true, 3m));
+
+        var ambiguo = Assert.Single(previa.Linhas, linha => linha.Ambiguo);
+        Assert.True(previa.PodeCadastrarTudo);
+        previa.CadastrarTudo(2, "Alimentos");
+
+        Assert.True(ambiguo.Ambiguo);
+        Assert.False(ambiguo.NovoSeraCriado);
+        Assert.False(ambiguo.PodeDesfazerNovo);
+        Assert.False(previa.PodeCadastrarTudo);
+
+        var biscoito = Assert.Single(previa.Linhas, linha => linha.DescricaoLida == "biscoito");
+        var sabao = Assert.Single(previa.Linhas, linha => linha.DescricaoLida == "sabão");
+        Assert.True(biscoito.NovoSeraCriado);
+        Assert.Equal("biscoito", biscoito.NomeGravado);
+
+        previa.DesfazerNovo(biscoito);
+        Assert.True(biscoito.NomeNovo);
+        Assert.False(biscoito.NovoSeraCriado);
+        Assert.False(biscoito.PodeDesfazerNovo);
+        Assert.Null(biscoito.ProdutoCestaId);
+        Assert.Equal("Bolacha · novo produto · biscoito", biscoito.Titulo);
+        Assert.True(sabao.NovoSeraCriado);
+        Assert.False(previa.PodeCadastrarTudo);
+
+        previa.DesfazerNovo(sabao);
+        Assert.True(previa.PodeCadastrarTudo);
+        Assert.Equal(2, previa.Linhas.Count(linha => linha.NomeNovo));
+    }
+
+    [Fact]
+    public void CadastrarTudo_DeduplicaNomeECatalogo()
+    {
+        var catalogo = new List<ProdutoCesta> { Produto(4, "Açúcar", 2, "Alimentos") };
+        var previa = Previa(
+            catalogo,
+            Item("Não identificado: Açúcar", "Doce", reconhecido: true, 2m),
+            Item("acucar", "Outro doce", reconhecido: true, 3m),
+            Item("sabão  líquido", "Detergente", reconhecido: true, 4m));
+
+        Assert.True(previa.PodeCadastrarTudo);
+        previa.CadastrarTudo(9, "Limpeza");
+
+        var acucar = previa.Linhas[0];
+        var repetido = previa.Linhas[1];
+        var sabao = previa.Linhas[2];
+        Assert.Equal(4, acucar.ProdutoCestaId);
+        Assert.Equal("Açúcar", acucar.NomeGravado);
+        Assert.False(acucar.NovoSeraCriado);
+        Assert.True(acucar.PodeDesfazerNovo);
+        Assert.Equal(4, repetido.ProdutoCestaId);
+        Assert.Equal("Açúcar", repetido.NomeGravado);
+        Assert.True(sabao.NovoSeraCriado);
+        Assert.Equal("sabão  líquido", sabao.NomeGravado);
+        Assert.Equal(PreviaComprovante.MensagemProdutoRepetido, previa.MensagemBloqueio);
+
+        previa.Remover(repetido);
+        var compra = previa.ParaCompra();
+        Assert.Equal(4, compra.Itens[0].ProdutoCestaId);
+        var novo = Assert.Single(compra.ProdutosNovos);
+        Assert.Equal("sabão  líquido", novo.Nome);
+        Assert.Equal(9, novo.CategoriaId);
+    }
+
+    [Fact]
+    public void CadastrarTudo_SegundoChamadoNaoCriaOutroProduto()
+    {
+        var previa = Previa([], Item("açúcar", "Doce", reconhecido: true, 2m), Item("sabão", "Limpeza X", reconhecido: true, 3m));
+        previa.CadastrarTudo(2, "Alimentos");
+        var ids = previa.Linhas.Select(linha => linha.ProdutoCestaId).ToArray();
+        previa.CadastrarTudo(2, "Alimentos");
+        Assert.Equal(ids, previa.Linhas.Select(linha => linha.ProdutoCestaId).ToArray());
+        Assert.Equal(2, previa.ParaCompra().ProdutosNovos.Count);
     }
 
     private static PreviaComprovante Previa(IReadOnlyList<ProdutoCesta> catalogo, params ItemComprovanteLido[] itens) =>

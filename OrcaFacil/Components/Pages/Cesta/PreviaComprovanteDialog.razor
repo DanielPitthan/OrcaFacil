@@ -42,7 +42,8 @@
                         <ItemList TItem="LinhaPreviaComprovante" Itens="@Previa.Linhas" Contagem="@Contagem"
                                   SomaFormatada="@Previa.SomaLinhas.ToString("C")"
                                   Titulo="Titulo" Subtitulo="Subtitulo" Valor="Valor" Icone="Icone"
-                                  ChaveItem="Chave" EmErro="EmErro" MostrarAdicionar="false"
+                                  ChaveItem="Chave" EmErro="EmErro" MostrarAdicionar="@Previa.PodeCadastrarTudo"
+                                  TextoAdicionar="Cadastrar tudo" OnAdicionar="CadastrarTudoAsync"
                                   TextoVazio="Nenhum item na leitura."
                                   OnEditar="Editar" OnRemover="Remover" />
                     </FormSection>
@@ -70,6 +71,10 @@
     @if (_editando?.PodeCadastrar == true)
     {
         <MudButton Class="of-cadastrar" Variant="Variant.Outlined" Color="Color.Default" OnClick="CadastrarAsync">Cadastrar</MudButton>
+    }
+    @if (_editando?.PodeDesfazerNovo == true)
+    {
+        <MudButton Class="of-cadastrar" Variant="Variant.Outlined" Color="Color.Default" OnClick="DesfazerNovo">Desfazer</MudButton>
     }
     @if (!Opcoes().Any())
     {
@@ -100,6 +105,7 @@
     private bool _sheetAberto;
     private bool _confirmando;
     private bool _cadastrando;
+    private bool _cadastrandoTudo;
     private int _produtoId;
     private decimal _preco;
     private string? _erroItem;
@@ -206,7 +212,7 @@
 
     private async Task CadastrarAsync()
     {
-        if (_cadastrando || _confirmando || _editando is null || !_editando.PodeCadastrar)
+        if (_cadastrando || _cadastrandoTudo || _confirmando || _editando is null || !_editando.PodeCadastrar)
             return;
 
         _cadastrando = true;
@@ -260,6 +266,59 @@
         {
             _cadastrando = false;
         }
+    }
+
+    private async Task CadastrarTudoAsync()
+    {
+        if (_cadastrandoTudo || _cadastrando || _confirmando || !Previa.PodeCadastrarTudo)
+            return;
+
+        _cadastrandoTudo = true;
+        try
+        {
+            if (Categorias.Count == 0)
+            {
+                Snackbar.Add("Cadastre uma categoria de despesa antes do produto.", Severity.Info);
+                return;
+            }
+
+            var categoria = Categorias[0];
+            if (Categorias.Count > 1)
+            {
+                var parametros = new DialogParameters<ProdutoCestaDialog>
+                {
+                    { x => x.Modelo, new ProdutoCestaFormModel { Ativo = true } },
+                    { x => x.Categorias, Categorias },
+                    { x => x.SomenteCategoria, true }
+                };
+                var dialog = await DialogService.ShowAsync<ProdutoCestaDialog>("Categoria dos novos", parametros, OpcoesProduto());
+                var resultado = await dialog.Result;
+                if (resultado is not { Canceled: false, Data: ProdutoCestaFormModel salvo })
+                    return;
+
+                var escolhida = Categorias.FirstOrDefault(item => item.Id == salvo.CategoriaId);
+                if (escolhida is null)
+                    return;
+
+                categoria = escolhida;
+            }
+
+            Previa.CadastrarTudo(categoria.Id, categoria.Nome);
+        }
+        finally
+        {
+            _cadastrandoTudo = false;
+        }
+    }
+
+    private void DesfazerNovo()
+    {
+        if (_editando is null)
+            return;
+
+        Previa.DesfazerNovo(_editando);
+        _sheetAberto = false;
+        _erroItem = null;
     }
 
     private IEnumerable<ProdutoCesta> Opcoes()
