@@ -5,9 +5,8 @@ using OrcaFacil.Core.Entities;
 namespace OrcaFacil.Core.Llm;
 
 /// <summary>
-/// Prévia editável do comprovante. Nada aqui grava compra nem produto:
-/// o cadastro só entra na linha quando <see cref="ConfirmarCadastro"/> recebe
-/// o produto que o usuário já confirmou. Cancelar desfaz o pendente.
+/// Prévia editável do comprovante. Confirmar o cadastro não grava o produto:
+/// ele fica nesta prévia até o confirmar da compra. Cancelar a prévia o descarta.
 /// O que segue para a compra é <see cref="LinhaPreviaComprovante.Nome"/>, nunca o rótulo.
 /// </summary>
 public sealed class PreviaComprovante
@@ -15,6 +14,10 @@ public sealed class PreviaComprovante
     public const string EtiquetaCasadoPelaDescricao = "casado pela descrição";
 
     public const string EtiquetaNovoProduto = "novo produto";
+
+    public const string EtiquetaAmbiguo = "ambíguo";
+
+    public const string EtiquetaNovoSeraCriado = "novo, será criado ao confirmar";
 
     public const string MensagemSemProdutoOuCategoria =
         "Classifique os itens sem produto ou categoria antes de confirmar.";
@@ -26,7 +29,10 @@ public sealed class PreviaComprovante
     public const string MensagemSemItem = "Inclua ao menos um item.";
 
     private readonly List<LinhaPreviaComprovante> _linhas;
+    private readonly List<ProdutoCesta> _catalogo;
+    private readonly List<ProdutoPendente> _pendentes = [];
     private Guid? _cadastroLinhaId;
+    private int _sequenciaPendente;
 
     private PreviaComprovante(
         ComprovanteNormalizado comprovante,
@@ -45,6 +51,7 @@ public sealed class PreviaComprovante
             .Where(p => p.Id > 0)
             .GroupBy(p => p.Id)
             .ToDictionary(g => g.Key, g => g.First().Categoria?.Nome);
+        _catalogo = produtos.Where(produto => produto is not null).ToList();
         _linhas = comprovante.Linhas.Select(linha => LinhaPreviaComprovante.DaLeitura(
             linha,
             linha.ProdutoCestaId is int id && categorias.TryGetValue(id, out var nome) ? nome : null)).ToList();
@@ -175,13 +182,16 @@ public sealed class PreviaComprovante
     }
 
     /// <summary>
-    /// Abre o cadastro com o nome cortado, sem o prefixo de não identificado.
-    /// Não cria produto e não muda a linha.
+    /// Abre o cadastro com a descrição lida, sem o prefixo e cortada em 80.
+    /// Um segundo início, com outro ainda em andamento, é ignorado e não cria produto.
     /// </summary>
-    public ProdutoCestaFormModel IniciarCadastro(LinhaPreviaComprovante linha)
+    public ProdutoCestaFormModel? IniciarCadastro(LinhaPreviaComprovante linha)
     {
         ArgumentNullException.ThrowIfNull(linha);
         ExigirLinha(linha);
+        if (_cadastroLinhaId is not null)
+            return null;
+
         _cadastroLinhaId = linha.Id;
         return new ProdutoCestaFormModel
         {
@@ -191,20 +201,68 @@ public sealed class PreviaComprovante
         };
     }
 
-    /// <summary>Desiste do cadastro. A linha continua como estava e nenhum produto é criado.</summary>
+    /// <summary>Desiste do cadastro em andamento. A linha continua como estava e nenhum produto é criado.</summary>
     public void CancelarCadastro() => _cadastroLinhaId = null;
 
     public bool CadastroPendente => _cadastroLinhaId is not null;
 
-    /// <summary>Casa a linha com o produto que o usuário acabou de confirmar. Não persiste.</summary>
-    public void ConfirmarCadastro(ProdutoCesta produto)
+    /// <summary>
+    /// Guarda o produto na prévia e casa a linha. Não grava no banco.
+    /// Nome igual a um produto já existente reaproveita esse produto.
+    /// </summary>
+    public void ConfirmarCadastro(ProdutoCestaFormModel modelo, decimal preco, string? categoriaNome = null)
     {
-        ArgumentNullException.ThrowIfNull(produto);
+        ArgumentNullException.ThrowIfNull(modelo);
         if (_cadastroLinhaId is not Guid id)
             throw new InvalidOperationException("Não há cadastro em andamento.");
 
+        var nome = (modelo.Nome ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(nome))
+            throw new InvalidOperationException("Informe o nome do produto.");
+
+        if (nome.Length > NormalizadorComprovante.TamanhoMaximoNome)
+            throw new InvalidOperationException("O nome pode ter no máximo 80 caracteres.");
+
+        if (modelo.CategoriaId <= 0)
+            throw new InvalidOperationException("Selecione a categoria do produto.");
+
         var linha = _linhas.First(item => item.Id == id);
-        AplicarProduto(linha, produto);
+        var chave = NormalizadorComprovante.TextoComparacao(nome);
+        var existentes = _catalogo
+            .Where(produto => produto.Id > 0 && NormalizadorComprovante.TextoComparacao(produto.Nome) == chave)
+            .Take(2)
+            .ToList();
+
+        if (existentes.Count > 1)
+        {
+            _cadastroLinhaId = null;
+            throw new InvalidOperationException(NormalizadorComprovante.MotivoAmbiguo);
+        }
+
+        if (existentes.Count == 1)
+        {
+            AplicarProduto(linha, existentes[0]);
+            AlterarPreco(linha, preco);
+            _cadastroLinhaId = null;
+            return;
+        }
+
+        var pendente = _pendentes.FirstOrDefault(produto => produto.Chave == chave);
+        if (pendente is null)
+        {
+            pendente = new ProdutoPendente
+            {
+                Id = --_sequenciaPendente,
+                Chave = chave,
+                Nome = nome,
+                CategoriaId = modelo.CategoriaId,
+                CategoriaNome = string.IsNullOrWhiteSpace(categoriaNome) ? null : categoriaNome.Trim()
+            };
+            _pendentes.Add(pendente);
+        }
+
+        AplicarPendente(linha, pendente);
+        AlterarPreco(linha, preco);
         _cadastroLinhaId = null;
     }
 
@@ -213,35 +271,61 @@ public sealed class PreviaComprovante
         if (!PodeConfirmar)
             throw new InvalidOperationException(MensagemBloqueio ?? MensagemSemProdutoOuCategoria);
 
+        var novos = new List<ProdutoNovoCompra>();
+        var itens = new List<ItemCompraCestaFormModel>();
+        foreach (var linha in _linhas)
+        {
+            if (linha.NovoSeraCriado)
+            {
+                var pendente = _pendentes.First(produto => produto.Chave == linha.ProdutoNovoChave);
+                if (novos.All(produto => produto.Chave != pendente.Chave))
+                {
+                    novos.Add(new ProdutoNovoCompra
+                    {
+                        Chave = pendente.Chave,
+                        Nome = pendente.Nome,
+                        CategoriaId = pendente.CategoriaId
+                    });
+                }
+
+                itens.Add(new ItemCompraCestaFormModel
+                {
+                    ProdutoNovoChave = pendente.Chave,
+                    Preco = linha.Preco
+                });
+                continue;
+            }
+
+            itens.Add(new ItemCompraCestaFormModel
+            {
+                ProdutoCestaId = linha.ProdutoCestaId!.Value,
+                Preco = linha.Preco
+            });
+        }
+
         return new CompraCestaFormModel
         {
             LocalCompraId = LocalCompraId ?? 0,
             Data = Data.Date,
-            Itens = _linhas.Select(linha => new ItemCompraCestaFormModel
-            {
-                ProdutoCestaId = linha.ProdutoCestaId!.Value,
-                Preco = linha.Preco
-            }).ToList()
+            ProdutosNovos = novos,
+            Itens = itens
         };
     }
 
     public static string NomeParaCadastro(LinhaPreviaComprovante linha)
     {
         ArgumentNullException.ThrowIfNull(linha);
-        if (linha.NaoIdentificado)
-            return SemPrefixoECortado(linha.DescricaoLida);
-
-        return NormalizadorComprovante.Cortar(linha.Nome ?? string.Empty);
+        return SemPrefixoECortado(linha.DescricaoLida);
     }
 
     public static string SemPrefixoECortado(string? texto)
     {
-        var nome = (texto ?? string.Empty).Trim();
+        var nome = texto ?? string.Empty;
         var prefixo = NormalizadorComprovante.PrefixoNaoIdentificado;
         if (nome.StartsWith(prefixo, StringComparison.Ordinal))
-            nome = nome[prefixo.Length..].TrimStart();
+            nome = nome[prefixo.Length..];
 
-        return NormalizadorComprovante.Cortar(nome);
+        return NormalizadorComprovante.Cortar(nome.Trim());
     }
 
     public override string ToString() => "PreviaComprovante";
@@ -259,6 +343,25 @@ public sealed class PreviaComprovante
         linha.Ambiguo = false;
         linha.ItemAusente = false;
         linha.CasadoPelaDescricao = false;
+        linha.NovoSeraCriado = false;
+        linha.ProdutoNovoChave = null;
+    }
+
+    private static void AplicarPendente(LinhaPreviaComprovante linha, ProdutoPendente pendente)
+    {
+        linha.Nome = pendente.Nome;
+        linha.ProdutoCestaId = pendente.Id;
+        linha.ProdutoNovoChave = pendente.Chave;
+        linha.CategoriaId = pendente.CategoriaId;
+        linha.CategoriaNome = pendente.CategoriaNome;
+        linha.CategoriaFaltando = false;
+        linha.ProdutoInativo = false;
+        linha.NaoIdentificado = false;
+        linha.NomeNovo = false;
+        linha.Ambiguo = false;
+        linha.ItemAusente = false;
+        linha.CasadoPelaDescricao = false;
+        linha.NovoSeraCriado = true;
     }
 
     private void ExigirLinha(LinhaPreviaComprovante linha)
@@ -290,6 +393,15 @@ public sealed class PreviaComprovante
         SomaLinhas = soma;
         SomaExcedida = excedida;
     }
+
+    private sealed class ProdutoPendente
+    {
+        public required int Id { get; init; }
+        public required string Chave { get; init; }
+        public required string Nome { get; init; }
+        public required int CategoriaId { get; init; }
+        public string? CategoriaNome { get; init; }
+    }
 }
 
 public sealed class LinhaPreviaComprovante
@@ -320,6 +432,10 @@ public sealed class LinhaPreviaComprovante
 
     public bool CasadoPelaDescricao { get; set; }
 
+    public bool NovoSeraCriado { get; set; }
+
+    public string? ProdutoNovoChave { get; set; }
+
     public bool ProdutoInativo { get; set; }
 
     public bool ItemAusente { get; set; }
@@ -336,6 +452,8 @@ public sealed class LinhaPreviaComprovante
 
     public string NomeLido { get; private set; } = string.Empty;
 
+    public IReadOnlyList<int> CandidatosIds { get; private set; } = [];
+
     public IReadOnlyList<string> Avisos { get; private set; } = [];
 
     public string? Motivo => Avisos.Count == 0 ? null : string.Join(" ", Avisos);
@@ -347,7 +465,7 @@ public sealed class LinhaPreviaComprovante
         NaoIdentificado ? NormalizadorComprovante.PrefixoNaoIdentificado + DescricaoLida : Nome;
 
     public bool TemProdutoECategoria =>
-        ProdutoCestaId is > 0
+        (ProdutoCestaId is > 0 || NovoSeraCriado)
         && !CategoriaFaltando
         && !NaoIdentificado
         && !NomeNovo
@@ -378,8 +496,14 @@ public sealed class LinhaPreviaComprovante
             if (NaoIdentificado)
                 return Rotulo;
 
+            if (NovoSeraCriado)
+                return Juntar(Nome, PreviaComprovante.EtiquetaNovoSeraCriado, DescricaoLida);
+
             if (CasadoPelaDescricao)
                 return Juntar(Nome, PreviaComprovante.EtiquetaCasadoPelaDescricao, DescricaoLida);
+
+            if (Ambiguo)
+                return Juntar(Nome, PreviaComprovante.EtiquetaAmbiguo, DescricaoLida);
 
             if (NomeNovo)
                 return Juntar(Nome, PreviaComprovante.EtiquetaNovoProduto, DescricaoLida);
@@ -404,7 +528,7 @@ public sealed class LinhaPreviaComprovante
         }
     }
 
-    public bool PodeCadastrar => ProdutoCestaId is not > 0;
+    public bool PodeCadastrar => ProdutoCestaId is not > 0 && !NovoSeraCriado;
 
     public static LinhaPreviaComprovante DaLeitura(LinhaComprovanteNormalizada linha, string? categoriaNome)
     {
@@ -429,6 +553,7 @@ public sealed class LinhaPreviaComprovante
             CategoriaNome = string.IsNullOrWhiteSpace(categoriaNome) ? null : categoriaNome.Trim(),
             Nome = linha.Nome,
             NomeLido = linha.NomeLido,
+            CandidatosIds = linha.CandidatosIds,
             Avisos = linha.Avisos
         };
     }
@@ -443,7 +568,11 @@ public sealed class LinhaPreviaComprovante
             if (string.IsNullOrWhiteSpace(parte))
                 continue;
 
-            vistos.Add(parte.Trim());
+            var texto = parte.Trim();
+            if (vistos.Contains(texto, StringComparer.Ordinal))
+                continue;
+
+            vistos.Add(texto);
         }
 
         return string.Join(" · ", vistos);

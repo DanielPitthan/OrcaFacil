@@ -22,6 +22,14 @@
     padding: 0;
 }
 
+:global(html.of-tema-claro) .of-lista-item-erro {
+    box-shadow: inset 4px 0 0 #9B2C3A;
+}
+
+:global(html.of-tema-escuro) .of-lista-item-erro {
+    box-shadow: inset 4px 0 0 #F59A9A;
+}
+
 .of-lista-item {
     display: flex;
     align-items: center;
@@ -62,7 +70,7 @@
 
 .of-lista-sub {
     margin-top: 2px;
-    color: var(--of-text-muted);
+    color: var(--of-text-secondary);
     font-size: 12px;
     line-height: 1.3;
     overflow: hidden;

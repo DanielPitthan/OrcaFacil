@@ -1,3 +1,4 @@
+using System.Globalization;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Llm;
 
@@ -472,12 +473,12 @@ public class NormalizadorComprovanteTests
             Cupom(Item("açúcar", "Doce", reconhecido: true, 2m)),
             catalogo).Linhas);
 
-        Assert.True(naoUnico.NomeNovo);
-        Assert.False(naoUnico.Ambiguo);
+        Assert.True(naoUnico.Ambiguo);
+        Assert.False(naoUnico.NomeNovo);
         Assert.False(naoUnico.CasadoPelaDescricao);
         Assert.Null(naoUnico.ProdutoCestaId);
-        Assert.Equal("Doce", naoUnico.Nome);
-        Assert.Equal("Doce", naoUnico.NomeLido);
+        Assert.Equal("açúcar", naoUnico.Nome);
+        Assert.Equal(new[] { 2, 3 }, naoUnico.CandidatosIds);
         Assert.False(naoUnico.ProntaParaGravar);
 
         var semDescricao = Assert.Single(NormalizadorComprovante.Normalizar(
@@ -598,6 +599,63 @@ public class NormalizadorComprovanteTests
 
         Assert.Null(comPrecoRuim.Aviso);
         Assert.False(comPrecoRuim.PodeGravar);
+    }
+
+    [Fact]
+    public void Comparacao_IgnoraAcentoCaixaEEspaco_EGravaONomeDoCatalogo()
+    {
+        var catalogo = new List<ProdutoCesta>
+        {
+            Produto(1, "Açúcar", 2),
+            Produto(2, "arroz branco", 2)
+        };
+
+        var acucar = Assert.Single(NormalizadorComprovante.Normalizar(
+            Cupom(Item("ACUCAR", "acucar", reconhecido: true, 4m)),
+            catalogo).Linhas);
+        Assert.Equal(1, acucar.ProdutoCestaId);
+        Assert.Equal("Açúcar", acucar.Nome);
+        Assert.False(acucar.CasadoPelaDescricao);
+
+        var arroz = Assert.Single(NormalizadorComprovante.Normalizar(
+            Cupom(Item("x", "arroz  branco", reconhecido: true, 5m)),
+            catalogo).Linhas);
+        Assert.Equal(2, arroz.ProdutoCestaId);
+        Assert.Equal("arroz branco", arroz.Nome);
+    }
+
+    [Fact]
+    public void Juntar_CasadoPelaDescricao_SoPermaneceSeTodasAsLinhasTiverem()
+    {
+        var catalogo = new List<ProdutoCesta> { Produto(1, "Arroz", 2) };
+        var misturado = Assert.Single(NormalizadorComprovante.Normalizar(
+            Cupom(
+                Item("ARROZ", "Arroz", reconhecido: true, 3m),
+                Item("Arroz", "ARROZ T1", reconhecido: true, 2m)),
+            catalogo).Linhas);
+
+        Assert.False(misturado.CasadoPelaDescricao);
+        Assert.Equal(5m, misturado.Preco);
+        Assert.Equal("Arroz", misturado.Nome);
+
+        var soDescricao = Assert.Single(NormalizadorComprovante.Normalizar(
+            Cupom(
+                Item("Arroz", "PACOTE", reconhecido: true, 3m),
+                Item("arroz", "OUTRO", reconhecido: true, 2m)),
+            catalogo).Linhas);
+
+        Assert.True(soDescricao.CasadoPelaDescricao);
+        Assert.Equal("Arroz", soDescricao.Nome);
+        Assert.Equal(5m, soDescricao.Preco);
+    }
+
+    [Fact]
+    public void Corte_GrafemaMaiorQue80_DevolveVazio()
+    {
+        var enorme = "e" + new string('\u0301', 80);
+        Assert.True(enorme.Length > 80);
+        Assert.Equal(1, new StringInfo(enorme).LengthInTextElements);
+        Assert.Equal(string.Empty, NormalizadorComprovante.Cortar(enorme));
     }
 
     private static ProdutoCesta Produto(int id, string nome, int categoriaId, bool ativo = true) =>

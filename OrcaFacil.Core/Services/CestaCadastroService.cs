@@ -3,6 +3,7 @@ using OrcaFacil.Core.Dtos;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
 using OrcaFacil.Core.Lancamentos;
+using OrcaFacil.Core.Llm;
 using OrcaFacil.Core.Repositories;
 
 namespace OrcaFacil.Core.Services;
@@ -176,25 +177,85 @@ public class CestaCadastroService
         if (modelo.Itens.Count == 0)
             throw new InvalidOperationException("Inclua ao menos um produto na compra.");
 
-        if (modelo.Itens.GroupBy(i => i.ProdutoCestaId).Any(g => g.Count() > 1))
-            throw new InvalidOperationException("Cada produto só pode aparecer uma vez na compra.");
-
-        var produtos = (await _cestas.ListarProdutosAsync(false)).ToDictionary(p => p.Id);
-        var precos = new List<ItemPrecoCategoria>();
-        foreach (var item in modelo.Itens)
+        var produtos = (await _cestas.ListarProdutosAsync(false)).OrderBy(p => p.Id).ToList();
+        var porId = produtos.ToDictionary(p => p.Id);
+        var porChave = new Dictionary<string, ProdutoCesta>(StringComparer.Ordinal);
+        foreach (var cadastrado in produtos)
         {
-            if (!produtos.TryGetValue(item.ProdutoCestaId, out var produto))
+            var chaveCadastrada = NormalizadorComprovante.TextoComparacao(cadastrado.Nome);
+            if (chaveCadastrada.Length > 0)
+                porChave.TryAdd(chaveCadastrada, cadastrado);
+        }
+
+        var definicoes = modelo.ProdutosNovos
+            .GroupBy(p => p.Chave, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        var precos = new List<ItemPrecoCategoria>();
+        var vinculos = new List<ProdutoNovoCompra>();
+        var identidades = new List<string>();
+        for (var indice = 0; indice < modelo.Itens.Count; indice++)
+        {
+            var item = modelo.Itens[indice];
+            var preco = CestaDespesaRegras.Dinheiro(item.Preco);
+            if (!string.IsNullOrEmpty(item.ProdutoNovoChave))
+            {
+                if (!definicoes.TryGetValue(item.ProdutoNovoChave, out var definicao))
+                    throw new InvalidOperationException("Um dos produtos da compra não existe mais.");
+
+                var nome = definicao.Nome.Trim();
+                if (string.IsNullOrWhiteSpace(nome))
+                    throw new InvalidOperationException("Informe o nome do produto.");
+
+                if (definicao.CategoriaId <= 0)
+                    throw new InvalidOperationException("Selecione a categoria do produto.");
+
+                var chave = NormalizadorComprovante.TextoComparacao(nome);
+                if (porChave.TryGetValue(chave, out var existente) && existente.Id > 0)
+                {
+                    if (!existente.Ativo && modelo.Id is null)
+                        throw new InvalidOperationException($"O produto {existente.Nome} está inativo.");
+
+                    if (preco <= 0)
+                        throw new InvalidOperationException($"Informe o preço de {existente.Nome}.");
+
+                    precos.Add(new ItemPrecoCategoria { Nome = existente.Nome, CategoriaId = existente.CategoriaId, Preco = preco });
+                    item.ProdutoCestaId = existente.Id;
+                    item.ProdutoNovoChave = null;
+                    identidades.Add("id:" + existente.Id);
+                    continue;
+                }
+
+                if (preco <= 0)
+                    throw new InvalidOperationException($"Informe o preço de {nome}.");
+
+                precos.Add(new ItemPrecoCategoria { Nome = nome, CategoriaId = definicao.CategoriaId, Preco = preco });
+                vinculos.Add(new ProdutoNovoCompra
+                {
+                    Chave = chave,
+                    Nome = nome,
+                    CategoriaId = definicao.CategoriaId,
+                    IndiceItem = indice
+                });
+                porChave[chave] = new ProdutoCesta { Nome = nome, CategoriaId = definicao.CategoriaId };
+                identidades.Add("novo:" + chave);
+                continue;
+            }
+
+            if (!porId.TryGetValue(item.ProdutoCestaId, out var produto))
                 throw new InvalidOperationException("Um dos produtos da compra não existe mais.");
 
             if (!produto.Ativo && modelo.Id is null)
                 throw new InvalidOperationException($"O produto {produto.Nome} está inativo.");
 
-            var preco = CestaDespesaRegras.Dinheiro(item.Preco);
             if (preco <= 0)
                 throw new InvalidOperationException($"Informe o preço de {produto.Nome}.");
 
             precos.Add(new ItemPrecoCategoria { Nome = produto.Nome, CategoriaId = produto.CategoriaId, Preco = preco });
+            identidades.Add("id:" + produto.Id);
         }
+
+        if (identidades.GroupBy(identidade => identidade, StringComparer.Ordinal).Any(grupo => grupo.Count() > 1))
+            throw new InvalidOperationException("Cada produto só pode aparecer uma vez na compra.");
 
         var beneficio = CestaDespesaRegras.Dinheiro(modelo.ValorBeneficio);
         var tipo = beneficio > 0 ? modelo.TipoCartaoBeneficio : null;
@@ -318,7 +379,7 @@ public class CestaCadastroService
                 membroFamiliaId);
         }
 
-        return await _cestas.SalvarCompraAsync(compra, despesa, faturaCredito);
+        return await _cestas.SalvarCompraAsync(compra, despesa, faturaCredito, vinculos);
     }
 
     public Task ExcluirCompraAsync(int id) => _cestas.ExcluirCompraAsync(id);

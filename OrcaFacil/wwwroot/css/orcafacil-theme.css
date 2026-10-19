@@ -109,7 +109,7 @@ body.of-tema-escuro {
 .of-appbar-sub {
     font-size: 0.75rem;
     line-height: 1.2;
-    color: var(--of-text-muted);
+    color: var(--of-text-secondary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

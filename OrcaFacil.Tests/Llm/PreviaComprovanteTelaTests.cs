@@ -49,7 +49,7 @@ public class PreviaComprovanteTelaTests
         Assert.DoesNotContain("SalvarCompraAsync", dialog, StringComparison.Ordinal);
 
         Assert.Contains("SalvarCompraAsync(\"Nova compra\", modelo)", pagina, StringComparison.Ordinal);
-        Assert.Contains("SalvarProdutoDaPreviaAsync", pagina, StringComparison.Ordinal);
+        Assert.DoesNotContain("SalvarProduto", dialog, StringComparison.Ordinal);
 
         Assert.Contains("[Parameter] public Func<TItem, bool>? EmErro", lista, StringComparison.Ordinal);
         Assert.Contains("[Parameter] public bool MostrarAdicionar { get; set; } = true;", lista, StringComparison.Ordinal);

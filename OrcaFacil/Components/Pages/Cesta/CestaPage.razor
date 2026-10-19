@@ -623,8 +623,7 @@
             {
                 { x => x.Previa, _previa },
                 { x => x.Produtos, _produtos },
-                { x => x.Categorias, _categorias },
-                { x => x.SalvarProduto, SalvarProdutoDaPreviaAsync }
+                { x => x.Categorias, _categorias }
             };
             var dialog = await DialogService.ShowAsync<PreviaComprovanteDialog>(
                 "Prévia do comprovante", parametros, OpcoesCompra());
@@ -652,23 +651,6 @@
             _previaAberta = false;
             if (!_descartada)
                 StateHasChanged();
-        }
-    }
-
-    private async Task<ProdutoCesta?> SalvarProdutoDaPreviaAsync(ProdutoCestaFormModel modelo)
-    {
-        try
-        {
-            var salvo = await CestaService.SalvarProdutoAsync(modelo);
-            _produtos = await CestaService.ListarProdutosAsync();
-            var completo = _produtos.FirstOrDefault(p => p.Id == salvo.Id) ?? salvo;
-            Snackbar.Add("Produto cadastrado", Severity.Success);
-            return completo;
-        }
-        catch (InvalidOperationException ex)
-        {
-            Snackbar.Add(ex.Message, Severity.Warning);
-            return null;
         }
     }
 

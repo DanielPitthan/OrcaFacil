@@ -71,14 +71,14 @@
     {
         <MudButton Class="of-cadastrar" Variant="Variant.Outlined" Color="Color.Default" OnClick="CadastrarAsync">Cadastrar</MudButton>
     }
-    @if (_catalogo.Count == 0)
+    @if (!Opcoes().Any())
     {
         <p class="of-previa-apoio">Nenhum produto cadastrado.</p>
     }
     else
     {
         <div class="of-previa-opcoes">
-            @foreach (var produto in _catalogo)
+            @foreach (var produto in Opcoes())
             {
                 <button type="button" class="of-previa-opcao @(_produtoId == produto.Id ? "of-previa-opcao-ativa" : null)"
                         @onclick="() => Escolher(produto.Id)">
@@ -94,12 +94,12 @@
     [Parameter] public PreviaComprovante Previa { get; set; } = null!;
     [Parameter] public IReadOnlyList<ProdutoCesta> Produtos { get; set; } = [];
     [Parameter] public IReadOnlyList<Categoria> Categorias { get; set; } = [];
-    [Parameter] public Func<ProdutoCestaFormModel, Task<ProdutoCesta?>>? SalvarProduto { get; set; }
 
     private readonly List<ProdutoCesta> _catalogo = [];
     private LinhaPreviaComprovante? _editando;
     private bool _sheetAberto;
     private bool _confirmando;
+    private bool _cadastrando;
     private int _produtoId;
     private decimal _preco;
     private string? _erroItem;
@@ -171,15 +171,22 @@
         if (_editando is null)
             return;
 
-        if (_produtoId <= 0)
-        {
-            _erroItem = "Selecione o produto.";
-            return;
-        }
-
         if (_preco <= 0)
         {
             _erroItem = "Informe o preço do item.";
+            return;
+        }
+
+        if (_editando.NovoSeraCriado && (_produtoId <= 0 || _produtoId == _editando.ProdutoCestaId))
+        {
+            Previa.AlterarPreco(_editando, _preco);
+            _sheetAberto = false;
+            return;
+        }
+
+        if (_produtoId <= 0)
+        {
+            _erroItem = "Selecione o produto.";
             return;
         }
 
@@ -199,58 +206,68 @@
 
     private async Task CadastrarAsync()
     {
-        if (_editando is null || !_editando.PodeCadastrar)
+        if (_cadastrando || _confirmando || _editando is null || !_editando.PodeCadastrar)
             return;
 
-        var linha = _editando;
-        if (Categorias.Count == 0)
-        {
-            Snackbar.Add("Cadastre uma categoria de despesa antes do produto.", Severity.Info);
-            return;
-        }
-
-        var modelo = Previa.IniciarCadastro(linha);
-        _sheetAberto = false;
-        var parametros = new DialogParameters<ProdutoCestaDialog>
-        {
-            { x => x.Modelo, modelo },
-            { x => x.Categorias, Categorias }
-        };
-        var dialog = await DialogService.ShowAsync<ProdutoCestaDialog>("Novo produto", parametros, OpcoesProduto());
-        var resultado = await dialog.Result;
-        if (resultado is not { Canceled: false, Data: ProdutoCestaFormModel salvo } || SalvarProduto is null)
-        {
-            Previa.CancelarCadastro();
-            _editando = linha;
-            _sheetAberto = true;
-            return;
-        }
-
-        ProdutoCesta? criado;
+        _cadastrando = true;
         try
         {
-            criado = await SalvarProduto(salvo);
+            var linha = _editando;
+            if (Categorias.Count == 0)
+            {
+                Snackbar.Add("Cadastre uma categoria de despesa antes do produto.", Severity.Info);
+                return;
+            }
+
+            var modelo = Previa.IniciarCadastro(linha);
+            if (modelo is null)
+                return;
+
+            _sheetAberto = false;
+            var parametros = new DialogParameters<ProdutoCestaDialog>
+            {
+                { x => x.Modelo, modelo },
+                { x => x.Categorias, Categorias }
+            };
+            var dialog = await DialogService.ShowAsync<ProdutoCestaDialog>("Novo produto", parametros, OpcoesProduto());
+            var resultado = await dialog.Result;
+            if (resultado is not { Canceled: false, Data: ProdutoCestaFormModel salvo })
+            {
+                Previa.CancelarCadastro();
+                _editando = linha;
+                _sheetAberto = true;
+                return;
+            }
+
+            var categoria = Categorias.FirstOrDefault(item => item.Id == salvo.CategoriaId)?.Nome;
+            try
+            {
+                Previa.ConfirmarCadastro(salvo, _preco, categoria);
+            }
+            catch (InvalidOperationException ex)
+            {
+                Previa.CancelarCadastro();
+                Snackbar.Add(ex.Message, Severity.Warning);
+                _editando = linha;
+                _sheetAberto = true;
+                return;
+            }
+
+            _sheetAberto = false;
+            _erroItem = null;
         }
-        catch
+        finally
         {
-            Previa.CancelarCadastro();
-            throw;
+            _cadastrando = false;
         }
+    }
 
-        if (criado is null)
-        {
-            Previa.CancelarCadastro();
-            _editando = linha;
-            _sheetAberto = true;
-            return;
-        }
+    private IEnumerable<ProdutoCesta> Opcoes()
+    {
+        if (_editando?.Ambiguo == true && _editando.CandidatosIds.Count > 0)
+            return _catalogo.Where(produto => _editando.CandidatosIds.Contains(produto.Id));
 
-        if (_catalogo.All(p => p.Id != criado.Id))
-            _catalogo.Add(criado);
-
-        Previa.ConfirmarCadastro(criado);
-        _sheetAberto = false;
-        _erroItem = null;
+        return _catalogo;
     }
 
     private static string Titulo(LinhaPreviaComprovante linha) => linha.Titulo;
