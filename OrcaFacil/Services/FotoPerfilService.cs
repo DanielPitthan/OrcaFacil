@@ -78,7 +78,24 @@ public class FotoPerfilService : IFotoPerfilService
             if (bytes.Length == 0)
                 return FotoComprovantePronta.Ilegivel();
 
-            return await MontarComprovanteAsync(bytes, cancellationToken);
+            var aceito = PreparoFotoComprovante.EscolherMediaType(bytes, arquivo.FileName) is not null;
+            try
+            {
+                var pronta = await MontarComprovanteAsync(bytes, cancellationToken);
+                if (pronta.Jpeg is { Length: > 0 } jpeg &&
+                    PreparoFotoComprovante.EscolherMediaType(jpeg) is null)
+                    return FotoComprovantePronta.FormatoNaoConvertido();
+
+                return pronta;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception) when (!aceito)
+            {
+                return FotoComprovantePronta.FormatoNaoConvertido();
+            }
         }
         finally
         {

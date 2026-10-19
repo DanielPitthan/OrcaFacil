@@ -58,6 +58,9 @@ public static class MensagensLeituraComprovante
 
     public const string TextoFotoGrandeDemais = "A foto ficou grande demais. Escolha outra.";
 
+    public const string TextoFormatoNaoConvertido =
+        "Não foi possível converter essa foto para JPEG. A leitura não foi enviada.";
+
     public const string ConsultaAba = "ia";
 
     /// <summary>Terceira aba de Configurações, a de Inteligência artificial.</summary>
@@ -85,6 +88,9 @@ public static class MensagensLeituraComprovante
 
     public static ExibicaoLeituraComprovante FotoGrandeDemais() =>
         Erro(SituacaoLeituraComprovante.Falha, TextoFotoGrandeDemais, levaParaInteligencia: false);
+
+    public static ExibicaoLeituraComprovante FormatoNaoConvertido() =>
+        Erro(SituacaoLeituraComprovante.Falha, TextoFormatoNaoConvertido, levaParaInteligencia: false);
 
     /// <summary>
     /// URL https sem usuário nem parâmetros, modelo e chave preenchidos.

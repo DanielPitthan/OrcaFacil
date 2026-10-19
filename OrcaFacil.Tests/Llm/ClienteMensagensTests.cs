@@ -340,6 +340,51 @@ public class ClienteMensagensTests
     }
 
     [Fact]
+    public async Task MaxTokens_Padrao8192_AceitaFaixa_ENaoChamaForaDela()
+    {
+        Assert.Equal(8192, PedidoMensagem.MaxTokens);
+        Assert.Equal(256, PedidoMensagem.MaxTokensMinimo);
+        Assert.Equal(32768, PedidoMensagem.MaxTokensMaximo);
+        Assert.Equal("O máximo de tokens fica entre 256 e 32768.", PedidoMensagem.TextoMaxTokensForaDaFaixa);
+        Assert.True(PedidoMensagem.MaxTokensNaFaixa(256));
+        Assert.True(PedidoMensagem.MaxTokensNaFaixa(8192));
+        Assert.True(PedidoMensagem.MaxTokensNaFaixa(32768));
+        Assert.False(PedidoMensagem.MaxTokensNaFaixa(255));
+        Assert.False(PedidoMensagem.MaxTokensNaFaixa(32769));
+        Assert.Equal(8192, PedidoMensagem.NormalizarMaxTokens(0));
+        Assert.Equal(8192, PedidoMensagem.NormalizarMaxTokens(255));
+        Assert.Equal(8192, PedidoMensagem.NormalizarMaxTokens(32769));
+        Assert.Equal(16384, PedidoMensagem.NormalizarMaxTokens(16384));
+
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, CorpoValido()));
+        using var cliente = new ClienteMensagens(captura);
+
+        await cliente.LerComprovanteAsync(
+            Base,
+            Chave,
+            PedidoMensagem.ModeloAnthropic,
+            Midia,
+            Imagem,
+            maxTokens: 16384);
+
+        using (var doc = JsonDocument.Parse(captura.Corpo))
+            Assert.Equal(16384, doc.RootElement.GetProperty("max_tokens").GetInt32());
+
+        var fora = await cliente.LerComprovanteAsync(
+            Base,
+            Chave,
+            PedidoMensagem.ModeloAnthropic,
+            Midia,
+            Imagem,
+            maxTokens: 10);
+
+        Assert.Equal(1, captura.Chamadas);
+        Assert.Equal(TipoResultadoMensagem.PedidoInvalido, fora.Tipo);
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            PedidoMensagem.Montar(PedidoMensagem.ModeloAnthropic, Midia, Imagem, 10));
+    }
+
+    [Fact]
     public async Task StopReasonMaxTokens_ViraRespostaCortada()
     {
         const string corpo = """

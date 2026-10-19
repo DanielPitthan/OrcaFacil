@@ -43,6 +43,37 @@ public class CestaLeituraFonteTests
         Assert.True(marcar > retorno);
     }
 
+    [Fact]
+    public void Leitura_UsaMaxTokensDaConfiguracao_ENaoChamaSemMediaType()
+    {
+        var raiz = EncontrarRaiz();
+        var pagina = File.ReadAllText(Path.Combine(raiz, "OrcaFacil", "Components", "Pages", "Cesta", "CestaPage.razor"));
+        var enviar = ExtrairBloco(pagina, "Task EnviarJpegAsync(");
+        var recusa = enviar.IndexOf("MensagensLeituraComprovante.FormatoNaoConvertido()", StringComparison.Ordinal);
+        var chamada = enviar.IndexOf("Cliente.LerComprovanteAsync(", StringComparison.Ordinal);
+
+        Assert.Contains("Configuracao.UrlInteligencia", enviar, StringComparison.Ordinal);
+        Assert.Contains("Configuracao.ModeloInteligencia", enviar, StringComparison.Ordinal);
+        Assert.Contains("Configuracao.MaxTokensInteligencia", enviar, StringComparison.Ordinal);
+        Assert.Contains("PreparoFotoComprovante.EscolherMediaType(jpeg)", enviar, StringComparison.Ordinal);
+        Assert.True(recusa >= 0);
+        Assert.True(chamada > recusa);
+        Assert.DoesNotContain("dashscope", pagina, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("deepseek", pagina, StringComparison.OrdinalIgnoreCase);
+
+        var painel = File.ReadAllText(Path.Combine(
+            raiz, "OrcaFacil", "Components", "Pages", "Configuracoes", "InteligenciaArtificialPanel.razor"));
+        Assert.Contains("Configuracao.MaxTokensInteligencia", painel, StringComparison.Ordinal);
+        Assert.Contains("PedidoMensagem.TextoMaxTokensForaDaFaixa", painel, StringComparison.Ordinal);
+        Assert.Contains("PedidoMensagem.MaxTokensNaFaixa(_maxTokens)", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("dashscope", painel, StringComparison.OrdinalIgnoreCase);
+
+        var configuracao = File.ReadAllText(Path.Combine(raiz, "OrcaFacil", "Services", "ConfiguracaoService.cs"));
+        Assert.Contains("ChipsInteligencia.ChaveMaxTokens", configuracao, StringComparison.Ordinal);
+        Assert.Contains("PedidoMensagem.NormalizarMaxTokens", configuracao, StringComparison.Ordinal);
+        Assert.Contains("PedidoMensagem.MaxTokensNaFaixa(value)", configuracao, StringComparison.Ordinal);
+    }
+
     private static string ExtrairMembro(string fonte, string assinatura)
     {
         var indice = fonte.IndexOf(assinatura, StringComparison.Ordinal);

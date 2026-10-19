@@ -119,7 +119,8 @@ public sealed class ClienteMensagens : IDisposable
         string? modelo,
         string? tipoMidia,
         string? imagemBase64,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int maxTokens = PedidoMensagem.MaxTokens)
     {
         var preparo = PrepararChamada(urlBase, chave);
         if (preparo.Falha is not null)
@@ -128,13 +129,14 @@ public sealed class ClienteMensagens : IDisposable
         if (string.IsNullOrWhiteSpace(modelo) ||
             string.IsNullOrWhiteSpace(tipoMidia) ||
             string.IsNullOrWhiteSpace(imagemBase64) ||
-            !ImagemCabe(imagemBase64))
+            !ImagemCabe(imagemBase64) ||
+            !PedidoMensagem.MaxTokensNaFaixa(maxTokens))
         {
             return Task.FromResult(
                 ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoPedidoInvalido));
         }
 
-        var json = PedidoMensagem.Montar(modelo.Trim(), tipoMidia.Trim(), imagemBase64);
+        var json = PedidoMensagem.Montar(modelo.Trim(), tipoMidia.Trim(), imagemBase64, maxTokens);
         return EnviarAsync(
             preparo.Uri,
             preparo.Chave,

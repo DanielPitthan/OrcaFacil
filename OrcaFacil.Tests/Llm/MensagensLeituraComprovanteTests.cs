@@ -9,6 +9,21 @@ public class MensagensLeituraComprovanteTests
     private const string Chave = "sk-ant-segredo-nao-pode-aparecer";
 
     [Fact]
+    public void FormatoNaoConvertido_ExplicaQueALeituraNaoSaiu()
+    {
+        var exibicao = MensagensLeituraComprovante.FormatoNaoConvertido();
+
+        Assert.Equal(SituacaoLeituraComprovante.Falha, exibicao.Situacao);
+        Assert.Equal(MensagensLeituraComprovante.TextoFormatoNaoConvertido, exibicao.Mensagem);
+        Assert.Contains("JPEG", exibicao.Mensagem, StringComparison.Ordinal);
+        Assert.Contains("não foi enviada", exibicao.Mensagem, StringComparison.Ordinal);
+        Assert.True(exibicao.PodeTentarDeNovo);
+        Assert.False(exibicao.LevaParaInteligenciaArtificial);
+        Assert.Null(exibicao.Diagnostico);
+        Assert.Equal("FormatoNaoConvertido", FotoComprovantePronta.FormatoNaoConvertido().ToString());
+    }
+
+    [Fact]
     public void Carregando_TemAFraseDaEspera()
     {
         var exibicao = MensagensLeituraComprovante.Carregando();

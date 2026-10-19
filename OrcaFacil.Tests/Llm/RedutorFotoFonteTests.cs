@@ -17,6 +17,10 @@ public class RedutorFotoFonteTests
         Assert.Contains("InSampleSize = amostra", fonte, StringComparison.Ordinal);
         Assert.Contains("Recycle()", fonte, StringComparison.Ordinal);
         Assert.Contains("global::Android.", fonte, StringComparison.Ordinal);
+        Assert.Contains("global::Android.Graphics.BitmapFactory", fonte, StringComparison.Ordinal);
+        Assert.Contains("CompressFormat.Jpeg", fonte, StringComparison.Ordinal);
+        Assert.DoesNotContain("ImageSharp", fonte, StringComparison.Ordinal);
+        Assert.DoesNotContain("Magick", fonte, StringComparison.Ordinal);
         Assert.DoesNotContain("LogWarning", fonte, StringComparison.Ordinal);
         Assert.DoesNotContain("LogInformation", fonte, StringComparison.Ordinal);
         Assert.Contains("OrientacaoExif.Rotate90", fonte, StringComparison.Ordinal);
@@ -58,6 +62,9 @@ public class RedutorFotoFonteTests
         Assert.DoesNotContain("ApagarNovidades", fonte, StringComparison.Ordinal);
         Assert.DoesNotContain("<<<<<<<", fonte, StringComparison.Ordinal);
         Assert.Equal(1, fonte.Split('\n').Count(linha => linha.Contains("LogWarning", StringComparison.Ordinal)));
+        Assert.Contains("EscolherMediaType(bytes, arquivo.FileName)", fonte, StringComparison.Ordinal);
+        Assert.Contains("FotoComprovantePronta.FormatoNaoConvertido()", fonte, StringComparison.Ordinal);
+        Assert.Contains("EscolherMediaType(jpeg) is null", fonte, StringComparison.Ordinal);
     }
 
     private static string TrechoAntesDoFinally(string metodo)
