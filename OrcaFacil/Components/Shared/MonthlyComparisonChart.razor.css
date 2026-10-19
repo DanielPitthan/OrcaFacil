@@ -1,16 +1,46 @@
 .of-comparacao {
+    width: 100%;
+    max-width: 100%;
     min-width: 0;
     margin-bottom: 8px;
     padding: 8px 8px 12px;
     background: var(--of-surface);
     border: 1px solid var(--of-border);
     border-radius: var(--of-radius-card);
-    overflow: hidden;
 }
 
+/* Android 11 (WebView ~83): MatchBoundsToSize observa o SVG. display:flex e
+   altura vinda do viewBox fazem o contentRect oscilar e o rótulo (out/26) infla.
+   Quem trava é display:block, min-width/min-height 0 e altura em px.
+   Sem overflow: o eixo Y (text-anchor end) sai à esquerda do viewBox, o eixo X
+   desce meio glifo e o tooltip das barras precisa continuar visível. */
 .of-comparacao-plot {
+    width: 100%;
+    max-width: 100%;
     min-width: 0;
     height: 220px;
+}
+
+.of-comparacao-plot ::deep .mud-chart {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    height: 220px;
+    min-height: 0;
+    max-height: 220px;
+    margin: 0;
+}
+
+.of-comparacao-plot ::deep .mud-chart svg {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    height: 220px;
+    min-height: 0;
+    max-height: 220px;
+    margin: 0;
 }
 
 .of-legenda {

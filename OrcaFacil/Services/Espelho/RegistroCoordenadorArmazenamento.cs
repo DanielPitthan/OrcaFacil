@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using OrcaFacil.Core.Armazenamento;
+using OrcaFacil.Core.Armazenamento.Espelho;
 using OrcaFacil.Core.Armazenamento.Partida;
 using OrcaFacil.Core.Data;
 using OrcaFacil.Data;
@@ -8,8 +9,8 @@ using Serilog;
 namespace OrcaFacil.Services.Espelho;
 
 /// <summary>
-/// Liga o coordenador na abertura. A senha continua
-/// <see cref="ProvedorSenhaEspelhoAindaNaoInformada"/> até a tela de Armazenamento.
+/// Liga o coordenador na abertura. A senha do espelho é
+/// <see cref="ProvedorSenhaEspelhoMemoria"/>, só nesta sessão.
 /// Não registra cliente de IA nem o cofre da chave.
 /// </summary>
 public static class RegistroCoordenadorArmazenamento

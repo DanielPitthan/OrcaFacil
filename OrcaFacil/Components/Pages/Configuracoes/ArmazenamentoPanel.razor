@@ -1,6 +1,61 @@
+@using System.Globalization
+@using OrcaFacil.Core.Armazenamento.Espelho
+@using OrcaFacil.Core.Armazenamento.Espelho.Pasta
+@using OrcaFacil.Data
+@using OrcaFacil.Services.Espelho
+@implements IDisposable
 @inject IArmazenamentoService ArmazenamentoService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject ISeletorPastaEspelho SeletorPasta
+@inject IMemoriaPastaEspelho MemoriaPasta
+@inject IVolumePastaEspelho VolumePasta
+@inject IDestinoEspelho DestinoEspelho
+@inject IAreaTemporariaEspelho AreaTemporaria
+@inject IProvedorSenhaEspelho ProvedorSenha
+@inject VersaoSchemaAplicacao VersaoSchema
+
+<div class="of-espelho">
+    <FormSection Titulo="Espelho">
+        <FormRow Icone="@Icons.Material.Outlined.Folder" Rotulo="Pasta" Valor="@_pastaValor" />
+        <div class="of-secao-bloco">
+            <p class="of-espelho-apoio">@_pastaDetalhe</p>
+            <div class="of-espelho-acoes">
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="EscolherPastaAsync"
+                           Disabled="@(_ocupado || _limpando)">
+                    Escolher pasta
+                </MudButton>
+            </div>
+        </div>
+        <FormRow Icone="@Icons.Material.Outlined.Lock" Rotulo="Senha">
+            <MudTextField T="string" @bind-Value="_senha" InputType="InputType.Password" Immediate="true"
+                          Variant="Variant.Text" Margin="Margin.Dense" Placeholder="Senha do espelho"
+                          Disabled="@(_ocupado || _limpando)" UserAttributes="@AtributosSenha" />
+        </FormRow>
+        <FormRow Icone="@Icons.Material.Outlined.Lock" Rotulo="Confirmar senha">
+            <MudTextField T="string" @bind-Value="_confirmacao" InputType="InputType.Password" Immediate="true"
+                          Variant="Variant.Text" Margin="Margin.Dense" Placeholder="Repita a senha"
+                          Disabled="@(_ocupado || _limpando)" UserAttributes="@AtributosConfirmacao" />
+        </FormRow>
+        <div class="of-secao-bloco">
+            <p class="of-espelho-apoio">@RegraSenhaEspelho.Requisitos</p>
+            <p class="of-espelho-apoio">A senha vale para a pasta escolhida, fica só nesta sessão e se perde ao fechar o app.</p>
+            @if (_senhaInformada)
+            {
+                <p class="of-espelho-apoio">Senha definida nesta sessão.</p>
+            }
+        </div>
+    </FormSection>
+
+    <p class="of-espelho-aviso" role="note">@RegraSenhaEspelho.Esquecimento</p>
+
+    <div class="of-espelho-acoes">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="BackupAgoraAsync"
+                   Disabled="@(_ocupado || _limpando)">
+            @(_fazendoBackup ? "Fazendo backup…" : "Fazer backup agora")
+        </MudButton>
+    </div>
+</div>
 
 <MudPaper Class="pa-4 mb-4" Elevation="2">
     <div class="d-flex justify-space-between align-center mb-2">
@@ -47,14 +102,42 @@
         Escolha quais dados apagar. A operação não pode ser desfeita.
     </MudText>
     <MudButton Variant="Variant.Filled" Color="Color.Error" StartIcon="@Icons.Material.Filled.DeleteForever"
-               OnClick="AbrirLimpezaAsync" Disabled="_limpando">
+               OnClick="AbrirLimpezaAsync" Disabled="@(_limpando || _ocupado)">
         Limpar dados
     </MudButton>
 </MudPaper>
 
 @code {
+    private static readonly Dictionary<string, object?> AtributosSenha = new()
+    {
+        ["autocomplete"] = "new-password",
+        ["autocapitalize"] = "off",
+        ["spellcheck"] = "false",
+        ["aria-label"] = "Senha do espelho",
+        ["data-lpignore"] = "true",
+        ["data-1p-ignore"] = "true"
+    };
+
+    private static readonly Dictionary<string, object?> AtributosConfirmacao = new()
+    {
+        ["autocomplete"] = "new-password",
+        ["autocapitalize"] = "off",
+        ["spellcheck"] = "false",
+        ["aria-label"] = "Confirmar senha do espelho",
+        ["data-lpignore"] = "true",
+        ["data-1p-ignore"] = "true"
+    };
+
     private ResumoArmazenamentoDto? _resumo;
     private bool _limpando;
+    private bool _ocupado;
+    private bool _fazendoBackup;
+    private bool _senhaInformada;
+    private string _senha = "";
+    private string _confirmacao = "";
+    private string _pastaValor = "Não escolhida";
+    private string _pastaDetalhe = "Nenhuma pasta foi escolhida para o espelho.";
+    private BackupEspelhoAgora? _backup;
 
     private IEnumerable<(string Rotulo, long Bytes, Color Cor)> Segmentos => _resumo is null
         ? Enumerable.Empty<(string, long, Color)>()
@@ -65,7 +148,167 @@
             ("Foto do perfil", _resumo.FotoBytes, Color.Secondary)
         };
 
-    protected override async Task OnInitializedAsync() => await CarregarAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        AtualizarPasta();
+        _senhaInformada = SenhaInformada();
+        await CarregarAsync();
+    }
+
+    public void Dispose()
+    {
+        _senha = "";
+        _confirmacao = "";
+    }
+
+    private bool SenhaInformada()
+        => ProvedorSenha is IDefinicaoSenhaEspelho definicao && definicao.Informada;
+
+    private BackupEspelhoAgora? ObterBackup()
+    {
+        if (_backup is not null)
+            return _backup;
+
+        if (ProvedorSenha is not IDefinicaoSenhaEspelho definicao)
+            return null;
+
+        _backup = new BackupEspelhoAgora(
+            VolumePasta,
+            DestinoEspelho,
+            ProvedorSenha,
+            definicao,
+            VersaoSchema,
+            new RegistroLogEspelho(),
+            AreaTemporaria);
+        return _backup;
+    }
+
+    private void AtualizarPasta()
+    {
+        try
+        {
+            var resumo = RotuloPastaEspelho.Descrever(VolumePasta.Consultar());
+            _pastaValor = resumo.Valor;
+            _pastaDetalhe = resumo.Detalhe;
+        }
+        catch (Exception)
+        {
+            _pastaValor = "Indisponível";
+            _pastaDetalhe = MensagensPastaEspelho.Para(CodigoFalhaPastaEspelho.Indisponivel);
+        }
+    }
+
+    private async Task EscolherPastaAsync()
+    {
+        if (_ocupado || _limpando)
+            return;
+
+        _ocupado = true;
+        try
+        {
+            var uriAnterior = MemoriaPasta.LerUri();
+            var escolha = await SeletorPasta.EscolherAsync();
+            var esqueceu = ProvedorSenha is IDefinicaoSenhaEspelho definicao
+                && SenhaDaPastaEspelho.AoConfirmarEscolha(definicao, uriAnterior, MemoriaPasta.LerUri());
+            if (esqueceu)
+            {
+                _senha = "";
+                _confirmacao = "";
+                _senhaInformada = false;
+            }
+            else
+            {
+                _senhaInformada = SenhaInformada();
+            }
+
+            AtualizarPasta();
+            if (escolha.Sucesso)
+                Snackbar.Add("Pasta escolhida.", Severity.Success);
+            else if (escolha.Codigo == CodigoFalhaPastaEspelho.Cancelado)
+                Snackbar.Add(escolha.Mensagem, Severity.Info);
+            else
+                Snackbar.Add(escolha.Mensagem, Severity.Error);
+
+            if (esqueceu)
+                Snackbar.Add("A senha da pasta anterior foi esquecida. Informe a senha desta pasta.", Severity.Info);
+        }
+        catch (Exception)
+        {
+            AtualizarPasta();
+            Snackbar.Add("Não foi possível escolher a pasta. Nada foi alterado.", Severity.Error);
+        }
+        finally
+        {
+            _ocupado = false;
+        }
+    }
+
+    private async Task BackupAgoraAsync()
+    {
+        if (_ocupado || _limpando)
+            return;
+
+        _ocupado = true;
+        _fazendoBackup = true;
+        try
+        {
+            var backup = ObterBackup();
+            if (backup is null)
+            {
+                Snackbar.Add("Não foi possível fazer o backup. Nada foi publicado.", Severity.Error);
+                return;
+            }
+
+            var resultado = await backup.ExecutarAsync(DbPathProvider.GetDbPath(), _senha, _confirmacao);
+            if (resultado.ExigeConfirmacao)
+            {
+                var confirmado = await DialogService.ShowMessageBoxAsync(
+                    "Substituir backup",
+                    TextoSubstituicao(resultado),
+                    yesText: "Substituir",
+                    cancelText: "Cancelar");
+                if (confirmado != true)
+                {
+                    Snackbar.Add("Nada foi publicado.", Severity.Info);
+                    return;
+                }
+
+                resultado = await backup.ExecutarAsync(
+                    DbPathProvider.GetDbPath(),
+                    _senha,
+                    _confirmacao,
+                    substituirEspelhoExistente: true);
+            }
+
+            _senhaInformada = SenhaInformada();
+            AtualizarPasta();
+            if (resultado.Sucesso)
+            {
+                _senha = "";
+                _confirmacao = "";
+            }
+
+            Snackbar.Add(resultado.Mensagem, resultado.Sucesso ? Severity.Success : Severity.Error);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Não foi possível fazer o backup. Nada foi publicado.", Severity.Error);
+        }
+        finally
+        {
+            _fazendoBackup = false;
+            _ocupado = false;
+        }
+    }
+
+    private static string TextoSubstituicao(ResultadoBackupEspelho resultado)
+    {
+        if (resultado.EspelhoExistenteEm is not DateTimeOffset quando)
+            return BackupEspelhoAgora.MensagemConfirmacao;
+
+        var texto = quando.ToLocalTime().ToString("dd/MM/yyyy HH:mm", CultureInfo.GetCultureInfo("pt-BR"));
+        return $"O espelho desta pasta é de {texto}. {BackupEspelhoAgora.MensagemConfirmacao}";
+    }
 
     private async Task CarregarAsync()
     {

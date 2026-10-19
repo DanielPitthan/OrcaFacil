@@ -679,6 +679,13 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
             .ToArray();
 
         Assert.Equal(conjuntos, PoliticaSemeadura.ConjuntosObservados.OrderBy(nome => nome, StringComparer.Ordinal).ToArray());
+
+        var fonte = File.ReadAllText(Path.Combine(EncontrarRaiz(), "OrcaFacil.Core", "Armazenamento", "PoliticaSemeadura.cs"));
+        var inicio = fonte.IndexOf("HaDadoDoUsuarioAsync", StringComparison.Ordinal);
+        Assert.True(inicio >= 0);
+        var corpo = fonte[inicio..];
+        foreach (var nome in conjuntos)
+            Assert.Contains("contexto." + nome, corpo, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -821,7 +828,10 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
         Assert.Contains("PrepararAsync", inicio, StringComparison.Ordinal);
         Assert.DoesNotContain("DbInitializer.InitializeAsync", inicio, StringComparison.Ordinal);
         Assert.Contains("FileSystem.AppDataDirectory, \"logs\"", inicio, StringComparison.Ordinal);
-        Assert.Contains("ProvedorSenhaEspelhoAindaNaoInformada", pasta, StringComparison.Ordinal);
+        Assert.Contains(
+            "AddSingleton<IProvedorSenhaEspelho, ProvedorSenhaEspelhoMemoria>()",
+            pasta,
+            StringComparison.Ordinal);
         Assert.Contains("ISondaBancoVivo, SondaBancoArquivo", registro, StringComparison.Ordinal);
         Assert.Contains("AddSingleton<CoordenadorArmazenamento>()", registro, StringComparison.Ordinal);
         Assert.Contains("ILimpezaTotalDados, LimpezaTotalForaDaAbertura", registro, StringComparison.Ordinal);

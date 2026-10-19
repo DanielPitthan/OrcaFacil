@@ -11,7 +11,7 @@ namespace OrcaFacil.Services.Espelho;
 
 /// <summary>
 /// Registra a pasta do espelho. A abertura resolve estes serviços pelo coordenador.
-/// A tela que chama o seletor fica para o PR seguinte.
+/// A tela de Armazenamento chama o seletor de pasta.
 /// </summary>
 /// <remarks>
 /// O <see cref="CoordenadorArmazenamento"/> não entra neste registro. A abertura o monta
@@ -19,7 +19,7 @@ namespace OrcaFacil.Services.Espelho;
 /// espelho, versão, restauração, migração, semeadura, limpeza, <see cref="OpcoesPreparoBanco"/>
 /// (com <see cref="OpcoesPreparoBanco.VersaoAplicativo"/>), <see cref="IPreservacaoBancoVivo"/>
 /// e <see cref="IPresencaPerfil"/>. Null lança <see cref="ArgumentNullException"/>.
-/// A senha continua <see cref="ProvedorSenhaEspelhoAindaNaoInformada"/> até a tela de Armazenamento.
+/// A senha do espelho é <see cref="ProvedorSenhaEspelhoMemoria"/>, só nesta sessão.
 /// <see cref="IMigracaoBancoVivo.MigrarEVerificarAsync"/> recebe as opções.
 /// <see cref="IPresencaPerfil.HaMembroAsync"/> só é consultada com schema íntegro;
 /// <see cref="ClassificacaoBancoVivo.AplicarPoliticaSeed"/> pode virar
@@ -31,7 +31,7 @@ public static class RegistroServicosPastaEspelho
     public static void Registrar(IServiceCollection services)
     {
         services.AddSingleton<IMemoriaPastaEspelho, MemoriaPastaEspelho>();
-        services.AddSingleton<IProvedorSenhaEspelho, ProvedorSenhaEspelhoAindaNaoInformada>();
+        services.AddSingleton<IProvedorSenhaEspelho, ProvedorSenhaEspelhoMemoria>();
         services.AddSingleton(_ => VersaoSchemaAplicacao.DoApp);
         services.AddSingleton<IVersaoSchemaApp>(provedor => provedor.GetRequiredService<VersaoSchemaAplicacao>());
         services.AddSingleton<IAreaTemporariaEspelho, AreaTemporariaEspelhoMaui>();

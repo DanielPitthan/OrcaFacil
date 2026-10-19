@@ -15,8 +15,10 @@
     {
         <div id="evolucao-mes" class="of-evolucao-corpo">
             <div class="of-evolucao-plot" role="img" aria-label="@Dados.RotuloAcessivelGrafico">
-                <MudChart T="double" ChartType="ChartType.Line" ChartSeries="@_series" ChartLabels="@_rotulos"
-                          ChartOptions="@_opcoes" Width="100%" Height="168px" MatchBoundsToSize="true" />
+                <div class="of-evolucao-caixa">
+                    <MudChart T="double" ChartType="ChartType.Line" ChartSeries="@_series" ChartLabels="@_rotulos"
+                              ChartOptions="@_opcoes" Width="100%" Height="168px" MatchBoundsToSize="true" />
+                </div>
                 @if (Dados.ExibirMarcadorHoje)
                 {
                     <div class="of-hoje" aria-hidden="true"><span>Hoje</span></div>
