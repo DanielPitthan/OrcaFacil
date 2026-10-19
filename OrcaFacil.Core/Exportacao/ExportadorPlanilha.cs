@@ -567,28 +567,33 @@ public static class ExportadorPlanilha
     }
 
     /// <summary>
-    /// Decodifica <c>%XX</c> até estabilizar (no máximo 3 vezes). Se aparecer barra,
-    /// o último segmento é refeito. Só então corta <c>?</c>, <c>;</c> e <c>#</c>.
+    /// Decodifica <c>%XX</c> até a string parar de encolher. Normaliza as pontas de novo
+    /// e refaz o último segmento: <c>/</c>, <c>\</c> e <c>:</c> separam, como no valor literal.
     /// </summary>
     private static string NomeDepoisDosEscapes(string segmento)
     {
         var nome = DecodificarPercent(segmento);
-        if (nome.Contains('/') || nome.Contains('\\'))
-            nome = UltimoSegmento(nome.Replace('\\', '/'));
+        nome = NormalizarPontas(nome).Replace('\\', '/');
+        nome = UltimoSegmento(nome);
 
         var corte = nome.IndexOfAny(['?', '#', ';']);
         if (corte >= 0)
             nome = nome[..corte];
 
-        if (nome.Length == 0 || nome[^1] is '/' or '\\' or ':' || TemControle(nome))
+        nome = NormalizarPontas(nome);
+        if (nome.Length == 0 || nome is "." or ".." || TemControle(nome))
+            return "";
+
+        if (nome[^1] is '/' or '\\' or ':')
             return "";
 
         return nome;
     }
 
+    /// <summary>Cada volta encolhe a string. Sem teto: para quando o escape acaba.</summary>
     private static string DecodificarPercent(string texto)
     {
-        for (var i = 0; i < 3; i++)
+        while (true)
         {
             string proximo;
             try
@@ -600,7 +605,7 @@ public static class ExportadorPlanilha
                 break;
             }
 
-            if (proximo == texto)
+            if (proximo.Length >= texto.Length)
                 break;
 
             texto = proximo;

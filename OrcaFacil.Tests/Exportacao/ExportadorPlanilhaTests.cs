@@ -389,10 +389,23 @@ public class ExportadorPlanilhaTests
     [InlineData("/home/daniel/", "")]
     [InlineData("pasta/", "")]
     [InlineData("C:", "")]
-    [InlineData("..", "..")]
-    [InlineData(".", ".")]
+    [InlineData("..", "")]
+    [InlineData(".", "")]
     [InlineData("   ", "")]
     [InlineData("C:foto.jpg", "foto.jpg")]
+    [InlineData("C%3Afoto.jpg", "foto.jpg")]
+    [InlineData("foto%3Aana.jpg", "ana.jpg")]
+    [InlineData("pasta/%2F%20", "")]
+    [InlineData("%2E", "")]
+    [InlineData("%2E%2E", "")]
+    [InlineData("%20", "")]
+    [InlineData("%E2%80%8B", "")]
+    [InlineData("Users%2525252Fdaniel%2525252Ffoto.jpg", "foto.jpg")]
+    [InlineData("Users%25252525252Fdaniel%25252525252Ffoto.jpg", "foto.jpg")]
+    [InlineData("bia.jpg%2525253Ftoken=SEGREDO", "bia.jpg")]
+    [InlineData("bia.jpg%25252525253Ftoken=SEGREDO", "bia.jpg")]
+    [InlineData("pasta/%2525252F", "")]
+    [InlineData("pasta/%25252525252F", "")]
     [InlineData("content://a/b/c.jpg?x", "c.jpg")]
     [InlineData("content://midia/bia.jpg%3Ftoken=SEGREDO", "bia.jpg")]
     [InlineData("bia.jpg%3Ftoken=SEGREDO", "bia.jpg")]
@@ -570,14 +583,7 @@ public class ExportadorPlanilhaTests
     [Fact]
     public void HorarioLocalInexistente_ViraTextoENaoLanca()
     {
-        var ajuste = TimeZoneInfo.AdjustmentRule.CreateAdjustmentRule(
-            DateTime.MinValue.Date,
-            DateTime.MaxValue.Date,
-            TimeSpan.FromHours(1),
-            TimeZoneInfo.TransitionTime.CreateFixedDateRule(new DateTime(1, 1, 1, 2, 0, 0), 11, 4),
-            TimeZoneInfo.TransitionTime.CreateFixedDateRule(new DateTime(1, 1, 1, 2, 0, 0), 2, 17));
-        var fuso = TimeZoneInfo.CreateCustomTimeZone(
-            "FusoComBuraco", TimeSpan.FromHours(-3), "Fuso com buraco", "Padrão", "Verão", [ajuste]);
+        var fuso = FusoComBuraco();
         var inexistente = new DateTime(2018, 11, 4, 2, 30, 45, DateTimeKind.Local);
 
         using var pasta = new XLWorkbook();
@@ -591,6 +597,37 @@ public class ExportadorPlanilhaTests
         Assert.Equal(XLDataType.Text, celula.DataType);
         Assert.Equal("04/11/2018 02:30:45", celula.GetText());
         Assert.False(celula.HasFormula);
+    }
+
+    [Fact]
+    public void HorarioLocalAmbiguo_UsaOffsetPadrao()
+    {
+        // 17/02 01:30 ocorre duas vezes: UTC−2 (verão) e UTC−3 (padrão).
+        // A conversão fica no offset padrão, 04:30 UTC, e não nas 03:30 do verão.
+        var fuso = FusoComBuraco();
+        var ambiguo = new DateTime(2018, 2, 17, 1, 30, 0, DateTimeKind.Local);
+        Assert.True(fuso.IsAmbiguousTime(DateTime.SpecifyKind(ambiguo, DateTimeKind.Unspecified)));
+
+        var utc = ExportadorPlanilha.InstanteUtc(ambiguo, fuso);
+        Assert.Equal(DateTimeKind.Utc, utc.Kind);
+        Assert.Equal(new DateTime(2018, 2, 17, 4, 30, 0, DateTimeKind.Utc), utc);
+
+        using var pasta = new XLWorkbook();
+        var aba = PlanilhaPtBr.CriarAba(pasta, "Perfis");
+        PlanilhaPtBr.GravarDataHora(aba.Cell(2, 1), utc);
+        Assert.Equal(new DateTime(2018, 2, 17, 2, 30, 0), aba.Cell(2, 1).GetDateTime());
+    }
+
+    private static TimeZoneInfo FusoComBuraco()
+    {
+        var ajuste = TimeZoneInfo.AdjustmentRule.CreateAdjustmentRule(
+            DateTime.MinValue.Date,
+            DateTime.MaxValue.Date,
+            TimeSpan.FromHours(1),
+            TimeZoneInfo.TransitionTime.CreateFixedDateRule(new DateTime(1, 1, 1, 2, 0, 0), 11, 4),
+            TimeZoneInfo.TransitionTime.CreateFixedDateRule(new DateTime(1, 1, 1, 2, 0, 0), 2, 17));
+        return TimeZoneInfo.CreateCustomTimeZone(
+            "FusoComBuraco", TimeSpan.FromHours(-3), "Fuso com buraco", "Padrão", "Verão", [ajuste]);
     }
 
     [Fact]
