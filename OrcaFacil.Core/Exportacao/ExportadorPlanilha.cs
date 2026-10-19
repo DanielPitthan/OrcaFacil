@@ -543,8 +543,8 @@ public static class ExportadorPlanilha
 
     /// <summary>
     /// ASCII imprimível, sem <c>%</c>, <c>?</c>, <c>#</c> nem <c>;</c>.
-    /// O último segmento de <c>/</c>, <c>\</c> ou <c>:</c> só entra se casar
-    /// com <c>^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$</c>. O resto sai vazio.
+    /// O último segmento de <c>/</c>, <c>\</c> ou <c>:</c> só entra com até
+    /// 128 caracteres e extensão jpg, jpeg, png, webp ou heic. O resto sai vazio.
     /// </summary>
     internal static string NomeDeFoto(string? valor)
     {
@@ -562,7 +562,7 @@ public static class ExportadorPlanilha
             inicio = i + 1;
         }
 
-        return NomePermitido.IsMatch(nome) ? nome : "";
+        return nome.Length <= 128 && NomePermitido.IsMatch(nome) ? nome : "";
     }
 
     /// <summary>0x20–0x7E, menos <c>%</c>, <c>?</c>, <c>#</c> e <c>;</c>.</summary>
@@ -578,11 +578,14 @@ public static class ExportadorPlanilha
     }
 
     /// <summary>
-    /// Sem <see cref="RegexOptions.IgnoreCase"/> e sem backtracking.
-    /// <c>Compiled</c> não combina com <c>NonBacktracking</c>.
+    /// Sem <see cref="RegexOptions.IgnoreCase"/>: a extensão lista as caixas ASCII,
+    /// então a cultura atual não entra. <c>\z</c> recusa <c>foto.jpg\n</c>.
+    /// Sem backtracking. <c>Compiled</c> não combina com <c>NonBacktracking</c>.
+    /// <c>{0,123}</c> cabe o <c>.jpg</c> de 128; acima de 128 o nome sai vazio.
     /// </summary>
-    private static readonly Regex NomePermitido = new(
-        "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+    internal static readonly Regex NomePermitido = new(
+        "^[A-Za-z0-9][A-Za-z0-9._-]{0,123}\\." +
+        "(?:[Jj][Pp][Gg]|[Jj][Pp][Ee][Gg]|[Pp][Nn][Gg]|[Ww][Ee][Bb][Pp]|[Hh][Ee][Ii][Cc])\\z",
         RegexOptions.CultureInvariant | RegexOptions.NonBacktracking);
 
     private static string TextoItemFatura(ItemLancamento? item)
