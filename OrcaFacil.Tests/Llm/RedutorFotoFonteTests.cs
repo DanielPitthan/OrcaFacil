@@ -36,11 +36,20 @@ public class RedutorFotoFonteTests
         Assert.Contains("FileSystem.AppDataDirectory, \"perfil\"", fonte, StringComparison.Ordinal);
         Assert.Contains("foto-{DateTime.Now:yyyyMMddHHmmss}.jpg", fonte, StringComparison.Ordinal);
         Assert.Contains("private const float LadoMaximo = 512f;", fonte, StringComparison.Ordinal);
-        var preparo = ExtrairBloco(fonte, "Task<FotoComprovantePronta> PrepararComprovanteAsync(");
-        var finalmente = ExtrairFinally(preparo);
-        Assert.Contains("ApagarTemporarioDoFluxo(", finalmente, StringComparison.Ordinal);
-        Assert.DoesNotContain("ApagarTemporarioDoFluxo(", TrechoAntesDoFinally(preparo), StringComparison.Ordinal);
-        Assert.DoesNotContain("LimpezaFotoTemporaria.ListarRemocao", TrechoAntesDoFinally(preparo), StringComparison.Ordinal);
+        foreach (var assinatura in new[]
+        {
+            "Task<string?> TirarSelfieAsync()",
+            "Task<string?> EscolherDaGaleriaAsync()",
+            "Task<FotoComprovantePronta> PrepararComprovanteAsync(",
+            "Task<string> SalvarAsync("
+        })
+        {
+            var metodo = ExtrairBloco(fonte, assinatura);
+            var finalmente = ExtrairFinally(metodo);
+            Assert.Contains("ApagarTemporarioDoFluxo(", finalmente, StringComparison.Ordinal);
+            Assert.DoesNotContain("ApagarTemporarioDoFluxo(", TrechoAntesDoFinally(metodo), StringComparison.Ordinal);
+            Assert.DoesNotContain("LimpezaFotoTemporaria.ListarRemocao", TrechoAntesDoFinally(metodo), StringComparison.Ordinal);
+        }
 
         var limpeza = ExtrairBloco(fonte, "void ApagarTemporarioDoFluxo(");
         Assert.Contains("LimpezaFotoTemporaria.ListarRemocao", limpeza, StringComparison.Ordinal);
