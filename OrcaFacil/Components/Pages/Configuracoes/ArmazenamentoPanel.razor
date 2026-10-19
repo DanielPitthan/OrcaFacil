@@ -1,12 +1,17 @@
+@using System.Globalization
 @using OrcaFacil.Core.Armazenamento.Espelho
 @using OrcaFacil.Core.Armazenamento.Espelho.Pasta
 @using OrcaFacil.Data
+@using OrcaFacil.Services.Espelho
+@implements IDisposable
 @inject IArmazenamentoService ArmazenamentoService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject ISeletorPastaEspelho SeletorPasta
+@inject IMemoriaPastaEspelho MemoriaPasta
 @inject IVolumePastaEspelho VolumePasta
 @inject IDestinoEspelho DestinoEspelho
+@inject IAreaTemporariaEspelho AreaTemporaria
 @inject IProvedorSenhaEspelho ProvedorSenha
 @inject VersaoSchemaAplicacao VersaoSchema
 
@@ -34,7 +39,7 @@
         </FormRow>
         <div class="of-secao-bloco">
             <p class="of-espelho-apoio">@RegraSenhaEspelho.Requisitos</p>
-            <p class="of-espelho-apoio">A senha fica só nesta sessão e se perde ao fechar o app.</p>
+            <p class="of-espelho-apoio">A senha vale para a pasta escolhida, fica só nesta sessão e se perde ao fechar o app.</p>
             @if (_senhaInformada)
             {
                 <p class="of-espelho-apoio">Senha definida nesta sessão.</p>
@@ -105,7 +110,7 @@
 @code {
     private static readonly Dictionary<string, object?> AtributosSenha = new()
     {
-        ["autocomplete"] = "off",
+        ["autocomplete"] = "new-password",
         ["autocapitalize"] = "off",
         ["spellcheck"] = "false",
         ["aria-label"] = "Senha do espelho"
@@ -113,7 +118,7 @@
 
     private static readonly Dictionary<string, object?> AtributosConfirmacao = new()
     {
-        ["autocomplete"] = "off",
+        ["autocomplete"] = "new-password",
         ["autocapitalize"] = "off",
         ["spellcheck"] = "false",
         ["aria-label"] = "Confirmar senha do espelho"
@@ -146,6 +151,12 @@
         await CarregarAsync();
     }
 
+    public void Dispose()
+    {
+        _senha = "";
+        _confirmacao = "";
+    }
+
     private bool SenhaInformada()
         => ProvedorSenha is IDefinicaoSenhaEspelho definicao && definicao.Informada;
 
@@ -157,7 +168,14 @@
         if (ProvedorSenha is not IDefinicaoSenhaEspelho definicao)
             return null;
 
-        _backup = new BackupEspelhoAgora(VolumePasta, DestinoEspelho, ProvedorSenha, definicao, VersaoSchema);
+        _backup = new BackupEspelhoAgora(
+            VolumePasta,
+            DestinoEspelho,
+            ProvedorSenha,
+            definicao,
+            VersaoSchema,
+            new RegistroLogEspelho(),
+            AreaTemporaria);
         return _backup;
     }
 
@@ -184,7 +202,21 @@
         _ocupado = true;
         try
         {
+            var uriAnterior = MemoriaPasta.LerUri();
             var escolha = await SeletorPasta.EscolherAsync();
+            var esqueceu = ProvedorSenha is IDefinicaoSenhaEspelho definicao
+                && SenhaDaPastaEspelho.AoConfirmarEscolha(definicao, uriAnterior, MemoriaPasta.LerUri());
+            if (esqueceu)
+            {
+                _senha = "";
+                _confirmacao = "";
+                _senhaInformada = false;
+            }
+            else
+            {
+                _senhaInformada = SenhaInformada();
+            }
+
             AtualizarPasta();
             if (escolha.Sucesso)
                 Snackbar.Add("Pasta escolhida.", Severity.Success);
@@ -192,6 +224,9 @@
                 Snackbar.Add(escolha.Mensagem, Severity.Info);
             else
                 Snackbar.Add(escolha.Mensagem, Severity.Error);
+
+            if (esqueceu)
+                Snackbar.Add("A senha da pasta anterior foi esquecida. Informe a senha desta pasta.", Severity.Info);
         }
         catch (Exception)
         {
@@ -221,6 +256,26 @@
             }
 
             var resultado = await backup.ExecutarAsync(DbPathProvider.GetDbPath(), _senha, _confirmacao);
+            if (resultado.ExigeConfirmacao)
+            {
+                var confirmado = await DialogService.ShowMessageBoxAsync(
+                    "Substituir backup",
+                    TextoSubstituicao(resultado),
+                    yesText: "Substituir",
+                    cancelText: "Cancelar");
+                if (confirmado != true)
+                {
+                    Snackbar.Add("Nada foi publicado.", Severity.Info);
+                    return;
+                }
+
+                resultado = await backup.ExecutarAsync(
+                    DbPathProvider.GetDbPath(),
+                    _senha,
+                    _confirmacao,
+                    substituirEspelhoExistente: true);
+            }
+
             _senhaInformada = SenhaInformada();
             AtualizarPasta();
             if (resultado.Sucesso)
@@ -240,6 +295,16 @@
             _fazendoBackup = false;
             _ocupado = false;
         }
+    }
+
+    private static string TextoSubstituicao(ResultadoBackupEspelho resultado)
+    {
+        const string efeito = "O backup desta pasta será substituído. O banco de dados deste aparelho não será apagado.";
+        if (resultado.EspelhoExistenteEm is not DateTimeOffset quando)
+            return efeito;
+
+        var texto = quando.ToLocalTime().ToString("dd/MM/yyyy HH:mm", CultureInfo.GetCultureInfo("pt-BR"));
+        return $"O espelho desta pasta é de {texto}. {efeito}";
     }
 
     private async Task CarregarAsync()

@@ -33,8 +33,7 @@ public sealed class ResultadoDefinicaoSenha
 
     public static ResultadoDefinicaoSenha Ok() => new(true, null);
 
-    public static ResultadoDefinicaoSenha Recusada(string motivo, params string?[] segredos)
-        => new(false, TextoSemSegredoEspelho.Limpar(motivo, "A senha não foi aceita.", segredos));
+    public static ResultadoDefinicaoSenha Recusada(string motivo) => new(false, motivo);
 
     public override string ToString() => Aceita ? "ResultadoDefinicaoSenha" : "ResultadoDefinicaoSenha:recusada";
 }
@@ -68,13 +67,11 @@ public sealed class ProvedorSenhaEspelhoMemoria : IProvedorSenhaEspelho, IDefini
         if (!string.Equals(senha, confirmacao, StringComparison.Ordinal))
         {
             return ResultadoDefinicaoSenha.Recusada(
-                "As senhas não coincidem. A senha desta sessão não mudou.",
-                senha,
-                confirmacao);
+                "As senhas não coincidem. A senha desta sessão não mudou.");
         }
 
         if (!RegraSenhaEspelho.AtendeForcaMinima(senha))
-            return ResultadoDefinicaoSenha.Recusada(RegraSenhaEspelho.Requisitos, senha, confirmacao);
+            return ResultadoDefinicaoSenha.Recusada(RegraSenhaEspelho.Requisitos);
 
         lock (_trava)
             _senha = senha;

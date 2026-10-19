@@ -1,15 +1,27 @@
+using System.Security.Cryptography;
 using OrcaFacil.Core.Armazenamento.Espelho.Pasta;
+using OrcaFacil.Core.Data;
 
 namespace OrcaFacil.Core.Armazenamento.Espelho;
 
 /// <summary>
 /// Gera o snapshot cifrado e publica na pasta escolhida.
-/// Senha fraca, pasta indisponível ou falha no meio não chamam uma troca que apague o espelho anterior.
-/// A senha nova só fica em memória depois que a publicação conclui.
+/// Senha fraca, pasta indisponível ou falha no meio não trocam a senha memorizada
+/// e não apagam o espelho anterior. A senha nova só entra na memória quando o nome
+/// definitivo fica com o ciphertext novo.
 /// </summary>
 public sealed class BackupEspelhoAgora
 {
     public const string MensagemGravado = "Backup gravado na pasta escolhida.";
+
+    public const string MensagemGravadoComReserva =
+        "Backup gravado na pasta escolhida. A limpeza da cópia anterior falhou; ela permanece na pasta.";
+
+    public const string MensagemRecusaEspelhoExistente =
+        "Já existe um backup nesta pasta. Use Restaurar para recuperá-lo.";
+
+    public const string MensagemConfirmacao =
+        "Já existe um backup nesta pasta. Confirme para substituí-lo. O banco deste aparelho não será apagado.";
 
     public const string MensagemSemSenha = "Defina a senha do espelho antes do backup. Nada foi publicado.";
 
@@ -22,13 +34,17 @@ public sealed class BackupEspelhoAgora
     private readonly IProvedorSenhaEspelho _provedor;
     private readonly IDefinicaoSenhaEspelho _definicao;
     private readonly GeradorSnapshotBanco _gerador;
+    private readonly IRegistroLog? _log;
+    private readonly IAreaTemporariaEspelho? _area;
 
     public BackupEspelhoAgora(
         IVolumePastaEspelho volume,
         IDestinoEspelho destino,
         IProvedorSenhaEspelho provedor,
         IDefinicaoSenhaEspelho definicao,
-        VersaoSchemaAplicacao versao)
+        VersaoSchemaAplicacao versao,
+        IRegistroLog? log = null,
+        IAreaTemporariaEspelho? area = null)
     {
         _volume = volume ?? throw new ArgumentNullException(nameof(volume));
         _destino = destino ?? throw new ArgumentNullException(nameof(destino));
@@ -38,13 +54,16 @@ public sealed class BackupEspelhoAgora
             throw new InvalidOperationException("A definição e a leitura da senha do espelho têm de ser o mesmo objeto.");
 
         _gerador = new GeradorSnapshotBanco(versao ?? throw new ArgumentNullException(nameof(versao)));
+        _log = log;
+        _area = area;
     }
 
     public async Task<ResultadoBackupEspelho> ExecutarAsync(
         string caminhoBancoVivo,
         string? senhaDigitada,
         string? confirmacao,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        bool substituirEspelhoExistente = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(caminhoBancoVivo);
         cancellationToken.ThrowIfCancellationRequested();
@@ -54,20 +73,20 @@ public sealed class BackupEspelhoAgora
         if (digitou)
         {
             if (!string.Equals(senhaDigitada, confirmacao, StringComparison.Ordinal))
-                return ResultadoBackupEspelho.Falha(MensagemNaoCoincide, senhaDigitada, confirmacao);
+                return ResultadoBackupEspelho.Falha(MensagemNaoCoincide);
 
             if (!RegraSenhaEspelho.AtendeForcaMinima(senhaDigitada))
-                return ResultadoBackupEspelho.Falha(RegraSenhaEspelho.Requisitos, senhaDigitada, confirmacao);
+                return ResultadoBackupEspelho.Falha(RegraSenhaEspelho.Requisitos);
 
             senhaNova = senhaDigitada;
         }
 
         var senha = senhaNova ?? _provedor.Obter();
         if (string.IsNullOrEmpty(senha))
-            return ResultadoBackupEspelho.Falha(MensagemSemSenha, senhaDigitada, confirmacao);
+            return ResultadoBackupEspelho.Falha(MensagemSemSenha);
 
         if (!RegraSenhaEspelho.AtendeForcaMinima(senha))
-            return ResultadoBackupEspelho.Falha(RegraSenhaEspelho.Requisitos, senha, senhaDigitada, confirmacao);
+            return ResultadoBackupEspelho.Falha(RegraSenhaEspelho.Requisitos);
 
         DiagnosticoPastaEspelho diagnostico;
         try
@@ -80,22 +99,29 @@ public sealed class BackupEspelhoAgora
         }
         catch (Exception)
         {
-            return ResultadoBackupEspelho.Falha(
-                MensagensPastaEspelho.Para(CodigoFalhaPastaEspelho.Indisponivel),
-                senha,
-                senhaDigitada,
-                confirmacao);
+            return ResultadoBackupEspelho.Falha(MensagensPastaEspelho.Para(CodigoFalhaPastaEspelho.Indisponivel));
         }
 
         if (!diagnostico.AcessoLivre)
+            return ResultadoBackupEspelho.Falha(MensagensPastaEspelho.Para(diagnostico.Codigo));
+
+        if (diagnostico.ArquivoNoNomeFinal)
         {
-            return ResultadoBackupEspelho.Falha(
-                MensagensPastaEspelho.Para(diagnostico.Codigo),
-                senha,
-                senhaDigitada,
-                confirmacao);
+            var leitura = await PresencaDadosReaisUsuario.ClassificarAsync(caminhoBancoVivo, cancellationToken);
+            if (leitura == LeituraDadosReais.SemDadosReais)
+                return ResultadoBackupEspelho.Falha(MensagemRecusaEspelhoExistente);
+
+            if (!substituirEspelhoExistente)
+            {
+                var geradoEm = await LerGeradoEmAsync(senha, cancellationToken);
+                return ResultadoBackupEspelho.Confirmacao(MensagemConfirmacao, geradoEm);
+            }
         }
 
+        // A promoção que já trocou o nome devolve o mesmo código de uma troca que não saiu do lugar.
+        // O hash do nome definitivo separa os dois: se o ciphertext novo está lá, a senha nova entra
+        // na memória. Desfazer a partir da reserva pode falhar e perder o arquivo que acabou de valer.
+        var antes = await FotografarAsync(cancellationToken);
         try
         {
             await _gerador.GerarAsync(caminhoBancoVivo, senha, _destino, cancellationToken);
@@ -106,52 +132,177 @@ public sealed class BackupEspelhoAgora
         }
         catch (IntegridadeSnapshotException ex)
         {
-            return ResultadoBackupEspelho.Falha(ex.Message, senha, senhaDigitada, confirmacao);
+            return ResultadoBackupEspelho.Falha(ex.Message);
         }
         catch (ArgumentException)
         {
-            return ResultadoBackupEspelho.Falha(RegraSenhaEspelho.Requisitos, senha, senhaDigitada, confirmacao);
+            return ResultadoBackupEspelho.Falha(RegraSenhaEspelho.Requisitos);
         }
-        catch (IOException ex)
+        catch (Exception ex)
         {
-            return ResultadoBackupEspelho.Falha(
-                string.IsNullOrWhiteSpace(ex.Message) ? MensagemMantido : ex.Message,
-                senha,
-                senhaDigitada,
-                confirmacao);
-        }
-        catch (Exception)
-        {
-            return ResultadoBackupEspelho.Falha(MensagemMantido, senha, senhaDigitada, confirmacao);
+            RegistroFalhaEspelho.Registrar(_log, ex, senha, senhaDigitada, confirmacao);
+            var depois = await FotografarAsync(cancellationToken);
+            if (DefinitivoMudou(antes, depois))
+                return Publicado(senhaNova);
+
+            return ResultadoBackupEspelho.Falha(MensagemMantido);
         }
 
+        return Publicado(senhaNova);
+    }
+
+    private ResultadoBackupEspelho Publicado(string? senhaNova)
+    {
         if (senhaNova is not null)
             _definicao.Definir(senhaNova, senhaNova);
 
-        return ResultadoBackupEspelho.Ok(MensagemGravado, senha);
+        var mensagem = HaResiduo() ? MensagemGravadoComReserva : MensagemGravado;
+        return ResultadoBackupEspelho.Ok(mensagem);
+    }
+
+    private bool HaResiduo()
+    {
+        try
+        {
+            return _volume.Consultar().ResiduoDesteApp;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private async Task<DateTimeOffset?> LerGeradoEmAsync(string senha, CancellationToken cancellationToken)
+    {
+        if (_area is null)
+            return null;
+
+        string? local = null;
+        try
+        {
+            local = _area.CriarArquivo();
+            var copia = await _volume.CopiarParaLocalAsync(_volume.NomeArquivo, local, cancellationToken);
+            if (!copia.Sucesso)
+                return null;
+
+            var leitura = CofreEspelho.Ler(local, senha);
+            CryptographicOperations.ZeroMemory(leitura.Sqlite);
+            return leitura.Metadados.GeradoEm;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+        finally
+        {
+            if (local is not null)
+                _area.Descartar(local);
+        }
+    }
+
+    private async Task<FotoArquivo?> FotografarAsync(CancellationToken cancellationToken)
+    {
+        if (_area is null)
+            return null;
+
+        string? local = null;
+        try
+        {
+            local = _area.CriarArquivo();
+            var copia = await _volume.CopiarParaLocalAsync(_volume.NomeArquivo, local, cancellationToken);
+            if (!copia.Sucesso)
+            {
+                return copia.Codigo == CodigoFalhaPastaEspelho.ArquivoAusente
+                    ? FotoArquivo.Ausente
+                    : null;
+            }
+
+            await using var fluxo = new FileStream(local, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var hash = await SHA256.HashDataAsync(fluxo, cancellationToken);
+            return FotoArquivo.De(hash);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+        finally
+        {
+            if (local is not null)
+                _area.Descartar(local);
+        }
+    }
+
+    private static bool DefinitivoMudou(FotoArquivo? antes, FotoArquivo? depois)
+    {
+        if (antes is null || depois is null || !depois.Value.Presente || depois.Value.Hash is null)
+            return false;
+
+        if (!antes.Value.Presente || antes.Value.Hash is null)
+            return true;
+
+        return !antes.Value.Hash.AsSpan().SequenceEqual(depois.Value.Hash);
+    }
+
+    private readonly record struct FotoArquivo(bool Presente, byte[]? Hash)
+    {
+        public static FotoArquivo Ausente { get; } = new(false, null);
+
+        public static FotoArquivo De(byte[] hash) => new(true, hash);
     }
 }
 
 public sealed class ResultadoBackupEspelho
 {
-    private ResultadoBackupEspelho(bool sucesso, string mensagem)
+    private ResultadoBackupEspelho(
+        bool sucesso,
+        string mensagem,
+        bool exigeConfirmacao,
+        DateTimeOffset? espelhoExistenteEm)
     {
         if (string.IsNullOrWhiteSpace(mensagem))
             throw new ArgumentException("Informe a mensagem.", nameof(mensagem));
+        if (sucesso && exigeConfirmacao)
+            throw new ArgumentException("Sucesso não pede confirmação.", nameof(exigeConfirmacao));
+        if (!exigeConfirmacao && espelhoExistenteEm is not null)
+            throw new ArgumentException("A data do espelho só acompanha a confirmação.", nameof(espelhoExistenteEm));
 
         Sucesso = sucesso;
         Mensagem = mensagem;
+        ExigeConfirmacao = exigeConfirmacao;
+        EspelhoExistenteEm = espelhoExistenteEm;
     }
 
     public bool Sucesso { get; }
 
+    public bool ExigeConfirmacao { get; }
+
+    public DateTimeOffset? EspelhoExistenteEm { get; }
+
     public string Mensagem { get; }
 
-    public static ResultadoBackupEspelho Ok(string mensagem, string? senha)
-        => new(true, TextoSemSegredoEspelho.Limpar(mensagem, "Backup gravado.", senha));
+    public static ResultadoBackupEspelho Ok(string mensagem) => new(true, mensagem, false, null);
 
-    public static ResultadoBackupEspelho Falha(string mensagem, params string?[] segredos)
-        => new(false, TextoSemSegredoEspelho.Limpar(mensagem, "Nada foi publicado.", segredos));
+    public static ResultadoBackupEspelho Falha(string mensagem) => new(false, mensagem, false, null);
 
-    public override string ToString() => Sucesso ? "ResultadoBackupEspelho" : "ResultadoBackupEspelho:falha";
+    public static ResultadoBackupEspelho Confirmacao(string mensagem, DateTimeOffset? espelhoExistenteEm)
+        => new(false, mensagem, true, espelhoExistenteEm);
+
+    public override string ToString()
+        => Sucesso
+            ? "ResultadoBackupEspelho"
+            : ExigeConfirmacao
+                ? "ResultadoBackupEspelho:confirma"
+                : "ResultadoBackupEspelho:falha";
 }

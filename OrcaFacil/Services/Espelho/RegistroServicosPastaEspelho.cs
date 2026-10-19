@@ -12,7 +12,7 @@ namespace OrcaFacil.Services.Espelho;
 /// <summary>
 /// Registra a pasta do espelho. Nada aqui é resolvido em <c>CreateMauiApp</c>:
 /// <c>InicializacaoApp</c> não depende destes serviços e o startup segue como estava.
-/// A tela que chama o seletor fica para o PR seguinte.
+/// A tela de Armazenamento chama o seletor de pasta.
 /// </summary>
 /// <remarks>
 /// O <see cref="CoordenadorArmazenamento"/> não entra neste registro. Quando o PR da tela
