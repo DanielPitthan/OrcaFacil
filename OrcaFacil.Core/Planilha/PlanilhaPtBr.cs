@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using ClosedXML.Excel;
 
@@ -26,6 +27,8 @@ public static class PlanilhaPtBr
     /// <summary>Largura em caracteres da fonte padrão, sem medir o texto.</summary>
     public const double LarguraColuna = 22;
 
+    internal static readonly CultureInfo Cultura = CultureInfo.GetCultureInfo("pt-BR");
+    internal static readonly TimeZoneInfo FusoBrasil = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
     private static readonly char[] CaracteresProibidosNaAba = [':', '\\', '/', '?', '*', '[', ']'];
 
     public static IXLWorksheet CriarAba(XLWorkbook pasta, string nome)
@@ -33,6 +36,18 @@ public static class PlanilhaPtBr
         ArgumentNullException.ThrowIfNull(pasta);
         ValidarNomeAba(nome);
         return pasta.AddWorksheet(nome);
+    }
+
+    /// <summary>Célula dentro do teto de linhas e colunas do Excel.</summary>
+    public static IXLCell Celula(IXLWorksheet aba, int linha, int coluna)
+    {
+        ArgumentNullException.ThrowIfNull(aba);
+        if (linha < 1 || linha > MaximoLinhas)
+            throw new ArgumentOutOfRangeException(nameof(linha), $"A planilha aceita no máximo {MaximoLinhas} linhas.");
+        if (coluna < 1 || coluna > MaximoColunas)
+            throw new ArgumentOutOfRangeException(nameof(coluna), $"A planilha aceita no máximo {MaximoColunas} colunas.");
+
+        return aba.Cell(linha, coluna);
     }
 
     public static void GravarCabecalho(IXLWorksheet aba, IReadOnlyList<string> colunas)
@@ -46,7 +61,7 @@ public static class PlanilhaPtBr
 
         for (var i = 0; i < colunas.Count; i++)
         {
-            var celula = aba.Cell(1, i + 1);
+            var celula = Celula(aba, 1, i + 1);
             GravarTexto(celula, colunas[i]);
             celula.Style.Font.Bold = true;
             aba.Column(i + 1).Width = LarguraColuna;
@@ -57,46 +72,89 @@ public static class PlanilhaPtBr
 
     public static void GravarData(IXLCell celula, DateTime? data)
     {
-        ArgumentNullException.ThrowIfNull(celula);
+        GarantirCelula(celula);
+        if (!DataGravavel(data, out var instante))
+        {
+            Limpar(celula);
+            return;
+        }
+
+        var dia = DateTime.SpecifyKind(EmSaoPaulo(instante).Date, DateTimeKind.Unspecified);
+        if (!CabeNoExcel(dia))
+        {
+            Limpar(celula);
+            return;
+        }
+
+        celula.Value = dia;
+        celula.Style.DateFormat.Format = FormatoData;
+    }
+
+    public static void GravarData(IXLCell celula, DateOnly? data)
+    {
+        GarantirCelula(celula);
         if (data is null)
         {
             Limpar(celula);
             return;
         }
 
-        var dia = DateTime.SpecifyKind(data.Value.Date, DateTimeKind.Unspecified);
+        var dia = data.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
+        if (!CabeNoExcel(dia))
+        {
+            Limpar(celula);
+            return;
+        }
+
         celula.Value = dia;
         celula.Style.DateFormat.Format = FormatoData;
     }
 
     public static void GravarDataHora(IXLCell celula, DateTime? data)
     {
-        ArgumentNullException.ThrowIfNull(celula);
-        if (data is null)
+        GarantirCelula(celula);
+        if (!DataGravavel(data, out var instante))
         {
             Limpar(celula);
             return;
         }
 
-        var instante = data.Value;
+        var noBrasil = EmSaoPaulo(instante);
+        if (!CabeNoExcel(noBrasil))
+        {
+            Limpar(celula);
+            return;
+        }
+
         var semSegundos = new DateTime(
-            instante.Year,
-            instante.Month,
-            instante.Day,
-            instante.Hour,
-            instante.Minute,
+            noBrasil.Year,
+            noBrasil.Month,
+            noBrasil.Day,
+            noBrasil.Hour,
+            noBrasil.Minute,
             0,
             DateTimeKind.Unspecified);
         celula.Value = semSegundos;
         celula.Style.DateFormat.Format = FormatoDataHora;
     }
 
+    /// <summary>
+    /// Moeda como número do Excel quando o decimal sobrevive à ida e volta por double.
+    /// Com cerca de 15 dígitos significativos o double arredondaria; nesse caso o
+    /// decimal entra como texto, com todos os dígitos.
+    /// </summary>
     public static void GravarMoeda(IXLCell celula, decimal? valor)
     {
-        ArgumentNullException.ThrowIfNull(celula);
+        GarantirCelula(celula);
         if (valor is null)
         {
             Limpar(celula);
+            return;
+        }
+
+        if (!CabeEmDouble(valor.Value))
+        {
+            GravarTexto(celula, TextoExato(valor.Value, moeda: true));
             return;
         }
 
@@ -104,29 +162,42 @@ public static class PlanilhaPtBr
         celula.Style.NumberFormat.Format = FormatoMoeda;
     }
 
-    /// <summary>Número sem símbolo de moeda. Meta de redução, quantidade e percentual.</summary>
+    /// <summary>
+    /// Número sem símbolo de moeda. Meta de redução, quantidade e percentual.
+    /// Acima de cerca de 15 dígitos significativos, texto exato em vez de double arredondado.
+    /// </summary>
     public static void GravarNumero(IXLCell celula, decimal? valor)
     {
-        ArgumentNullException.ThrowIfNull(celula);
+        GarantirCelula(celula);
         if (valor is null)
         {
             Limpar(celula);
             return;
         }
 
+        if (!CabeEmDouble(valor.Value))
+        {
+            GravarTexto(celula, TextoExato(valor.Value, moeda: false));
+            return;
+        }
+
         celula.Value = (double)valor.Value;
     }
 
+    /// <summary>Parcela, mês, ano e ordem. O inteiro cabe no double sem perder dígito.</summary>
+    public static void GravarNumero(IXLCell celula, int? valor)
+        => GravarNumero(celula, valor is null ? null : (decimal)valor.Value);
+
     public static void GravarSimNao(IXLCell celula, bool valor)
     {
-        ArgumentNullException.ThrowIfNull(celula);
+        GarantirCelula(celula);
         GravarTexto(celula, valor ? Sim : Nao);
     }
 
     public static void GravarTexto(IXLCell celula, string? texto)
     {
-        ArgumentNullException.ThrowIfNull(celula);
-        var bruto = texto ?? "";
+        GarantirCelula(celula);
+        var bruto = SemControle(TrocarSurrogateSolto(texto ?? ""));
         var neutralizar = PrecisaNeutralizar(bruto);
         var valor = Cortar(bruto);
         if (PrecisaNeutralizar(valor))
@@ -154,14 +225,77 @@ public static class PlanilhaPtBr
             celula.Style.IncludeQuotePrefix = true;
     }
 
+    private static void GarantirCelula(IXLCell celula)
+    {
+        ArgumentNullException.ThrowIfNull(celula);
+        var linha = celula.Address.RowNumber;
+        var coluna = celula.Address.ColumnNumber;
+        if (linha < 1 || linha > MaximoLinhas)
+            throw new ArgumentOutOfRangeException(nameof(celula), $"A planilha aceita no máximo {MaximoLinhas} linhas.");
+        if (coluna < 1 || coluna > MaximoColunas)
+            throw new ArgumentOutOfRangeException(nameof(celula), $"A planilha aceita no máximo {MaximoColunas} colunas.");
+    }
+
     private static void Limpar(IXLCell celula)
     {
         celula.Clear(XLClearOptions.Contents);
     }
 
+    private static bool DataGravavel(DateTime? data, out DateTime instante)
+    {
+        instante = default;
+        if (data is null || !CabeNoExcel(data.Value))
+            return false;
+
+        instante = data.Value;
+        return true;
+    }
+
+    /// <summary>Serial negativo ou anterior a 1900 não é data de Excel. <see cref="DateTime.MinValue"/> cai aqui.</summary>
+    private static bool CabeNoExcel(DateTime data)
+        => data.Year is >= 1900 and <= 9999;
+
+    private static DateTime EmSaoPaulo(DateTime instante)
+    {
+        if (instante.Kind != DateTimeKind.Utc)
+            return instante;
+
+        return TimeZoneInfo.ConvertTimeFromUtc(instante, FusoBrasil);
+    }
+
+    /// <summary>
+    /// O double tem cerca de 15 dígitos significativos. <see cref="decimal.MaxValue"/>
+    /// vira um double finito e o cast de volta lança <see cref="OverflowException"/>.
+    /// Os dois casos, e um double não finito, contam como "não cabe": o texto exato entra no lugar.
+    /// </summary>
+    private static bool CabeEmDouble(decimal valor)
+    {
+        try
+        {
+            var numero = (double)valor;
+            if (!double.IsFinite(numero))
+                return false;
+
+            return (decimal)numero == valor;
+        }
+        catch (OverflowException)
+        {
+            return false;
+        }
+    }
+
+    private static string TextoExato(decimal valor, bool moeda)
+    {
+        var numero = valor.ToString("0.#############################", Cultura);
+        return moeda ? "R$ " + numero : numero;
+    }
+
     private static void ValidarNomeAba(string nome)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(nome);
+
+        if (nome.Equals("History", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("O nome History é reservado pelo Excel.", nameof(nome));
 
         if (nome.Length > MaximoCaracteresAba)
             throw new ArgumentException(
@@ -179,22 +313,140 @@ public static class PlanilhaPtBr
     }
 
     /// <summary>
-    /// = + - @ no início, ou tab, CR e LF, fazem o Excel tratar a célula como fórmula
-    /// quando a planilha é aberta ou convertida. Espaço antes do gatilho também.
-    /// CR e LF entram juntos porque o ClosedXML grava os dois como quebra de linha.
+    /// = + - @ no início, ou tab, CR e LF, fazem o Excel tratar a célula como fórmula.
+    /// O mesmo vale para os fullwidth ＝ ＋ － ＠ e para o menos U+2212.
+    /// Antes do gatilho, espaço em branco (<see cref="Rune.IsWhiteSpace"/>),
+    /// formato (Cf), separadores Zs, Zl e Zp e o U+FFFD são ignorados. Assim um NBSP,
+    /// U+2000–U+200A, U+202F, U+205F, U+1680, U+2028, U+2029 ou um surrogate solto
+    /// (que vira U+FFFD) não esconde o =.
     /// </summary>
     private static bool PrecisaNeutralizar(string texto)
     {
-        foreach (var caractere in texto)
+        for (var i = 0; i < texto.Length;)
         {
-            if (caractere == ' ')
+            // Surrogate solto não é escalar. Vira U+FFFD e a leitura segue um char.
+            if (!Rune.TryGetRuneAt(texto, i, out var rune))
+            {
+                rune = Rune.ReplacementChar;
+                i++;
+            }
+            else
+            {
+                i += rune.Utf16SequenceLength;
+            }
+
+            if (IgnoravelNoInicio(rune))
                 continue;
 
-            return caractere is '=' or '+' or '-' or '@' or '\t' or '\r' or '\n';
+            return GatilhoDeFormula(rune);
         }
 
         return false;
     }
+
+    /// <summary>Par incompleto não pode ir para o XML. Cada um vira U+FFFD.</summary>
+    private static string TrocarSurrogateSolto(string texto)
+    {
+        var temSolto = false;
+        for (var i = 0; i < texto.Length; i++)
+        {
+            if (char.IsHighSurrogate(texto[i]))
+            {
+                if (i + 1 >= texto.Length || !char.IsLowSurrogate(texto[i + 1]))
+                {
+                    temSolto = true;
+                    break;
+                }
+
+                i++;
+            }
+            else if (char.IsLowSurrogate(texto[i]))
+            {
+                temSolto = true;
+                break;
+            }
+        }
+
+        if (!temSolto)
+            return texto;
+
+        var resultado = new StringBuilder(texto.Length);
+        for (var i = 0; i < texto.Length; i++)
+        {
+            if (char.IsHighSurrogate(texto[i]) && i + 1 < texto.Length && char.IsLowSurrogate(texto[i + 1]))
+            {
+                resultado.Append(texto[i]);
+                resultado.Append(texto[i + 1]);
+                i++;
+            }
+            else if (char.IsSurrogate(texto[i]))
+            {
+                resultado.Append('\uFFFD');
+            }
+            else
+            {
+                resultado.Append(texto[i]);
+            }
+        }
+
+        return resultado.ToString();
+    }
+
+    private static bool IgnoravelNoInicio(Rune rune)
+    {
+        if (GatilhoDeFormula(rune))
+            return false;
+
+        // U+FFFD é So. Sem isto, o substituto de um surrogate solto esconde o =.
+        if (rune.Value == Rune.ReplacementChar.Value)
+            return true;
+
+        if (Rune.IsWhiteSpace(rune))
+            return true;
+
+        var categoria = Rune.GetUnicodeCategory(rune);
+        return categoria is UnicodeCategory.Format
+            or UnicodeCategory.SpaceSeparator
+            or UnicodeCategory.LineSeparator
+            or UnicodeCategory.ParagraphSeparator;
+    }
+
+    private static bool GatilhoDeFormula(Rune rune)
+        => rune.Value <= char.MaxValue && GatilhoDeFormula((char)rune.Value);
+
+    private static bool GatilhoDeFormula(char caractere) => caractere is
+        '=' or '+' or '-' or '@' or '\t' or '\r' or '\n'
+        or '\uFF1D' or '\uFF0B' or '\uFF0D' or '\uFF20' or '\u2212';
+
+    /// <summary>
+    /// XML não aceita estes controles. O ClosedXML os grava como <c>_x0001_</c>,
+    /// e o Excel mostra esse texto. Aqui viram espaço. Tab e quebra de linha ficam.
+    /// </summary>
+    private static string SemControle(string texto)
+    {
+        var temControle = false;
+        foreach (var caractere in texto)
+        {
+            if (!EhControleInvalido(caractere))
+                continue;
+
+            temControle = true;
+            break;
+        }
+
+        if (!temControle)
+            return texto;
+
+        var resultado = new StringBuilder(texto.Length);
+        foreach (var caractere in texto)
+            resultado.Append(EhControleInvalido(caractere) ? ' ' : caractere);
+
+        return resultado.ToString();
+    }
+
+    private static bool EhControleInvalido(char caractere)
+        => caractere < ' ' && caractere is not '\t' and not '\n' and not '\r'
+            || caractere is '\uFFFE' or '\uFFFF';
 
     private static string Cortar(string texto)
     {

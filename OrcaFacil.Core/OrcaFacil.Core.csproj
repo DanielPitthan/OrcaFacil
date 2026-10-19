@@ -18,7 +18,8 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.11" />
     <PackageReference Include="ClosedXML" Version="0.105.0" />
     <!-- 0.105.0 depende de SixLabors.Fonts >= 1.0.0 sem teto. A 2.x muda a licença
-         e a 3.x quebra no Android com TypeLoadException em GlyphMetrics. -->
+         e a SixLabors.Fonts 3.x quebra com TypeLoadException em GlyphMetrics em qualquer sistema
+         (ClosedXML #2844), não só no Android. -->
     <PackageReference Include="SixLabors.Fonts" Version="[1.0.0,2.0.0)" />
   </ItemGroup>
 
