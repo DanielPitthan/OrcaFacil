@@ -448,3 +448,27 @@ html.of-teclado-aberto .mud-dialog-container {
     margin-right: 6px;
     vertical-align: middle;
 }
+
+/* Falha ao apagar a chave. O snackbar preenchido do erro da paleta fica curto de contraste.
+   O aviso fica até o fecho. Não muda o layout da página. */
+html.of-tema-claro .mud-snackbar.of-snack-chave,
+html.of-tema-claro .mud-snackbar.of-snack-chave .mud-snackbar-content-message,
+html.of-tema-claro .mud-snackbar.of-snack-chave .mud-icon-button,
+html.of-tema-claro .mud-snackbar.of-snack-chave .mud-icon-root {
+    color: #FFFFFF;
+}
+
+html.of-tema-claro .mud-snackbar.of-snack-chave {
+    background-color: #9B2C3A;
+}
+
+html.of-tema-escuro .mud-snackbar.of-snack-chave,
+html.of-tema-escuro .mud-snackbar.of-snack-chave .mud-snackbar-content-message,
+html.of-tema-escuro .mud-snackbar.of-snack-chave .mud-icon-button,
+html.of-tema-escuro .mud-snackbar.of-snack-chave .mud-icon-root {
+    color: #0B1220;
+}
+
+html.of-tema-escuro .mud-snackbar.of-snack-chave {
+    background-color: #E07171;
+}

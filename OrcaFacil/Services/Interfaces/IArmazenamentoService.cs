@@ -1,3 +1,4 @@
+using OrcaFacil.Core.Armazenamento;
 using OrcaFacil.Core.Enums;
 
 namespace OrcaFacil.Services.Interfaces;
@@ -15,5 +16,5 @@ public class ResumoArmazenamentoDto
 public interface IArmazenamentoService
 {
     Task<ResumoArmazenamentoDto> ObterResumoAsync();
-    Task LimparAsync(TipoLimpezaDados tipo);
+    Task<ResultadoLimpeza> LimparAsync(TipoLimpezaDados tipo);
 }

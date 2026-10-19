@@ -14,7 +14,7 @@ public class AplicacaoDeTemaTests
         TemaUsuarioApp userAppTheme)
     {
         var memoria = new PreferenciasEmMemoria();
-        var preferencias = new PreferenciasTema(memoria);
+        var preferencias = new PreferenciasTema(memoria, CofreChaveVazio.Instancia);
         var aplicados = new List<TemaUsuarioApp>();
 
         var resultado = AplicacaoDeTema.DefinirEAplicar(preferencias, tema, aplicado =>
@@ -34,7 +34,7 @@ public class AplicacaoDeTemaTests
     public void DefinirEAplicar_SubstituiOTemaAnterior()
     {
         var memoria = new PreferenciasEmMemoria();
-        var preferencias = new PreferenciasTema(memoria);
+        var preferencias = new PreferenciasTema(memoria, CofreChaveVazio.Instancia);
         var aplicados = new List<TemaUsuarioApp>();
 
         AplicacaoDeTema.DefinirEAplicar(preferencias, TemaPreferido.Claro, aplicado =>

@@ -1,31 +1,44 @@
 using OrcaFacil.Core.Armazenamento.Espelho.Pasta;
+using OrcaFacil.Core.Llm;
 
 namespace OrcaFacil.Core.Tema;
 
 /// <summary>
 /// Apaga as preferências gravadas e devolve <c>Config.Tema</c> como estava.
 /// A URI da pasta do espelho também fica: redefinir o tema não desliga o espelho.
+/// O cofre é obrigatório: sem ele, "Limpar tudo" deixaria a chave da API no SecureStorage.
+/// <c>Preferences.Clear</c> não alcança esse arquivo.
 /// <c>ConfiguracaoService.Redefinir</c> só delega para este método.
 /// </summary>
 public interface IRedefinicaoPreferencias
 {
-    void Redefinir();
+    /// <summary>
+    /// <c>true</c> quando a chave foi apagada (ou já não estava).
+    /// <c>false</c> quando o cofre falhou e a chave pode ter ficado.
+    /// Tema e URI do espelho já foram devolvidos. Pode ser chamado de novo.
+    /// </summary>
+    Task<bool> Redefinir();
 }
 
 /// <summary>
 /// Chave <c>Config.Tema</c>. O padrão é Automático e só é gravado quando alguém escolhe.
-/// <see cref="Redefinir"/> apaga as outras preferências, devolve esta chave como estava
-/// e preserva <see cref="UriEscolhaPasta.ChavePreferencia"/>.
+/// <see cref="Redefinir"/> apaga as outras preferências, devolve esta chave como estava,
+/// preserva <see cref="UriEscolhaPasta.ChavePreferencia"/> e chama
+/// <see cref="ICofreChaveApi.RemoverTudo"/>.
 /// </summary>
 public sealed class PreferenciasTema : IRedefinicaoPreferencias
 {
     public const string Chave = "Config.Tema";
 
     private readonly IPreferenciasSimples _preferencias;
+    private readonly ICofreChaveApi _cofre;
 
-    public PreferenciasTema(IPreferenciasSimples preferencias)
+    public PreferenciasTema(IPreferenciasSimples preferencias, ICofreChaveApi cofre)
     {
+        ArgumentNullException.ThrowIfNull(preferencias);
+        ArgumentNullException.ThrowIfNull(cofre);
         _preferencias = preferencias;
+        _cofre = cofre;
     }
 
     public TemaPreferido Tema
@@ -34,7 +47,7 @@ public sealed class PreferenciasTema : IRedefinicaoPreferencias
         set => _preferencias.Definir(Chave, MapeamentoTema.ParaTexto(value));
     }
 
-    public void Redefinir()
+    public async Task<bool> Redefinir()
     {
         var preservar = _preferencias.Contem(Chave);
         var texto = preservar ? _preferencias.Obter(Chave, MapeamentoTema.TextoAutomatico) : null;
@@ -45,5 +58,15 @@ public sealed class PreferenciasTema : IRedefinicaoPreferencias
             _preferencias.Definir(Chave, texto ?? MapeamentoTema.TextoAutomatico);
         if (preservarPasta)
             _preferencias.Definir(UriEscolhaPasta.ChavePreferencia, uriPasta ?? "");
+
+        // Tema e pasta já voltaram. A falha do cofre não desfaz isso e não derruba a limpeza.
+        try
+        {
+            return await _cofre.RemoverTudo();
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 }
