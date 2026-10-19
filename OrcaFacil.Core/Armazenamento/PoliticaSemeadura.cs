@@ -66,8 +66,14 @@ public static class PoliticaSemeadura
         return true;
     }
 
-    private static async Task<bool> HaDadoDoUsuarioAsync(AppDbContext contexto, CancellationToken cancellationToken)
+    /// <summary>
+    /// Critério único de dado do usuário. A abertura e o backup chamam este método.
+    /// Categoria padrão do sistema não conta. Qualquer linha de log conta.
+    /// </summary>
+    public static async Task<bool> HaDadoDoUsuarioAsync(AppDbContext contexto, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(contexto);
+
         if (await contexto.MembrosFamilia.AnyAsync(cancellationToken))
             return true;
 

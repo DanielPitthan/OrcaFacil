@@ -113,7 +113,9 @@
         ["autocomplete"] = "new-password",
         ["autocapitalize"] = "off",
         ["spellcheck"] = "false",
-        ["aria-label"] = "Senha do espelho"
+        ["aria-label"] = "Senha do espelho",
+        ["data-lpignore"] = "true",
+        ["data-1p-ignore"] = "true"
     };
 
     private static readonly Dictionary<string, object?> AtributosConfirmacao = new()
@@ -121,7 +123,9 @@
         ["autocomplete"] = "new-password",
         ["autocapitalize"] = "off",
         ["spellcheck"] = "false",
-        ["aria-label"] = "Confirmar senha do espelho"
+        ["aria-label"] = "Confirmar senha do espelho",
+        ["data-lpignore"] = "true",
+        ["data-1p-ignore"] = "true"
     };
 
     private ResumoArmazenamentoDto? _resumo;
@@ -299,12 +303,11 @@
 
     private static string TextoSubstituicao(ResultadoBackupEspelho resultado)
     {
-        const string efeito = "O backup desta pasta será substituído. O banco de dados deste aparelho não será apagado.";
         if (resultado.EspelhoExistenteEm is not DateTimeOffset quando)
-            return efeito;
+            return BackupEspelhoAgora.MensagemConfirmacao;
 
         var texto = quando.ToLocalTime().ToString("dd/MM/yyyy HH:mm", CultureInfo.GetCultureInfo("pt-BR"));
-        return $"O espelho desta pasta é de {texto}. {efeito}";
+        return $"O espelho desta pasta é de {texto}. {BackupEspelhoAgora.MensagemConfirmacao}";
     }
 
     private async Task CarregarAsync()

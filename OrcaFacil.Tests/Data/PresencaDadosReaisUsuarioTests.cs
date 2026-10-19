@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using OrcaFacil.Core.Armazenamento;
 using OrcaFacil.Core.Data;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
@@ -31,33 +32,53 @@ public class PresencaDadosReaisUsuarioTests
     }
 
     [Fact]
-    public async Task BancoVazio_Essencial_DemonstracaoELog_NaoSaoDadoReal()
+    public async Task BancoVazio_ECategoriaPadrao_NaoSaoDado_LogConta()
     {
         await using var banco = await Banco.AbrirAsync();
         Assert.Equal(LeituraDadosReais.SemDadosReais, await PresencaDadosReaisUsuario.ClassificarAsync(banco.Contexto));
 
-        var perfil = await banco.EssencialAsync();
-        Assert.Equal(LeituraDadosReais.SemDadosReais, await PresencaDadosReaisUsuario.ClassificarAsync(banco.Contexto));
-
-        CatalogoDemonstracao.AdicionarDemonstracao(banco.Contexto, perfil, new DateTime(2026, 10, 19));
+        banco.Contexto.Categorias.AddRange(CatalogoDemonstracao.CriarCategorias());
         await banco.Contexto.SaveChangesAsync();
         Assert.Equal(LeituraDadosReais.SemDadosReais, await PresencaDadosReaisUsuario.ClassificarAsync(banco.Contexto));
-
-        var orcamento = banco.Contexto.Orcamentos.First();
-        var mes = orcamento.Mes == 1 ? 12 : orcamento.Mes - 1;
-        var ano = orcamento.Mes == 1 ? orcamento.Ano - 1 : orcamento.Ano;
-        orcamento.Mes = mes;
-        orcamento.Ano = ano;
-        await banco.Contexto.SaveChangesAsync();
-        Assert.Equal(LeituraDadosReais.SemDadosReais, await PresencaDadosReaisUsuario.ClassificarAsync(banco.Contexto));
+        Assert.False(await PoliticaSemeadura.HaDadoDoUsuarioAsync(banco.Contexto));
 
         banco.Contexto.LogsEvento.Add(new LogEvento { Tipo = TipoLogEvento.Sistema, Mensagem = "abriu" });
         await banco.Contexto.SaveChangesAsync();
-        Assert.Equal(LeituraDadosReais.SemDadosReais, await PresencaDadosReaisUsuario.ClassificarAsync(banco.Contexto));
+        Assert.Equal(LeituraDadosReais.ComDadosReais, await PresencaDadosReaisUsuario.ClassificarAsync(banco.Contexto));
+        Assert.True(await PoliticaSemeadura.HaDadoDoUsuarioAsync(banco.Contexto));
     }
 
     [Fact]
-    public async Task SubconjuntoDaDemonstracao_AindaNaoEDadoReal()
+    public async Task AberturaEBackup_ClassificamIgual_Vazio_Demonstracao_Log_EDadoReal()
+    {
+        await using (var vazio = await Banco.AbrirAsync())
+            await ConferirIgualAsync(vazio, false);
+
+        await using (var demonstracao = await Banco.AbrirAsync())
+        {
+            var perfil = await demonstracao.EssencialAsync();
+            CatalogoDemonstracao.AdicionarDemonstracao(demonstracao.Contexto, perfil, new DateTime(2026, 10, 19));
+            await demonstracao.Contexto.SaveChangesAsync();
+            await ConferirIgualAsync(demonstracao, true);
+        }
+
+        await using (var soLog = await Banco.AbrirAsync())
+        {
+            soLog.Contexto.LogsEvento.Add(new LogEvento { Tipo = TipoLogEvento.Sistema, Mensagem = "abriu" });
+            await soLog.Contexto.SaveChangesAsync();
+            await ConferirIgualAsync(soLog, true);
+        }
+
+        await using (var real = await Banco.AbrirAsync())
+        {
+            real.Contexto.MembrosFamilia.Add(new MembroFamilia { Nome = "Marina", Avatar = "M", Ativo = true });
+            await real.Contexto.SaveChangesAsync();
+            await ConferirIgualAsync(real, true);
+        }
+    }
+
+    [Fact]
+    public async Task LancamentoNoFormatoDaDemonstracao_ContaComoDado()
     {
         await using var banco = await Banco.AbrirAsync();
         var perfil = await banco.EssencialAsync();
@@ -74,7 +95,7 @@ public class PresencaDadosReaisUsuarioTests
         });
         await banco.Contexto.SaveChangesAsync();
 
-        Assert.Equal(LeituraDadosReais.SemDadosReais, await PresencaDadosReaisUsuario.ClassificarAsync(banco.Contexto));
+        Assert.Equal(LeituraDadosReais.ComDadosReais, await PresencaDadosReaisUsuario.ClassificarAsync(banco.Contexto));
     }
 
     [Fact]
@@ -204,6 +225,14 @@ public class PresencaDadosReaisUsuarioTests
         fechado.Contexto.FechamentosPeriodo.Add(new FechamentoPeriodo { Mes = 10, Ano = 2026, Fechado = true });
         await fechado.Contexto.SaveChangesAsync();
         Assert.Equal(LeituraDadosReais.ComDadosReais, await PresencaDadosReaisUsuario.ClassificarAsync(fechado.Contexto));
+    }
+
+    private static async Task ConferirIgualAsync(Banco banco, bool dado)
+    {
+        var abertura = await PoliticaSemeadura.HaDadoDoUsuarioAsync(banco.Contexto);
+        var backup = await PresencaDadosReaisUsuario.ClassificarAsync(banco.Contexto);
+        Assert.Equal(dado, abertura);
+        Assert.Equal(dado ? LeituraDadosReais.ComDadosReais : LeituraDadosReais.SemDadosReais, backup);
     }
 
     private sealed class Banco : IAsyncDisposable

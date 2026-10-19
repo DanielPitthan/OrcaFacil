@@ -198,7 +198,11 @@ public sealed record DiagnosticoPastaEspelho
 
 public sealed record ResultadoOperacaoPasta
 {
-    public ResultadoOperacaoPasta(bool sucesso, CodigoFalhaPastaEspelho codigo, string mensagem)
+    public ResultadoOperacaoPasta(
+        bool sucesso,
+        CodigoFalhaPastaEspelho codigo,
+        string mensagem,
+        bool promocaoEfetuada = false)
     {
         if (sucesso != EhPublicacao(codigo))
             throw new ArgumentException("Sucesso e código não combinam.");
@@ -208,10 +212,13 @@ public sealed record ResultadoOperacaoPasta
             throw new ArgumentException("Publicação com resíduo precisa de mensagem.");
         if (!sucesso && string.IsNullOrWhiteSpace(mensagem))
             throw new ArgumentException("Falha precisa de mensagem.");
+        if (promocaoEfetuada && sucesso)
+            throw new ArgumentException("A promoção efetuada só acompanha uma falha de publicação.", nameof(promocaoEfetuada));
 
         Sucesso = sucesso;
         Codigo = codigo;
         Mensagem = mensagem;
+        PromocaoEfetuada = promocaoEfetuada;
     }
 
     public bool Sucesso { get; }
@@ -219,6 +226,12 @@ public sealed record ResultadoOperacaoPasta
     public CodigoFalhaPastaEspelho Codigo { get; }
 
     public string Mensagem { get; }
+
+    /// <summary>
+    /// A promoção já moveu o temporário para o nome definitivo e a chamada mesmo assim falhou.
+    /// O parque que só afasta o arquivo antigo não liga esta marca.
+    /// </summary>
+    public bool PromocaoEfetuada { get; }
 
     public static bool EhPublicacao(CodigoFalhaPastaEspelho codigo)
         => codigo is CodigoFalhaPastaEspelho.Nenhuma or CodigoFalhaPastaEspelho.PublicadoComResiduo;
@@ -231,12 +244,12 @@ public sealed record ResultadoOperacaoPasta
             CodigoFalhaPastaEspelho.PublicadoComResiduo,
             MensagensPastaEspelho.Para(CodigoFalhaPastaEspelho.PublicadoComResiduo));
 
-    public static ResultadoOperacaoPasta Falha(CodigoFalhaPastaEspelho codigo)
+    public static ResultadoOperacaoPasta Falha(CodigoFalhaPastaEspelho codigo, bool promocaoEfetuada = false)
     {
         if (EhPublicacao(codigo))
             throw new ArgumentException("Falha precisa de um código de falha.", nameof(codigo));
 
-        return new ResultadoOperacaoPasta(false, codigo, MensagensPastaEspelho.Para(codigo));
+        return new ResultadoOperacaoPasta(false, codigo, MensagensPastaEspelho.Para(codigo), promocaoEfetuada);
     }
 
     public override string ToString()

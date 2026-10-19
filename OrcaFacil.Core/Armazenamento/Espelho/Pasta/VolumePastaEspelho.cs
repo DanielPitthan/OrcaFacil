@@ -114,11 +114,3 @@ public sealed class LeitorEspelhoLocal : ILeitorEspelhoLocal
     public Task<LeituraEspelho> LerAsync(string caminhoLocal, CancellationToken cancellationToken = default)
         => new EspelhoArquivo(caminhoLocal, _senha, _versao).LerAsync(cancellationToken);
 }
-
-/// <summary>Senha ainda não pedida. O PR da tela substitui este registro.</summary>
-public sealed class ProvedorSenhaEspelhoAindaNaoInformada : IProvedorSenhaEspelho
-{
-    public string? Obter() => null;
-
-    public override string ToString() => "ProvedorSenhaEspelhoAindaNaoInformada";
-}

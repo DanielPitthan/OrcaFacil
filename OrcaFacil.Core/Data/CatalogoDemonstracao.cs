@@ -6,15 +6,16 @@ namespace OrcaFacil.Core.Data;
 
 /// <summary>
 /// O que o app grava sozinho na instalação: categorias padrão, o perfil "Usuário"
-/// e os lançamentos, orçamentos e metas de demonstração. Não é dado do usuário.
+/// e os lançamentos, orçamentos e metas de demonstração.
+/// Quem decide se isso já é dado do usuário é
+/// <see cref="OrcaFacil.Core.Armazenamento.PoliticaSemeadura.HaDadoDoUsuarioAsync"/>:
+/// categoria padrão não conta; perfil, lançamento, orçamento, meta e log contam.
 /// </summary>
 public static class CatalogoDemonstracao
 {
     public const string NomePerfilPadrao = "Usuário";
 
     public const string AvatarPerfilPadrao = "👤";
-
-    public const int RepeticoesMensais = 3;
 
     public static IReadOnlyList<CategoriaPadrao> Categorias { get; } =
     [
@@ -97,47 +98,6 @@ public static class CatalogoDemonstracao
             Role = PerfilRole.Admin
         };
 
-    public static bool EhPerfilPadrao(MembroFamilia membro)
-        => membro.Nome == NomePerfilPadrao
-            && membro.Avatar == AvatarPerfilPadrao
-            && membro.Ativo
-            && string.IsNullOrEmpty(membro.Apelido)
-            && string.IsNullOrEmpty(membro.FotoPath)
-            && membro.Role == PerfilRole.Admin;
-
-    public static bool EhCategoriaPadrao(Categoria categoria)
-    {
-        if (!categoria.EhPadraoDoSistema || !categoria.Ativo)
-            return false;
-
-        foreach (var padrao in Categorias)
-        {
-            if (padrao.Nome == categoria.Nome
-                && padrao.Icone == categoria.Icone
-                && padrao.CorHex == categoria.CorHex
-                && padrao.TipoPadrao == categoria.TipoPadrao
-                && padrao.PermiteItensFatura == categoria.PermiteItensFatura)
-                return true;
-        }
-
-        return false;
-    }
-
-    public static bool TentarLimiteLancamento(
-        string descricao,
-        decimal valor,
-        TipoTransacao tipo,
-        TipoRecorrencia recorrencia,
-        string categoria,
-        out int limite)
-        => LimitesLancamento.TryGetValue(new ChaveLancamento(descricao, valor, tipo, recorrencia, categoria), out limite);
-
-    public static bool TentarLimiteOrcamento(string categoria, decimal valorLimite, out int limite)
-        => LimitesOrcamento.TryGetValue(new ChaveOrcamento(categoria, valorLimite), out limite);
-
-    public static bool TentarLimiteMeta(string nome, decimal valorAlvo, decimal valorAtual, string icone, out int limite)
-        => LimitesMeta.TryGetValue(new ChaveMeta(nome, valorAlvo, valorAtual, icone), out limite);
-
     /// <summary>
     /// Acrescenta a demonstração. O perfil e as categorias padrão já precisam estar gravados.
     /// O mês de referência é <paramref name="hoje"/>, como na primeira abertura do app.
@@ -200,53 +160,6 @@ public static class CatalogoDemonstracao
         => ids.TryGetValue(nome, out var id)
             ? id
             : throw new InvalidOperationException("Categoria padrão ausente.");
-
-    private static readonly Dictionary<ChaveLancamento, int> LimitesLancamento = CriarLimitesLancamento();
-
-    private static readonly Dictionary<ChaveOrcamento, int> LimitesOrcamento = CriarLimitesOrcamento();
-
-    private static readonly Dictionary<ChaveMeta, int> LimitesMeta = CriarLimitesMeta();
-
-    private static Dictionary<ChaveLancamento, int> CriarLimitesLancamento()
-    {
-        var mapa = new Dictionary<ChaveLancamento, int>();
-        foreach (var item in Lancamentos)
-        {
-            mapa[new ChaveLancamento(item.Descricao, item.Valor, item.Tipo, item.Recorrencia, item.Categoria)] =
-                RepeticoesMensais;
-        }
-
-        return mapa;
-    }
-
-    private static Dictionary<ChaveOrcamento, int> CriarLimitesOrcamento()
-    {
-        var mapa = new Dictionary<ChaveOrcamento, int>();
-        foreach (var item in Orcamentos)
-            mapa[new ChaveOrcamento(item.Categoria, item.ValorLimite)] = 1;
-
-        return mapa;
-    }
-
-    private static Dictionary<ChaveMeta, int> CriarLimitesMeta()
-    {
-        var mapa = new Dictionary<ChaveMeta, int>();
-        foreach (var item in Metas)
-            mapa[new ChaveMeta(item.Nome, item.ValorAlvo, item.ValorAtual, item.Icone)] = 1;
-
-        return mapa;
-    }
-
-    private readonly record struct ChaveLancamento(
-        string Descricao,
-        decimal Valor,
-        TipoTransacao Tipo,
-        TipoRecorrencia Recorrencia,
-        string Categoria);
-
-    private readonly record struct ChaveOrcamento(string Categoria, decimal ValorLimite);
-
-    private readonly record struct ChaveMeta(string Nome, decimal ValorAlvo, decimal ValorAtual, string Icone);
 
     public readonly record struct CategoriaPadrao(
         string Nome,

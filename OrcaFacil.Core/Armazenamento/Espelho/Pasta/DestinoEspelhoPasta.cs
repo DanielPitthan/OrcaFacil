@@ -24,7 +24,12 @@ public sealed class DestinoEspelhoPasta : IDestinoEspelho
     {
         var resultado = await PublicarInternoAsync(arquivoOrigem, cancellationToken);
         if (!resultado.Sucesso)
+        {
+            if (resultado.PromocaoEfetuada)
+                throw new PublicacaoEspelhoException(resultado.Mensagem, promocaoEfetuada: true);
+
             throw new IOException(resultado.Mensagem);
+        }
     }
 
     public override string ToString() => "DestinoEspelhoPasta";
@@ -47,4 +52,19 @@ public sealed class DestinoEspelhoPasta : IDestinoEspelho
             return ResultadoOperacaoPasta.Falha(codigo);
         }
     }
+}
+
+/// <summary>
+/// Falha da publicação na pasta. <see cref="PromocaoEfetuada"/> fica ligado quando o
+/// temporário já assumiu o nome definitivo, mesmo que a chamada tenha falhado.
+/// </summary>
+public sealed class PublicacaoEspelhoException : IOException
+{
+    public PublicacaoEspelhoException(string mensagem, bool promocaoEfetuada)
+        : base(mensagem)
+    {
+        PromocaoEfetuada = promocaoEfetuada;
+    }
+
+    public bool PromocaoEfetuada { get; }
 }

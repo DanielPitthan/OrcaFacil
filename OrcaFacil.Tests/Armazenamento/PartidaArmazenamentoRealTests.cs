@@ -679,6 +679,13 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
             .ToArray();
 
         Assert.Equal(conjuntos, PoliticaSemeadura.ConjuntosObservados.OrderBy(nome => nome, StringComparer.Ordinal).ToArray());
+
+        var fonte = File.ReadAllText(Path.Combine(EncontrarRaiz(), "OrcaFacil.Core", "Armazenamento", "PoliticaSemeadura.cs"));
+        var inicio = fonte.IndexOf("HaDadoDoUsuarioAsync", StringComparison.Ordinal);
+        Assert.True(inicio >= 0);
+        var corpo = fonte[inicio..];
+        foreach (var nome in conjuntos)
+            Assert.Contains("contexto." + nome, corpo, StringComparison.Ordinal);
     }
 
     [Theory]

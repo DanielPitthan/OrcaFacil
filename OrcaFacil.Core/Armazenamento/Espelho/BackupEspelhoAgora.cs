@@ -17,8 +17,14 @@ public sealed class BackupEspelhoAgora
     public const string MensagemGravadoComReserva =
         "Backup gravado na pasta escolhida. A limpeza da cópia anterior falhou; ela permanece na pasta.";
 
+    public const string MensagemGravadoLeituraNaoConfirmada =
+        "Backup atualizado na pasta escolhida. Não foi possível confirmar a leitura do arquivo final.";
+
+    /// <summary>
+    /// A frase volta a citar o Restaurar quando a parte B do #42 entrar.
+    /// </summary>
     public const string MensagemRecusaEspelhoExistente =
-        "Já existe um backup nesta pasta. Use Restaurar para recuperá-lo.";
+        "Já existe um backup nesta pasta. A cópia anterior continua guardada na pasta de backup.";
 
     public const string MensagemConfirmacao =
         "Já existe um backup nesta pasta. Confirme para substituí-lo. O banco deste aparelho não será apagado.";
@@ -119,8 +125,9 @@ public sealed class BackupEspelhoAgora
         }
 
         // A promoção que já trocou o nome devolve o mesmo código de uma troca que não saiu do lugar.
-        // O hash do nome definitivo separa os dois: se o ciphertext novo está lá, a senha nova entra
-        // na memória. Desfazer a partir da reserva pode falhar e perder o arquivo que acabou de valer.
+        // O hash do nome definitivo separa os dois quando a releitura funciona. Se a promoção já
+        // ocorreu e a releitura falha, a senha nova entra mesmo assim: o nome definitivo pode ter
+        // o ciphertext novo e a memória não pode ficar com a senha antiga.
         var antes = await FotografarAsync(cancellationToken);
         try
         {
@@ -145,6 +152,9 @@ public sealed class BackupEspelhoAgora
             if (DefinitivoMudou(antes, depois))
                 return Publicado(senhaNova);
 
+            if (PromocaoEfetuada(ex))
+                return PublicadoSemConfirmarLeitura(senhaNova);
+
             return ResultadoBackupEspelho.Falha(MensagemMantido);
         }
 
@@ -158,6 +168,25 @@ public sealed class BackupEspelhoAgora
 
         var mensagem = HaResiduo() ? MensagemGravadoComReserva : MensagemGravado;
         return ResultadoBackupEspelho.Ok(mensagem);
+    }
+
+    private ResultadoBackupEspelho PublicadoSemConfirmarLeitura(string? senhaNova)
+    {
+        if (senhaNova is not null)
+            _definicao.Definir(senhaNova, senhaNova);
+
+        return ResultadoBackupEspelho.Ok(MensagemGravadoLeituraNaoConfirmada);
+    }
+
+    private static bool PromocaoEfetuada(Exception excecao)
+    {
+        for (var atual = excecao; atual is not null; atual = atual.InnerException)
+        {
+            if (atual is PublicacaoEspelhoException publicacao)
+                return publicacao.PromocaoEfetuada;
+        }
+
+        return false;
     }
 
     private bool HaResiduo()
