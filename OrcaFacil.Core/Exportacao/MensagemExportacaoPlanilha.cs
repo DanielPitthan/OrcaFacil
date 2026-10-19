@@ -9,6 +9,11 @@ public static class MensagemExportacaoPlanilha
     public const string Generica = "Não foi possível exportar a planilha. Tente de novo.";
     public const string Compartilhamento = "Não foi possível compartilhar a planilha. Tente de novo.";
 
+    /// <summary>
+    /// A chamada do compartilhar terminou: a folha abriu. Não é confirmação de que o arquivo foi salvo.
+    /// </summary>
+    public const string ProntaParaCompartilhar = "Arquivo pronto para compartilhar.";
+
     private static readonly string[] Prefixos =
     [
         "A aba ",

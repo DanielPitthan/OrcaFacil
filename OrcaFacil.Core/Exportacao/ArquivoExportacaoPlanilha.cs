@@ -4,13 +4,18 @@ namespace OrcaFacil.Core.Exportacao;
 
 /// <summary>
 /// Nome e limpeza do xlsx no cache do app. Só entra o padrão
-/// <c>orcafacil-AAAAMMDD-HHmmss.xlsx</c> no topo da pasta. Subpastas,
-/// CSV, espelho e qualquer outro arquivo ficam de fora.
+/// <c>orcafacil-AAAAMMDD-HHmmss-hhhhhhhh.xlsx</c> (8 hex minúsculos) no topo da pasta.
+/// Subpastas, CSV, espelho e qualquer outro arquivo ficam de fora.
+/// Um arquivo reservado pela gravação em andamento também fica.
 /// </summary>
 public static class ArquivoExportacaoPlanilha
 {
     public const string Prefixo = "orcafacil-";
     public const string Sufixo = ".xlsx";
+    public const int TamanhoSufixo = 8;
+
+    private static readonly object PortaReserva = new();
+    private static readonly HashSet<string> Reservados = new(StringComparer.Ordinal);
 
     /// <summary>
     /// MIME do .xlsx. No Android, <c>ShareFile(caminho)</c> obtém este valor
@@ -18,10 +23,30 @@ public static class ArquivoExportacaoPlanilha
     /// </summary>
     public const string Mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
-    public static string Nome(DateTime instante)
+    /// <summary>8 caracteres de <c>Guid</c> no formato <c>N</c>, minúsculos.</summary>
+    public static string NovoSufixo() => Guid.NewGuid().ToString("N")[..TamanhoSufixo];
+
+    public static bool SufixoValido(string? sufixo)
     {
+        if (sufixo is null || sufixo.Length != TamanhoSufixo)
+            return false;
+
+        foreach (var caractere in sufixo)
+        {
+            if (caractere is not (>= '0' and <= '9' or >= 'a' and <= 'f'))
+                return false;
+        }
+
+        return true;
+    }
+
+    public static string Nome(DateTime instante, string sufixo)
+    {
+        if (!SufixoValido(sufixo))
+            throw new ArgumentException("O sufixo da planilha precisa ter 8 caracteres hexadecimais.", nameof(sufixo));
+
         var texto = instante.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
-        return Prefixo + texto + Sufixo;
+        return Prefixo + texto + "-" + sufixo + Sufixo;
     }
 
     public static bool NomeEhDesteApp(string? nome)
@@ -33,24 +58,73 @@ public static class ArquivoExportacaoPlanilha
             return false;
 
         var meio = nome[Prefixo.Length..^Sufixo.Length];
-        if (meio.Length != 15 || meio[8] != '-')
+        if (meio.Length != 24 || meio[8] != '-' || meio[15] != '-')
             return false;
 
         for (var i = 0; i < meio.Length; i++)
         {
-            if (i == 8)
+            if (i is 8 or 15)
                 continue;
-            if (meio[i] is < '0' or > '9')
+
+            var caractere = meio[i];
+            if (i < 15)
+            {
+                if (caractere is < '0' or > '9')
+                    return false;
+            }
+            else if (caractere is not (>= '0' and <= '9' or >= 'a' and <= 'f'))
+            {
                 return false;
+            }
         }
 
         return true;
     }
 
-    public static string Caminho(string diretorioCache, DateTime instante)
+    public static void Reservar(string caminho)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(caminho);
+        lock (PortaReserva)
+            Reservados.Add(Path.GetFullPath(caminho));
+    }
+
+    public static void Liberar(string? caminho)
+    {
+        if (string.IsNullOrWhiteSpace(caminho))
+            return;
+
+        try
+        {
+            var cheio = Path.GetFullPath(caminho);
+            lock (PortaReserva)
+                Reservados.Remove(cheio);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or IOException)
+        {
+        }
+    }
+
+    public static bool EstaReservado(string? caminho)
+    {
+        if (string.IsNullOrWhiteSpace(caminho))
+            return false;
+
+        try
+        {
+            var cheio = Path.GetFullPath(caminho);
+            lock (PortaReserva)
+                return Reservados.Contains(cheio);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or IOException)
+        {
+            return false;
+        }
+    }
+
+    public static string Caminho(string diretorioCache, DateTime instante, string sufixo)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(diretorioCache);
-        var nome = Nome(instante);
+        var nome = Nome(instante, sufixo);
         if (!NomeEhDesteApp(nome))
             throw new InvalidOperationException("Nome de arquivo da planilha recusado.");
 
@@ -80,6 +154,9 @@ public static class ArquivoExportacaoPlanilha
         var apagados = 0;
         foreach (var caminho in Directory.EnumerateFiles(raiz))
         {
+            if (EstaReservado(caminho))
+                continue;
+
             if (ApagarSeForDesteApp(caminho, raiz))
                 apagados++;
         }

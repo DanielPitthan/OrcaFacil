@@ -9,94 +9,95 @@
 
 <MudPaper Class="pa-4 mt-4" Elevation="2">
     <MudText Typo="Typo.subtitle1" Class="mb-2">Planilha</MudText>
-    <p class="mb-3" role="note">O arquivo exportado não é criptografado e contém os dados financeiros em claro.</p>
+    <p id="aviso-planilha-clara" class="mb-3" role="note">O arquivo exportado não é criptografado e contém os dados financeiros em claro.</p>
 
     @if (_exportando)
     {
-        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-3" />
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-3" aria-label="Exportando a planilha" />
     }
 
-    @if (!string.IsNullOrEmpty(_erro))
+    @if (!string.IsNullOrEmpty(_aviso))
     {
-        <MudAlert Severity="Severity.Error" Dense="true" Class="mb-3">@_erro</MudAlert>
+        <MudAlert Severity="@(_folha ? Severity.Info : Severity.Error)" Dense="true" Class="mb-3">@_aviso</MudAlert>
     }
 
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="_exportando" OnClick="ExportarAsync">
+    <MudButton Variant="Variant.Filled"
+               Color="Color.Primary"
+               Disabled="_exportando"
+               aria-describedby="aviso-planilha-clara"
+               OnClick="ExportarAsync">
         @(_exportando ? "Exportando…" : "Exportar para Excel")
     </MudButton>
 </MudPaper>
 
 @code {
+    private static readonly OrquestradorExportacaoPlanilha Orquestrador = new(TimeProvider.System);
+    private static Task<ResultadoExportacao>? _pendente;
+
     private bool _exportando;
+    private bool _folha;
     private bool _vivo = true;
-    private string? _erro;
+    private string? _aviso;
+
+    protected override void OnInitialized()
+    {
+        _exportando = Orquestrador.Exportando;
+        _aviso = Orquestrador.Aviso;
+        _folha = Orquestrador.FolhaAberta;
+        if (_pendente is { IsCompleted: false })
+            _ = Acompanhar(_pendente);
+    }
 
     public void Dispose() => _vivo = false;
 
-    private string Gravar(string cache, ConfiguracaoExportavel configuracao)
+    private async Task ExportarAsync()
     {
-        ArquivoExportacaoPlanilha.ApagarAnteriores(cache);
-        Directory.CreateDirectory(cache);
-        var arquivo = ArquivoExportacaoPlanilha.Caminho(cache, DateTime.Now);
-        try
-        {
-            using (var contexto = ContextoFactory.CreateDbContext())
-            using (var destino = new FileStream(arquivo, FileMode.CreateNew, FileAccess.Write, FileShare.None))
-            {
-                ExportadorPlanilha.Exportar(contexto, configuracao, destino);
-                destino.Flush();
-            }
+        var tarefa = Orquestrador.ExportarAsync(
+            MontarConfiguracao,
+            () => FileSystem.CacheDirectory,
+            Gravar,
+            AbrirFolha);
+        if (tarefa.IsCompletedSuccessfully && !tarefa.Result.Executou)
+            return;
 
-            return arquivo;
-        }
-        catch
+        _pendente = tarefa;
+        _exportando = true;
+        _aviso = null;
+        _folha = false;
+        await Acompanhar(tarefa);
+    }
+
+    private async Task Acompanhar(Task<ResultadoExportacao> tarefa)
+    {
+        var resultado = await tarefa;
+        if (!_vivo || !resultado.Executou)
+            return;
+
+        _exportando = Orquestrador.Exportando;
+        _aviso = resultado.Aviso;
+        _folha = resultado.FolhaAberta;
+    }
+
+    private void Gravar(string caminho, ConfiguracaoExportavel configuracao)
+    {
+        using var contexto = ContextoFactory.CreateDbContext();
+        using (var destino = new FileStream(caminho, FileMode.CreateNew, FileAccess.Write, FileShare.None))
         {
-            ArquivoExportacaoPlanilha.ApagarSeForDesteApp(arquivo, cache);
-            throw;
+            ExportadorPlanilha.Exportar(contexto, configuracao, destino);
+            destino.Flush();
         }
     }
 
-    private async Task ExportarAsync()
+    private async Task<DesfechoCompartilhamentoPlanilha> AbrirFolha(string caminho)
     {
-        if (_exportando || !_vivo)
-            return;
+        var resultado = await Compartilhador.CompartilharAsync(caminho, "Exportar para Excel");
+        if (resultado.Sucesso)
+            return DesfechoCompartilhamentoPlanilha.FolhaAberta;
 
-        _exportando = true;
-        _erro = null;
-        var configuracao = MontarConfiguracao();
-        var cache = FileSystem.CacheDirectory;
-        await Task.Yield();
+        if (resultado.Codigo == CodigoFalhaPastaEspelho.Cancelado)
+            return DesfechoCompartilhamentoPlanilha.Cancelado;
 
-        string? caminho = null;
-        var manter = false;
-        try
-        {
-            caminho = await Task.Run(() => Gravar(cache, configuracao));
-            if (!_vivo)
-                return;
-
-            // ShareFile(caminho) no Android lê o MIME da extensão .xlsx:
-            // application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
-            var resultado = await Compartilhador.CompartilharAsync(caminho, "Exportar para Excel");
-            if (!_vivo)
-                return;
-
-            manter = resultado.Sucesso;
-            if (!resultado.Sucesso && resultado.Codigo != CodigoFalhaPastaEspelho.Cancelado)
-                _erro = MensagemExportacaoPlanilha.Compartilhamento;
-        }
-        catch (Exception ex)
-        {
-            if (_vivo)
-                _erro = MensagemExportacaoPlanilha.Para(ex);
-        }
-        finally
-        {
-            if (!manter)
-                ArquivoExportacaoPlanilha.ApagarSeForDesteApp(caminho, cache);
-            if (_vivo)
-                _exportando = false;
-        }
+        return DesfechoCompartilhamentoPlanilha.Falhou;
     }
 
     private ConfiguracaoExportavel MontarConfiguracao()
