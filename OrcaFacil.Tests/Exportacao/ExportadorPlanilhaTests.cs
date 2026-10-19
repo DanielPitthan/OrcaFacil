@@ -412,13 +412,44 @@ public class ExportadorPlanilhaTests
     [InlineData("bia.jpg%253Ftoken=SEGREDO", "bia.jpg")]
     [InlineData("bia.jpg%3bx=SEGREDO", "bia.jpg")]
     [InlineData("bia.jpg%23SEGREDO", "bia.jpg")]
-    [InlineData("bia.jpg?token=/SEGREDO", "bia.jpg")]
-    [InlineData("bia.jpg%3Ftoken=%2FSEGREDO", "bia.jpg")]
-    [InlineData("foto.jpg#/SEGREDO", "foto.jpg")]
-    [InlineData("foto.jpg;x=/SEGREDO", "foto.jpg")]
-    [InlineData("foto.jpg?a:SEGREDO", "foto.jpg")]
-    [InlineData("foto.jpg?x=\\\\SEGREDO", "foto.jpg")]
-    [InlineData("pasta/foto.jpg?x=/etc/SEGREDO.jpg", "foto.jpg")]
+    [InlineData("bia.jpg?token=/SEGREDO", "")]
+    [InlineData("bia.jpg%3Ftoken=%2FSEGREDO", "")]
+    [InlineData("bia.jpg%253Ftoken=%252FSEGREDO", "")]
+    [InlineData("bia.jpg%2525253Ftoken=%2525252FSEGREDO", "")]
+    [InlineData("bia.jpg%25252525253Ftoken=%25252525252FSEGREDO", "")]
+    [InlineData("foto.jpg#/SEGREDO", "")]
+    [InlineData("foto.jpg;x=/SEGREDO", "")]
+    [InlineData("foto.jpg?a:SEGREDO", "")]
+    [InlineData("foto.jpg?x=\\\\SEGREDO", "")]
+    [InlineData("pasta/foto.jpg?x=/etc/SEGREDO.jpg", "")]
+    [InlineData("C:\\Users\\daniel#1\\foto.jpg", "")]
+    [InlineData("/home/daniel;old/foto.jpg", "")]
+    [InlineData("pasta%23x/foto.jpg", "")]
+    [InlineData("Fotos?/ana.jpg", "")]
+    [InlineData("C:\\Users#1\\daniel\\foto.jpg", "")]
+    [InlineData("/home/da#niel/foto.jpg", "")]
+    [InlineData("/home/da%23niel/foto.jpg", "")]
+    [InlineData("/home/da%2523niel/foto.jpg", "")]
+    [InlineData("/home/da%25252523niel/foto.jpg", "")]
+    [InlineData("%2Fhome%2Fda%23niel%2Ffoto.jpg", "")]
+    [InlineData("%252Fhome%252Fda%2523niel%252Ffoto.jpg", "")]
+    [InlineData("%2525252Fhome%2525252Fda%25252523niel%2525252Ffoto.jpg", "")]
+    [InlineData("C:\\Users\\dan;iel\\foto.jpg", "")]
+    [InlineData("C:\\Users\\dan%3Biel\\foto.jpg", "")]
+    [InlineData("C:\\Users\\dan%253Biel\\foto.jpg", "")]
+    [InlineData("C:\\Users\\dan%2525253Biel\\foto.jpg", "")]
+    [InlineData("C:%5CUsers%5Cdan%3Biel%5Cfoto.jpg", "")]
+    [InlineData("C:%255CUsers%255Cdan%253Biel%255Cfoto.jpg", "")]
+    [InlineData("C:%2525255CUsers%2525255Cdan%2525253Biel%2525255Cfoto.jpg", "")]
+    [InlineData("/home/daniel/fo?to/x.jpg", "")]
+    [InlineData("pasta%23daniel%2Ffoto.jpg", "")]
+    [InlineData("pasta%2523daniel%252Ffoto.jpg", "")]
+    [InlineData("pasta%25252523daniel%2525252Ffoto.jpg", "")]
+    [InlineData("content://media/x;y/foto.jpg", "")]
+    [InlineData("content://media/x%3By/foto.jpg", "")]
+    [InlineData("content://media/x%253By/foto.jpg", "")]
+    [InlineData("content://media/x%2525253By/foto.jpg", "")]
+    [InlineData("foto.jpg?x=1", "foto.jpg")]
     [InlineData("pasta%2Fdaniel%2Ffoto.jpg", "foto.jpg")]
     [InlineData("fo\u200Blder/SENTINELA-CF/foto.jpg", "foto.jpg")]
     [InlineData("/home/daniel/\u200B", "")]
@@ -519,13 +550,13 @@ public class ExportadorPlanilhaTests
     {
         (string Foto, string Esperado)[] fotos =
         [
-            ("bia.jpg?token=/SEGREDO", "bia.jpg"),
-            ("bia.jpg%3Ftoken=%2FSEGREDO", "bia.jpg"),
-            ("foto.jpg#/SEGREDO", "foto.jpg"),
-            ("foto.jpg;x=/SEGREDO", "foto.jpg"),
-            ("foto.jpg?a:SEGREDO", "foto.jpg"),
-            ("foto.jpg?x=\\\\SEGREDO", "foto.jpg"),
-            ("pasta/foto.jpg?x=/etc/SEGREDO.jpg", "foto.jpg")
+            ("bia.jpg?token=/SEGREDO", ""),
+            ("bia.jpg%3Ftoken=%2FSEGREDO", ""),
+            ("foto.jpg#/SEGREDO", ""),
+            ("foto.jpg;x=/SEGREDO", ""),
+            ("foto.jpg?a:SEGREDO", ""),
+            ("foto.jpg?x=\\\\SEGREDO", ""),
+            ("pasta/foto.jpg?x=/etc/SEGREDO.jpg", "")
         ];
 
         foreach (var (foto, esperado) in fotos)
@@ -559,7 +590,13 @@ public class ExportadorPlanilhaTests
         using var pasta = new XLWorkbook(destino);
         var aba = pasta.Worksheet("Perfis");
         for (var i = 0; i < fotos.Length; i++)
-            Assert.Equal(fotos[i].Esperado, aba.Cell(i + 2, 5).GetText());
+        {
+            var celula = aba.Cell(i + 2, 5);
+            if (fotos[i].Esperado.Length == 0)
+                Assert.Equal(XLDataType.Blank, celula.DataType);
+            else
+                Assert.Equal(fotos[i].Esperado, celula.GetText());
+        }
     }
 
     private static string EsperadoDaFoto(string foto)

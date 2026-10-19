@@ -542,8 +542,8 @@ public static class ExportadorPlanilha
 
     /// <summary>
     /// Só o nome do arquivo. Pasta, relativa ou absoluta, não entra.
-    /// A consulta, o fragmento e a matriz saem antes do último segmento,
-    /// senão um <c>/</c>, <c>\</c> ou <c>:</c> ali vira nome.
+    /// Se o primeiro <c>?</c>, <c>#</c> ou <c>;</c> vem antes do último
+    /// separador (<c>/</c>, <c>\</c> ou <c>:</c>), a célula fica vazia.
     /// <c>content://</c> sem segmento fica vazio: o host não vira nome.
     /// </summary>
     internal static string NomeDeFoto(string? valor)
@@ -557,6 +557,10 @@ public static class ExportadorPlanilha
 
         texto = DecodificarPercent(texto);
         var corte = texto.IndexOfAny(['?', '#', ';']);
+        var ultimoSeparador = texto.LastIndexOfAny(['/', '\\', ':']);
+        if (corte >= 0 && corte < ultimoSeparador)
+            return "";
+
         if (corte >= 0)
             texto = texto[..corte];
 
