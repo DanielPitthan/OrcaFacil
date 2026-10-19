@@ -252,30 +252,68 @@ public class ExportadorPlanilhaTests
 
     [Theory]
     [InlineData("https://user:SENTINELA-SENHA@api.exemplo.test/v1?token=SENTINELA-TOKEN", "https://api.exemplo.test/v1")]
+    [InlineData("https://user:SENTINELA-SENHA@api.exemplo.test/v1?token=X", "https://api.exemplo.test/v1")]
     [InlineData("https://api.exemplo.test/path;token=SENTINELA-TOKEN", "https://api.exemplo.test/path")]
     [InlineData("https://user:SENTINELA-SENHA@api.exemplo.test:8443/v1;token=X?y=1#frag", "https://api.exemplo.test:8443/v1")]
-    [InlineData("/path;token=SENTINELA-TOKEN?x=1", "/path")]
     [InlineData("https://api.exemplo.test/v1", "https://api.exemplo.test/v1")]
-    [InlineData("//user:SENTINELA-SENHA@host/v1?token=SENTINELA-TOKEN", "//host/v1")]
-    [InlineData("user:SENTINELA-SENHA@host/v1;token=SENTINELA-TOKEN", "host/v1")]
-    [InlineData("//user:SENTINELA-SENHA@host/v1;token=SENTINELA-TOKEN#frag", "//host/v1")]
-    [InlineData("//host/caminho/a@b.txt", "//host/caminho/a@b.txt")]
-    [InlineData("//host/v1?q=a@b", "//host/v1")]
-    [InlineData("//host/v1?token=SENTINELA-TOKEN", "//host/v1")]
-    [InlineData(" //user:SENTINELA-SENHA@host/v1?token=X", "//host/v1")]
-    [InlineData("\u00A0//user:SENTINELA-SENHA@host/v1?token=X", "//host/v1")]
+    [InlineData("HTTP://api.exemplo.test/v1", "http://api.exemplo.test/v1")]
     [InlineData("https://user:SENTINELA-SEGRE@SENTINELA-DO@host/v1", "https://host/v1")]
-    [InlineData("//user:SENTINELA-SEGRE@SENTINELA-DO@host/v1", "//host/v1")]
     [InlineData(" https://user:SENTINELA-SEGRE@SENTINELA-DO@host/v1", "https://host/v1")]
+    [InlineData("https://host/v1%3Ftoken=SENTINELA", "https://host/v1")]
+    [InlineData("https://host/v1%3ftoken=SENTINELA", "https://host/v1")]
+    [InlineData("https://host/v1%3Btoken=SENTINELA", "https://host/v1")]
+    [InlineData("https://host/v1%23SENTINELA", "https://host/v1")]
+    [InlineData("/path;token=SENTINELA-TOKEN?x=1", "")]
+    [InlineData("/path;token=X", "")]
+    [InlineData("//user:SENTINELA-SENHA@host/v1?token=SENTINELA-TOKEN", "")]
+    [InlineData("user:SENTINELA-SENHA@host/v1;token=SENTINELA-TOKEN", "")]
+    [InlineData("user:SENTINELA-SENHA@host", "")]
+    [InlineData("user:sec/ret@host", "")]
+    [InlineData("user:SENTINELA-SEC/ret@host", "")]
+    [InlineData("//user:SENTINELA-SENHA@host/v1;token=SENTINELA-TOKEN#frag", "")]
+    [InlineData("//host/caminho/a@b.txt", "")]
+    [InlineData("//host/v1?q=a@b", "")]
+    [InlineData("//host/v1?token=SENTINELA-SEGREDO", "")]
+    [InlineData("//host/v1?token=SENTINELA-TOKEN", "")]
+    [InlineData(" //user:SENTINELA-SENHA@host/v1?token=X", "")]
+    [InlineData("\u00A0//user:SENTINELA-SENHA@host/v1?token=X", "")]
+    [InlineData("//user:SENTINELA-SEGRE@SENTINELA-DO@host/v1", "")]
+    [InlineData("//host/v1?token=SENTINELA&next=https://x", "")]
+    [InlineData("//host/v1?next=https://evil.example/x", "")]
+    [InlineData("//host/caminho/a@b.txt?q=https://x", "")]
+    [InlineData("//host/a://b.txt", "")]
+    [InlineData("file:///SENTINELA-SENHA", "")]
+    [InlineData("content://SENTINELA-HOST/a", "")]
+    [InlineData("javascript:SENTINELA-SENHA", "")]
+    [InlineData("data:text/plain,SENTINELA-SENHA", "")]
+    [InlineData("ftp://SENTINELA-SENHA@host/v1", "")]
     public void UrlSemSegredo_TiraUserinfoConsultaEMatriz(string url, string esperado)
     {
         var limpa = ExportadorPlanilha.UrlSemSegredo(url);
         Assert.Equal(esperado, limpa);
-        Assert.DoesNotContain("SENTINELA", limpa ?? "", StringComparison.Ordinal);
+        Assert.DoesNotContain("SENTINELA", limpa, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void FotoRelativaSaiIgual_EAbsolutaSaiSoONome()
+    public void UrlForaDaLista_NaoVazaSentinelaNoXml()
+    {
+        using var fabrica = new TestDbContextFactory();
+        using var contexto = fabrica.CreateDbContext();
+        using var destino = new MemoryStream();
+        ExportadorPlanilha.Exportar(contexto, new ConfiguracaoExportavel
+        {
+            Url = "//host/v1?token=SENTINELA-TOKEN&next=https://x"
+        }, destino);
+
+        var xml = XmlDasPartes(destino.ToArray());
+        Assert.DoesNotContain("SENTINELA", xml, StringComparison.Ordinal);
+        Assert.DoesNotContain("file://", xml, StringComparison.Ordinal);
+        using var pasta = new XLWorkbook(destino);
+        Assert.Equal(XLDataType.Blank, pasta.Worksheet("Configurações").Cell(8, 2).DataType);
+    }
+
+    [Fact]
+    public void FotoSaiSoComONomeDoArquivo()
     {
         using var fabrica = new TestDbContextFactory();
         using var contexto = fabrica.CreateDbContext();
@@ -298,14 +336,15 @@ public class ExportadorPlanilhaTests
 
         using var pasta = new XLWorkbook(destino);
         var aba = pasta.Worksheet("Perfis");
-        Assert.Equal("pasta/foto-ana.jpg", aba.Cell(2, 5).GetText());
+        Assert.DoesNotContain("pasta/", xml, StringComparison.Ordinal);
+        Assert.Equal("foto-ana.jpg", aba.Cell(2, 5).GetText());
         Assert.Equal("bia.jpg", aba.Cell(3, 5).GetText());
         Assert.Equal("cris.jpg", aba.Cell(4, 5).GetText());
         Assert.Equal("duda.jpg", aba.Cell(5, 5).GetText());
     }
 
     [Theory]
-    [InlineData("pasta/foto-ana.jpg", "pasta/foto-ana.jpg")]
+    [InlineData("pasta/foto-ana.jpg", "foto-ana.jpg")]
     [InlineData("\u00A0/var/fotos/duda.jpg", "duda.jpg")]
     [InlineData("\n/var/fotos/duda.jpg", "duda.jpg")]
     [InlineData("\r/var/fotos/duda.jpg", "duda.jpg")]
@@ -317,8 +356,67 @@ public class ExportadorPlanilhaTests
     [InlineData("\u200B/var/fotos/duda.jpg", "duda.jpg")]
     [InlineData("\uFEFF/var/fotos/duda.jpg", "duda.jpg")]
     [InlineData("/var/fotos/duda.jpg\u200B", "duda.jpg")]
-    public void NomeDeFoto_BrancoNaoEscondePasta_EUriSemSegmentoSaiVazia(string valor, string esperado)
+    [InlineData("C:Users\\daniel\\foto.jpg", "foto.jpg")]
+    [InlineData("foto\u0001.jpg", "")]
+    public void NomeDeFoto_SaiSoONomeDoArquivo(string valor, string esperado)
         => Assert.Equal(esperado, ExportadorPlanilha.NomeDeFoto(valor));
+
+    [Fact]
+    public void NomeDeFoto_PrefixoInvisivelNaoVazaPastaNoXml()
+    {
+        var caminhos = new[] { "/home/daniel/foto.jpg", "C:\\Users\\daniel\\foto.jpg" };
+        var prefixos = new List<string>
+        {
+            "\uFEFF",
+            "\u200B", "\u200C", "\u200D", "\u200E", "\u200F",
+            "\u2060",
+            "\u180E",
+            "\u0001",
+            "\u00A0\uFEFF",
+            new string(['\uD800'])
+        };
+
+        var fotos = new List<string> { "C:Users\\daniel\\foto.jpg" };
+        foreach (var prefixo in prefixos)
+        {
+            foreach (var caminho in caminhos)
+                fotos.Add(prefixo + caminho);
+        }
+
+        foreach (var foto in fotos)
+            Assert.Equal("foto.jpg", ExportadorPlanilha.NomeDeFoto(foto));
+
+        using var fabrica = new TestDbContextFactory();
+        using var contexto = fabrica.CreateDbContext();
+        var quando = DateTime.UtcNow;
+        for (var i = 0; i < fotos.Count; i++)
+        {
+            contexto.MembrosFamilia.Add(new MembroFamilia
+            {
+                Nome = $"Pessoa {i + 1}",
+                FotoPath = fotos[i],
+                CriadoEm = quando
+            });
+        }
+
+        contexto.SaveChanges();
+        using var destino = new MemoryStream();
+        ExportadorPlanilha.Exportar(
+            contexto,
+            new ConfiguracaoExportavel { Url = "https://host/v1%3Ftoken=SENTINELA-TOKEN" },
+            destino);
+        var bytes = destino.ToArray();
+        var compartilhadas = Parte(bytes, "xl/sharedStrings.xml");
+        Assert.DoesNotContain("daniel", compartilhadas, StringComparison.Ordinal);
+        Assert.DoesNotContain("SENTINELA", compartilhadas, StringComparison.Ordinal);
+        Assert.DoesNotContain("daniel", XmlDasPartes(bytes), StringComparison.Ordinal);
+
+        using var pasta = new XLWorkbook(destino);
+        var aba = pasta.Worksheet("Perfis");
+        for (var i = 0; i < fotos.Count; i++)
+            Assert.Equal("foto.jpg", aba.Cell(i + 2, 5).GetText());
+        Assert.Equal("https://host/v1", pasta.Worksheet("Configurações").Cell(8, 2).GetText());
+    }
 
     [Fact]
     public void FotoComBrancoOuUriSemSegmento_NaoVazaPastaNemHost()
@@ -341,7 +439,7 @@ public class ExportadorPlanilhaTests
 
         using var pasta = new XLWorkbook(destino);
         var aba = pasta.Worksheet("Perfis");
-        Assert.Equal("pasta/foto-ana.jpg", aba.Cell(2, 5).GetText());
+        Assert.Equal("foto-ana.jpg", aba.Cell(2, 5).GetText());
         Assert.Equal("eva.jpg", aba.Cell(3, 5).GetText());
         Assert.Equal(XLDataType.Blank, aba.Cell(4, 5).DataType);
     }
@@ -367,18 +465,19 @@ public class ExportadorPlanilhaTests
     [Fact]
     public void CriadoEmComKindLocal_PassaPorUtcAntesDeSaoPaulo()
     {
+        // UTC−10 fixo, não o fuso da máquina. Sem a conversão de Local o relógio
+        // 10:00 seguiria como UTC e São Paulo (UTC−2 em nov/2018) marcaria 08:00.
+        var fuso = TimeZoneInfo.CreateCustomTimeZone(
+            "FusoDeTeste", TimeSpan.FromHours(-10), "Fuso de teste", "Fuso de teste");
         var local = new DateTime(2018, 11, 15, 10, 0, 0, DateTimeKind.Local);
-        var utc = ExportadorPlanilha.InstanteUtc(local);
+        var utc = ExportadorPlanilha.InstanteUtc(local, fuso);
         Assert.Equal(DateTimeKind.Utc, utc.Kind);
-        Assert.Equal(local.ToUniversalTime(), utc);
+        Assert.Equal(new DateTime(2018, 11, 15, 20, 0, 0, DateTimeKind.Utc), utc);
 
         using var pasta = new XLWorkbook();
         var aba = PlanilhaPtBr.CriarAba(pasta, "Perfis");
         PlanilhaPtBr.GravarDataHora(aba.Cell(2, 1), utc);
-        var emSaoPaulo = TimeZoneInfo.ConvertTimeFromUtc(utc, PlanilhaPtBr.FusoBrasil);
-        Assert.Equal(
-            new DateTime(emSaoPaulo.Year, emSaoPaulo.Month, emSaoPaulo.Day, emSaoPaulo.Hour, emSaoPaulo.Minute, 0),
-            aba.Cell(2, 1).GetDateTime());
+        Assert.Equal(new DateTime(2018, 11, 15, 18, 0, 0), aba.Cell(2, 1).GetDateTime());
     }
 
     [Fact]
@@ -467,6 +566,15 @@ public class ExportadorPlanilhaTests
         }
 
         return xml.ToString();
+    }
+
+    private static string Parte(byte[] bytes, string nome)
+    {
+        using var zip = new ZipArchive(new MemoryStream(bytes), ZipArchiveMode.Read);
+        var entrada = zip.GetEntry(nome);
+        Assert.NotNull(entrada);
+        using var leitor = new StreamReader(entrada!.Open(), Encoding.UTF8);
+        return leitor.ReadToEnd();
     }
 
     private static Cartao Semear(AppDbContext contexto)

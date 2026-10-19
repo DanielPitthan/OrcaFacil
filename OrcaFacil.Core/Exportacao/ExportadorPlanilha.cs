@@ -465,14 +465,21 @@ public static class ExportadorPlanilha
     /// <summary>
     /// CriadoEm e AtualizadoEm são gravados com <see cref="DateTime.UtcNow"/>.
     /// O SQLite devolve o mesmo relógio com <see cref="DateTimeKind.Unspecified"/>.
-    /// Kind Local vira UTC antes de São Paulo.
+    /// Kind Local é o relógio de <paramref name="fusoLocal"/> (o fuso da máquina, se omitido)
+    /// e vira UTC antes de São Paulo.
     /// </summary>
-    internal static DateTime InstanteUtc(DateTime instante) => instante.Kind switch
+    internal static DateTime InstanteUtc(DateTime instante, TimeZoneInfo? fusoLocal = null) => instante.Kind switch
     {
         DateTimeKind.Utc => instante,
-        DateTimeKind.Local => instante.ToUniversalTime(),
+        DateTimeKind.Local => RelogioLocalParaUtc(instante, fusoLocal ?? TimeZoneInfo.Local),
         _ => DateTime.SpecifyKind(instante, DateTimeKind.Utc)
     };
+
+    private static DateTime RelogioLocalParaUtc(DateTime instante, TimeZoneInfo fuso)
+    {
+        var relogio = DateTime.SpecifyKind(instante, DateTimeKind.Unspecified);
+        return TimeZoneInfo.ConvertTimeToUtc(relogio, fuso);
+    }
 
     private static DateTime? InstanteUtc(DateTime? instante)
         => instante is null ? null : InstanteUtc(instante.Value);
@@ -510,47 +517,158 @@ public static class ExportadorPlanilha
     }
 
     /// <summary>
-    /// Caminho relativo sai como está. Caminho absoluto, URI ou letra de unidade
-    /// vira só o nome do arquivo, sem pasta e sem consulta.
+    /// Só o nome do arquivo. Pasta, relativa ou absoluta, não entra.
+    /// <c>content://</c> sem segmento fica vazio: o host não vira nome.
     /// </summary>
     internal static string NomeDeFoto(string? valor)
     {
-        if (string.IsNullOrWhiteSpace(valor))
+        if (string.IsNullOrEmpty(valor))
             return "";
 
-        if (!EhCaminhoAbsoluto(valor))
-            return valor;
+        var texto = NormalizarPontas(valor).Replace('\\', '/');
+        if (texto.Length == 0)
+            return "";
 
-        return NomeDeArquivo(SemBrancoNasPontas(valor));
+        if (IndiceDoEsquema(texto) is int esquema)
+        {
+            var resto = texto[(esquema + 3)..];
+            var barra = resto.IndexOf('/');
+            if (barra < 0)
+                return "";
+
+            texto = resto[(barra + 1)..];
+        }
+
+        var nome = UltimoSegmento(texto);
+        var parametro = nome.IndexOfAny(['?', '#', ';']);
+        if (parametro >= 0)
+            nome = nome[..parametro];
+
+        if (nome.Length == 0 || TemControle(nome))
+            return "";
+
+        return nome;
     }
 
-    /// <summary>
-    /// Branco e formato (Cf) das pontas saem antes do teste. Sem isso, um espaço,
-    /// NBSP, tab, quebra, U+200B ou BOM na frente esconde a pasta.
-    /// </summary>
-    private static bool EhCaminhoAbsoluto(string valor)
+    /// <summary>Esquema RFC 3986 no início. Devolve o índice do <c>:</c>.</summary>
+    private static int? IndiceDoEsquema(string texto)
     {
-        valor = SemBrancoNasPontas(valor);
-        if (valor.Length == 0)
-            return false;
+        if (texto.Length == 0 || !char.IsAsciiLetter(texto[0]))
+            return null;
 
-        if (valor.Contains("://", StringComparison.Ordinal))
-            return true;
+        var i = 1;
+        while (i < texto.Length && (char.IsAsciiLetterOrDigit(texto[i]) || texto[i] is '+' or '-' or '.'))
+            i++;
 
-        if (valor.StartsWith("//", StringComparison.Ordinal) || valor.StartsWith("\\\\", StringComparison.Ordinal))
-            return true;
+        if (i + 2 < texto.Length && texto[i] == ':' && texto[i + 1] == '/' && texto[i + 2] == '/')
+            return i;
 
-        if (valor.Length >= 3 && char.IsLetter(valor[0]) && valor[1] == ':' && valor[2] is '\\' or '/')
-            return true;
+        return null;
+    }
 
-        return Path.IsPathRooted(valor);
+    /// <summary><c>/</c> e <c>:</c> separam segmento. Letra de unidade sem barra também.</summary>
+    private static string UltimoSegmento(string texto)
+    {
+        var nome = "";
+        var inicio = 0;
+        for (var i = 0; i <= texto.Length; i++)
+        {
+            if (i < texto.Length && texto[i] is not '/' and not ':')
+                continue;
+
+            if (i > inicio)
+                nome = texto[inicio..i];
+
+            inicio = i + 1;
+        }
+
+        return nome;
+    }
+
+    private static bool TemControle(string texto)
+    {
+        foreach (var caractere in texto)
+        {
+            if (char.IsControl(caractere))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string TextoItemFatura(ItemLancamento? item)
+    {
+        if (item is null)
+            return "";
+
+        return string.IsNullOrWhiteSpace(item.Descritivo) ? item.Descricao : item.Descritivo;
     }
 
     /// <summary>
-    /// Tira das pontas qualquer branco (<see cref="Rune.IsWhiteSpace"/>) e qualquer
-    /// formato (Cf), inclusive U+200B e U+FEFF. O miolo fica como está.
+    /// Só http ou https, com o esquema no início da URL já normalizada.
+    /// Sai sem userinfo (último <c>@</c> da autoridade), sem matriz, sem consulta
+    /// e sem fragmento. <c>%3F</c>, <c>%3B</c> e <c>%23</c> no caminho também cortam.
+    /// Qualquer outra coisa volta vazia.
     /// </summary>
-    private static string SemBrancoNasPontas(string valor)
+    internal static string UrlSemSegredo(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+            return "";
+
+        var normalizada = NormalizarPontas(url);
+        if (!ComecaComHttp(normalizada))
+            return "";
+
+        var semSegredo = SemUserinfoEParametros(normalizada);
+        if (!Uri.TryCreate(semSegredo, UriKind.Absolute, out var absoluta)
+            || !absoluta.IsAbsoluteUri
+            || absoluta.Scheme is not ("http" or "https")
+            || string.IsNullOrEmpty(absoluta.Host))
+            return "";
+
+        return absoluta.Scheme + "://" + SemArrobaNaAutoridade(absoluta.Authority) + CortarCaminho(absoluta.AbsolutePath);
+    }
+
+    private static bool ComecaComHttp(string url)
+        => url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+            || url.StartsWith("http://", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Tira o userinfo inteiro e corta o caminho em <c>;</c>, <c>?</c>, <c>#</c>
+    /// e nos códigos <c>%3F</c>, <c>%3B</c> e <c>%23</c>.
+    /// </summary>
+    private static string SemUserinfoEParametros(string url)
+    {
+        var esquema = url.IndexOf("://", StringComparison.Ordinal);
+        var prefixo = url[..(esquema + 3)];
+        var resto = url[(esquema + 3)..];
+
+        var fimDaAutoridade = resto.IndexOfAny(['/', '?', '#', ';']);
+        var autoridade = fimDaAutoridade < 0 ? resto : resto[..fimDaAutoridade];
+        var caminho = fimDaAutoridade < 0 ? "" : resto[fimDaAutoridade..];
+        return prefixo + SemArrobaNaAutoridade(autoridade) + CortarCaminho(caminho);
+    }
+
+    private static string CortarCaminho(string caminho)
+    {
+        var corte = caminho.IndexOfAny([';', '?', '#']);
+        foreach (var codigo in CodigosDeCorte)
+        {
+            var indice = caminho.IndexOf(codigo, StringComparison.OrdinalIgnoreCase);
+            if (indice >= 0 && (corte < 0 || indice < corte))
+                corte = indice;
+        }
+
+        return corte < 0 ? caminho : caminho[..corte];
+    }
+
+    private static readonly string[] CodigosDeCorte = ["%3F", "%3B", "%23"];
+
+    /// <summary>
+    /// Tira das pontas branco (<see cref="char.IsWhiteSpace"/>, inclusive NBSP),
+    /// formato (Cf), separadores Zs, Zl e Zp, controle (Cc), surrogate solto e U+FFFD.
+    /// </summary>
+    private static string NormalizarPontas(string valor)
     {
         var inicio = -1;
         var fim = 0;
@@ -558,16 +676,12 @@ public static class ExportadorPlanilha
         {
             if (!Rune.TryGetRuneAt(valor, i, out var rune))
             {
-                if (inicio < 0)
-                    inicio = i;
-
                 i++;
-                fim = i;
                 continue;
             }
 
             var proximo = i + rune.Utf16SequenceLength;
-            if (EhBrancoOuFormato(rune))
+            if (EhDescartavelNaPonta(rune))
             {
                 i = proximo;
                 continue;
@@ -583,105 +697,23 @@ public static class ExportadorPlanilha
         return inicio < 0 ? "" : valor[inicio..fim];
     }
 
-    private static bool EhBrancoOuFormato(Rune rune)
-        => Rune.IsWhiteSpace(rune) || Rune.GetUnicodeCategory(rune) == UnicodeCategory.Format;
-
-    /// <summary>
-    /// URI sem segmento depois da autoridade (<c>content://X</c>) não tem nome de arquivo.
-    /// O host não entra no lugar.
-    /// </summary>
-    private static string NomeDeArquivo(string texto)
+    private static bool EhDescartavelNaPonta(Rune rune)
     {
-        var esquema = texto.IndexOf("://", StringComparison.Ordinal);
-        if (esquema >= 0)
-        {
-            var resto = texto[(esquema + 3)..];
-            var barra = resto.IndexOfAny(['/', '\\']);
-            if (barra < 0)
-                return "";
+        if (rune.Value == Rune.ReplacementChar.Value)
+            return true;
 
-            texto = resto[barra..];
-        }
+        if (Rune.IsWhiteSpace(rune))
+            return true;
 
-        var corte = Math.Max(texto.LastIndexOf('/'), texto.LastIndexOf('\\'));
-        var nome = corte < 0 ? texto : texto[(corte + 1)..];
-        var parametro = nome.IndexOfAny(['?', '#', ';']);
-        return parametro < 0 ? nome : nome[..parametro];
-    }
+        if (rune.IsBmp && char.IsWhiteSpace((char)rune.Value))
+            return true;
 
-    private static string TextoItemFatura(ItemLancamento? item)
-    {
-        if (item is null)
-            return "";
-
-        return string.IsNullOrWhiteSpace(item.Descritivo) ? item.Descricao : item.Descritivo;
-    }
-
-    /// <summary>
-    /// Esquema, host, porta e caminho. Sem userinfo, também quando não há esquema
-    /// (<c>//user:senha@host</c> ou <c>user:senha@host</c>). A senha pode ter <c>@</c>:
-    /// o corte é o último arroba antes do primeiro <c>/</c>, <c>?</c>, <c>#</c> ou <c>;</c>.
-    /// Branco e Cf das pontas saem antes. Sem <c>://</c> o <see cref="Uri"/> não entra,
-    /// porque ele lê <c>//host</c> como arquivo.
-    /// </summary>
-    internal static string? UrlSemSegredo(string? url)
-    {
-        if (string.IsNullOrWhiteSpace(url))
-            return url;
-
-        url = SemBrancoNasPontas(url);
-        if (url.Length == 0)
-            return "";
-
-        if (url.Contains("://", StringComparison.Ordinal)
-            && Uri.TryCreate(url, UriKind.Absolute, out var absoluta)
-            && absoluta.IsAbsoluteUri
-            && !string.IsNullOrEmpty(absoluta.Host))
-        {
-            var caminho = absoluta.AbsolutePath;
-            var corte = caminho.IndexOfAny([';', '?', '#']);
-            if (corte >= 0)
-                caminho = caminho[..corte];
-
-            return absoluta.Scheme + "://" + SemArrobaNaAutoridade(absoluta.Authority) + caminho;
-        }
-
-        return SemUserinfoEParametros(url);
-    }
-
-    /// <summary>
-    /// Tira o userinfo inteiro e corta parâmetros. Vale com esquema e sem esquema.
-    /// </summary>
-    private static string SemUserinfoEParametros(string url)
-    {
-        string prefixo;
-        string resto;
-        var esquema = url.IndexOf("://", StringComparison.Ordinal);
-        if (esquema >= 0)
-        {
-            prefixo = url[..(esquema + 3)];
-            resto = url[(esquema + 3)..];
-        }
-        else
-        {
-            var barras = 0;
-            while (barras < url.Length && url[barras] == '/')
-                barras++;
-
-            prefixo = url[..barras];
-            resto = url[barras..];
-        }
-
-        var fimDaAutoridade = resto.IndexOfAny(['/', '?', '#', ';']);
-        var autoridade = fimDaAutoridade < 0 ? resto : resto[..fimDaAutoridade];
-        var semUserinfo = SemArrobaNaAutoridade(autoridade);
-        resto = semUserinfo + (fimDaAutoridade < 0 ? "" : resto[fimDaAutoridade..]);
-
-        var corte = resto.IndexOfAny([';', '?', '#']);
-        if (corte >= 0)
-            resto = resto[..corte];
-
-        return prefixo + resto;
+        var categoria = Rune.GetUnicodeCategory(rune);
+        return categoria is UnicodeCategory.Format
+            or UnicodeCategory.SpaceSeparator
+            or UnicodeCategory.LineSeparator
+            or UnicodeCategory.ParagraphSeparator
+            or UnicodeCategory.Control;
     }
 
     /// <summary>O userinfo acaba no último <c>@</c> da autoridade. Um arroba no caminho fica.</summary>
