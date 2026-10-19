@@ -150,6 +150,41 @@ public class LimpezaFotoTemporariaTests
         }
     }
 
+    [Fact]
+    public void RaizDeVolume_Cache_TemporarioEPerfil_SaoRecusadosNaEntrada()
+    {
+        var raiz = Directory.CreateTempSubdirectory("orca-limpeza-raiz-");
+        try
+        {
+            var perfil = Path.Combine(raiz.FullName, "perfil");
+            var cache = Path.Combine(raiz.FullName, "cache");
+            var temporario = Path.Combine(raiz.FullName, "tmp");
+            Directory.CreateDirectory(perfil);
+            Directory.CreateDirectory(cache);
+            Directory.CreateDirectory(temporario);
+            var foto = Path.Combine(cache, "picker", "captura.jpg");
+            Directory.CreateDirectory(Path.GetDirectoryName(foto)!);
+            File.WriteAllBytes(foto, [1]);
+
+            Assert.Empty(LimpezaFotoTemporaria.ListarRemocao(cache, perfil, cache, temporario));
+            Assert.Empty(LimpezaFotoTemporaria.ListarRemocao(
+                cache + Path.DirectorySeparatorChar, perfil, cache, temporario));
+            Assert.Empty(LimpezaFotoTemporaria.ListarRemocao(temporario, perfil, cache, temporario));
+            Assert.Empty(LimpezaFotoTemporaria.ListarRemocao(perfil, perfil, cache, temporario));
+            Assert.Empty(LimpezaFotoTemporaria.ListarRemocao(Path.GetPathRoot(cache), perfil, cache, temporario));
+
+            var lista = LimpezaFotoTemporaria.ListarRemocao(foto, perfil, cache, temporario);
+            Assert.Contains(Path.GetFullPath(foto), lista);
+            Assert.DoesNotContain(Path.GetFullPath(cache), lista);
+            Assert.DoesNotContain(Path.GetFullPath(perfil), lista);
+            Assert.DoesNotContain(Path.GetFullPath(temporario), lista);
+        }
+        finally
+        {
+            raiz.Delete(recursive: true);
+        }
+    }
+
     private static bool Mesmo(string esquerda, string direita) =>
         string.Equals(Path.GetFullPath(esquerda), Path.GetFullPath(direita), StringComparison.OrdinalIgnoreCase);
 }

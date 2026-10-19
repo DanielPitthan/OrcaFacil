@@ -31,6 +31,9 @@ public static class LimpezaFotoTemporaria
             return [];
         }
 
+        if (EhRaizDeVolume(cheio) || EhRaizProtegida(cheio, pastaPerfil, pastaCache, pastaTemporaria))
+            return [];
+
         var lista = new List<string> { cheio };
         var atual = Path.GetDirectoryName(cheio);
         while (!string.IsNullOrEmpty(atual))
@@ -95,6 +98,21 @@ public static class LimpezaFotoTemporaria
             || cheio.StartsWith(prefixo, StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool EhRaizDeVolume(string caminho)
+    {
+        string raiz;
+        try
+        {
+            raiz = Path.GetPathRoot(caminho) ?? "";
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+
+        return !string.IsNullOrEmpty(raiz) && MesmoCaminho(caminho, raiz);
+    }
+
     private static bool EhRaizProtegida(
         string caminho,
         string? pastaPerfil,
@@ -111,14 +129,24 @@ public static class LimpezaFotoTemporaria
 
         try
         {
-            return string.Equals(
-                Path.GetFullPath(esquerda),
-                Path.GetFullPath(direita),
-                StringComparison.OrdinalIgnoreCase);
+            return string.Equals(Normalizar(esquerda), Normalizar(direita), StringComparison.OrdinalIgnoreCase);
         }
         catch (Exception)
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Caminho cheio sem separador no fim. A raiz do volume permanece, para <c>/</c> não virar vazio.
+    /// </summary>
+    private static string Normalizar(string caminho)
+    {
+        var cheio = Path.GetFullPath(caminho);
+        var raiz = Path.GetPathRoot(cheio);
+        if (!string.IsNullOrEmpty(raiz) && string.Equals(cheio, raiz, StringComparison.OrdinalIgnoreCase))
+            return raiz;
+
+        return cheio.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
     }
 }

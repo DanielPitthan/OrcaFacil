@@ -36,12 +36,58 @@ public class RedutorFotoFonteTests
         Assert.Contains("FileSystem.AppDataDirectory, \"perfil\"", fonte, StringComparison.Ordinal);
         Assert.Contains("foto-{DateTime.Now:yyyyMMddHHmmss}.jpg", fonte, StringComparison.Ordinal);
         Assert.Contains("private const float LadoMaximo = 512f;", fonte, StringComparison.Ordinal);
-        Assert.Contains("LimpezaFotoTemporaria.ListarRemocao", fonte, StringComparison.Ordinal);
+        var preparo = ExtrairBloco(fonte, "Task<FotoComprovantePronta> PrepararComprovanteAsync(");
+        var finalmente = ExtrairFinally(preparo);
+        Assert.Contains("ApagarTemporarioDoFluxo(", finalmente, StringComparison.Ordinal);
+        Assert.DoesNotContain("ApagarTemporarioDoFluxo(", TrechoAntesDoFinally(preparo), StringComparison.Ordinal);
+        Assert.DoesNotContain("LimpezaFotoTemporaria.ListarRemocao", TrechoAntesDoFinally(preparo), StringComparison.Ordinal);
+
+        var limpeza = ExtrairBloco(fonte, "void ApagarTemporarioDoFluxo(");
+        Assert.Contains("LimpezaFotoTemporaria.ListarRemocao", limpeza, StringComparison.Ordinal);
         Assert.DoesNotContain("SearchOption.AllDirectories", fonte, StringComparison.Ordinal);
         Assert.DoesNotContain("FotografarCaches", fonte, StringComparison.Ordinal);
         Assert.DoesNotContain("ApagarNovidades", fonte, StringComparison.Ordinal);
         Assert.DoesNotContain("<<<<<<<", fonte, StringComparison.Ordinal);
         Assert.Equal(1, fonte.Split('\n').Count(linha => linha.Contains("LogWarning", StringComparison.Ordinal)));
+    }
+
+    private static string TrechoAntesDoFinally(string metodo)
+    {
+        var indice = metodo.IndexOf("finally", StringComparison.Ordinal);
+        Assert.True(indice > 0);
+        return metodo[..indice];
+    }
+
+    private static string ExtrairFinally(string metodo)
+    {
+        var indice = metodo.IndexOf("finally", StringComparison.Ordinal);
+        Assert.True(indice >= 0);
+        return ExtrairChaves(metodo, metodo.IndexOf('{', indice));
+    }
+
+    private static string ExtrairBloco(string fonte, string assinatura)
+    {
+        var indice = fonte.IndexOf(assinatura, StringComparison.Ordinal);
+        Assert.True(indice >= 0, assinatura);
+        return ExtrairChaves(fonte, fonte.IndexOf('{', indice));
+    }
+
+    private static string ExtrairChaves(string fonte, int abre)
+    {
+        var profundidade = 0;
+        for (var i = abre; i < fonte.Length; i++)
+        {
+            if (fonte[i] == '{')
+                profundidade++;
+            else if (fonte[i] == '}')
+            {
+                profundidade--;
+                if (profundidade == 0)
+                    return fonte[abre..(i + 1)];
+            }
+        }
+
+        throw new InvalidOperationException("Bloco sem fechamento.");
     }
 
     private static string EncontrarRaiz()
