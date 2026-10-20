@@ -38,6 +38,12 @@
         <div class="of-secao-bloco">
             <p class="of-apoio">Entre @PedidoMensagem.MaxTokensMinimo e @PedidoMensagem.MaxTokensMaximo. O padrão é @PedidoMensagem.MaxTokens.</p>
         </div>
+        @if (AvisoMapeamento is not null)
+        {
+            <div class="of-secao-bloco">
+                <p class="of-apoio">@AvisoMapeamento</p>
+            </div>
+        }
         @if (RotuloModelo is not null)
         {
             <div class="of-secao-bloco">
@@ -96,7 +102,9 @@
     private string? _resultadoTeste;
     private bool _testeOk;
 
-    private string? RotuloModelo => ChipsInteligencia.RotuloDoModelo(_modelo);
+    private string? AvisoMapeamento => ChipsInteligencia.AvisoMapeamento(_url, _modelo);
+
+    private string? RotuloModelo => ChipsInteligencia.RotuloDoModelo(_url, _modelo);
 
     private string PlaceholderChave => _temChave ? "Chave já salva neste aparelho" : "";
 

@@ -460,17 +460,27 @@
 
     private async Task<bool> ConfirmarAvisoAsync()
     {
-        if (AvisoPrivacidadeComprovante.JaVisto(Preferencias))
+        var efetiva = ChipsInteligencia.Efetiva(
+            Configuracao.ProvedorInteligencia,
+            Configuracao.UrlInteligencia,
+            Configuracao.ModeloInteligencia);
+        var provedor = PerfilProvedor.DaUrl(efetiva.Url).Provedor;
+        if (AvisoPrivacidadeComprovante.JaVisto(Preferencias, provedor))
             return true;
 
+        var parametros = new DialogParameters<AvisoPrivacidadeComprovanteDialog>
+        {
+            { x => x.Provedor, provedor }
+        };
         var dialog = await DialogService.ShowAsync<AvisoPrivacidadeComprovanteDialog>(
             "Privacidade",
+            parametros,
             Opcoes(MaxWidth.ExtraSmall));
         var resultado = await dialog.Result;
         if (resultado is not { Canceled: false })
             return false;
 
-        AvisoPrivacidadeComprovante.MarcarVisto(Preferencias);
+        AvisoPrivacidadeComprovante.MarcarVisto(Preferencias, provedor);
         return true;
     }
 

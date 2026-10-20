@@ -2,7 +2,7 @@
 
 <MudDialog>
     <DialogContent>
-        <p class="of-leitura-texto">@MensagensLeituraComprovante.TextoAvisoPrivacidade</p>
+        <p class="of-leitura-texto">@AvisoPrivacidadeComprovante.TextoAvisoPrivacidade(Provedor)</p>
     </DialogContent>
     <DialogActions>
         <MudButton Class="of-tentar" Variant="Variant.Outlined" Color="Color.Default" OnClick="AgoraNao">Agora não</MudButton>
@@ -12,6 +12,8 @@
 
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public ProvedorDetectado Provedor { get; set; }
 
     private void AgoraNao() => MudDialog.Cancel();
 

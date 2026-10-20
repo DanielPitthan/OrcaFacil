@@ -328,6 +328,121 @@ public class MensagensLeituraComprovanteTests
     }
 
     [Theory]
+    [InlineData(ProvedorDetectado.Anthropic)]
+    [InlineData(ProvedorDetectado.Desconhecido)]
+    public void TextoAvisoPrivacidade_ForaDoDeepSeek_IgualAoAtual(ProvedorDetectado provedor)
+    {
+        var texto = AvisoPrivacidadeComprovante.TextoAvisoPrivacidade(provedor);
+
+        Assert.Equal(MensagensLeituraComprovante.TextoAvisoPrivacidade, texto);
+        Assert.Equal(
+            "A foto do comprovante sai deste aparelho e vai para o provedor da URL configurada. O OrcaFacil não guarda essa foto.",
+            texto);
+        Assert.DoesNotContain("sede na China", texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeek, texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(Chave, texto, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TextoAvisoPrivacidade_DeepSeek_AnexaSedeNaChina()
+    {
+        var texto = AvisoPrivacidadeComprovante.TextoAvisoPrivacidade(ProvedorDetectado.DeepSeek);
+
+        Assert.Equal(
+            "O provedor configurado é o DeepSeek, empresa com sede na China. A foto do comprovante será enviada para os servidores dele.",
+            MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeek);
+        Assert.Equal(
+            MensagensLeituraComprovante.TextoAvisoPrivacidade + " " + MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeek,
+            texto);
+        Assert.Contains("sede na China", texto, StringComparison.Ordinal);
+        Assert.StartsWith(MensagensLeituraComprovante.TextoAvisoPrivacidade, texto, StringComparison.Ordinal);
+        Assert.EndsWith(MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeek, texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("sede na China", MensagensLeituraComprovante.TextoAvisoPrivacidade, StringComparison.Ordinal);
+        Assert.DoesNotContain(Chave, texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("Authorization", texto, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("x-api-key", texto, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void DeepSeek_ChaveAntigaMarcada_AvisoReapareceUmaVez()
+    {
+        var preferencias = new PreferenciasEmMemoria();
+        preferencias.Definir(AvisoPrivacidadeComprovante.ChavePreferencia, AvisoPrivacidadeComprovante.ValorVisto);
+
+        Assert.Equal("Cesta.Leitura.AvisoPrivacidade", AvisoPrivacidadeComprovante.ChavePreferencia);
+        Assert.Equal(
+            AvisoPrivacidadeComprovante.ChavePreferencia + "DeepSeek",
+            AvisoPrivacidadeComprovante.ChavePreferenciaDeepSeek);
+        Assert.Equal("Cesta.Leitura.AvisoPrivacidadeDeepSeek", AvisoPrivacidadeComprovante.ChavePreferenciaDeepSeek);
+        Assert.NotEqual(
+            AvisoPrivacidadeComprovante.ChavePreferencia,
+            AvisoPrivacidadeComprovante.ChaveDe(ProvedorDetectado.DeepSeek));
+        Assert.Equal(
+            AvisoPrivacidadeComprovante.ChavePreferencia,
+            AvisoPrivacidadeComprovante.ChaveDe(ProvedorDetectado.Anthropic));
+        Assert.Equal(
+            AvisoPrivacidadeComprovante.ChavePreferencia,
+            AvisoPrivacidadeComprovante.ChaveDe(ProvedorDetectado.Desconhecido));
+        Assert.False(AvisoPrivacidadeComprovante.JaVisto(preferencias, ProvedorDetectado.DeepSeek));
+
+        AvisoPrivacidadeComprovante.MarcarVisto(preferencias, ProvedorDetectado.DeepSeek);
+
+        Assert.True(AvisoPrivacidadeComprovante.JaVisto(preferencias, ProvedorDetectado.DeepSeek));
+        Assert.Equal("visto", preferencias.ValorOuNulo(AvisoPrivacidadeComprovante.ChavePreferenciaDeepSeek));
+        Assert.Equal("visto", preferencias.ValorOuNulo(AvisoPrivacidadeComprovante.ChavePreferencia));
+        Assert.DoesNotContain(Chave, preferencias.ValorOuNulo(AvisoPrivacidadeComprovante.ChavePreferenciaDeepSeek)!, StringComparison.Ordinal);
+        Assert.DoesNotContain("Chave", AvisoPrivacidadeComprovante.ChavePreferenciaDeepSeek, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(AvisoPrivacidadeComprovante.ChavePreferenciaDeepSeek, ChipsInteligencia.ChavesPreferencia);
+    }
+
+    [Fact]
+    public void Anthropic_ChaveAntigaMarcada_AvisoNaoReaparece()
+    {
+        var preferencias = new PreferenciasEmMemoria();
+        preferencias.Definir(AvisoPrivacidadeComprovante.ChavePreferencia, AvisoPrivacidadeComprovante.ValorVisto);
+
+        Assert.True(AvisoPrivacidadeComprovante.JaVisto(preferencias, ProvedorDetectado.Anthropic));
+        Assert.True(AvisoPrivacidadeComprovante.JaVisto(preferencias, ProvedorDetectado.Desconhecido));
+        Assert.False(preferencias.Contem(AvisoPrivacidadeComprovante.ChavePreferenciaDeepSeek));
+    }
+
+    [Fact]
+    public void MarcarDeepSeek_NaoReaproveitaAChaveAntiga()
+    {
+        var preferencias = new PreferenciasEmMemoria();
+
+        AvisoPrivacidadeComprovante.MarcarVisto(preferencias, ProvedorDetectado.DeepSeek);
+
+        Assert.True(AvisoPrivacidadeComprovante.JaVisto(preferencias, ProvedorDetectado.DeepSeek));
+        Assert.False(AvisoPrivacidadeComprovante.JaVisto(preferencias, ProvedorDetectado.Anthropic));
+        Assert.False(preferencias.Contem(AvisoPrivacidadeComprovante.ChavePreferencia));
+        Assert.Equal("visto", preferencias.ValorOuNulo(AvisoPrivacidadeComprovante.ChavePreferenciaDeepSeek));
+    }
+
+    [Fact]
+    public void RazorDoAviso_UsaOMetodo_SemOTextoLiteral()
+    {
+        var raiz = EncontrarRaiz();
+        var dialog = File.ReadAllText(Path.Combine(
+            raiz, "OrcaFacil", "Components", "Pages", "Cesta", "AvisoPrivacidadeComprovanteDialog.razor"));
+        var pagina = File.ReadAllText(Path.Combine(raiz, "OrcaFacil", "Components", "Pages", "Cesta", "CestaPage.razor"));
+        var confirmar = ExtrairBloco(pagina, "Task<bool> ConfirmarAvisoAsync()");
+
+        Assert.Contains("AvisoPrivacidadeComprovante.TextoAvisoPrivacidade(Provedor)", dialog, StringComparison.Ordinal);
+        Assert.DoesNotContain("sede na China", dialog, StringComparison.Ordinal);
+        Assert.DoesNotContain("O provedor configurado é o DeepSeek", dialog, StringComparison.Ordinal);
+        Assert.DoesNotContain(MensagensLeituraComprovante.TextoAvisoPrivacidade, dialog, StringComparison.Ordinal);
+        Assert.DoesNotContain(MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeek, dialog, StringComparison.Ordinal);
+        Assert.Contains("PerfilProvedor.DaUrl(", confirmar, StringComparison.Ordinal);
+        Assert.Contains("AvisoPrivacidadeComprovante.JaVisto(Preferencias, provedor)", confirmar, StringComparison.Ordinal);
+        Assert.Contains("AvisoPrivacidadeComprovante.MarcarVisto(Preferencias, provedor)", confirmar, StringComparison.Ordinal);
+        Assert.Contains("x => x.Provedor, provedor", confirmar, StringComparison.Ordinal);
+        Assert.DoesNotContain("sede na China", confirmar, StringComparison.Ordinal);
+        Assert.DoesNotContain("api.deepseek.com", confirmar, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(".Host", confirmar, StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData("The model does not support image content blocks.")]
     [InlineData("Image content blocks are not supported by this model.")]
     [InlineData("current model does not support multimodal")]
@@ -346,6 +461,27 @@ public class MensagensLeituraComprovanteTests
     public void Diagnostico_NaoConfundeOutroErroComFaltaDeVisao(string? corpo)
     {
         Assert.False(DiagnosticoErroProvedor.IndicaModeloSemVisao(corpo));
+    }
+
+    private static string ExtrairBloco(string fonte, string assinatura)
+    {
+        var indice = fonte.IndexOf(assinatura, StringComparison.Ordinal);
+        Assert.True(indice >= 0, assinatura);
+        var abre = fonte.IndexOf('{', indice);
+        var profundidade = 0;
+        for (var i = abre; i < fonte.Length; i++)
+        {
+            if (fonte[i] == '{')
+                profundidade++;
+            else if (fonte[i] == '}')
+            {
+                profundidade--;
+                if (profundidade == 0)
+                    return fonte[abre..(i + 1)];
+            }
+        }
+
+        throw new InvalidOperationException("Bloco sem fechamento.");
     }
 
     private static string EncontrarRaiz()

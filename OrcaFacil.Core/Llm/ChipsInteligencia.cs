@@ -103,6 +103,25 @@ public static class ChipsInteligencia
         return new(provedor, url ?? "", modelo ?? "");
     }
 
+    public const string TextoAvisoMapeamento =
+        "No DeepSeek, modelos claude-haiku/sonnet são atendidos pelo deepseek-flash.";
+
+    /// <summary>
+    /// Aviso quando a URL é do DeepSeek e o modelo começa com "claude".
+    /// O host vem de <see cref="PerfilProvedor.DaUrl"/>. Sem URL, sem modelo ou noutro provedor, não há aviso.
+    /// </summary>
+    public static string? AvisoMapeamento(string? url, string? modelo)
+    {
+        if (PerfilProvedor.DaUrl(url).Provedor != ProvedorDetectado.DeepSeek)
+            return null;
+
+        var texto = modelo?.Trim();
+        if (string.IsNullOrEmpty(texto) || !texto.StartsWith("claude", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        return TextoAvisoMapeamento;
+    }
+
     public static string? RotuloDoModelo(string? modelo)
     {
         var texto = modelo?.Trim();
@@ -112,4 +131,13 @@ public static class ChipsInteligencia
             return RotuloAnthropic;
         return null;
     }
+
+    /// <summary>
+    /// No mapeamento do DeepSeek, o rótulo é DeepSeek Flash (mapeado).
+    /// Fora desse caso, vale o rótulo só pelo modelo.
+    /// </summary>
+    public static string? RotuloDoModelo(string? url, string? modelo) =>
+        AvisoMapeamento(url, modelo) is null
+            ? RotuloDoModelo(modelo)
+            : RotuloDeepSeek + " (mapeado)";
 }
