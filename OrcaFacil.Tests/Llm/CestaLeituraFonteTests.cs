@@ -1,3 +1,5 @@
+using OrcaFacil.Core.Llm;
+
 namespace OrcaFacil.Tests.Llm;
 
 public class CestaLeituraFonteTests
@@ -84,6 +86,35 @@ public class CestaLeituraFonteTests
         var acima = capturar.IndexOf("MensagensLeituraComprovante.FotoAcimaDoTeto()", StringComparison.Ordinal);
         var envio = capturar.IndexOf("EnviarJpegAsync(", StringComparison.Ordinal);
         Assert.True(acima >= 0 && acima < envio);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ChaveVaziaNaLeitura_MostraInformeAChave(string? chave)
+    {
+        Assert.True(string.IsNullOrWhiteSpace(chave));
+        Assert.Equal("Informe a chave da API.", ResultadoMensagem.TextoChaveNaoInformada);
+
+        var exibicao = MensagensLeituraComprovante.De(
+            ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoChaveNaoInformada),
+            null);
+        Assert.Equal("Informe a chave da API.", exibicao.Mensagem);
+        Assert.Equal(ResultadoMensagem.TextoChaveNaoInformada, exibicao.Mensagem);
+        Assert.NotEqual(MensagensLeituraComprovante.TextoSemUrlModeloOuChave, exibicao.Mensagem);
+
+        var pagina = File.ReadAllText(Path.Combine(
+            EncontrarRaiz(), "OrcaFacil", "Components", "Pages", "Cesta", "CestaPage.razor"));
+        var enviar = ExtrairBloco(pagina, "Task EnviarJpegAsync(");
+        var branca = enviar.IndexOf("string.IsNullOrWhiteSpace(chave)", StringComparison.Ordinal);
+        var frase = enviar.IndexOf("ResultadoMensagem.TextoChaveNaoInformada", StringComparison.Ordinal);
+        var generica = enviar.IndexOf("MensagensLeituraComprovante.SemConfiguracao()", StringComparison.Ordinal);
+
+        Assert.True(branca >= 0);
+        Assert.True(frase > branca);
+        Assert.True(generica > frase);
+        Assert.Contains("Informe a chave da API.", ResultadoMensagem.TextoChaveNaoInformada, StringComparison.Ordinal);
     }
 
     [Fact]

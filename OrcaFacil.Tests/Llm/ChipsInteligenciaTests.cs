@@ -180,6 +180,29 @@ public class ChipsInteligenciaTests
         Assert.Equal(modelo, memoria.Obter(ChipsInteligencia.ChaveModelo, ""));
     }
 
+    [Theory]
+    [InlineData("https://api.anthropic.com", "claude-haiku-5-5")]
+    [InlineData("", "qwen-vl-max")]
+    [InlineData("https://dashscope.aliyuncs.com", "")]
+    public void ProvedorNuloComUrlOuModelo_NaoViraDeepSeek(string url, string modelo)
+    {
+        var memoria = new PreferenciasEmMemoria();
+        memoria.Definir(ChipsInteligencia.ChaveUrl, url);
+        memoria.Definir(ChipsInteligencia.ChaveModelo, modelo);
+
+        var efetiva = ChipsInteligencia.Efetiva(
+            ChipsInteligencia.Interpretar(memoria.Obter(ChipsInteligencia.ChaveProvedor, "")),
+            memoria.Obter(ChipsInteligencia.ChaveUrl, ""),
+            memoria.Obter(ChipsInteligencia.ChaveModelo, ""));
+
+        Assert.Null(efetiva.Provedor);
+        Assert.Equal(url, efetiva.Url);
+        Assert.Equal(modelo, efetiva.Modelo);
+        Assert.False(memoria.Contem(ChipsInteligencia.ChaveProvedor));
+        Assert.Equal(url, memoria.Obter(ChipsInteligencia.ChaveUrl, "trocada"));
+        Assert.Equal(modelo, memoria.Obter(ChipsInteligencia.ChaveModelo, "trocado"));
+    }
+
     private static string CaminhoPainel()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
