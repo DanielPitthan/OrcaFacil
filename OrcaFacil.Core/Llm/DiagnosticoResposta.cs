@@ -43,11 +43,12 @@ public sealed class DiagnosticoResposta
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     /// <summary>
-    /// Contínuo de 201, ou linhas de 76 (com \r\n, \n ou \r) mais a última linha, de 1 a 76.
+    /// Contínuo de 201, ou linhas de 76 mais uma última linha de 1 a 76 que fecha a linha,
+    /// com padding = ou ==. A frase da linha seguinte, como "O total", fica de fora.
     /// O alfabeto inclui o url-safe (- e _).
     /// </summary>
     private static readonly Regex Base64Longo = new(
-        """(?:[A-Za-z0-9+/_-]{76}(?:\r\n|\n|\r)){2,}[A-Za-z0-9+/_-]{1,76}={0,2}|[A-Za-z0-9+/_-]{201,}={0,2}""",
+        """(?:[A-Za-z0-9+/_-]{76}(?:\r\n|\n|\r)){2,}(?:[A-Za-z0-9+/_-]{1,76}={0,2}(?=(?:\r\n|\n|\r|$)))?|[A-Za-z0-9+/_-]{201,}={0,2}""",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex EscapeUnicode = new(
@@ -469,9 +470,13 @@ public sealed class DiagnosticoResposta
         return fim >= texto.Length || !EhColadoNoToken(texto[fim]);
     }
 
-    /// <summary>Letra, dígito, ponto, hífen ou sublinhado continuam o mesmo token.</summary>
+    /// <summary>
+    /// Letra, dígito, ponto, hífen ou sublinhado continuam o token.
+    /// Espaço, =, aspas e dois-pontos fecham.
+    /// </summary>
     private static bool EhColadoNoToken(char caractere) =>
-        char.IsLetterOrDigit(caractere) || caractere is '.' or '-' or '_';
+        caractere is not (' ' or '=' or '"' or '\'' or ':')
+        && (char.IsLetterOrDigit(caractere) || caractere is '.' or '-' or '_');
 
     private static bool EhSeparador(char caractere) =>
         char.IsWhiteSpace(caractere) || caractere is '\u00AD' or '\u180E' or '\u200B' or '\u200C' or '\u200D'
