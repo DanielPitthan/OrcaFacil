@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using MudBlazor.Services;
+using OrcaFacil.Core.B3;
 using OrcaFacil.Core.Data;
 using OrcaFacil.Core.Llm;
 using OrcaFacil.Core.Repositories;
@@ -114,6 +115,8 @@ public static class MauiProgram
         builder.Services.AddScoped<IArmazenamentoService, ArmazenamentoService>();
         builder.Services.AddSingleton<ResultadoRealizadoService>();
         builder.Services.AddSingleton<ProventoService>();
+        builder.Services.AddSingleton<IParserExtratoB3, ParserExtratoB3>();
+        builder.Services.AddSingleton<ImportacaoExtratoB3Service>();
         builder.Services.AddScoped<IAtivoService, AtivoService>();
         builder.Services.AddScoped<IOperacaoAtivoService, OperacaoAtivoService>();
         builder.Services.AddScoped<ICestaService, CestaService>();

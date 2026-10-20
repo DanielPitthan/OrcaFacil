@@ -25,16 +25,27 @@ public class ProventoService
         _contextFactory = contextFactory;
     }
 
-    public async Task<Provento> SalvarAsync(
+    public Task<Provento> SalvarAsync(
+        ProventoFormModel modelo,
+        int membroFamiliaId,
+        CancellationToken cancellationToken = default)
+        => EmTransacaoAsync(
+            (context, ct) => SalvarNoContextoAsync(context, modelo, membroFamiliaId, ct),
+            cancellationToken);
+
+    /// <summary>
+    /// Grava na transação que o chamador já abriu. Não confirma nem desfaz.
+    /// A importação do extrato usa isto para gravar várias linhas de uma vez.
+    /// </summary>
+    public async Task<Provento> SalvarNoContextoAsync(
+        AppDbContext context,
         ProventoFormModel modelo,
         int membroFamiliaId,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(modelo);
         ValidarCampos(modelo);
-
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transacao = await context.Database.BeginTransactionAsync(cancellationToken);
 
         if (!await context.MembrosFamilia.AnyAsync(m => m.Id == membroFamiliaId, cancellationToken))
             throw new InvalidOperationException("Perfil não encontrado.");
@@ -114,10 +125,7 @@ public class ProventoService
                     lancamento, valor, data, TipoTransacao.Receita, categoria, descricao, ObservacaoLancamento);
 
             if (proventoIgual && lancamentoIgual)
-            {
-                await transacao.CommitAsync(cancellationToken);
                 return alvo;
-            }
 
             if (!proventoIgual)
             {
@@ -142,7 +150,6 @@ public class ProventoService
         try
         {
             await context.SaveChangesAsync(cancellationToken);
-            await transacao.CommitAsync(cancellationToken);
         }
         catch (DbUpdateException ex) when (EhHashRepetido(ex))
         {
@@ -150,6 +157,17 @@ public class ProventoService
         }
 
         return alvo;
+    }
+
+    private async Task<T> EmTransacaoAsync<T>(
+        Func<AppDbContext, CancellationToken, Task<T>> acao,
+        CancellationToken cancellationToken)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transacao = await context.Database.BeginTransactionAsync(cancellationToken);
+        var resultado = await acao(context, cancellationToken);
+        await transacao.CommitAsync(cancellationToken);
+        return resultado;
     }
 
     public async Task ExcluirAsync(int id, int membroFamiliaId, CancellationToken cancellationToken = default)

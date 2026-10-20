@@ -1,0 +1,214 @@
+@page "/ativos/importar-b3"
+@using System.Globalization
+@using OrcaFacil.Core.B3
+@using OrcaFacil.Core.Services
+@using OrcaFacil.Services.Interfaces
+@inject ImportacaoExtratoB3Service Importacao
+@inject IPerfilContext Perfil
+@inject NavigationManager Navegacao
+@inject ISnackbar Snackbar
+
+<div class="pro-sticky-header">
+    <div class="d-flex align-center">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Inherit" Edge="Edge.Start"
+                       aria-label="Voltar" Disabled="@_ocupado" OnClick="Voltar" />
+        <MudText Typo="Typo.subtitle1"><b>Importar extrato B3</b></MudText>
+    </div>
+</div>
+
+<div class="pro-fab-spacer">
+    <MudPaper Class="pa-4 mb-2" Elevation="0">
+        <MudText Typo="Typo.body2" Class="mb-3">@PreviaExtratoB3.Aviso</MudText>
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.UploadFile"
+                   Disabled="@_ocupado" OnClick="EscolherArquivoAsync">Escolher CSV</MudButton>
+        @if (!string.IsNullOrWhiteSpace(_nomeArquivo))
+        {
+            <MudText Typo="Typo.caption" Class="mt-2">@_nomeArquivo</MudText>
+        }
+    </MudPaper>
+
+    @if (!string.IsNullOrWhiteSpace(_erro))
+    {
+        <MudAlert Severity="Severity.Error" Class="mb-2" Dense="true">@_erro</MudAlert>
+    }
+
+    @if (_previa is not null)
+    {
+        <MudText Typo="Typo.caption" Class="px-4 mb-2">@Resumo(_previa)</MudText>
+        <ItemList TItem="LinhaPreviaExtratoB3" Itens="@_previa.Linhas" Contagem="@Contagem" SomaFormatada="@Soma"
+                  Titulo="Titulo" Subtitulo="Subtitulo" Valor="Valor" Icone="Icone" ChaveItem="Chave"
+                  EhCredito="EhCredito" EmErro="EmErro" Destacado="Destacado" ConfirmadoVisual="Confirmado"
+                  ExigeMarcacao="PodeMarcar" Marcado="Marcada" OnAlternarMarcacao="Alternar" AriaMarcacao="Aria"
+                  Marcador="Marcador" MostrarMenu="false" MostrarAdicionar="false"
+                  TextoVazio="Nenhuma linha no arquivo." />
+    }
+</div>
+
+@if (_previa is not null)
+{
+    <StickyActionBar TextoCancelar="Voltar" TextoPrimario="Gravar" TipoPrimario="ButtonType.Button"
+                     OnCancelar="Voltar" OnPrimario="GravarAsync"
+                     CancelarDesabilitado="@_ocupado" PrimarioDesabilitado="@(!PodeGravar)" />
+}
+
+@code {
+    private static readonly CultureInfo PtBr = CultureInfo.GetCultureInfo("pt-BR");
+
+    private PreviaExtratoB3? _previa;
+    private string? _nomeArquivo;
+    private string? _erro;
+    private bool _ocupado;
+
+    private bool PodeGravar => !_ocupado && _previa is { Marcadas: > 0 } && Perfil.Atual is not null;
+    private string Contagem => _previa is null ? "" : $"{_previa.Marcadas} de {_previa.Linhas.Count}";
+    private string Soma => _previa is null
+        ? ""
+        : _previa.Linhas.Where(linha => linha.Marcada).Sum(linha => linha.Valor).ToString("C", PtBr);
+
+    private int MembroId()
+        => Perfil.Atual?.Id ?? throw new InvalidOperationException("Nenhum perfil ativo.");
+
+    private void Voltar() => Navegacao.NavigateTo("/ativos");
+
+    private async Task EscolherArquivoAsync()
+    {
+        if (_ocupado)
+            return;
+
+        FileResult? arquivo;
+        try
+        {
+            arquivo = await FilePicker.Default.PickAsync(new PickOptions
+            {
+                PickerTitle = "Extrato da B3",
+                FileTypes = new FilePickerFileType(new Dictionary<DevicePlatform, IEnumerable<string>>
+                {
+                    { DevicePlatform.Android, new[] { "text/csv", "text/comma-separated-values", "text/plain", "application/vnd.ms-excel", "application/octet-stream" } },
+                    { DevicePlatform.WinUI, new[] { ".csv", ".txt" } }
+                })
+            });
+        }
+        catch (Exception)
+        {
+            _erro = "Não foi possível abrir o seletor de arquivos.";
+            return;
+        }
+
+        if (arquivo is null)
+            return;
+
+        _ocupado = true;
+        _erro = null;
+        _nomeArquivo = arquivo.FileName;
+        try
+        {
+            await using var stream = await arquivo.OpenReadAsync();
+            _previa = await Importacao.PreverAsync(stream, MembroId());
+        }
+        catch (InvalidOperationException ex)
+        {
+            _previa = null;
+            _erro = ex.Message;
+        }
+        catch (Exception)
+        {
+            _previa = null;
+            _erro = "Não foi possível ler o extrato.";
+        }
+        finally
+        {
+            _ocupado = false;
+        }
+    }
+
+    private async Task Alternar(LinhaPreviaExtratoB3 linha)
+    {
+        if (_previa is null || _ocupado || !linha.PodeMarcar)
+            return;
+
+        linha.Marcada = !linha.Marcada;
+        _ocupado = true;
+        try
+        {
+            _previa = await Importacao.ReclassificarAsync(_previa, MembroId());
+        }
+        catch (InvalidOperationException ex)
+        {
+            _erro = ex.Message;
+        }
+        finally
+        {
+            _ocupado = false;
+        }
+    }
+
+    private async Task GravarAsync()
+    {
+        if (_previa is null || !PodeGravar)
+            return;
+
+        _ocupado = true;
+        _erro = null;
+        try
+        {
+            var gravadas = await Importacao.GravarAsync(_previa, MembroId());
+            Snackbar.Add(gravadas == 1 ? "1 linha gravada" : $"{gravadas} linhas gravadas", Severity.Success);
+            Navegacao.NavigateTo("/ativos");
+        }
+        catch (InvalidOperationException ex)
+        {
+            _erro = ex.Message;
+            try
+            {
+                _previa = await Importacao.ReclassificarAsync(_previa, MembroId());
+            }
+            catch (InvalidOperationException)
+            {
+            }
+        }
+        finally
+        {
+            _ocupado = false;
+        }
+    }
+
+    private static string Resumo(PreviaExtratoB3 previa)
+    {
+        string Parte(StatusLinhaImportacaoB3 status, string rotulo)
+        {
+            var n = previa.Contar(status);
+            return n == 0 ? "" : $"{n} {rotulo}";
+        }
+
+        var partes = new[]
+        {
+            Parte(StatusLinhaImportacaoB3.Nova, "novas"),
+            Parte(StatusLinhaImportacaoB3.PossivelDuplicataManual, "possíveis duplicatas"),
+            Parte(StatusLinhaImportacaoB3.DuplicataImportada, "já importadas"),
+            Parte(StatusLinhaImportacaoB3.MesFechado, "mês fechado"),
+            Parte(StatusLinhaImportacaoB3.SemPosicao, "sem posição"),
+            Parte(StatusLinhaImportacaoB3.Informativa, "informativas"),
+            Parte(StatusLinhaImportacaoB3.Erro, "erros")
+        };
+        return string.Join(" · ", partes.Where(parte => parte.Length > 0));
+    }
+
+    private static string Titulo(LinhaPreviaExtratoB3 linha) => linha.Titulo;
+    private static string Subtitulo(LinhaPreviaExtratoB3 linha) => linha.Subtitulo;
+    private static string Valor(LinhaPreviaExtratoB3 linha) => linha.ValorTexto;
+    private static string Icone(LinhaPreviaExtratoB3 linha) => linha.Icone;
+    private static object Chave(LinhaPreviaExtratoB3 linha) => linha.Numero;
+    private static bool EhCredito(LinhaPreviaExtratoB3 linha) => linha.EhCredito;
+    private static bool EmErro(LinhaPreviaExtratoB3 linha)
+        => linha.Status is StatusLinhaImportacaoB3.Erro
+            or StatusLinhaImportacaoB3.SemPosicao
+            or StatusLinhaImportacaoB3.MesFechado;
+    private static bool Destacado(LinhaPreviaExtratoB3 linha)
+        => linha.Status == StatusLinhaImportacaoB3.PossivelDuplicataManual;
+    private static bool Confirmado(LinhaPreviaExtratoB3 linha)
+        => linha.Status == StatusLinhaImportacaoB3.DuplicataImportada;
+    private static bool PodeMarcar(LinhaPreviaExtratoB3 linha) => linha.PodeMarcar;
+    private static bool Marcada(LinhaPreviaExtratoB3 linha) => linha.Marcada;
+    private static string Aria(LinhaPreviaExtratoB3 linha) => $"{linha.RotuloStatus} {linha.Titulo}";
+    private static string Marcador(LinhaPreviaExtratoB3 linha) => linha.RotuloStatus;
+}

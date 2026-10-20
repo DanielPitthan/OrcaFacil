@@ -31,16 +31,27 @@ public class ResultadoRealizadoService
         _contextFactory = contextFactory;
     }
 
-    public async Task<OperacaoAtivo> SalvarAsync(
+    public Task<OperacaoAtivo> SalvarAsync(
+        OperacaoAtivoFormModel modelo,
+        int membroFamiliaId,
+        CancellationToken cancellationToken = default)
+        => EmTransacaoAsync(
+            (context, ct) => SalvarNoContextoAsync(context, modelo, membroFamiliaId, ct),
+            cancellationToken);
+
+    /// <summary>
+    /// Grava na transação que o chamador já abriu. Não confirma nem desfaz.
+    /// A importação do extrato usa isto para gravar várias linhas de uma vez.
+    /// </summary>
+    public async Task<OperacaoAtivo> SalvarNoContextoAsync(
+        AppDbContext context,
         OperacaoAtivoFormModel modelo,
         int membroFamiliaId,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(modelo);
         ValidarCampos(modelo);
-
-        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
-        await using var transacao = await context.Database.BeginTransactionAsync(cancellationToken);
 
         if (!await context.MembrosFamilia.AnyAsync(m => m.Id == membroFamiliaId, cancellationToken))
             throw new InvalidOperationException("Perfil não encontrado.");
@@ -131,7 +142,6 @@ public class ResultadoRealizadoService
         try
         {
             await context.SaveChangesAsync(cancellationToken);
-            await transacao.CommitAsync(cancellationToken);
         }
         catch (DbUpdateException ex) when (EhHashRepetido(ex))
         {
@@ -139,6 +149,17 @@ public class ResultadoRealizadoService
         }
 
         return alvo;
+    }
+
+    private async Task<T> EmTransacaoAsync<T>(
+        Func<AppDbContext, CancellationToken, Task<T>> acao,
+        CancellationToken cancellationToken)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        await using var transacao = await context.Database.BeginTransactionAsync(cancellationToken);
+        var resultado = await acao(context, cancellationToken);
+        await transacao.CommitAsync(cancellationToken);
+        return resultado;
     }
 
     public async Task ExcluirAsync(int id, int membroFamiliaId, CancellationToken cancellationToken = default)
