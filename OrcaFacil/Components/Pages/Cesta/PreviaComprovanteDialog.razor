@@ -51,6 +51,7 @@
                                   AriaMarcacao="AriaMarcacao" Marcador="Marcador" Destacado="Destacado"
                                   ConfirmadoVisual="ConfirmadoVisual" ComplementoAriaMenu="ComplementoAria"
                                   OnEditar="Editar" OnRemover="Remover" />
+                        <ParProdutoPrevia Previa="Previa" Catalogo="_catalogo" OnLinhaDesfeita="FecharSeEditando" />
                     </FormSection>
                 </div>
 
@@ -334,6 +335,15 @@
         {
             _cadastrandoTudo = false;
         }
+    }
+
+    private void FecharSeEditando(LinhaPreviaComprovante linha)
+    {
+        if (_editando != linha)
+            return;
+
+        _editando = null;
+        _sheetAberto = false;
     }
 
     private void DesfazerNovo()

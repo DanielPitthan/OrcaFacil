@@ -1,0 +1,58 @@
+@using OrcaFacil.Core.Llm
+
+<div class="of-par">
+    <p class="of-par-nome">@Linha.Nome</p>
+    @if (!string.IsNullOrEmpty(Linha.DescricaoLida))
+    {
+        <p class="of-par-lido">@Linha.DescricaoLida</p>
+    }
+    <div class="of-par-acoes">
+        <button type="button" class="of-par-botao" aria-expanded="@(_troca ? "true" : "false")"
+                aria-controls="@($"of-par-troca-{Linha.Id}")"
+                aria-label="@($"Trocar {Linha.Nome}")" @onclick="AbrirTroca">Trocar</button>
+        <button type="button" class="of-par-botao" aria-label="@($"Desfazer {Linha.Nome}")" @onclick="Desfazer">Desfazer</button>
+    </div>
+    @if (_troca)
+    {
+        <div id="@($"of-par-troca-{Linha.Id}")" class="of-par-painel">
+        @if (!Catalogo.Any())
+        {
+            <p class="of-par-lido">Nenhum produto cadastrado.</p>
+        }
+        else
+        {
+            <div class="of-par-opcoes">
+                @foreach (var produto in Catalogo)
+                {
+                    <button type="button" class="of-par-opcao" @onclick="() => Trocar(produto)">
+                        @produto.Nome
+                    </button>
+                }
+            </div>
+        }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public LinhaPreviaComprovante Linha { get; set; } = null!;
+    [Parameter] public IReadOnlyList<ProdutoCesta> Catalogo { get; set; } = [];
+    [Parameter] public EventCallback<ProdutoCesta> OnTrocar { get; set; }
+    [Parameter] public EventCallback OnDesfazer { get; set; }
+
+    private bool _troca;
+
+    private void AbrirTroca() => _troca = !_troca;
+
+    private Task Trocar(ProdutoCesta produto)
+    {
+        _troca = false;
+        return OnTrocar.InvokeAsync(produto);
+    }
+
+    private Task Desfazer()
+    {
+        _troca = false;
+        return OnDesfazer.InvokeAsync();
+    }
+}

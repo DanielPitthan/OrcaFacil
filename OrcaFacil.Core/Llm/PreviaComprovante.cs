@@ -540,7 +540,7 @@ public sealed class PreviaComprovante
             throw new InvalidOperationException("A linha não está na prévia.");
     }
 
-    private void AtualizarSomas()
+    internal void AtualizarSomas()
     {
         static string Chave(LinhaPreviaComprovante linha)
         {
