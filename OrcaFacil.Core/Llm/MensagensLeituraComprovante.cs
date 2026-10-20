@@ -57,6 +57,9 @@ public static class MensagensLeituraComprovante
     public const string ComplementoPrivacidadeDeepSeek =
         "O provedor configurado é o DeepSeek, empresa com sede na China. A foto do comprovante será enviada para os servidores dele.";
 
+    public const string ComplementoPrivacidadeDeepSeekPadrao =
+        "Como não há URL gravada, o OrcaFacil vai usar o DeepSeek, empresa com sede na China, que é o provedor padrão do app.";
+
     public const string TextoFotoInvalida = "Não foi possível ler essa foto.";
 
     public const string TextoFotoGrandeDemais = "A foto ficou grande demais. Escolha outra.";

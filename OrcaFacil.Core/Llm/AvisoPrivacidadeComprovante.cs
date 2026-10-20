@@ -19,13 +19,24 @@ public static class AvisoPrivacidadeComprovante
         provedor == ProvedorDetectado.DeepSeek ? ChavePreferenciaDeepSeek : ChavePreferencia;
 
     /// <summary>
-    /// Texto do aviso. No DeepSeek, anexa <see cref="MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeek"/>.
+    /// Texto do aviso. No DeepSeek configurado, anexa <see cref="MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeek"/>.
+    /// Quando o DeepSeek veio do padrão do app, anexa <see cref="MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeekPadrao"/>.
     /// Nos outros provedores, devolve o texto genérico.
     /// </summary>
     public static string TextoAvisoPrivacidade(ProvedorDetectado provedor) =>
-        provedor == ProvedorDetectado.DeepSeek
-            ? MensagensLeituraComprovante.TextoAvisoPrivacidade + " " + MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeek
-            : MensagensLeituraComprovante.TextoAvisoPrivacidade;
+        TextoAvisoPrivacidade(provedor, semUrlGravada: false);
+
+    public static string TextoAvisoPrivacidade(ProvedorDetectado provedor, bool semUrlGravada)
+    {
+        if (provedor != ProvedorDetectado.DeepSeek)
+            return MensagensLeituraComprovante.TextoAvisoPrivacidade;
+
+        var complemento = semUrlGravada
+            ? MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeekPadrao
+            : MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeek;
+
+        return MensagensLeituraComprovante.TextoAvisoPrivacidade + " " + complemento;
+    }
 
     public static bool JaVisto(IPreferenciasSimples preferencias) =>
         JaVisto(preferencias, ProvedorDetectado.Desconhecido);

@@ -88,13 +88,17 @@ public static class ChipsInteligencia
         _ => throw new ArgumentOutOfRangeException(nameof(provedor))
     };
 
+    /// <summary>Nada gravado: provedor, URL e modelo vazios. O padrão do app entra em <see cref="Efetiva"/>.</summary>
+    public static bool SemProvedorUrlNemModelo(ProvedorIa? provedor, string? url, string? modelo) =>
+        provedor is null && string.IsNullOrWhiteSpace(url) && string.IsNullOrWhiteSpace(modelo);
+
     /// <summary>
     /// Sem provedor, URL e modelo salvos, o padrão efetivo é o Alibaba.
     /// Qualquer um dos três preenchido permanece como foi gravado.
     /// </summary>
     public static ConfiguracaoIaEfetiva Efetiva(ProvedorIa? provedor, string? url, string? modelo)
     {
-        if (provedor is null && string.IsNullOrWhiteSpace(url) && string.IsNullOrWhiteSpace(modelo))
+        if (SemProvedorUrlNemModelo(provedor, url, modelo))
         {
             var padrao = Padrao(ProvedorIa.Alibaba);
             return new(ProvedorIa.Alibaba, padrao.Url ?? "", padrao.Modelo ?? "");
@@ -106,8 +110,16 @@ public static class ChipsInteligencia
     public const string TextoAvisoMapeamento =
         "No DeepSeek, modelos claude-haiku/sonnet são atendidos pelo deepseek-flash.";
 
+    public const string TextoAvisoMapeamentoOpus =
+        "No DeepSeek, modelos claude-opus são atendidos pelo deepseek-v4-pro.";
+
+    public const string RotuloMapeado = "DeepSeek Flash (mapeado)";
+
+    public const string RotuloMapeadoPro = "DeepSeek V4 Pro (mapeado)";
+
     /// <summary>
     /// Aviso quando a URL é do DeepSeek e o modelo começa com "claude".
+    /// claude-opus* vai para o V4 Pro; os outros claude* vão para o Flash.
     /// O host vem de <see cref="PerfilProvedor.DaUrl"/>. Sem URL, sem modelo ou noutro provedor, não há aviso.
     /// </summary>
     public static string? AvisoMapeamento(string? url, string? modelo)
@@ -118,6 +130,9 @@ public static class ChipsInteligencia
         var texto = modelo?.Trim();
         if (string.IsNullOrEmpty(texto) || !texto.StartsWith("claude", StringComparison.OrdinalIgnoreCase))
             return null;
+
+        if (texto.StartsWith("claude-opus", StringComparison.OrdinalIgnoreCase))
+            return TextoAvisoMapeamentoOpus;
 
         return TextoAvisoMapeamento;
     }
@@ -133,11 +148,15 @@ public static class ChipsInteligencia
     }
 
     /// <summary>
-    /// No mapeamento do DeepSeek, o rótulo é DeepSeek Flash (mapeado).
+    /// No mapeamento do DeepSeek, opus mostra DeepSeek V4 Pro (mapeado) e os outros claude mostram DeepSeek Flash (mapeado).
     /// Fora desse caso, vale o rótulo só pelo modelo.
     /// </summary>
-    public static string? RotuloDoModelo(string? url, string? modelo) =>
-        AvisoMapeamento(url, modelo) is null
-            ? RotuloDoModelo(modelo)
-            : RotuloDeepSeek + " (mapeado)";
+    public static string? RotuloDoModelo(string? url, string? modelo)
+    {
+        var aviso = AvisoMapeamento(url, modelo);
+        if (aviso is null)
+            return RotuloDoModelo(modelo);
+
+        return aviso == TextoAvisoMapeamentoOpus ? RotuloMapeadoPro : RotuloMapeado;
+    }
 }

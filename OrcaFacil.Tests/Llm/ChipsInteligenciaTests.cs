@@ -160,20 +160,39 @@ public class ChipsInteligenciaTests
     }
 
     [Theory]
-    [InlineData("https://api.deepseek.com/anthropic", "claude-haiku-5-5")]
-    [InlineData("https://api.deepseek.com/anthropic", "claude-sonnet")]
-    [InlineData("https://api.deepseek.com/anthropic", "Claude-Haiku-5-5")]
-    [InlineData("https://api.deepseek.com/anthropic", "CLAUDE")]
-    [InlineData("https://API.DEEPSEEK.COM/anthropic", "  claude-haiku-5-5  ")]
-    public void AvisoMapeamento_DeepSeekComClaude_DevolveOTextoERotuloMapeado(string url, string modelo)
+    [InlineData("https://api.deepseek.com/anthropic", "claude-haiku-5-5", false)]
+    [InlineData("https://api.deepseek.com/anthropic", "claude-sonnet", false)]
+    [InlineData("https://api.deepseek.com/anthropic", "Claude-Haiku-5-5", false)]
+    [InlineData("https://api.deepseek.com/anthropic", "CLAUDE", false)]
+    [InlineData("https://API.DEEPSEEK.COM/anthropic", "  claude-haiku-5-5  ", false)]
+    [InlineData("https://api.deepseek.com/anthropic", "claudeopus", false)]
+    [InlineData("https://api.deepseek.com/anthropic", "claude-opus-4-6", true)]
+    [InlineData("https://api.deepseek.com/anthropic", "Claude-Opus", true)]
+    [InlineData("https://api.deepseek.com/anthropic", "  CLAUDE-OPUS-4  ", true)]
+    public void AvisoMapeamento_DeepSeekComClaude_DevolveOTextoERotuloMapeado(string url, string modelo, bool opus)
     {
-        const string texto = "No DeepSeek, modelos claude-haiku/sonnet são atendidos pelo deepseek-flash.";
+        const string textoFlash = "No DeepSeek, modelos claude-haiku/sonnet são atendidos pelo deepseek-flash.";
+        const string textoOpus = "No DeepSeek, modelos claude-opus são atendidos pelo deepseek-v4-pro.";
+        var texto = opus ? textoOpus : textoFlash;
+        var rotulo = opus ? "DeepSeek V4 Pro (mapeado)" : "DeepSeek Flash (mapeado)";
 
         Assert.Equal(texto, ChipsInteligencia.AvisoMapeamento(url, modelo));
-        Assert.Equal(ChipsInteligencia.TextoAvisoMapeamento, ChipsInteligencia.AvisoMapeamento(url, modelo));
-        Assert.Equal("DeepSeek Flash (mapeado)", ChipsInteligencia.RotuloDoModelo(url, modelo));
-        Assert.Contains("(mapeado)", ChipsInteligencia.RotuloDoModelo(url, modelo), StringComparison.Ordinal);
-        Assert.StartsWith(ChipsInteligencia.RotuloDeepSeek, ChipsInteligencia.RotuloDoModelo(url, modelo), StringComparison.Ordinal);
+        Assert.Equal(rotulo, ChipsInteligencia.RotuloDoModelo(url, modelo));
+        Assert.Contains("(mapeado)", rotulo, StringComparison.Ordinal);
+        if (opus)
+        {
+            Assert.Equal(ChipsInteligencia.TextoAvisoMapeamentoOpus, ChipsInteligencia.AvisoMapeamento(url, modelo));
+            Assert.Equal(ChipsInteligencia.RotuloMapeadoPro, ChipsInteligencia.RotuloDoModelo(url, modelo));
+            Assert.DoesNotContain("deepseek-flash", texto, StringComparison.Ordinal);
+            Assert.NotEqual(ChipsInteligencia.RotuloMapeado, rotulo);
+        }
+        else
+        {
+            Assert.Equal(ChipsInteligencia.TextoAvisoMapeamento, ChipsInteligencia.AvisoMapeamento(url, modelo));
+            Assert.Equal(ChipsInteligencia.RotuloMapeado, ChipsInteligencia.RotuloDoModelo(url, modelo));
+            Assert.StartsWith(ChipsInteligencia.RotuloDeepSeek, rotulo, StringComparison.Ordinal);
+            Assert.DoesNotContain("deepseek-v4-pro", texto, StringComparison.Ordinal);
+        }
     }
 
     [Theory]
@@ -181,7 +200,7 @@ public class ChipsInteligenciaTests
     [InlineData("https://api.deepseek.com/anthropic", "  deepseek-flash  ")]
     [InlineData("https://api.anthropic.com", "claude-haiku-5-5")]
     [InlineData("https://api.anthropic.com", "claude-sonnet")]
-    [InlineData("https://api.anthropic.com", "Claude-Haiku")]
+    [InlineData("https://api.anthropic.com", "claude-opus-4-6")]
     [InlineData("https://dashscope.aliyuncs.com", "claude-haiku-5-5")]
     [InlineData("https://exemplo.test/api.deepseek.com", "claude-haiku-5-5")]
     [InlineData("https://api.deepseek.com.evil.com", "claude")]
@@ -205,9 +224,13 @@ public class ChipsInteligenciaTests
         Assert.Equal("Haiku 5.5", ChipsInteligencia.RotuloDoModelo(ChipsInteligencia.UrlAnthropic, "claude-haiku-5-5"));
         Assert.Equal("DeepSeek Flash (mapeado)", ChipsInteligencia.RotuloDoModelo(ChipsInteligencia.UrlDeepSeek, "claude-haiku-5-5"));
         Assert.Equal("DeepSeek Flash (mapeado)", ChipsInteligencia.RotuloDoModelo(ChipsInteligencia.UrlDeepSeek, "claude-sonnet"));
+        Assert.Equal("DeepSeek V4 Pro (mapeado)", ChipsInteligencia.RotuloDoModelo(ChipsInteligencia.UrlDeepSeek, "claude-opus-4-6"));
         Assert.NotEqual(
             "Haiku 5.5",
             ChipsInteligencia.RotuloDoModelo(ChipsInteligencia.UrlDeepSeek, "claude-haiku-5-5"));
+        Assert.NotEqual(
+            "DeepSeek Flash (mapeado)",
+            ChipsInteligencia.RotuloDoModelo(ChipsInteligencia.UrlDeepSeek, "claude-opus-4-6"));
         Assert.Null(ChipsInteligencia.RotuloDoModelo("qwen-vl-max"));
         Assert.Null(ChipsInteligencia.RotuloDoModelo(ChipsInteligencia.UrlDeepSeek, "qwen-vl-max"));
         Assert.Null(ChipsInteligencia.RotuloDoModelo(ChipsInteligencia.UrlAnthropic, "claude-sonnet"));
@@ -224,9 +247,11 @@ public class ChipsInteligenciaTests
         Assert.Contains("ChipsInteligencia.UrlAlibaba", painel, StringComparison.Ordinal);
         Assert.Contains("ChipsInteligencia.AvisoMapeamento(_url, _modelo)", painel, StringComparison.Ordinal);
         Assert.Contains("ChipsInteligencia.RotuloDoModelo(_url, _modelo)", painel, StringComparison.Ordinal);
-        Assert.Contains("class=\"of-apoio\"", painel, StringComparison.Ordinal);
+        Assert.Contains("<p class=\"of-apoio\" role=\"status\">@AvisoMapeamento</p>", painel, StringComparison.Ordinal);
         Assert.DoesNotContain("https://api.", painel, StringComparison.Ordinal);
         Assert.DoesNotContain("No DeepSeek, modelos claude-haiku/sonnet", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("No DeepSeek, modelos claude-opus", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("deepseek-v4-pro", painel, StringComparison.Ordinal);
         Assert.DoesNotContain("(mapeado)", painel, StringComparison.Ordinal);
         Assert.DoesNotContain("api.deepseek.com", painel, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(".Host", painel, StringComparison.Ordinal);
