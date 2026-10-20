@@ -79,12 +79,79 @@ public class ChipsInteligenciaTests
     }
 
     [Fact]
+    public void DeepSeek_PreencheUrlModeloERotuloFlash()
+    {
+        var ajuste = ChipsInteligencia.Padrao(ProvedorIa.DeepSeek);
+
+        Assert.Equal("DeepSeek", ChipsInteligencia.Texto(ProvedorIa.DeepSeek));
+        Assert.Equal(ProvedorIa.DeepSeek, ChipsInteligencia.Interpretar("DeepSeek"));
+        Assert.Equal("https://api.deepseek.com/anthropic", ajuste.Url);
+        Assert.Equal(ChipsInteligencia.UrlDeepSeek, ajuste.Url);
+        Assert.Equal("deepseek-flash", PedidoMensagem.ModeloDeepSeek);
+        Assert.Equal(PedidoMensagem.ModeloDeepSeek, ajuste.Modelo);
+        Assert.Equal(ChipsInteligencia.ModeloDeepSeek, ajuste.Modelo);
+        Assert.Equal("DeepSeek Flash", ajuste.RotuloModelo);
+        Assert.Equal("DeepSeek Flash", ChipsInteligencia.RotuloDeepSeek);
+        Assert.Equal("DeepSeek Flash", ChipsInteligencia.RotuloDoModelo("deepseek-flash"));
+        Assert.Equal("DeepSeek Flash", ChipsInteligencia.RotuloDoModelo("  deepseek-flash  "));
+        Assert.Equal("AjusteChipIa", ajuste.ToString());
+        Assert.DoesNotContain("api.deepseek.com", ajuste.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("deepseek-flash", ajuste.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("DeepSeek Flash", ajuste.ToString(), StringComparison.Ordinal);
+        AssertSemCampoDeChave(ajuste);
+    }
+
+    [Fact]
     public void Chip_NaoAlteraOutroProvedor()
     {
-        Assert.Equal([ProvedorIa.Anthropic, ProvedorIa.Alibaba], ChipsInteligencia.Provedores);
+        Assert.Equal(
+            [ProvedorIa.Anthropic, ProvedorIa.Alibaba, ProvedorIa.DeepSeek],
+            Enum.GetValues<ProvedorIa>());
+        Assert.Equal(
+            [ProvedorIa.DeepSeek, ProvedorIa.Anthropic, ProvedorIa.Alibaba],
+            ChipsInteligencia.Provedores);
+        Assert.Equal(ProvedorIa.Alibaba, ChipsInteligencia.Interpretar("Alibaba"));
+        Assert.Equal("Alibaba", ChipsInteligencia.Texto(ProvedorIa.Alibaba));
+        Assert.NotEqual(
+            ChipsInteligencia.Padrao(ProvedorIa.DeepSeek),
+            ChipsInteligencia.Padrao(ProvedorIa.Anthropic));
         Assert.NotEqual(
             ChipsInteligencia.Padrao(ProvedorIa.Anthropic),
             ChipsInteligencia.Padrao(ProvedorIa.Alibaba));
+        Assert.NotEqual(
+            ChipsInteligencia.Padrao(ProvedorIa.DeepSeek),
+            ChipsInteligencia.Padrao(ProvedorIa.Alibaba));
+    }
+
+    [Fact]
+    public void Painel_PlaceholderUsaUrlDeepSeek_SemUrlLiteral()
+    {
+        var painel = File.ReadAllText(CaminhoPainel());
+
+        Assert.Contains("Placeholder=\"@ChipsInteligencia.UrlDeepSeek\"", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("https://api.anthropic.com", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("https://api.deepseek.com", painel, StringComparison.Ordinal);
+    }
+
+    private static string CaminhoPainel()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            var caminho = Path.Combine(
+                dir.FullName,
+                "OrcaFacil",
+                "Components",
+                "Pages",
+                "Configuracoes",
+                "InteligenciaArtificialPanel.razor");
+            if (File.Exists(caminho))
+                return caminho;
+
+            dir = dir.Parent;
+        }
+
+        throw new InvalidOperationException("Não foi possível localizar InteligenciaArtificialPanel.razor.");
     }
 
     private static void AssertSemCampoDeChave(AjusteChipIa ajuste)

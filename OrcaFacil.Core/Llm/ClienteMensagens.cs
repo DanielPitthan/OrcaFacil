@@ -136,7 +136,12 @@ public sealed class ClienteMensagens : IDisposable
                 ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoPedidoInvalido));
         }
 
-        var json = PedidoMensagem.Montar(modelo.Trim(), tipoMidia.Trim(), imagemBase64, maxTokens);
+        var json = PedidoMensagem.Montar(
+            modelo.Trim(),
+            tipoMidia.Trim(),
+            imagemBase64,
+            maxTokens,
+            PerfilProvedor.DaUrl(urlBase).Thinking);
         return EnviarAsync(
             preparo.Uri,
             preparo.Chave,
@@ -163,7 +168,7 @@ public sealed class ClienteMensagens : IDisposable
         if (preparo.Falha is not null)
             return Task.FromResult(preparo.Falha);
 
-        var json = PedidoMensagem.MontarTesteConexao(modelo!);
+        var json = PedidoMensagem.MontarTesteConexao(modelo!, PerfilProvedor.DaUrl(urlBase).Thinking);
         return EnviarAsync(
             preparo.Uri,
             preparo.Chave,
