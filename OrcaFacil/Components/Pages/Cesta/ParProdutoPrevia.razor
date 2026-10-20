@@ -27,7 +27,7 @@
 
     private void Desfazer(LinhaPreviaComprovante linha)
     {
-        ConfirmacaoParProduto.Desfazer(linha);
+        ConfirmacaoParProduto.Desfazer(Previa, linha);
         _ = OnLinhaDesfeita.InvokeAsync(linha);
     }
 }

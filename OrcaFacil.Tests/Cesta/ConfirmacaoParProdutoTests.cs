@@ -127,7 +127,7 @@ public class ConfirmacaoParProdutoTests : IDisposable
         Assert.True(linha.CasamentoConfirmado);
         Assert.False(linha.PodeCadastrar);
 
-        ConfirmacaoParProduto.Desfazer(linha);
+        ConfirmacaoParProduto.Desfazer(previa, linha);
         Assert.True(linha.NaoIdentificado);
         Assert.True(linha.PodeCadastrar);
         Assert.Null(linha.ProdutoCestaId);
@@ -135,7 +135,7 @@ public class ConfirmacaoParProdutoTests : IDisposable
         Assert.False(linha.CasamentoConfirmado);
         Assert.False(ConfirmacaoParProduto.PodeAjustar(linha));
         Assert.StartsWith(NormalizadorComprovante.PrefixoNaoIdentificado, linha.Rotulo, StringComparison.Ordinal);
-        ConfirmacaoParProduto.Desfazer(linha);
+        ConfirmacaoParProduto.Desfazer(previa, linha);
         Assert.True(linha.NaoIdentificado);
         Assert.False(linha.Marcado);
         Assert.False(previa.PodeConfirmar);
@@ -146,6 +146,89 @@ public class ConfirmacaoParProdutoTests : IDisposable
         Assert.Equal("ARROZ TIPO 1", formulario.Nome);
         Assert.Equal(0, await ContarComprasAsync());
         Assert.Equal(0, await ContarItensAsync());
+    }
+
+    [Fact]
+    public void Desfazer_AtualizaSomasETiraOAvisoDaOutraLinha()
+    {
+        var local = new LocalCompra { Id = 1, Nome = "Mercado", Ativo = true };
+        var previa = Previa(
+            local,
+            [
+                Lido("ARROZ A", _arroz.Id, true, 0.95m),
+                Lido("FEIJAO", _feijao.Id, true, 0.95m)
+            ],
+            _arroz,
+            _feijao);
+        var arroz = Assert.Single(previa.Linhas, linha => linha.DescricaoLida == "ARROZ A");
+        var feijao = Assert.Single(previa.Linhas, linha => linha.DescricaoLida == "FEIJAO");
+        Assert.False(arroz.SeraSomado);
+        Assert.False(feijao.SeraSomado);
+
+        Assert.True(ConfirmacaoParProduto.Trocar(previa, feijao, _arroz, Catalogo()));
+        Assert.True(arroz.SeraSomado);
+        Assert.True(feijao.SeraSomado);
+        Assert.Contains(PreviaComprovante.EtiquetaSeraSomado, arroz.Titulo, StringComparison.Ordinal);
+        Assert.Contains(PreviaComprovante.EtiquetaSeraSomado, feijao.Titulo, StringComparison.Ordinal);
+
+        ConfirmacaoParProduto.Desfazer(previa, feijao);
+        Assert.True(feijao.NaoIdentificado);
+        Assert.False(feijao.SeraSomado);
+        Assert.False(arroz.SeraSomado);
+        Assert.DoesNotContain(PreviaComprovante.EtiquetaSeraSomado, arroz.Titulo, StringComparison.Ordinal);
+        Assert.DoesNotContain(PreviaComprovante.EtiquetaSeraSomado, feijao.Titulo, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TrocarEDesfazer_InativoECasadoPorNome()
+    {
+        var local = new LocalCompra { Id = 1, Nome = "Mercado", Ativo = true };
+        var previa = PreviaInativoENome(local);
+        var inativa = Assert.Single(previa.Linhas, linha => linha.DescricaoLida == "VELHO");
+        var porNome = Assert.Single(previa.Linhas, linha => linha.DescricaoLida == "leite");
+
+        Assert.True(inativa.ProdutoInativo);
+        Assert.Equal(_inativo.Id, inativa.ProdutoCestaId);
+        Assert.True(ConfirmacaoParProduto.PodeAjustar(inativa));
+        Assert.True(porNome.CasadoPelaDescricao);
+        Assert.Equal(_leite.Id, porNome.ProdutoCestaId);
+        Assert.True(porNome.Pendente);
+        Assert.True(ConfirmacaoParProduto.PodeAjustar(porNome));
+        inativa.Marcado = true;
+        porNome.Marcado = true;
+        previa.ConfirmarMarcados();
+
+        Assert.True(ConfirmacaoParProduto.Trocar(previa, inativa, _arroz, Catalogo()));
+        Assert.Equal(_arroz.Id, inativa.ProdutoCestaId);
+        Assert.False(inativa.ProdutoInativo);
+        Assert.False(inativa.Marcado);
+        Assert.False(inativa.CasamentoConfirmado);
+
+        ConfirmacaoParProduto.Desfazer(previa, porNome);
+        Assert.True(porNome.NaoIdentificado);
+        Assert.False(porNome.CasadoPelaDescricao);
+        Assert.Null(porNome.ProdutoCestaId);
+        Assert.False(porNome.Marcado);
+        Assert.False(porNome.CasamentoConfirmado);
+
+        var outra = PreviaInativoENome(local);
+        var inativaOutra = Assert.Single(outra.Linhas, linha => linha.DescricaoLida == "VELHO");
+        var porNomeOutra = Assert.Single(outra.Linhas, linha => linha.DescricaoLida == "leite");
+        inativaOutra.Marcado = true;
+        porNomeOutra.Marcado = true;
+        outra.ConfirmarMarcados();
+
+        ConfirmacaoParProduto.Desfazer(outra, inativaOutra);
+        Assert.True(inativaOutra.NaoIdentificado);
+        Assert.False(inativaOutra.ProdutoInativo);
+        Assert.False(inativaOutra.Marcado);
+        Assert.False(inativaOutra.CasamentoConfirmado);
+
+        Assert.True(ConfirmacaoParProduto.Trocar(outra, porNomeOutra, _feijao, Catalogo()));
+        Assert.Equal(_feijao.Id, porNomeOutra.ProdutoCestaId);
+        Assert.False(porNomeOutra.CasadoPelaDescricao);
+        Assert.False(porNomeOutra.Marcado);
+        Assert.False(porNomeOutra.CasamentoConfirmado);
     }
 
     [Fact]
@@ -217,6 +300,7 @@ public class ConfirmacaoParProdutoTests : IDisposable
         var previa = Ler("OrcaFacil.Core", "Llm", "PreviaComprovante.cs");
         Assert.True(TrocarDesmarca(fonte));
         Assert.True(DesfazerDesmarca(fonte));
+        Assert.True(DesfazerAtualizaSomas(fonte));
         Assert.True(MarcarTodosPulaPendente(previa));
 
         var semMarca = fonte.Replace(
@@ -243,6 +327,13 @@ public class ConfirmacaoParProdutoTests : IDisposable
             """,
             StringComparison.Ordinal);
         Assert.False(DesfazerDesmarca(semDesfazer));
+
+        var semSomas = fonte.Replace(
+            "previa.AtualizarSomas();",
+            "// previa.AtualizarSomas();",
+            StringComparison.Ordinal);
+        Assert.Contains("AtualizarSomas", semSomas, StringComparison.Ordinal);
+        Assert.False(DesfazerAtualizaSomas(semSomas));
 
         var marcaPendente = previa.Replace(
             "if (linha.ProdutoCestaId is > 0 && !linha.Pendente)",
@@ -276,6 +367,8 @@ public class ConfirmacaoParProdutoTests : IDisposable
         Assert.True(ComponenteSoTroca(par));
         Assert.True(ItemSoTroca(item));
         Assert.True(CssDoPar(css));
+        Assert.True(OpcaoTemAlvo(Ler("OrcaFacil", "Components", "Pages", "Cesta", "ItemParPrevia.razor.css")));
+        Assert.Contains("--of-touch: 44px;", SemComentarios(Ler("OrcaFacil", "wwwroot", "css", "orcafacil-theme.css")), StringComparison.Ordinal);
 
         var semTrocar = par.Replace(
             "ConfirmacaoParProduto.Trocar(Previa, linha, produto, Catalogo);",
@@ -284,14 +377,54 @@ public class ConfirmacaoParProdutoTests : IDisposable
         Assert.False(ComponenteSoTroca(semTrocar));
 
         var semDesfazer = par.Replace(
-            "ConfirmacaoParProduto.Desfazer(linha);",
-            "// ConfirmacaoParProduto.Desfazer(linha);",
+            "ConfirmacaoParProduto.Desfazer(Previa, linha);",
+            "// ConfirmacaoParProduto.Desfazer(Previa, linha);",
             StringComparison.Ordinal);
         Assert.False(ComponenteSoTroca(semDesfazer));
 
         var semBotao = item.Replace(">Trocar</button>", "<!-- >Trocar</button> -->", StringComparison.Ordinal);
         Assert.Contains(">Trocar</button>", semBotao, StringComparison.Ordinal);
         Assert.False(ItemSoTroca(semBotao));
+
+        var semAria = dialog.Replace(
+            "AriaDescribedBy=\"@(Previa.MensagemBloqueio is null ? null : \"previa-motivo-bloqueio\")\"",
+            "<!-- AriaDescribedBy=\"@(Previa.MensagemBloqueio is null ? null : \"previa-motivo-bloqueio\")\" -->",
+            StringComparison.Ordinal);
+        Assert.Contains("AriaDescribedBy", semAria, StringComparison.Ordinal);
+        Assert.False(DialogoUsaChecks(semAria));
+        Assert.False(DialogoUsaChecks(dialog.Replace(
+            "PrimarioDesabilitado=\"@(!Previa.PodeConfirmar)\"",
+            "PrimarioDesabilitado=\"@(!PodeGravarCompra)\"",
+            StringComparison.Ordinal)));
+
+        var semExpanded = item.Replace(
+            "aria-expanded=\"@(_troca ? \"true\" : \"false\")\"",
+            "<!-- aria-expanded=\"@(_troca ? \"true\" : \"false\")\" -->",
+            StringComparison.Ordinal);
+        Assert.Contains("aria-expanded", semExpanded, StringComparison.Ordinal);
+        Assert.False(ItemSoTroca(semExpanded));
+
+        var cssOpcao = Ler("OrcaFacil", "Components", "Pages", "Cesta", "ItemParPrevia.razor.css");
+        Assert.False(OpcaoTemAlvo(cssOpcao.Replace(
+            """
+            button.of-par-opcao {
+                -webkit-appearance: none;
+                appearance: none;
+                box-sizing: border-box;
+                display: block;
+                width: 100%;
+                min-height: var(--of-touch);
+            """,
+            """
+            button.of-par-opcao {
+                -webkit-appearance: none;
+                appearance: none;
+                box-sizing: border-box;
+                display: block;
+                /* width: 100%; */
+                /* min-height: var(--of-touch); */
+            """,
+            StringComparison.Ordinal)));
 
         var semMarcar = dialog.Replace(
             "Previa.MarcarNaoPendentes()",
@@ -403,6 +536,18 @@ public class ConfirmacaoParProdutoTests : IDisposable
     private PreviaComprovante Previa(LocalCompra local, ItemComprovanteLido item, params ProdutoCesta[] produtos) =>
         Previa(local, [item], produtos);
 
+    private PreviaComprovante PreviaInativoENome(LocalCompra local) =>
+        Previa(
+            local,
+            [
+                Lido("VELHO", _inativo.Id, true, 0.95m),
+                new ItemComprovanteLido("leite", "", true, 6m, null, null, null, null)
+            ],
+            _arroz,
+            _feijao,
+            _leite,
+            _inativo);
+
     private static PreviaComprovante Previa(
         LocalCompra local,
         IReadOnlyList<ItemComprovanteLido> itens,
@@ -444,6 +589,28 @@ public class ConfirmacaoParProdutoTests : IDisposable
             && metodo.Contains("linha.CasamentoConfirmado = false", StringComparison.Ordinal);
     }
 
+    private static bool DesfazerAtualizaSomas(string fonte)
+    {
+        var metodo = Metodo(SemComentarios(fonte), "void Desfazer(");
+        return metodo.Contains("AplicarNaoIdentificado(linha);", StringComparison.Ordinal)
+            && metodo.Contains("previa.AtualizarSomas();", StringComparison.Ordinal);
+    }
+
+    private static bool OpcaoTemAlvo(string css)
+    {
+        var limpo = SemComentarios(css);
+        if (limpo.Contains(":focus-visible", StringComparison.Ordinal) || limpo.Contains(":has(", StringComparison.Ordinal))
+            return false;
+        if (limpo.Contains("gap:", StringComparison.Ordinal))
+            return false;
+
+        var regra = Regra(limpo, "button.of-par-opcao");
+        return regra.Contains("width: 100%;", StringComparison.Ordinal)
+            && regra.Contains("min-height: var(--of-touch);", StringComparison.Ordinal)
+            && Contraste("#1E2A33", "#ffffff") >= 4.5
+            && Contraste("#E8EAF0", "#1B1F27") >= 4.5;
+    }
+
     private static bool MarcarTodosPulaPendente(string fonte)
     {
         var metodo = Metodo(SemComentarios(fonte), "void MarcarNaoPendentes()");
@@ -455,12 +622,15 @@ public class ConfirmacaoParProdutoTests : IDisposable
     {
         var limpo = SemComentarios(fonte);
         return limpo.Contains("PrimarioDesabilitado=\"@(!Previa.PodeConfirmar)\"", StringComparison.Ordinal)
+            && limpo.Contains("AriaDescribedBy=\"@(Previa.MensagemBloqueio is null ? null : \"previa-motivo-bloqueio\")\"", StringComparison.Ordinal)
+            && limpo.Contains("Previa.AlternarMarcacao(linha)", StringComparison.Ordinal)
             && limpo.Contains("Previa.ConfirmarMarcados()", StringComparison.Ordinal)
             && limpo.Contains("Previa.MarcarNaoPendentes()", StringComparison.Ordinal)
             && limpo.Contains("aria-label=\"Marcar todos os itens não pendentes\"", StringComparison.Ordinal)
             && limpo.Contains("linha.MarcadorCasamento", StringComparison.Ordinal)
             && limpo.Contains("<ParProdutoPrevia ", StringComparison.Ordinal)
             && !limpo.Contains("PodeGravarCompra", StringComparison.Ordinal)
+            && !limpo.Contains("linha.Marcado = !linha.Marcado", StringComparison.Ordinal)
             && !limpo.Contains(">Confirmar</button>", StringComparison.Ordinal);
     }
 
@@ -476,7 +646,7 @@ public class ConfirmacaoParProdutoTests : IDisposable
 
         return limpo.Contains("<ItemParPrevia ", StringComparison.Ordinal)
             && limpo.Contains("ConfirmacaoParProduto.Trocar(Previa, linha, produto, Catalogo);", StringComparison.Ordinal)
-            && limpo.Contains("ConfirmacaoParProduto.Desfazer(linha);", StringComparison.Ordinal);
+            && limpo.Contains("ConfirmacaoParProduto.Desfazer(Previa, linha);", StringComparison.Ordinal);
     }
 
     private static bool ItemSoTroca(string fonte)
@@ -491,7 +661,10 @@ public class ConfirmacaoParProdutoTests : IDisposable
 
         return limpo.Contains(">Trocar</button>", StringComparison.Ordinal)
             && limpo.Contains(">Desfazer</button>", StringComparison.Ordinal)
-            && limpo.Contains("Linha.Nome", StringComparison.Ordinal);
+            && limpo.Contains("aria-expanded=\"@(_troca ? \"true\" : \"false\")\"", StringComparison.Ordinal)
+            && limpo.Contains("aria-label=\"@($\"Trocar {Linha.Nome}\")\"", StringComparison.Ordinal)
+            && limpo.Contains("aria-label=\"@($\"Desfazer {Linha.Nome}\")\"", StringComparison.Ordinal)
+            && limpo.Contains("class=\"of-par-opcao\"", StringComparison.Ordinal);
     }
 
     private static bool CssDoPar(string fonte)

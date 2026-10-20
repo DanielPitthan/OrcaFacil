@@ -7,8 +7,9 @@
         <p class="of-par-lido">@Linha.DescricaoLida</p>
     }
     <div class="of-par-acoes">
-        <button type="button" class="of-par-botao" @onclick="AbrirTroca">Trocar</button>
-        <button type="button" class="of-par-botao" @onclick="Desfazer">Desfazer</button>
+        <button type="button" class="of-par-botao" aria-expanded="@(_troca ? "true" : "false")"
+                aria-label="@($"Trocar {Linha.Nome}")" @onclick="AbrirTroca">Trocar</button>
+        <button type="button" class="of-par-botao" aria-label="@($"Desfazer {Linha.Nome}")" @onclick="Desfazer">Desfazer</button>
     </div>
     @if (_troca)
     {
@@ -21,7 +22,7 @@
             <div class="of-par-opcoes">
                 @foreach (var produto in Catalogo)
                 {
-                    <button type="button" class="of-previa-opcao" @onclick="() => Trocar(produto)">
+                    <button type="button" class="of-par-opcao" @onclick="() => Trocar(produto)">
                         @produto.Nome
                     </button>
                 }

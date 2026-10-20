@@ -39,13 +39,15 @@ public static class ConfirmacaoParProduto
         return true;
     }
 
-    public static void Desfazer(LinhaPreviaComprovante linha)
+    public static void Desfazer(PreviaComprovante previa, LinhaPreviaComprovante linha)
     {
+        ArgumentNullException.ThrowIfNull(previa);
         ArgumentNullException.ThrowIfNull(linha);
         if (!PodeAjustar(linha))
             return;
 
         AplicarNaoIdentificado(linha);
+        previa.AtualizarSomas();
     }
 
     public static void AplicarNaoIdentificado(LinhaPreviaComprovante linha)
