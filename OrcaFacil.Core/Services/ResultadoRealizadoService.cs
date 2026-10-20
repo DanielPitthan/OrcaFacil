@@ -17,8 +17,8 @@ namespace OrcaFacil.Core.Services;
 /// </summary>
 public class ResultadoRealizadoService
 {
-    public const string CategoriaGanho = "Ganho realizado em ativos";
-    public const string CategoriaPerda = "Perda realizada em ativos";
+    public const string CategoriaGanho = LancamentoResultadoAtivo.CategoriaGanho;
+    public const string CategoriaPerda = LancamentoResultadoAtivo.CategoriaPerda;
 
     public const string MensagemHashRepetido = "Já existe uma operação com este hash de importação.";
 
@@ -236,8 +236,15 @@ public class ResultadoRealizadoService
             return true;
 
         var tipo = resultado > 0m ? TipoTransacao.Receita : TipoTransacao.Despesa;
-        var categoria = await ObterOuCriarCategoriaAsync(context, tipo, cancellationToken);
-        return !LancamentoIgual(lancamento, resultado, data, tipo, categoria, ticker);
+        var categoria = await LancamentoResultadoAtivo.ObterOuCriarCategoriaAsync(context, tipo, cancellationToken);
+        return !LancamentoResultadoAtivo.Igual(
+            lancamento,
+            Math.Abs(resultado),
+            data,
+            tipo,
+            categoria,
+            MontarDescricao(tipo, ticker),
+            ObservacaoLancamento);
     }
 
     private static async Task SincronizarLancamentosAsync(
@@ -261,7 +268,7 @@ public class ResultadoRealizadoService
                 continue;
 
             var tipo = resultado.Resultado > 0m ? TipoTransacao.Receita : TipoTransacao.Despesa;
-            var categoria = await ObterOuCriarCategoriaAsync(context, tipo, cancellationToken);
+            var categoria = await LancamentoResultadoAtivo.ObterOuCriarCategoriaAsync(context, tipo, cancellationToken);
             var valor = Math.Abs(resultado.Resultado);
             var data = resultado.Data.Date;
             var descricao = MontarDescricao(tipo, plano.Ativo.Ticker);
@@ -269,18 +276,8 @@ public class ResultadoRealizadoService
             if (lancamento is null)
             {
                 var operacao = operacaoPorId[resultado.Id];
-                var criado = new Transacao
-                {
-                    Descricao = descricao,
-                    Valor = valor,
-                    Data = data,
-                    Tipo = tipo,
-                    Recorrencia = TipoRecorrencia.Unica,
-                    Pago = true,
-                    Observacao = ObservacaoLancamento,
-                    MembroFamiliaId = membroFamiliaId,
-                    Categoria = categoria
-                };
+                var criado = LancamentoResultadoAtivo.Criar(
+                    membroFamiliaId, valor, data, tipo, categoria, descricao, ObservacaoLancamento);
 
                 if (operacao.Id == 0)
                     criado.OperacaoAtivo = operacao;
@@ -291,21 +288,10 @@ public class ResultadoRealizadoService
                 continue;
             }
 
-            if (LancamentoIgual(lancamento, resultado.Resultado, data, tipo, categoria, plano.Ativo.Ticker))
+            if (LancamentoResultadoAtivo.Igual(lancamento, valor, data, tipo, categoria, descricao, ObservacaoLancamento))
                 continue;
 
-            lancamento.Descricao = descricao;
-            lancamento.Valor = valor;
-            lancamento.Data = data;
-            lancamento.Tipo = tipo;
-            lancamento.Recorrencia = TipoRecorrencia.Unica;
-            lancamento.Pago = true;
-            lancamento.Observacao = ObservacaoLancamento;
-            if (categoria.Id == 0)
-                lancamento.Categoria = categoria;
-            else
-                lancamento.CategoriaId = categoria.Id;
-            lancamento.AtualizadoEm = DateTime.UtcNow;
+            LancamentoResultadoAtivo.Aplicar(lancamento, valor, data, tipo, categoria, descricao, ObservacaoLancamento);
         }
 
         var idsComResultado = plano.Posicao.Vendas.Where(v => v.Resultado != 0m).Select(v => v.Id).ToHashSet();
@@ -314,53 +300,6 @@ public class ResultadoRealizadoService
             if (lancamento.OperacaoAtivoId is int opId && !idsComResultado.Contains(opId))
                 context.Transacoes.Remove(lancamento);
         }
-    }
-
-    private static bool LancamentoIgual(
-        Transacao lancamento,
-        decimal resultado,
-        DateTime data,
-        TipoTransacao tipo,
-        Categoria categoria,
-        string ticker)
-    {
-        var categoriaIgual = categoria.Id == 0
-            ? ReferenceEquals(lancamento.Categoria, categoria)
-            : lancamento.CategoriaId == categoria.Id;
-
-        return lancamento.Valor == Math.Abs(resultado)
-            && lancamento.Tipo == tipo
-            && lancamento.Data.Date == data.Date
-            && lancamento.Descricao == MontarDescricao(tipo, ticker)
-            && categoriaIgual
-            && lancamento.Pago
-            && lancamento.Recorrencia == TipoRecorrencia.Unica
-            && lancamento.Observacao == ObservacaoLancamento;
-    }
-
-    private static async Task<Categoria> ObterOuCriarCategoriaAsync(
-        AppDbContext context,
-        TipoTransacao tipo,
-        CancellationToken cancellationToken)
-    {
-        var nome = tipo == TipoTransacao.Receita ? CategoriaGanho : CategoriaPerda;
-        var existente = context.Categorias.Local.FirstOrDefault(c => string.Equals(c.Nome, nome, StringComparison.OrdinalIgnoreCase))
-            ?? await context.Categorias.FirstOrDefaultAsync(c => c.Nome == nome, cancellationToken);
-        if (existente is not null)
-            return existente;
-
-        var nova = new Categoria
-        {
-            Nome = nome,
-            Icone = tipo == TipoTransacao.Receita ? "📈" : "📉",
-            CorHex = tipo == TipoTransacao.Receita ? "#6DA538" : "#659ECD",
-            TipoPadrao = tipo,
-            EhPadraoDoSistema = true,
-            PermiteItensFatura = false,
-            Ativo = true
-        };
-        context.Categorias.Add(nova);
-        return nova;
     }
 
     private static async Task<List<Transacao>> CarregarLancamentosAsync(
