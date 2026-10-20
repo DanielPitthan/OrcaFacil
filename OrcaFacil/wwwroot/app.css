@@ -136,3 +136,5 @@ html, body {
     .blazor-error-boundary::after {
         content: "Ocorreu um erro."
 }
+
+.mud-snackbar.of-snack-importacao { max-width: calc(100vw - 32px); }

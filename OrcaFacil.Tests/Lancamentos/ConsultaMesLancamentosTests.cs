@@ -15,6 +15,10 @@ public class ConsultaMesLancamentosTests
         Assert.Equal(new DateTime(2026, 10, 1), ConsultaMesLancamentos.Resolver("2026-3", Hoje));
         Assert.Equal(new DateTime(2026, 10, 1), ConsultaMesLancamentos.Resolver("marco", Hoje));
         Assert.Equal(new DateTime(2026, 10, 1), ConsultaMesLancamentos.Resolver("2026-03-01", Hoje));
+        Assert.Equal(new DateTime(2026, 10, 1), ConsultaMesLancamentos.Resolver(" 2026-03", Hoje));
+        Assert.Equal(new DateTime(2026, 10, 1), ConsultaMesLancamentos.Resolver("2026-03 ", Hoje));
+        Assert.Equal(new DateTime(2026, 10, 1), ConsultaMesLancamentos.Resolver(" 2026-03 ", Hoje));
+        Assert.Equal(new DateTime(2026, 10, 1), ConsultaMesLancamentos.Resolver("2026/03", Hoje));
     }
 
     [Fact]

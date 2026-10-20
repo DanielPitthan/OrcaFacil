@@ -151,19 +151,26 @@
         _erro = null;
         try
         {
-            var gravadas = await Importacao.GravarAsync(_previa, MembroId());
-            var destino = DestinoLancamentosImportacao.Calcular(
-                _previa.Linhas.Where(linha => linha.Marcada && linha.PodeMarcar && linha.Comando is not null));
-            if (destino.Quantidade == 0)
+            var gravacao = await Importacao.GravarAsync(_previa, MembroId());
+            if (gravacao.Lancamentos == 0)
             {
-                Snackbar.Add(gravadas == 1 ? "1 linha gravada" : $"{gravadas} linhas gravadas", Severity.Success);
-                Snackbar.Add(destino.Texto, Severity.Warning);
+                Snackbar.Add(
+                    gravacao.Linhas == 1 ? "1 linha gravada" : $"{gravacao.Linhas} linhas gravadas",
+                    Severity.Success,
+                    options => options.SnackbarTypeClass = "of-snack-importacao");
+                Snackbar.Add(
+                    gravacao.Texto,
+                    Severity.Warning,
+                    options => options.SnackbarTypeClass = "of-snack-importacao");
                 Navegacao.NavigateTo("/ativos");
             }
             else
             {
-                Snackbar.Add(destino.Texto, Severity.Success);
-                Navegacao.NavigateTo(destino.Rota);
+                Snackbar.Add(
+                    gravacao.Texto,
+                    Severity.Success,
+                    options => options.SnackbarTypeClass = "of-snack-importacao");
+                Navegacao.NavigateTo(gravacao.Rota);
             }
         }
         catch (InvalidOperationException ex)
