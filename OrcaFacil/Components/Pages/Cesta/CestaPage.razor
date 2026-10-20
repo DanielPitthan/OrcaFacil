@@ -377,14 +377,15 @@
         if (!await ConfirmarAvisoAsync() || _descartada)
             return;
 
-        if (!await TemConfiguracaoAsync())
+        var impedimento = await TemConfiguracaoAsync();
+        if (impedimento is not null)
         {
             if (_descartada)
                 return;
 
             _jpeg = null;
             _comprovante = null;
-            _exibicao = MensagensLeituraComprovante.SemConfiguracao();
+            _exibicao = impedimento;
             return;
         }
 
@@ -395,7 +396,7 @@
         await CapturarEEnviarAsync(origem.Value);
     }
 
-    private async Task<bool> TemConfiguracaoAsync()
+    private async Task<ExibicaoLeituraComprovante?> TemConfiguracaoAsync()
     {
         string? chave = null;
         try
@@ -405,7 +406,7 @@
                 Configuracao.ProvedorInteligencia,
                 Configuracao.UrlInteligencia,
                 Configuracao.ModeloInteligencia);
-            return MensagensLeituraComprovante.TemUrlModeloEChave(efetiva.Url, efetiva.Modelo, chave);
+            return MensagensLeituraComprovante.ImpedimentoParaLer(efetiva.Url, efetiva.Modelo, chave);
         }
         catch (OperationCanceledException)
         {
@@ -413,7 +414,7 @@
         }
         catch (Exception)
         {
-            return false;
+            return MensagensLeituraComprovante.SemConfiguracao();
         }
         finally
         {

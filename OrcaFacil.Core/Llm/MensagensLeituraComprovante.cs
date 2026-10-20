@@ -107,6 +107,27 @@ public static class MensagensLeituraComprovante
         !string.IsNullOrWhiteSpace(modelo) &&
         !string.IsNullOrWhiteSpace(chave);
 
+    /// <summary>
+    /// Nulo quando a leitura pode começar. Chave vazia ou só com espaços pede a chave.
+    /// Sem URL ou modelo, a frase genérica. Não guarda a chave.
+    /// </summary>
+    public static ExibicaoLeituraComprovante? ImpedimentoParaLer(string? url, string? modelo, string? chave)
+    {
+        if (string.IsNullOrWhiteSpace(chave))
+        {
+            return De(
+                ResultadoMensagem.Falha(
+                    TipoResultadoMensagem.PedidoInvalido,
+                    ResultadoMensagem.TextoChaveNaoInformada),
+                null);
+        }
+
+        if (!TemUrlModeloEChave(url, modelo, chave))
+            return SemConfiguracao();
+
+        return null;
+    }
+
     public static ExibicaoLeituraComprovante De(ResultadoMensagem resultado, ComprovanteNormalizado? normalizado)
     {
         ArgumentNullException.ThrowIfNull(resultado);
