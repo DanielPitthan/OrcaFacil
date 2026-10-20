@@ -33,7 +33,7 @@ public class ImportacaoExtratoB3ServiceTests
             5002.00m);
 
         var texto = HashLinhaExtratoB3.Texto(linha, 0);
-        Assert.Equal("2026-09-16|Aplicacao|CDB9268YCA7|5002|5002.00|ITAU UNIBANCO S.A.|0", texto);
+        Assert.Equal("2026-09-16|Aplicacao|CDB9268YCA7|5002|1.4909|5002.00|ITAU UNIBANCO S.A.|0", texto);
         var esperado = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(texto))).ToLowerInvariant();
         Assert.Equal(esperado, HashLinhaExtratoB3.Calcular(linha, 0));
         Assert.Equal(64, esperado.Length);
@@ -42,6 +42,30 @@ public class ImportacaoExtratoB3ServiceTests
         Assert.Equal(HashLinhaExtratoB3.Calcular(linha, 0), HashLinhaExtratoB3.Calcular(outraPosicao, 0));
         Assert.NotEqual(HashLinhaExtratoB3.Calcular(linha, 0), HashLinhaExtratoB3.Calcular(linha, 1));
         Assert.Equal([0, 1], HashLinhaExtratoB3.Ocorrencias([linha, outraPosicao]));
+    }
+
+    [Fact]
+    public void PrecosDiferentes_FicamEmSeriesDistintas_AmbasOcorrenciaZero()
+    {
+        var primeiro = new LinhaExtratoB3(
+            2,
+            DirecaoB3.Credito,
+            new DateOnly(2024, 2, 1),
+            "Transferência - Liquidação",
+            TipoOperacaoB3.Compra,
+            "PETR4",
+            "PETR4 - PETROLEO BRASILEIRO",
+            ClasseAtivoB3.Acao,
+            "XP INVESTIMENTOS CCTVM S/A",
+            10m,
+            10m,
+            100m);
+        var segundo = primeiro with { Linha = 8, PrecoUnitario = 12.5m };
+
+        Assert.Equal(primeiro.ValorOperacao, segundo.ValorOperacao);
+        Assert.NotEqual(primeiro.PrecoUnitario, segundo.PrecoUnitario);
+        Assert.Equal([0, 0], HashLinhaExtratoB3.Ocorrencias([primeiro, segundo]));
+        Assert.NotEqual(HashLinhaExtratoB3.Chave(primeiro), HashLinhaExtratoB3.Chave(segundo));
     }
 
     [Fact]
@@ -158,6 +182,34 @@ public class ImportacaoExtratoB3ServiceTests
         var segunda = await ambiente.Service.PreverAsync(releitura, ambiente.MembroId);
         Assert.Equal(2, segunda.Contar(StatusLinhaImportacaoB3.DuplicataImportada));
         Assert.Equal(0, segunda.Contar(StatusLinhaImportacaoB3.Nova));
+    }
+
+    [Fact]
+    public async Task DuasIdenticasDepoisTres_TrazExatamenteUmaNova()
+    {
+        const string cabecalho =
+            "Entrada/Saída;Data;Movimentação;Produto;Instituição;Quantidade;Preço unitário;Valor da Operação";
+        const string linha =
+            "Credito;01/02/2024;Transferência - Liquidação;PETR4 - PETROLEO BRASILEIRO;XP INVESTIMENTOS CCTVM S/A;10; R$10,00 ; R$100,00 ";
+
+        static string Arquivo(int quantidade)
+            => cabecalho + "\n" + string.Join('\n', Enumerable.Repeat(linha, quantidade)) + "\n";
+
+        await using var ambiente = await Ambiente.CriarAsync();
+        await using (var duas = new MemoryStream(Encoding.UTF8.GetBytes(Arquivo(2))))
+        {
+            var previa = await ambiente.Service.PreverAsync(duas, ambiente.MembroId);
+            Assert.Equal(2, await ambiente.Service.GravarAsync(previa, ambiente.MembroId));
+        }
+
+        await using var tres = new MemoryStream(Encoding.UTF8.GetBytes(Arquivo(3)));
+        var seguinte = await ambiente.Service.PreverAsync(tres, ambiente.MembroId);
+        Assert.Equal(1, seguinte.Contar(StatusLinhaImportacaoB3.Nova));
+        Assert.Equal(2, seguinte.Contar(StatusLinhaImportacaoB3.DuplicataImportada));
+
+        await ambiente.Service.GravarAsync(seguinte, ambiente.MembroId);
+        await using var contexto = await ambiente.Factory.CreateDbContextAsync();
+        Assert.Equal(3, await contexto.OperacoesAtivo.CountAsync());
     }
 
     [Fact]

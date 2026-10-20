@@ -6,7 +6,7 @@ namespace OrcaFacil.Core.B3;
 
 /// <summary>
 /// SHA-256 da linha, em hex minúsculo.
-/// A chave é Data(yyyy-MM-dd)|Tipo|Ticker|Quantidade|ValorOperacao|Instituicao,
+/// A chave é Data(yyyy-MM-dd)|Tipo|Ticker|Quantidade|PrecoUnitario|ValorOperacao|Instituicao,
 /// mais o índice de ocorrência dessa chave no arquivo (0, 1, …), na ordem em que aparece.
 /// Decimais usam <see cref="CultureInfo.InvariantCulture"/>. Nulo vira vazio.
 /// O número da linha não entra: o mesmo período em outro extrato gera o mesmo hash.
@@ -21,6 +21,7 @@ public static class HashLinhaExtratoB3
             linha.Tipo.ToString(),
             linha.Ticker,
             Formatar(linha.Quantidade),
+            Formatar(linha.PrecoUnitario),
             Formatar(linha.ValorOperacao),
             linha.Instituicao);
     }
