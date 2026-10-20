@@ -2,6 +2,7 @@ using OrcaFacil.Core.Dtos;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
 using OrcaFacil.Core.Lancamentos;
+using OrcaFacil.Core.RendaFixa;
 using OrcaFacil.Core.Repositories;
 using OrcaFacil.Core.Services;
 using OrcaFacil.Services.Interfaces;
@@ -83,6 +84,8 @@ public class TransacaoService : ITransacaoService
         var transacao = await _transacaoRepository.GetByIdAsync(id)
             ?? throw new InvalidOperationException("Lançamento não encontrado.");
 
+        ProtecaoLancamentoRendaFixa.GarantirEditavelNaTela(transacao.OperacaoRendaFixaId);
+
         await _fechamentoService.GarantirPeriodoAbertoAsync(transacao.Data);
         await _fechamentoService.GarantirPeriodoAbertoAsync(dto.Data);
 
@@ -111,6 +114,8 @@ public class TransacaoService : ITransacaoService
         var transacao = await _transacaoRepository.GetByIdAsync(id)
             ?? throw new InvalidOperationException("Lançamento não encontrado.");
 
+        ProtecaoLancamentoRendaFixa.GarantirEditavelNaTela(transacao.OperacaoRendaFixaId);
+
         await _fechamentoService.GarantirPeriodoAbertoAsync(transacao.Data);
 
         await _transacaoRepository.DeleteAsync(transacao);
@@ -121,6 +126,8 @@ public class TransacaoService : ITransacaoService
     {
         var transacao = await _transacaoRepository.GetByIdAsync(id)
             ?? throw new InvalidOperationException("Lançamento não encontrado.");
+
+        ProtecaoLancamentoRendaFixa.GarantirEditavelNaTela(transacao.OperacaoRendaFixaId);
 
         await _fechamentoService.GarantirPeriodoAbertoAsync(transacao.Data);
 
