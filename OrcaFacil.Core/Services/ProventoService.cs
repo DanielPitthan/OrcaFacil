@@ -83,7 +83,7 @@ public class ProventoService
             context, cancellationToken);
         var descricao = MontarDescricao(modelo.Tipo, ativo.Ticker);
         var data = modelo.DataPagamento.Date;
-        var valor = Math.Round(modelo.ValorLiquido, 2);
+        var valor = Math.Round(modelo.ValorLiquido, 2, MidpointRounding.AwayFromZero);
 
         Provento alvo;
         if (existente is null)
@@ -233,7 +233,7 @@ public class ProventoService
         destino.AtivoId = modelo.AtivoId;
         destino.Tipo = modelo.Tipo;
         destino.DataPagamento = modelo.DataPagamento.Date;
-        destino.ValorLiquido = Math.Round(modelo.ValorLiquido, 2);
+        destino.ValorLiquido = Math.Round(modelo.ValorLiquido, 2, MidpointRounding.AwayFromZero);
     }
 
     private static string MontarDescricao(TipoProvento tipo, string ticker)
@@ -247,7 +247,7 @@ public class ProventoService
     {
         if (modelo.AtivoId <= 0)
             throw new InvalidOperationException("Selecione um ativo.");
-        if (Math.Round(modelo.ValorLiquido, 2) <= 0)
+        if (Math.Round(modelo.ValorLiquido, 2, MidpointRounding.AwayFromZero) <= 0)
             throw new InvalidOperationException("O valor líquido deve ser maior que zero.");
 
         var hash = NormalizarHash(modelo.HashImportacao);
