@@ -71,7 +71,8 @@ public static class ExportadorPlanilha
         {
             nameof(AppDbContext.LogsEvento),
             nameof(AppDbContext.RegrasCatalogoComprovante),
-            nameof(AppDbContext.RegrasFiscais)
+            nameof(AppDbContext.RegrasFiscais),
+            nameof(AppDbContext.CodigosDirpf)
         };
 
     private static readonly (PrazoAviso Flag, string Texto)[] TextosPrazo =

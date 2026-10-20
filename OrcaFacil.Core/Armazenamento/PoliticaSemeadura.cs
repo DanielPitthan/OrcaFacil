@@ -2,6 +2,7 @@ using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.Ativos;
 using OrcaFacil.Core.Data;
+using OrcaFacil.Core.Dirpf;
 using OrcaFacil.Core.Entities;
 
 namespace OrcaFacil.Core.Armazenamento;
@@ -58,7 +59,8 @@ public static class PoliticaSemeadura
         nameof(AppDbContext.TitulosRendaFixa),
         nameof(AppDbContext.OperacoesRendaFixa),
         nameof(AppDbContext.RegrasCatalogoComprovante),
-        nameof(AppDbContext.RegrasFiscais)
+        nameof(AppDbContext.RegrasFiscais),
+        nameof(AppDbContext.CodigosDirpf)
     ];
 
     /// <summary>Colunas de <see cref="Transacao"/> que o backup compara com a semente. Fora Id e CriadoEm.</summary>
@@ -224,7 +226,10 @@ public static class PoliticaSemeadura
                 cancellationToken))
             return true;
 
-        return await RegrasFiscaisDiferemDaSementeAsync(contexto, cancellationToken);
+        if (await RegrasFiscaisDiferemDaSementeAsync(contexto, cancellationToken))
+            return true;
+
+        return await CodigosDirpfDiferemDaSementeAsync(contexto, cancellationToken);
     }
 
     /// <summary>
@@ -290,6 +295,9 @@ public static class PoliticaSemeadura
             return SituacaoConteudoBanco.DadoReal;
 
         if (await RegrasFiscaisDiferemDaSementeAsync(contexto, cancellationToken))
+            return SituacaoConteudoBanco.DadoReal;
+
+        if (await CodigosDirpfDiferemDaSementeAsync(contexto, cancellationToken))
             return SituacaoConteudoBanco.DadoReal;
 
         var membros = await contexto.MembrosFamilia.AsNoTracking().ToListAsync(cancellationToken);
@@ -738,6 +746,35 @@ public static class PoliticaSemeadura
             if (gravada.Id != esperada.Id
                 || !string.Equals(gravada.Codigo, esperada.Codigo, StringComparison.Ordinal)
                 || gravada.Valor != esperada.Valor
+                || gravada.VigenciaInicio.Date != esperada.VigenciaInicio.Date
+                || gravada.VigenciaFim?.Date != esperada.VigenciaFim?.Date
+                || gravada.EhSistema != esperada.EhSistema)
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>A semente da migration não é dado do usuário. Linha a mais ou código diferente é.</summary>
+    private static async Task<bool> CodigosDirpfDiferemDaSementeAsync(
+        AppDbContext contexto,
+        CancellationToken cancellationToken)
+    {
+        var gravadas = await contexto.CodigosDirpf.AsNoTracking().OrderBy(codigo => codigo.Id).ToListAsync(cancellationToken);
+        var esperadas = CatalogoCodigosDirpf.Linhas().OrderBy(codigo => codigo.Id).ToList();
+        if (gravadas.Count != esperadas.Count)
+            return true;
+
+        for (var i = 0; i < gravadas.Count; i++)
+        {
+            var gravada = gravadas[i];
+            var esperada = esperadas[i];
+            if (gravada.Id != esperada.Id
+                || gravada.Ficha != esperada.Ficha
+                || gravada.TipoAtivo != esperada.TipoAtivo
+                || !string.Equals(gravada.Grupo, esperada.Grupo, StringComparison.Ordinal)
+                || !string.Equals(gravada.Codigo, esperada.Codigo, StringComparison.Ordinal)
+                || !string.Equals(gravada.Descricao, esperada.Descricao, StringComparison.Ordinal)
                 || gravada.VigenciaInicio.Date != esperada.VigenciaInicio.Date
                 || gravada.VigenciaFim?.Date != esperada.VigenciaFim?.Date
                 || gravada.EhSistema != esperada.EhSistema)
