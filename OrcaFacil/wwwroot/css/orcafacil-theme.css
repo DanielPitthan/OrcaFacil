@@ -208,49 +208,70 @@ html, body {
 .of-color-swatch {
     width: 32px;
     height: 32px;
+    margin: 0;
+    padding: 0;
     border-radius: 50%;
     cursor: pointer;
     display: inline-block;
+    box-sizing: border-box;
     border: 2px solid transparent;
+    appearance: none;
+    -webkit-appearance: none;
+    font: inherit;
+    line-height: 0;
+    vertical-align: middle;
+}
+
+.of-color-swatch:focus-visible {
+    outline: 2px solid var(--of-primary);
+    outline-offset: 2px;
 }
 
 .of-color-swatch.selected {
     border-color: var(--of-blue-grey);
 }
 
-/* O campo fechado continua em 180px. A largura não vai no Style do picker:
-   o MudBlazor copia Style para o papel e o espectro de 312px seria cortado. */
+/* O campo fechado continua em 180px. A paleta em si abre noutro diálogo. */
 .of-campo-paleta {
     width: 180px;
     max-width: calc(100% - 32px);
 }
 
-/* No 9.9.0 o overlay do PickerVariant.Dialog tem filho, então renderiza
-   dentro do papel da categoria. A animação mud-open-dialog-center (fill both)
-   deixa transform, e o overflow hidden desse papel recorta o position fixed.
-   Sem transform o fixed volta a ser da viewport. Não usa :has(). */
-.mud-dialog-container .mud-dialog.of-dialogo-categoria {
-    transform: none;
-    animation: none;
+.of-abrir-paleta {
+    width: 100%;
+    margin: 0;
+    padding: 6px 10px;
+    border: 1px solid var(--mud-palette-lines-inputs);
+    border-radius: var(--of-radius-control);
+    background: transparent;
+    color: var(--of-text);
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
 }
 
-/* Tela baixa: o espectro cabe e a linha RGB segue rolando. 100vh vale no
-   Chrome 83, que ignora 100dvh. A borda dos campos RGB fica só neste papel. */
-.mud-overlay.mud-overlay-dialog .mud-picker.mud-dialog {
-    width: auto;
-    max-width: calc(100% - 32px);
+.of-abrir-paleta-rotulo {
+    display: block;
+    font-size: 12px;
+    line-height: 1.2;
+    color: var(--of-text-muted);
+}
+
+.of-abrir-paleta-valor {
+    display: block;
+    font-size: 0.875rem;
+    line-height: 1.3;
+    color: var(--of-text);
+}
+
+/* Diálogo próprio da paleta, irmão do diálogo da categoria no provider.
+   100vh vale no Chrome 83, que ignora 100dvh. A borda RGB fica só aqui. */
+.mud-dialog-container .mud-dialog.of-dialogo-paleta {
     max-height: calc(100vh - 32px);
     max-height: calc(100dvh - 32px);
-    overflow-x: hidden;
     overflow-y: auto;
-    transform: none;
-    animation: none;
+    max-width: calc(100% - 32px);
     --mud-palette-lines-inputs: #767676;
-}
-
-.mud-overlay.mud-overlay-dialog .mud-picker.mud-dialog .mud-picker-content {
-    overflow: visible;
-    max-width: none;
 }
 
 .of-mascara-numerica input {

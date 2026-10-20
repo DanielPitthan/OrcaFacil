@@ -3,36 +3,61 @@ using System.Text;
 namespace OrcaFacil.Tests.Categorias;
 
 /// <summary>
-/// No 9.9.0 o overlay do PickerVariant.Dialog nasce dentro do papel da categoria.
-/// A animação deixa transform e o overflow hidden recorta o position fixed.
-/// Comentário no fonte não conta como regra.
+/// A paleta abre num diálogo próprio do DialogService. Comentário no fonte não conta.
 /// </summary>
 public class PaletaCategoriaPopoverTests
 {
     [Fact]
-    public void PaletaAbreEmDialogo_EComentarioNaoConta()
+    public void PaletaAbrePorDialogService_ForaDaCategoria_EComentarioNaoConta()
     {
-        var razor = File.ReadAllText(Caminho("OrcaFacil", "Components", "Shared", "ColorSwatchPicker.razor"));
-        var limpo = SemComentarios(razor);
+        var seletor = SemComentarios(Ler("OrcaFacil", "Components", "Shared", "ColorSwatchPicker.razor"));
+        var dialogo = SemComentarios(Ler("OrcaFacil", "Components", "Shared", "PaletaCategoriaDialog.razor"));
+        var categoria = SemComentarios(Ler("OrcaFacil", "Components", "Pages", "Categorias", "CategoriaForm.razor"));
 
-        Assert.Contains("PickerVariant=\"PickerVariant.Dialog\"", limpo, StringComparison.Ordinal);
-        Assert.Contains("class=\"of-campo-paleta\"", limpo, StringComparison.Ordinal);
-        Assert.DoesNotContain("width:180px", limpo, StringComparison.Ordinal);
+        Assert.Contains("DialogService.ShowAsync<PaletaCategoriaDialog>", seletor, StringComparison.Ordinal);
+        Assert.Contains("CloseOnEscapeKey = true", seletor, StringComparison.Ordinal);
+        Assert.Contains("BackdropClick = true", seletor, StringComparison.Ordinal);
+        Assert.Contains("DecisaoCorPaleta.Resolver", seletor, StringComparison.Ordinal);
+        Assert.DoesNotContain("MudColorPicker", seletor, StringComparison.Ordinal);
+        Assert.DoesNotContain("PickerVariant.Inline", seletor, StringComparison.Ordinal);
+        Assert.DoesNotContain("PickerVariant.Dialog", seletor, StringComparison.Ordinal);
+        Assert.Contains("PickerVariant=\"PickerVariant.Static\"", dialogo, StringComparison.Ordinal);
+        Assert.DoesNotContain("PickerVariant.Inline", dialogo, StringComparison.Ordinal);
+        Assert.DoesNotContain("PickerVariant.Dialog", dialogo, StringComparison.Ordinal);
+        Assert.DoesNotContain("MudColorPicker", categoria, StringComparison.Ordinal);
+        Assert.DoesNotContain("of-dialogo-categoria", categoria, StringComparison.Ordinal);
 
-        var mutado = razor.Replace(
-            "PickerVariant=\"PickerVariant.Dialog\"",
-            "@* PickerVariant=\"PickerVariant.Dialog\" *@",
-            StringComparison.Ordinal);
-        var mutadoLimpo = SemComentarios(mutado);
+        var mutado = SemComentarios(Ler("OrcaFacil", "Components", "Shared", "ColorSwatchPicker.razor").Replace(
+            "DialogService.ShowAsync<PaletaCategoriaDialog>",
+            "@* DialogService.ShowAsync<PaletaCategoriaDialog> *@",
+            StringComparison.Ordinal));
 
-        Assert.DoesNotContain("PickerVariant.Dialog", mutadoLimpo, StringComparison.Ordinal);
-        Assert.Contains("MudColorPicker", mutadoLimpo, StringComparison.Ordinal);
+        Assert.DoesNotContain("ShowAsync<PaletaCategoriaDialog>", mutado, StringComparison.Ordinal);
+        Assert.Contains("DecisaoCorPaleta.Resolver", mutado, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CorSoEntraNoFormularioNoOk_EComentarioNaoConta()
+    {
+        var seletor = SemComentarios(Ler("OrcaFacil", "Components", "Shared", "ColorSwatchPicker.razor"));
+
+        Assert.Contains("var confirmou = resultado is { Canceled: false };", seletor, StringComparison.Ordinal);
+        Assert.Contains("DecisaoCorPaleta.Resolver(Value, resultado?.Data as string, confirmou)", seletor, StringComparison.Ordinal);
+        Assert.Contains("if (string.Equals(cor, Value, StringComparison.OrdinalIgnoreCase))", seletor, StringComparison.Ordinal);
+
+        var mutado = SemComentarios(Ler("OrcaFacil", "Components", "Shared", "ColorSwatchPicker.razor").Replace(
+            "DecisaoCorPaleta.Resolver(Value, resultado?.Data as string, confirmou)",
+            "/* DecisaoCorPaleta.Resolver(Value, resultado?.Data as string, confirmou) */",
+            StringComparison.Ordinal));
+
+        Assert.DoesNotContain("DecisaoCorPaleta.Resolver", mutado, StringComparison.Ordinal);
+        Assert.Contains("ShowAsync<PaletaCategoriaDialog>", mutado, StringComparison.Ordinal);
     }
 
     [Fact]
     public void CampoFechadoMantem180px_EComentarioNaoConta()
     {
-        var css = File.ReadAllText(Caminho("OrcaFacil", "wwwroot", "css", "orcafacil-theme.css"));
+        var css = Ler("OrcaFacil", "wwwroot", "css", "orcafacil-theme.css");
         var bloco = Bloco(SemComentarios(css), ".of-campo-paleta");
 
         Assert.Contains("width: 180px;", bloco, StringComparison.Ordinal);
@@ -59,120 +84,66 @@ public class PaletaCategoriaPopoverTests
     }
 
     [Fact]
-    public void DialogoDaCategoriaNaoDeixaTransform_EComentarioNaoConta()
+    public void AmostrasTemNomeAcessivel_EComentarioNaoConta()
     {
-        var razor = File.ReadAllText(Caminho("OrcaFacil", "Components", "Pages", "Categorias", "CategoriaForm.razor"));
-        var css = File.ReadAllText(Caminho("OrcaFacil", "wwwroot", "css", "orcafacil-theme.css"));
-        var limpo = SemComentarios(css);
-        var bloco = Bloco(limpo, ".mud-dialog-container .mud-dialog.of-dialogo-categoria");
-        var demais = Bloco(limpo, ".mud-dialog-container .mud-dialog");
+        var seletor = SemComentarios(Ler("OrcaFacil", "Components", "Shared", "ColorSwatchPicker.razor"));
 
-        Assert.Contains("Class=\"of-dialogo-categoria\"", SemComentarios(razor), StringComparison.Ordinal);
-        Assert.Contains("transform: none;", bloco, StringComparison.Ordinal);
-        Assert.Contains("animation: none;", bloco, StringComparison.Ordinal);
-        Assert.DoesNotContain(":has(", bloco, StringComparison.Ordinal);
-        Assert.Contains("overflow: hidden;", demais, StringComparison.Ordinal);
+        Assert.Contains("<button type=\"button\"", seletor, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"@cor\"", seletor, StringComparison.Ordinal);
+        Assert.Contains("class=\"of-color-swatch", seletor, StringComparison.Ordinal);
 
-        var razorMutado = razor.Replace(
-            "Class=\"of-dialogo-categoria\"",
-            "@* Class=\"of-dialogo-categoria\" *@",
-            StringComparison.Ordinal);
-        Assert.DoesNotContain("of-dialogo-categoria", SemComentarios(razorMutado), StringComparison.Ordinal);
+        var mutado = SemComentarios(Ler("OrcaFacil", "Components", "Shared", "ColorSwatchPicker.razor").Replace(
+            "aria-label=\"@cor\"",
+            "@* aria-label=\"@cor\" *@",
+            StringComparison.Ordinal));
 
-        var cssMutado = css.Replace(
-            """
-            .mud-dialog-container .mud-dialog.of-dialogo-categoria {
-                transform: none;
-                animation: none;
-            }
-            """,
-            """
-            .mud-dialog-container .mud-dialog.of-dialogo-categoria {
-                /* transform: none; */
-                /* animation: none; */
-            }
-            """,
-            StringComparison.Ordinal);
-        var blocoMutado = Bloco(SemComentarios(cssMutado), ".mud-dialog-container .mud-dialog.of-dialogo-categoria");
-
-        Assert.DoesNotContain("transform: none", blocoMutado, StringComparison.Ordinal);
-        Assert.DoesNotContain("animation: none", blocoMutado, StringComparison.Ordinal);
+        Assert.DoesNotContain("aria-label=\"@cor\"", mutado, StringComparison.Ordinal);
+        Assert.Contains("<button type=\"button\"", mutado, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void PapelDaPaletaRolaEmTelaBaixa_EComentarioNaoConta()
+    public void RegrasDeTelaBaixaFicamSoNoDialogoDaPaleta_EComentarioNaoConta()
     {
-        var css = File.ReadAllText(Caminho("OrcaFacil", "wwwroot", "css", "orcafacil-theme.css"));
-        var bloco = Bloco(SemComentarios(css), ".mud-overlay.mud-overlay-dialog .mud-picker.mud-dialog");
-
-        Assert.Contains("max-height: calc(100vh - 32px);", bloco, StringComparison.Ordinal);
-        Assert.Contains("max-height: calc(100dvh - 32px);", bloco, StringComparison.Ordinal);
-        Assert.Contains("overflow-x: hidden;", bloco, StringComparison.Ordinal);
-        Assert.Contains("overflow-y: auto;", bloco, StringComparison.Ordinal);
-        Assert.Contains("max-width: calc(100% - 32px);", bloco, StringComparison.Ordinal);
-
-        var mutado = css.Replace(
-            """
-                max-height: calc(100vh - 32px);
-                max-height: calc(100dvh - 32px);
-                overflow-x: hidden;
-                overflow-y: auto;
-                transform: none;
-                animation: none;
-            """,
-            """
-                /* max-height: calc(100vh - 32px); */
-                /* max-height: calc(100dvh - 32px); */
-                /* overflow-x: hidden; */
-                /* overflow-y: auto; */
-                transform: none;
-                animation: none;
-            """,
-            StringComparison.Ordinal);
-        var blocoMutado = Bloco(SemComentarios(mutado), ".mud-overlay.mud-overlay-dialog .mud-picker.mud-dialog");
-
-        Assert.DoesNotContain("100dvh - 32px", blocoMutado, StringComparison.Ordinal);
-        Assert.DoesNotContain("overflow-y: auto", blocoMutado, StringComparison.Ordinal);
-        Assert.Contains("max-width: calc(100% - 32px);", blocoMutado, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void BordaDosCamposRgbFicaSoNoPapelDaPaleta_EComentarioNaoConta()
-    {
-        var css = File.ReadAllText(Caminho("OrcaFacil", "wwwroot", "css", "orcafacil-theme.css"));
+        var css = Ler("OrcaFacil", "wwwroot", "css", "orcafacil-theme.css");
         var limpo = SemComentarios(css);
-        var paleta = Bloco(limpo, ".mud-overlay.mud-overlay-dialog .mud-picker.mud-dialog");
-        var categoria = Bloco(limpo, ".mud-dialog-container .mud-dialog.of-dialogo-categoria");
+        var paleta = Bloco(limpo, ".mud-dialog-container .mud-dialog.of-dialogo-paleta");
 
+        Assert.Contains("max-height: calc(100vh - 32px);", paleta, StringComparison.Ordinal);
+        Assert.Contains("max-height: calc(100dvh - 32px);", paleta, StringComparison.Ordinal);
+        Assert.Contains("overflow-y: auto;", paleta, StringComparison.Ordinal);
+        Assert.Contains("max-width: calc(100% - 32px);", paleta, StringComparison.Ordinal);
         Assert.Contains("--mud-palette-lines-inputs: #767676;", paleta, StringComparison.Ordinal);
-        Assert.DoesNotContain("--mud-palette-lines-inputs", categoria, StringComparison.Ordinal);
+        Assert.DoesNotContain("of-dialogo-categoria", limpo, StringComparison.Ordinal);
+        Assert.DoesNotContain(".mud-overlay.mud-overlay-dialog .mud-picker.mud-dialog", limpo, StringComparison.Ordinal);
         Assert.DoesNotContain(":has(", limpo, StringComparison.Ordinal);
 
         var mutado = css.Replace(
             "--mud-palette-lines-inputs: #767676;",
             "/* --mud-palette-lines-inputs: #767676; */",
             StringComparison.Ordinal);
-        var paletaMutada = Bloco(SemComentarios(mutado), ".mud-overlay.mud-overlay-dialog .mud-picker.mud-dialog");
+        var paletaMutada = Bloco(SemComentarios(mutado), ".mud-dialog-container .mud-dialog.of-dialogo-paleta");
 
         Assert.DoesNotContain("#767676", paletaMutada, StringComparison.Ordinal);
-        Assert.Contains("overflow-y: auto;", paletaMutada, StringComparison.Ordinal);
+        Assert.Contains("max-height: calc(100dvh - 32px);", paletaMutada, StringComparison.Ordinal);
     }
 
     [Fact]
     public void ComentarioNaoContaComoAberturaDaPaleta()
     {
         const string fonte = """
-            @* PickerVariant="PickerVariant.Dialog" *@
-            // PickerVariant.Dialog
-            /* PickerVariant.Dialog */
-            <!-- PickerVariant.Dialog -->
-            <MudColorPicker Label="Outras cores" />
+            @* DialogService.ShowAsync<PaletaCategoriaDialog> *@
+            // PickerVariant.Static
+            /* aria-label="@cor" */
+            <!-- DecisaoCorPaleta.Resolver -->
+            <button type="button">Outras cores</button>
             """;
 
         var limpo = SemComentarios(fonte);
 
-        Assert.DoesNotContain("PickerVariant.Dialog", limpo, StringComparison.Ordinal);
-        Assert.Contains("MudColorPicker", limpo, StringComparison.Ordinal);
+        Assert.DoesNotContain("PaletaCategoriaDialog", limpo, StringComparison.Ordinal);
+        Assert.DoesNotContain("PickerVariant.Static", limpo, StringComparison.Ordinal);
+        Assert.DoesNotContain("aria-label", limpo, StringComparison.Ordinal);
+        Assert.DoesNotContain("DecisaoCorPaleta", limpo, StringComparison.Ordinal);
         Assert.Contains("Outras cores", limpo, StringComparison.Ordinal);
     }
 
@@ -297,13 +268,13 @@ public class PaletaCategoriaPopoverTests
         return true;
     }
 
-    private static string Caminho(params string[] partes)
+    private static string Ler(params string[] partes)
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
         {
             if (File.Exists(Path.Combine(dir.FullName, "OrcaFacil", "Components", "Shared", "ColorSwatchPicker.razor")))
-                return Path.Combine(new[] { dir.FullName }.Concat(partes).ToArray());
+                return File.ReadAllText(Path.Combine(new[] { dir.FullName }.Concat(partes).ToArray()));
 
             dir = dir.Parent;
         }
