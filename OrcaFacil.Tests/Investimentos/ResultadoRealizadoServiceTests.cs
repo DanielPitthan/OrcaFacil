@@ -282,6 +282,44 @@ public class ResultadoRealizadoServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task EditarImportada_MudarPreco_RecalculaValorOperacao()
+    {
+        await _servico.SalvarAsync(Operacao(_petroId, TipoOperacao.Compra, new DateTime(2026, 1, 10), 10, 10m, 0m), _membroId);
+
+        var modelo = Operacao(_petroId, TipoOperacao.Venda, new DateTime(2026, 2, 10), 10, 15.01m, 0m);
+        modelo.Origem = OrigemOperacaoAtivo.ExtratoB3;
+        modelo.HashImportacao = "hash-do-preco";
+        modelo.ValorOperacao = 149.97m;
+        var gravada = await _servico.SalvarAsync(modelo, _membroId);
+
+        int idLancamento;
+        using (var antes = _factory.CreateDbContext())
+        {
+            var lancamento = Assert.Single(antes.Transacoes);
+            Assert.Equal(49.97m, lancamento.Valor);
+            idLancamento = lancamento.Id;
+        }
+
+        await _servico.SalvarAsync(
+            Operacao(_petroId, TipoOperacao.Venda, new DateTime(2026, 2, 10), 10, 16m, 0m, gravada.Id),
+            _membroId);
+
+        using var contexto = _factory.CreateDbContext();
+        var atual = contexto.OperacoesAtivo.Single(o => o.Id == gravada.Id);
+        Assert.Equal(16m, atual.PrecoUnitario);
+        Assert.Equal(10m, atual.Quantidade);
+        Assert.Equal(160m, atual.ValorOperacao);
+        Assert.Equal(OrigemOperacaoAtivo.ExtratoB3, atual.Origem);
+        Assert.Equal("hash-do-preco", atual.HashImportacao);
+
+        var depois = Assert.Single(contexto.Transacoes);
+        Assert.Equal(idLancamento, depois.Id);
+        Assert.Equal(TipoTransacao.Receita, depois.Tipo);
+        Assert.Equal(60m, depois.Valor);
+        Assert.Equal(gravada.Id, depois.OperacaoAtivoId);
+    }
+
+    [Fact]
     public async Task MesFechado_BloqueiaAlteracaoDoLancamento_ENaoGrava()
     {
         await _servico.SalvarAsync(Operacao(_petroId, TipoOperacao.Compra, new DateTime(2026, 3, 10), 100, 10m, 0m), _membroId);
