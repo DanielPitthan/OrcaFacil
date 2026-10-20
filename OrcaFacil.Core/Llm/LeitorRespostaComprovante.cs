@@ -13,7 +13,7 @@ public static class LeitorRespostaComprovante
 {
     public const string MotivoJsonInvalido = "JSON inválido";
     public const string MotivoTruncada = "resposta truncada";
-    public const string MotivoCortada = "resposta cortada";
+    public const string MotivoCortada = "A resposta foi cortada por limite de tokens.";
 
     private const int ObjetosMaximos = 32;
     private const int ProfundidadeMaxima = 64;

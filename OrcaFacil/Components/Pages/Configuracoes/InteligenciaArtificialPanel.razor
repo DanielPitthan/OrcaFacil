@@ -23,8 +23,11 @@
     <FormSection Titulo="Conexão">
         <FormRow Icone="@Icons.Material.Outlined.Link" Rotulo="URL da API">
             <MudTextField T="string" @bind-Value="_url" Immediate="true" Variant="Variant.Text" Margin="Margin.Dense"
-                          Placeholder="@ChipsInteligencia.UrlDeepSeek" />
+                          Placeholder="@ChipsInteligencia.UrlAlibaba" />
         </FormRow>
+        <div class="of-secao-bloco">
+            <p class="of-apoio">@ChipsInteligencia.TextoAjudaAlibaba</p>
+        </div>
         <FormRow Icone="@Icons.Material.Outlined.Memory" Rotulo="Modelo">
             <MudTextField T="string" @bind-Value="_modelo" Immediate="true" Variant="Variant.Text" Margin="Margin.Dense" />
         </FormRow>

@@ -389,23 +389,38 @@ public class ClienteMensagensTests
     [Fact]
     public async Task StopReasonMaxTokens_ViraRespostaCortada()
     {
-        const string corpo = """
+        const string token = "sk-sp-ficticio-corte-9f3c2a7b1e";
+        var base64 = new string('Q', 240);
+        var corpo = """
             {"stop_reason":"max_tokens","content":[{"type":"text","text":"{\"legivel\":true"}]}
-            """;
+            """
+            + " Authorization: Bearer " + token
+            + "\nx-api-key: " + token
+            + "\ndata:image/jpeg;base64," + base64
+            + "\n" + Imagem;
         var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, corpo));
         using var cliente = new ClienteMensagens(captura);
 
-        var resultado = await cliente.LerComprovanteAsync(Base, Chave, "deepseek-v4-flash", Midia, Imagem);
+        var resultado = await cliente.LerComprovanteAsync(Base, token, "deepseek-v4.1-flash-1017", Midia, Imagem);
 
         Assert.Equal(1, captura.Chamadas);
+        Assert.Null(resultado.RetryAfter);
         Assert.Equal(TipoResultadoMensagem.RespostaInvalida, resultado.Tipo);
         Assert.Equal(ResultadoMensagem.TextoRespostaCortada, resultado.Mensagem);
+        Assert.Equal("A resposta foi cortada por limite de tokens.", resultado.Mensagem);
         Assert.Null(resultado.Comprovante);
         Assert.NotNull(resultado.Diagnostico);
-        Assert.Contains("resposta cortada", resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains("A resposta foi cortada por limite de tokens.", resultado.Diagnostico.Texto, StringComparison.Ordinal);
         Assert.Contains("stop_reason: max_tokens", resultado.Diagnostico.Texto, StringComparison.Ordinal);
         Assert.Equal("https://api.anthropic.com", resultado.Diagnostico.Origem);
-        Assert.DoesNotContain(Chave, resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(token, resultado.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain(token, resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(token, resultado.Diagnostico.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(Imagem, resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(base64, resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("Authorization", resultado.Diagnostico.Texto, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("x-api-key", resultado.Diagnostico.Texto, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("data:image", resultado.Diagnostico.Texto, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("/v1/messages", resultado.Diagnostico.Texto, StringComparison.Ordinal);
     }
 
@@ -558,7 +573,7 @@ public class ClienteMensagensTests
     }
 
     [Fact]
-    public async Task SemPreferencia_LeituraUsaUrlEModeloDeepSeek()
+    public async Task SemPreferencia_LeituraUsaUrlEModeloAlibaba()
     {
         var efetiva = ChipsInteligencia.Efetiva(null, "", "");
         var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, CorpoValido()));
@@ -573,12 +588,16 @@ public class ClienteMensagensTests
 
         Assert.True(resultado.Sucesso);
         Assert.Equal(1, captura.Chamadas);
-        Assert.Equal("https://api.deepseek.com/anthropic/v1/messages", captura.Uri);
-        Assert.Equal(PedidoMensagem.ModeloDeepSeek, efetiva.Modelo);
+        Assert.Equal(ChipsInteligencia.UrlAlibaba + "/v1/messages", captura.Uri);
+        Assert.Equal(PedidoMensagem.ModeloAlibaba, efetiva.Modelo);
+        Assert.DoesNotContain("api.deepseek.com", captura.Uri, StringComparison.OrdinalIgnoreCase);
 
         using var doc = JsonDocument.Parse(captura.Corpo);
-        Assert.Equal(PedidoMensagem.ModeloDeepSeek, doc.RootElement.GetProperty("model").GetString());
-        Assert.Equal("disabled", doc.RootElement.GetProperty("thinking").GetProperty("type").GetString());
+        var raiz = doc.RootElement;
+        Assert.Equal(PedidoMensagem.ModeloAlibaba, raiz.GetProperty("model").GetString());
+        Assert.Equal("disabled", raiz.GetProperty("thinking").GetProperty("type").GetString());
+        Assert.False(raiz.TryGetProperty("output_config", out _));
+        Assert.DoesNotContain("output_config", captura.Corpo, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -955,12 +974,20 @@ public class ClienteMensagensTests
     }
 
     [Theory]
+    [InlineData("https://token-plan.maas.qwencloudapi.com/apps/anthropic", "deepseek-v4.1-flash-1017", true)]
+    [InlineData("https://maas.qwencloudapi.com/apps/anthropic", "qwen3.7-plus", true)]
+    [InlineData("https://foo.qwencloudapi.com/apps/anthropic", "qwen3.7-flash", true)]
+    [InlineData("https://QWENCLOUDAPI.COM/v1", "qwen3-vl-plus", true)]
+    [InlineData("https://Token-Plan.MAAS.QwenCloudApi.Com:8443/apps/anthropic", "deepseek-v4.1-flash-1017", true)]
+    [InlineData("https://qwencloudapi.com.evil.com/apps/anthropic", "deepseek-v4.1-flash-1017", false)]
+    [InlineData("https://notqwencloudapi.com/apps/anthropic", "qwen3.7-plus", false)]
+    [InlineData("https://maas.qwencloudapi.com.evil.com/apps/anthropic", "qwen3-vl-plus", false)]
     [InlineData("https://api.deepseek.com/anthropic", "deepseek-flash", true)]
     [InlineData("https://API.DEEPSEEK.COM/anthropic", "deepseek-flash", true)]
     [InlineData("https://api.anthropic.com", "claude-haiku-5-5", false)]
     [InlineData("https://dashscope.aliyuncs.com", "deepseek-flash", false)]
     [InlineData("https://api.deepseek.com.evil.com", "deepseek-flash", false)]
-    public async Task Leitura_ThinkingSoNoHostDeepSeek_MantemToolChoiceEChave(
+    public async Task Leitura_ThinkingNoHost_MantemToolChoiceEChave(
         string url,
         string modelo,
         bool desliga)
@@ -982,18 +1009,24 @@ public class ClienteMensagensTests
         var raiz = doc.RootElement;
         Assert.Equal(modelo, raiz.GetProperty("model").GetString());
         Assert.Equal(PedidoMensagem.MaxTokens, raiz.GetProperty("max_tokens").GetInt32());
+        Assert.Equal(PedidoMensagem.CriarUri(url)!.AbsoluteUri, captura.Uri);
         var escolha = raiz.GetProperty("tool_choice");
         Assert.Equal("tool", escolha.GetProperty("type").GetString());
         Assert.Equal(PedidoMensagem.NomeFerramenta, escolha.GetProperty("name").GetString());
+        Assert.False(raiz.TryGetProperty("output_config", out _));
+        Assert.DoesNotContain("output_config", captura.Corpo, StringComparison.Ordinal);
         AssertThinking(raiz, captura.Corpo, desliga);
     }
 
     [Theory]
     [InlineData("https://api.deepseek.com/anthropic/", true)]
     [InlineData("https://API.DEEPSEEK.COM/anthropic", true)]
+    [InlineData("https://token-plan.maas.qwencloudapi.com/apps/anthropic", true)]
+    [InlineData("https://foo.qwencloudapi.com", true)]
     [InlineData("https://api.anthropic.com/", false)]
     [InlineData("https://dashscope.aliyuncs.com", false)]
     [InlineData("https://api.deepseek.com.evil.com/anthropic", false)]
+    [InlineData("https://qwencloudapi.com.evil.com", false)]
     public async Task TesteDeConexao_ThinkingSegueOHost(string url, bool desliga)
     {
         var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, "ok"));

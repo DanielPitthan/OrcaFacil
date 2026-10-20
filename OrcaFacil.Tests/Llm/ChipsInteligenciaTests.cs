@@ -52,20 +52,34 @@ public class ChipsInteligenciaTests
     }
 
     [Fact]
-    public void Alibaba_DeixaUrlEditavelEModeloLivre_SemDeepSeekFlash()
+    public void Alibaba_PreencheUrlDoTokenPlanEModelo_SemJsonSchema()
     {
         var ajuste = ChipsInteligencia.Padrao(ProvedorIa.Alibaba);
 
         Assert.Equal("Alibaba", ChipsInteligencia.Texto(ProvedorIa.Alibaba));
         Assert.Equal(ProvedorIa.Alibaba, ChipsInteligencia.Interpretar("Alibaba"));
-        Assert.Null(ajuste.Url);
-        Assert.Null(ajuste.Modelo);
+        Assert.Equal("https://token-plan.maas.qwencloudapi.com/apps/anthropic", ajuste.Url);
+        Assert.Equal(ChipsInteligencia.UrlAlibaba, ajuste.Url);
+        Assert.Equal("deepseek-v4.1-flash-1017", ajuste.Modelo);
+        Assert.Equal(PedidoMensagem.ModeloAlibaba, ajuste.Modelo);
+        Assert.Equal(ChipsInteligencia.ModeloAlibaba, ajuste.Modelo);
         Assert.Null(ajuste.RotuloModelo);
         Assert.Null(ChipsInteligencia.RotuloDoModelo(ajuste.Modelo));
+        Assert.DoesNotContain("/v1/messages", ajuste.Url, StringComparison.Ordinal);
+        Assert.NotEqual("deepseek-flash", ajuste.Modelo);
         Assert.NotEqual("DeepSeek Flash V4", ajuste.Modelo);
-        Assert.NotEqual("DeepSeek Flash V4", ajuste.Url);
-        Assert.NotEqual("DeepSeek Flash V4", ajuste.RotuloModelo);
-        Assert.DoesNotContain("DeepSeek", ajuste.ToString(), StringComparison.Ordinal);
+        Assert.NotEqual(ChipsInteligencia.UrlDeepSeek, ajuste.Url);
+        Assert.Equal("AjusteChipIa", ajuste.ToString());
+        Assert.DoesNotContain("qwencloudapi.com", ajuste.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("deepseek-v4.1-flash-1017", ajuste.ToString(), StringComparison.Ordinal);
+        Assert.Contains("sk-sp-", ChipsInteligencia.TextoAjudaAlibaba, StringComparison.Ordinal);
+        Assert.Contains(ChipsInteligencia.UrlAlibaba, ChipsInteligencia.TextoAjudaAlibaba, StringComparison.Ordinal);
+        Assert.Contains("pay-as-you-go (sk-)", ChipsInteligencia.TextoAjudaAlibaba, StringComparison.Ordinal);
+        Assert.Contains(ChipsInteligencia.UrlAlibabaAvulso, ChipsInteligencia.TextoAjudaAlibaba, StringComparison.Ordinal);
+        Assert.Contains("qwen3.7-flash", ChipsInteligencia.TextoAjudaAlibaba, StringComparison.Ordinal);
+        Assert.Contains("qwen3.7-plus", ChipsInteligencia.TextoAjudaAlibaba, StringComparison.Ordinal);
+        Assert.Contains("qwen3-vl-plus", ChipsInteligencia.TextoAjudaAlibaba, StringComparison.Ordinal);
+        Assert.DoesNotContain("output_config", ChipsInteligencia.TextoAjudaAlibaba, StringComparison.Ordinal);
         AssertSemCampoDeChave(ajuste);
     }
 
@@ -109,8 +123,9 @@ public class ChipsInteligenciaTests
             [ProvedorIa.Anthropic, ProvedorIa.Alibaba, ProvedorIa.DeepSeek],
             Enum.GetValues<ProvedorIa>());
         Assert.Equal(
-            [ProvedorIa.DeepSeek, ProvedorIa.Anthropic, ProvedorIa.Alibaba],
+            [ProvedorIa.Anthropic, ProvedorIa.Alibaba],
             ChipsInteligencia.Provedores);
+        Assert.DoesNotContain(ProvedorIa.DeepSeek, ChipsInteligencia.Provedores);
         Assert.Equal(ProvedorIa.Alibaba, ChipsInteligencia.Interpretar("Alibaba"));
         Assert.Equal("Alibaba", ChipsInteligencia.Texto(ProvedorIa.Alibaba));
         Assert.NotEqual(
@@ -125,33 +140,47 @@ public class ChipsInteligenciaTests
     }
 
     [Fact]
-    public void Painel_PlaceholderUsaUrlDeepSeek_SemUrlLiteral()
+    public void Painel_PlaceholderUsaUrlAlibaba_SemUrlLiteral()
     {
         var painel = File.ReadAllText(CaminhoPainel());
 
-        Assert.Contains("Placeholder=\"@ChipsInteligencia.UrlDeepSeek\"", painel, StringComparison.Ordinal);
-        Assert.DoesNotContain("https://api.anthropic.com", painel, StringComparison.Ordinal);
-        Assert.DoesNotContain("https://api.deepseek.com", painel, StringComparison.Ordinal);
+        Assert.Contains("Placeholder=\"@ChipsInteligencia.UrlAlibaba\"", painel, StringComparison.Ordinal);
+        Assert.Contains("@ChipsInteligencia.TextoAjudaAlibaba", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("https://", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("DeepSeek", painel, StringComparison.Ordinal);
         Assert.Contains("ChipsInteligencia.Efetiva(", painel, StringComparison.Ordinal);
+        Assert.Contains("ChipsInteligencia.Provedores", painel, StringComparison.Ordinal);
+
+        var cliente = File.ReadAllText(CaminhoCore("ClienteMensagens.cs"));
+        var pedido = File.ReadAllText(CaminhoCore("PedidoMensagem.cs"));
+        Assert.DoesNotContain("qwencloudapi.com", cliente, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("qwencloudapi.com", pedido, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("output_config", pedido, StringComparison.Ordinal);
     }
 
     [Theory]
     [InlineData(null, null, null)]
     [InlineData(null, "", "")]
     [InlineData(null, "   ", "   ")]
-    public void SemConfiguracaoSalva_PadraoEfetivoEhDeepSeek(string? provedor, string? url, string? modelo)
+    public void SemConfiguracaoSalva_PadraoEfetivoEhAlibaba(string? provedor, string? url, string? modelo)
     {
         var efetiva = ChipsInteligencia.Efetiva(ChipsInteligencia.Interpretar(provedor), url, modelo);
-        var padrao = ChipsInteligencia.Padrao(ProvedorIa.DeepSeek);
+        var padrao = ChipsInteligencia.Padrao(ProvedorIa.Alibaba);
 
-        Assert.Equal(ProvedorIa.DeepSeek, efetiva.Provedor);
+        Assert.Equal(ProvedorIa.Alibaba, efetiva.Provedor);
         Assert.Equal(padrao.Url, efetiva.Url);
         Assert.Equal(padrao.Modelo, efetiva.Modelo);
-        Assert.Equal(ChipsInteligencia.UrlDeepSeek, efetiva.Url);
-        Assert.Equal(PedidoMensagem.ModeloDeepSeek, efetiva.Modelo);
+        Assert.Equal(ChipsInteligencia.UrlAlibaba, efetiva.Url);
+        Assert.Equal("https://token-plan.maas.qwencloudapi.com/apps/anthropic", efetiva.Url);
+        Assert.Equal(PedidoMensagem.ModeloAlibaba, efetiva.Modelo);
+        Assert.Equal("deepseek-v4.1-flash-1017", efetiva.Modelo);
+        Assert.NotEqual(ProvedorIa.DeepSeek, efetiva.Provedor);
+        Assert.NotEqual(ChipsInteligencia.UrlDeepSeek, efetiva.Url);
+        Assert.NotEqual(PedidoMensagem.ModeloDeepSeek, efetiva.Modelo);
         Assert.True(MensagensLeituraComprovante.TemUrlModeloEChave(efetiva.Url, efetiva.Modelo, "chave"));
         Assert.Equal("ConfiguracaoIaEfetiva", efetiva.ToString());
-        Assert.DoesNotContain("api.deepseek.com", efetiva.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("qwencloudapi.com", efetiva.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("deepseek", efetiva.ToString(), StringComparison.OrdinalIgnoreCase);
     }
 
     [Theory]
@@ -175,6 +204,16 @@ public class ChipsInteligenciaTests
         Assert.Equal(modelo, efetiva.Modelo);
         Assert.NotEqual(ProvedorIa.DeepSeek, efetiva.Provedor);
         Assert.NotEqual(ChipsInteligencia.UrlDeepSeek, efetiva.Url);
+        Assert.NotEqual(PedidoMensagem.ModeloDeepSeek, efetiva.Modelo);
+        if (!string.Equals(url, ChipsInteligencia.UrlAlibaba, StringComparison.Ordinal))
+            Assert.NotEqual(ChipsInteligencia.UrlAlibaba, efetiva.Url);
+        if (!string.Equals(modelo, PedidoMensagem.ModeloAlibaba, StringComparison.Ordinal))
+            Assert.NotEqual(PedidoMensagem.ModeloAlibaba, efetiva.Modelo);
+        Assert.False(
+            efetiva.Provedor == ProvedorIa.Alibaba &&
+            efetiva.Url == ChipsInteligencia.UrlAlibaba &&
+            efetiva.Modelo == PedidoMensagem.ModeloAlibaba &&
+            (url != ChipsInteligencia.UrlAlibaba || modelo != PedidoMensagem.ModeloAlibaba));
         Assert.Equal(ChipsInteligencia.Texto(provedor), memoria.Obter(ChipsInteligencia.ChaveProvedor, ""));
         Assert.Equal(url, memoria.Obter(ChipsInteligencia.ChaveUrl, ""));
         Assert.Equal(modelo, memoria.Obter(ChipsInteligencia.ChaveModelo, ""));
@@ -184,6 +223,8 @@ public class ChipsInteligenciaTests
     [InlineData("https://api.anthropic.com", "claude-haiku-5-5")]
     [InlineData("", "qwen-vl-max")]
     [InlineData("https://dashscope.aliyuncs.com", "")]
+    [InlineData("https://token-plan.maas.qwencloudapi.com/apps/anthropic", "qwen3.7-plus")]
+    [InlineData("https://maas.qwencloudapi.com/apps/anthropic", "deepseek-v4.1-flash-1017")]
     public void ProvedorNuloComUrlOuModelo_NaoViraDeepSeek(string url, string modelo)
     {
         var memoria = new PreferenciasEmMemoria();
@@ -198,12 +239,53 @@ public class ChipsInteligenciaTests
         Assert.Null(efetiva.Provedor);
         Assert.Equal(url, efetiva.Url);
         Assert.Equal(modelo, efetiva.Modelo);
+        Assert.NotEqual(ProvedorIa.DeepSeek, efetiva.Provedor);
+        Assert.NotEqual(ProvedorIa.Alibaba, efetiva.Provedor);
+        if (!string.Equals(url, ChipsInteligencia.UrlAlibaba, StringComparison.Ordinal))
+            Assert.NotEqual(ChipsInteligencia.UrlAlibaba, efetiva.Url);
+        if (!string.Equals(modelo, PedidoMensagem.ModeloAlibaba, StringComparison.Ordinal))
+            Assert.NotEqual(PedidoMensagem.ModeloAlibaba, efetiva.Modelo);
+        Assert.NotEqual(ChipsInteligencia.UrlDeepSeek, efetiva.Url);
         Assert.False(memoria.Contem(ChipsInteligencia.ChaveProvedor));
         Assert.Equal(url, memoria.Obter(ChipsInteligencia.ChaveUrl, "trocada"));
         Assert.Equal(modelo, memoria.Obter(ChipsInteligencia.ChaveModelo, "trocado"));
     }
 
-    private static string CaminhoPainel()
+    [Fact]
+    public void PreferenciaDeepSeekSalva_NaoViraAlibaba()
+    {
+        var memoria = new PreferenciasEmMemoria();
+        memoria.Definir(ChipsInteligencia.ChaveProvedor, "DeepSeek");
+        memoria.Definir(ChipsInteligencia.ChaveUrl, ChipsInteligencia.UrlDeepSeek);
+        memoria.Definir(ChipsInteligencia.ChaveModelo, PedidoMensagem.ModeloDeepSeek);
+
+        var efetiva = ChipsInteligencia.Efetiva(
+            ChipsInteligencia.Interpretar(memoria.Obter(ChipsInteligencia.ChaveProvedor, "")),
+            memoria.Obter(ChipsInteligencia.ChaveUrl, ""),
+            memoria.Obter(ChipsInteligencia.ChaveModelo, ""));
+
+        Assert.Equal(ProvedorIa.DeepSeek, efetiva.Provedor);
+        Assert.Equal(ChipsInteligencia.UrlDeepSeek, efetiva.Url);
+        Assert.Equal(PedidoMensagem.ModeloDeepSeek, efetiva.Modelo);
+        Assert.NotEqual(ProvedorIa.Alibaba, efetiva.Provedor);
+        Assert.NotEqual(ChipsInteligencia.UrlAlibaba, efetiva.Url);
+        Assert.NotEqual(PedidoMensagem.ModeloAlibaba, efetiva.Modelo);
+        Assert.Equal("DeepSeek", memoria.Obter(ChipsInteligencia.ChaveProvedor, ""));
+    }
+
+    private static string CaminhoPainel() =>
+        Path.Combine(
+            EncontrarRaiz(),
+            "OrcaFacil",
+            "Components",
+            "Pages",
+            "Configuracoes",
+            "InteligenciaArtificialPanel.razor");
+
+    private static string CaminhoCore(string arquivo) =>
+        Path.Combine(EncontrarRaiz(), "OrcaFacil.Core", "Llm", arquivo);
+
+    private static string EncontrarRaiz()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null)
@@ -216,7 +298,7 @@ public class ChipsInteligenciaTests
                 "Configuracoes",
                 "InteligenciaArtificialPanel.razor");
             if (File.Exists(caminho))
-                return caminho;
+                return dir.FullName;
 
             dir = dir.Parent;
         }
