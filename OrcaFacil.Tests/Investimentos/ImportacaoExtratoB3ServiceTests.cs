@@ -46,6 +46,30 @@ public class ImportacaoExtratoB3ServiceTests
     }
 
     [Fact]
+    public void PrecoEfetivo_QuatroCasas_AfastaDoZero()
+    {
+        var terco = LinhaDePreco(3m, 100m);
+        Assert.Contains("|33.3333|100|", HashLinhaExtratoB3.Chave(terco), StringComparison.Ordinal);
+
+        var mil = LinhaDePreco(1m, 1.00005m);
+        Assert.Contains("|1.0001|1.00005|", HashLinhaExtratoB3.Chave(mil), StringComparison.Ordinal);
+
+        static LinhaExtratoB3 LinhaDePreco(decimal quantidade, decimal valor) => new(
+            1,
+            DirecaoB3.Credito,
+            new DateOnly(2024, 2, 1),
+            "Transferência - Liquidação",
+            TipoOperacaoB3.Compra,
+            "PETR4",
+            "PETR4 - PETROLEO BRASILEIRO",
+            ClasseAtivoB3.Acao,
+            "XP INVESTIMENTOS CCTVM S/A",
+            quantidade,
+            null,
+            valor);
+    }
+
+    [Fact]
     public void PrecosEfetivosDiferentes_FicamEmSeriesDistintas_AmbasOcorrenciaZero()
     {
         var primeiro = new LinhaExtratoB3(
