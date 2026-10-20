@@ -109,6 +109,19 @@ public class CalculadoraRendaFixaTests
         Assert.Contains("excede a posição", ex.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ResgateEmDiaAnterior_ERecusado_MesmoComIdMaior()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() => CalculadoraRendaFixa.Calcular(
+        [
+            Movimento(2, new DateTime(2026, 2, 10), TipoOperacaoRendaFixa.Resgate, 1m, 110m),
+            Movimento(1, new DateTime(2026, 3, 10), TipoOperacaoRendaFixa.Aplicacao, 1m, 100m)
+        ]));
+
+        Assert.Contains("10/02/2026", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("excede a posição", ex.Message, StringComparison.Ordinal);
+    }
+
     private static MovimentoRendaFixa Movimento(
         int id,
         DateTime data,
