@@ -18,6 +18,9 @@ public sealed class DiagnosticoResposta
     /// <summary>Segredo longo demais para a busca com separador (a imagem). A troca exata basta.</summary>
     private const int TamanhoMaximoSegredoFlexivel = 2048;
 
+    /// <summary>Abaixo disto, o segredo só sai quando forma um token inteiro.</summary>
+    private const int TamanhoTokenIsolado = 8;
+
     /// <summary>Marca privada das quebras do texto já montado. Não pode voltar como quebra nova.</summary>
     private const char MarcaQuebra = '\uE000';
 
@@ -40,11 +43,11 @@ public sealed class DiagnosticoResposta
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
     /// <summary>
-    /// Contínuo de 201 ou linhas de 76 (com \r\n, \n ou \r) cujo total também chega a 201.
+    /// Contínuo de 201, ou linhas de 76 (com \r\n, \n ou \r) mais a última linha, de 1 a 76.
     /// O alfabeto inclui o url-safe (- e _).
     /// </summary>
     private static readonly Regex Base64Longo = new(
-        """(?:[A-Za-z0-9+/_-]{76}(?:\r\n|\n|\r)){2,}[A-Za-z0-9+/_-]{49,76}={0,2}|[A-Za-z0-9+/_-]{201,}={0,2}""",
+        """(?:[A-Za-z0-9+/_-]{76}(?:\r\n|\n|\r)){2,}[A-Za-z0-9+/_-]{1,76}={0,2}|[A-Za-z0-9+/_-]{201,}={0,2}""",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex EscapeUnicode = new(
@@ -388,7 +391,8 @@ public sealed class DiagnosticoResposta
         var indice = 0;
         while (indice < texto.Length)
         {
-            if (CasaSegredo(texto, indice, segredo, out var fim))
+            if (CasaSegredo(texto, indice, segredo, out var fim) &&
+                (segredo.Length >= TamanhoTokenIsolado || TokenIsolado(texto, indice, fim)))
             {
                 saida.Append("***");
                 indice = fim;
@@ -456,6 +460,18 @@ public sealed class DiagnosticoResposta
         >= 'A' and <= 'F' => caractere - 'A' + 10,
         _ => null,
     };
+
+    private static bool TokenIsolado(string texto, int inicio, int fim)
+    {
+        if (inicio > 0 && EhColadoNoToken(texto[inicio - 1]))
+            return false;
+
+        return fim >= texto.Length || !EhColadoNoToken(texto[fim]);
+    }
+
+    /// <summary>Letra, dígito, ponto, hífen ou sublinhado continuam o mesmo token.</summary>
+    private static bool EhColadoNoToken(char caractere) =>
+        char.IsLetterOrDigit(caractere) || caractere is '.' or '-' or '_';
 
     private static bool EhSeparador(char caractere) =>
         char.IsWhiteSpace(caractere) || caractere is '\u00AD' or '\u180E' or '\u200B' or '\u200C' or '\u200D'

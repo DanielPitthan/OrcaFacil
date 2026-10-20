@@ -493,6 +493,61 @@ public class DiagnosticoRespostaTests
         Assert.Contains("foi recusada", diagnostico.Texto, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void SegredoCurto_SoMascaraTokenIsolado()
+    {
+        Assert.InRange("api".Length, 1, 7);
+        Assert.InRange("haiku".Length, 1, 7);
+        Assert.InRange("500".Length, 1, 7);
+
+        var diagnostico = DiagnosticoResposta.Criar(
+            401,
+            "https://api.anthropic.com/v1/messages",
+            "claude-haiku-5-5",
+            "NaoAutorizado",
+            "A chave da API foi recusada.",
+            null,
+            null,
+            null,
+            "total 1500 e o codigo 500 acabou",
+            false,
+            ["api", "haiku", "500"]);
+
+        var log = AssertDialogoCopiaELog(diagnostico);
+        Assert.Contains("https://api.anthropic.com", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains("claude-haiku-5-5", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains("1500", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("codigo 500", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains("codigo ***", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains("https://api.anthropic.com", log, StringComparison.Ordinal);
+        Assert.Contains("claude-haiku-5-5", log, StringComparison.Ordinal);
+        Assert.Contains("1500", log, StringComparison.Ordinal);
+        Assert.DoesNotContain("codigo 500", log, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(48)]
+    [InlineData(76)]
+    public void Base64UltimaLinhaCurta_TambemEMascarada(int tamanhoFinal)
+    {
+        const string alfabeto = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        var linha = alfabeto + alfabeto[..12];
+        var final = tamanhoFinal == 76 ? linha : new string('9', tamanhoFinal);
+        var bloco = string.Join("\n", linha, linha, final);
+        var diagnostico = Diagnosticar("antes " + bloco + " depois");
+
+        var log = AssertDialogoCopiaELog(diagnostico);
+        Assert.Contains(DiagnosticoResposta.MarcaBase64, diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains(DiagnosticoResposta.MarcaBase64, log, StringComparison.Ordinal);
+        Assert.DoesNotContain(linha[..40], diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(final, diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(linha[..40], log, StringComparison.Ordinal);
+        Assert.DoesNotContain(final, log, StringComparison.Ordinal);
+        Assert.Contains("antes", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains("depois", diagnostico.Texto, StringComparison.Ordinal);
+    }
+
     [Theory]
     [MemberData(nameof(Base64ForaDoContinuo))]
     public void Base64EmLinhasOuUrlSafe_NaoVazaNoDialogoNaCopiaNemNoLog(string bloco)
