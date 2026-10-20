@@ -43,6 +43,10 @@ public class Transacao
     public int? OperacaoRendaFixaId { get; set; }
     public OperacaoRendaFixa? OperacaoRendaFixa { get; set; }
 
+    /// <summary>Lançamento gerado pela venda de um ativo. Nulo nos demais.</summary>
+    public int? OperacaoAtivoId { get; set; }
+    public OperacaoAtivo? OperacaoAtivo { get; set; }
+
     public ICollection<ItemLancamento> Itens { get; set; } = new List<ItemLancamento>();
 
     public DateTime CriadoEm { get; set; } = DateTime.UtcNow;

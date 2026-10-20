@@ -88,6 +88,18 @@ public class PosicaoCalculatorTests
     }
 
     [Fact]
+    public void VendaAcimaDaPosicao_QuantidadeNaMensagemEmPortugues()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() => PosicaoCalculator.Calcular(new[]
+        {
+            Compra(1, new DateTime(2026, 1, 10), 1.5m, 10m),
+            Venda(2, new DateTime(2026, 1, 11), 2.5m, 11m)
+        }));
+
+        Assert.Contains("A venda de 2,5 em 11/01/2026 excede a quantidade em carteira (1,5).", ex.Message);
+    }
+
+    [Fact]
     public void CorrigirCompraAntiga_DeixaVendaPosteriorInvalida()
     {
         Assert.Throws<InvalidOperationException>(() => PosicaoCalculator.Calcular(new[]

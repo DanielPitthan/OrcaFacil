@@ -1,5 +1,6 @@
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
+using OrcaFacil.Core.Ativos;
 using OrcaFacil.Core.Data;
 using OrcaFacil.Core.Entities;
 
@@ -55,7 +56,8 @@ public static class PoliticaSemeadura
         nameof(AppDbContext.RecargasCartao),
         nameof(AppDbContext.TitulosRendaFixa),
         nameof(AppDbContext.OperacoesRendaFixa),
-        nameof(AppDbContext.RegrasCatalogoComprovante)
+        nameof(AppDbContext.RegrasCatalogoComprovante),
+        nameof(AppDbContext.RegrasFiscais)
     ];
 
     /// <summary>Colunas de <see cref="Transacao"/> que o backup compara com a semente. Fora Id e CriadoEm.</summary>
@@ -73,6 +75,7 @@ public static class PoliticaSemeadura
         nameof(Transacao.TransacaoOrigemId),
         nameof(Transacao.CartaoId),
         nameof(Transacao.OperacaoRendaFixaId),
+        nameof(Transacao.OperacaoAtivoId),
         nameof(Transacao.AtualizadoEm)
     ];
 
@@ -211,9 +214,12 @@ public static class PoliticaSemeadura
         if (await contexto.RecargasCartao.AnyAsync(cancellationToken))
             return true;
 
-        return await contexto.RegrasCatalogoComprovante.AnyAsync(
-            regra => regra.LimiteProdutos != RegraCatalogoComprovante.LimitePadrao,
-            cancellationToken);
+        if (await contexto.RegrasCatalogoComprovante.AnyAsync(
+                regra => regra.LimiteProdutos != RegraCatalogoComprovante.LimitePadrao,
+                cancellationToken))
+            return true;
+
+        return await RegrasFiscaisDiferemDaSementeAsync(contexto, cancellationToken);
     }
 
     /// <summary>
@@ -273,6 +279,9 @@ public static class PoliticaSemeadura
         if (await contexto.RegrasCatalogoComprovante.AnyAsync(
                 regra => regra.LimiteProdutos != RegraCatalogoComprovante.LimitePadrao,
                 cancellationToken))
+            return SituacaoConteudoBanco.DadoReal;
+
+        if (await RegrasFiscaisDiferemDaSementeAsync(contexto, cancellationToken))
             return SituacaoConteudoBanco.DadoReal;
 
         var membros = await contexto.MembrosFamilia.AsNoTracking().ToListAsync(cancellationToken);
@@ -703,4 +712,30 @@ public static class PoliticaSemeadura
 
     private static bool MesmaData(DateTime gravada, DateTime esperada)
         => gravada.Date == esperada.Date && gravada.TimeOfDay.Ticks == esperada.TimeOfDay.Ticks;
+
+    /// <summary>A semente da migration não é dado do usuário. Linha a mais ou valor diferente é.</summary>
+    private static async Task<bool> RegrasFiscaisDiferemDaSementeAsync(
+        AppDbContext contexto,
+        CancellationToken cancellationToken)
+    {
+        var gravadas = await contexto.RegrasFiscais.AsNoTracking().OrderBy(regra => regra.Id).ToListAsync(cancellationToken);
+        var esperadas = CatalogoRegrasFiscais.Linhas().OrderBy(regra => regra.Id).ToList();
+        if (gravadas.Count != esperadas.Count)
+            return true;
+
+        for (var i = 0; i < gravadas.Count; i++)
+        {
+            var gravada = gravadas[i];
+            var esperada = esperadas[i];
+            if (gravada.Id != esperada.Id
+                || !string.Equals(gravada.Codigo, esperada.Codigo, StringComparison.Ordinal)
+                || gravada.Valor != esperada.Valor
+                || gravada.VigenciaInicio.Date != esperada.VigenciaInicio.Date
+                || gravada.VigenciaFim?.Date != esperada.VigenciaFim?.Date
+                || gravada.EhSistema != esperada.EhSistema)
+                return true;
+        }
+
+        return false;
+    }
 }

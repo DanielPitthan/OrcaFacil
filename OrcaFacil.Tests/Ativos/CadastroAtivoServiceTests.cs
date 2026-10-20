@@ -13,7 +13,7 @@ public class CadastroAtivoServiceTests : IDisposable
     private readonly AtivoFinanceiroRepository _ativos;
     private readonly OperacaoAtivoRepository _operacoes;
     private readonly AtivoCadastroService _ativosService;
-    private readonly OperacaoCadastroService _operacoesService;
+    private readonly ResultadoRealizadoService _operacoesService;
     private readonly int _membroId;
 
     public CadastroAtivoServiceTests()
@@ -21,7 +21,7 @@ public class CadastroAtivoServiceTests : IDisposable
         _ativos = new AtivoFinanceiroRepository(_factory);
         _operacoes = new OperacaoAtivoRepository(_factory);
         _ativosService = new AtivoCadastroService(_ativos, _operacoes);
-        _operacoesService = new OperacaoCadastroService(_operacoes, _ativos);
+        _operacoesService = new ResultadoRealizadoService(_factory);
 
         var membros = new MembroFamiliaRepository(_factory);
         var membro = new MembroFamilia { Nome = "Usuário" };
