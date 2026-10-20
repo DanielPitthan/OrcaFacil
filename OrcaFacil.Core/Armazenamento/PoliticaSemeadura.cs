@@ -52,7 +52,9 @@ public static class PoliticaSemeadura
         nameof(AppDbContext.ComprasCesta),
         nameof(AppDbContext.ItensCompraCesta),
         nameof(AppDbContext.Cartoes),
-        nameof(AppDbContext.RecargasCartao)
+        nameof(AppDbContext.RecargasCartao),
+        nameof(AppDbContext.TitulosRendaFixa),
+        nameof(AppDbContext.OperacoesRendaFixa)
     ];
 
     /// <summary>Colunas de <see cref="Transacao"/> que o backup compara com a semente. Fora Id e CriadoEm.</summary>
@@ -69,6 +71,7 @@ public static class PoliticaSemeadura
         nameof(Transacao.MembroFamiliaId),
         nameof(Transacao.TransacaoOrigemId),
         nameof(Transacao.CartaoId),
+        nameof(Transacao.OperacaoRendaFixaId),
         nameof(Transacao.AtualizadoEm)
     ];
 
@@ -183,6 +186,12 @@ public static class PoliticaSemeadura
         if (await contexto.OperacoesAtivo.AnyAsync(cancellationToken))
             return true;
 
+        if (await contexto.TitulosRendaFixa.AnyAsync(cancellationToken))
+            return true;
+
+        if (await contexto.OperacoesRendaFixa.AnyAsync(cancellationToken))
+            return true;
+
         if (await contexto.ProdutosCesta.AnyAsync(cancellationToken))
             return true;
 
@@ -229,6 +238,12 @@ public static class PoliticaSemeadura
             return SituacaoConteudoBanco.DadoReal;
 
         if (await contexto.OperacoesAtivo.AnyAsync(cancellationToken))
+            return SituacaoConteudoBanco.DadoReal;
+
+        if (await contexto.TitulosRendaFixa.AnyAsync(cancellationToken))
+            return SituacaoConteudoBanco.DadoReal;
+
+        if (await contexto.OperacoesRendaFixa.AnyAsync(cancellationToken))
             return SituacaoConteudoBanco.DadoReal;
 
         if (await contexto.ProdutosCesta.AnyAsync(cancellationToken))

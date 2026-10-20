@@ -29,6 +29,8 @@ public static class ExportadorPlanilha
         "Fechamentos",
         "Ativos",
         "Operações",
+        "Renda fixa",
+        "Operações de renda fixa",
         "Produtos da cesta",
         "Locais de compra",
         "Compras da cesta",
@@ -51,6 +53,8 @@ public static class ExportadorPlanilha
             [nameof(AppDbContext.FechamentosPeriodo)] = "Fechamentos",
             [nameof(AppDbContext.AtivosFinanceiros)] = "Ativos",
             [nameof(AppDbContext.OperacoesAtivo)] = "Operações",
+            [nameof(AppDbContext.TitulosRendaFixa)] = "Renda fixa",
+            [nameof(AppDbContext.OperacoesRendaFixa)] = "Operações de renda fixa",
             [nameof(AppDbContext.ProdutosCesta)] = "Produtos da cesta",
             [nameof(AppDbContext.LocaisCompra)] = "Locais de compra",
             [nameof(AppDbContext.ComprasCesta)] = "Compras da cesta",
@@ -91,6 +95,8 @@ public static class ExportadorPlanilha
         GravarFechamentos(contexto, pasta);
         GravarAtivos(contexto, pasta);
         GravarOperacoes(contexto, pasta);
+        GravarTitulosRendaFixa(contexto, pasta);
+        GravarOperacoesRendaFixa(contexto, pasta);
         GravarProdutos(contexto, pasta);
         GravarLocais(contexto, pasta);
         GravarCompras(contexto, pasta);
@@ -288,6 +294,53 @@ public static class ExportadorPlanilha
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 9), operacao.Corretora);
             GravarInstante(PlanilhaPtBr.Celula(aba, linha, 10), operacao.CriadoEm);
             GravarInstante(PlanilhaPtBr.Celula(aba, linha, 11), operacao.AtualizadoEm);
+        });
+    }
+
+    private static void GravarTitulosRendaFixa(AppDbContext contexto, XLWorkbook pasta)
+    {
+        var aba = Abrir(pasta, "Renda fixa");
+        PlanilhaPtBr.GravarCabecalho(aba,
+            ["Tipo", "Código", "Nome", "Emissor", "Ano de vencimento", "Corretora", "Ativo", "Criado em"]);
+        EmLotes(contexto.TitulosRendaFixa.AsNoTracking().OrderBy(t => t.Id), "Renda fixa", (titulo, indice) =>
+        {
+            var linha = LinhaDeDados(indice);
+            PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 1), TextoTituloRendaFixa(titulo.Tipo));
+            PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 2), titulo.Codigo);
+            PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 3), titulo.Nome);
+            PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 4), titulo.Emissor);
+            PlanilhaPtBr.GravarNumero(PlanilhaPtBr.Celula(aba, linha, 5), titulo.AnoVencimento);
+            PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 6), titulo.Corretora);
+            PlanilhaPtBr.GravarSimNao(PlanilhaPtBr.Celula(aba, linha, 7), titulo.Ativo);
+            GravarInstante(PlanilhaPtBr.Celula(aba, linha, 8), titulo.CriadoEm);
+        });
+    }
+
+    private static void GravarOperacoesRendaFixa(AppDbContext contexto, XLWorkbook pasta)
+    {
+        var aba = Abrir(pasta, "Operações de renda fixa");
+        PlanilhaPtBr.GravarCabecalho(aba,
+        [
+            "Código", "Nome do título", "Operação", "Data", "Quantidade", "Preço unitário",
+            "Valor", "Custos", "IR retido", "Origem", "Criado em", "Atualizado em"
+        ]);
+        EmLotes(contexto.OperacoesRendaFixa.AsNoTracking()
+            .Include(o => o.Titulo)
+            .OrderBy(o => o.Id), "Operações de renda fixa", (operacao, indice) =>
+        {
+            var linha = LinhaDeDados(indice);
+            PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 1), operacao.Titulo?.Codigo);
+            PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 2), operacao.Titulo?.Nome);
+            PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 3), TextoOperacaoRendaFixa(operacao.Tipo));
+            PlanilhaPtBr.GravarData(PlanilhaPtBr.Celula(aba, linha, 4), operacao.Data);
+            PlanilhaPtBr.GravarNumero(PlanilhaPtBr.Celula(aba, linha, 5), operacao.Quantidade);
+            PlanilhaPtBr.GravarNumero(PlanilhaPtBr.Celula(aba, linha, 6), operacao.PrecoUnitario);
+            PlanilhaPtBr.GravarMoeda(PlanilhaPtBr.Celula(aba, linha, 7), operacao.Valor);
+            PlanilhaPtBr.GravarMoeda(PlanilhaPtBr.Celula(aba, linha, 8), operacao.Custos);
+            PlanilhaPtBr.GravarMoeda(PlanilhaPtBr.Celula(aba, linha, 9), operacao.IrRetido);
+            PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 10), TextoOrigemRendaFixa(operacao.Origem));
+            GravarInstante(PlanilhaPtBr.Celula(aba, linha, 11), operacao.CriadoEm);
+            GravarInstante(PlanilhaPtBr.Celula(aba, linha, 12), operacao.AtualizadoEm);
         });
     }
 
@@ -764,6 +817,31 @@ public static class ExportadorPlanilha
         TipoOperacao.Compra => "Compra",
         TipoOperacao.Venda => "Venda",
         _ => throw new InvalidOperationException($"Operação desconhecida: {tipo}.")
+    };
+
+    internal static string TextoTituloRendaFixa(TipoTituloRendaFixa tipo) => tipo switch
+    {
+        TipoTituloRendaFixa.CDB => "CDB",
+        TipoTituloRendaFixa.TesouroPrefixado => "Tesouro Prefixado",
+        TipoTituloRendaFixa.TesouroIPCA => "Tesouro IPCA+",
+        TipoTituloRendaFixa.TesouroSelic => "Tesouro Selic",
+        TipoTituloRendaFixa.Outro => "Outro",
+        _ => throw new InvalidOperationException($"Tipo de renda fixa desconhecido: {tipo}.")
+    };
+
+    internal static string TextoOperacaoRendaFixa(TipoOperacaoRendaFixa tipo) => tipo switch
+    {
+        TipoOperacaoRendaFixa.Aplicacao => "Aplicação",
+        TipoOperacaoRendaFixa.Resgate => "Resgate",
+        _ => throw new InvalidOperationException($"Operação de renda fixa desconhecida: {tipo}.")
+    };
+
+    internal static string TextoOrigemRendaFixa(OrigemOperacaoRendaFixa origem) => origem switch
+    {
+        OrigemOperacaoRendaFixa.Manual => "Manual",
+        OrigemOperacaoRendaFixa.ExtratoB3 => "Extrato B3",
+        OrigemOperacaoRendaFixa.CustoInformado => "Custo informado",
+        _ => throw new InvalidOperationException($"Origem de renda fixa desconhecida: {origem}.")
     };
 
     internal static string TextoCartao(TipoCartao tipo) => tipo switch
