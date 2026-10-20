@@ -243,6 +243,12 @@ html.of-tema-escuro .of-color-swatch:focus-visible {
     outline-color: #E8EAF0;
 }
 
+/* Regra separada: o Chrome 83 não conhece :focus-visible e descarta o bloco
+   inteiro. O anel do :focus continua. Nos navegadores novos, o clique some. */
+.of-color-swatch:focus:not(:focus-visible) {
+    outline: none;
+}
+
 .of-color-swatch.selected {
     border-color: var(--of-blue-grey);
 }
@@ -257,7 +263,8 @@ html.of-tema-escuro .of-color-swatch:focus-visible {
     width: 100%;
     margin: 0;
     padding: 6px 10px;
-    border: 1px solid var(--mud-palette-lines-inputs);
+    /* #767676 sobre #fff é 4,54:1 e sobre #1B1F27 é 3,63:1. Componente de UI, mínimo 3:1. */
+    border: 1px solid #767676;
     border-radius: var(--of-radius-control);
     background: transparent;
     color: var(--of-text);
@@ -310,6 +317,8 @@ html.of-tema-escuro .of-abrir-paleta-rotulo {
     min-width: 0;
     max-width: 100%;
     overflow-x: hidden;
+    box-sizing: border-box;
+    padding-right: 4px;
 }
 
 .mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-picker-color-picker {
@@ -340,9 +349,17 @@ html.of-tema-escuro .of-abrir-paleta-rotulo {
     margin-inline-start: 4px;
 }
 
-.mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-picker-control-switch .mud-icon-button {
-    margin-right: 0 !important;
-    margin-inline-end: 0 !important;
+/* Texto branco sobre #1E2A33 é 14,6:1. O primário #659ECD com texto branco fica em 2,87:1.
+   Só no tema claro; no escuro o par #0B1220 sobre #6EA8FE já passa de 4,5:1. */
+html.of-tema-claro .mud-dialog.of-dialogo-paleta .of-paleta-ok.mud-button-filled {
+    background-color: #1E2A33;
+    color: #ffffff;
+}
+
+html.of-tema-claro .mud-dialog.of-dialogo-paleta .of-paleta-ok.mud-button-filled:hover,
+html.of-tema-claro .mud-dialog.of-dialogo-paleta .of-paleta-ok.mud-button-filled:active {
+    background-color: #1E2A33;
+    color: #ffffff;
 }
 
 .of-mascara-numerica input {

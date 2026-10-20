@@ -124,7 +124,7 @@ public class PaletaCategoriaPopoverTests
         Assert.Contains("max-width: 312px;", Bloco(limpo, ".mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-picker-color-picker"), StringComparison.Ordinal);
         Assert.Contains("width: 100%;", Bloco(limpo, ".mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-picker-color-controls"), StringComparison.Ordinal);
         Assert.Contains("padding-left: 0;", Bloco(limpo, ".mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-picker-color-controls"), StringComparison.Ordinal);
-        Assert.Contains("margin-inline-end: 0 !important;", Bloco(limpo, ".mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-picker-control-switch .mud-icon-button"), StringComparison.Ordinal);
+        Assert.DoesNotContain("!important", limpo[limpo.IndexOf(".of-dialogo-paleta", StringComparison.Ordinal)..], StringComparison.Ordinal);
         Assert.DoesNotContain("of-dialogo-categoria", limpo, StringComparison.Ordinal);
         Assert.DoesNotContain(".mud-overlay.mud-overlay-dialog .mud-picker.mud-dialog", limpo, StringComparison.Ordinal);
         Assert.DoesNotContain(":has(", limpo, StringComparison.Ordinal);
@@ -210,7 +210,9 @@ public class PaletaCategoriaPopoverTests
         var visivel = Bloco(limpo, ".of-color-swatch:focus-visible");
 
         Assert.Contains("outline: 2px solid #1E2A33;", foco, StringComparison.Ordinal);
+        Assert.DoesNotContain("focus-visible", foco, StringComparison.Ordinal);
         Assert.Contains("outline: 2px solid #1E2A33;", visivel, StringComparison.Ordinal);
+        Assert.Contains("outline: none;", Bloco(limpo, ".of-color-swatch:focus:not(:focus-visible)"), StringComparison.Ordinal);
         Assert.Contains("outline-color: #E8EAF0;", Bloco(limpo, "html.of-tema-escuro .of-color-swatch:focus"), StringComparison.Ordinal);
         Assert.True(Contraste("#1E2A33", "#ffffff") >= 4.5);
         Assert.True(Contraste("#E8EAF0", "#1B1F27") >= 4.5);
@@ -232,6 +234,86 @@ public class PaletaCategoriaPopoverTests
 
         Assert.DoesNotContain("outline: 2px solid #1E2A33;", Bloco(mutado, ".of-color-swatch:focus"), StringComparison.Ordinal);
         Assert.Contains("outline: 2px solid #1E2A33;", Bloco(mutado, ".of-color-swatch:focus-visible"), StringComparison.Ordinal);
+
+        var semClique = SemComentarios(css.Replace(
+            """
+            .of-color-swatch:focus:not(:focus-visible) {
+                outline: none;
+            }
+            """,
+            """
+            .of-color-swatch:focus:not(:focus-visible) {
+                /* outline: none; */
+            }
+            """,
+            StringComparison.Ordinal));
+
+        Assert.DoesNotContain("outline: none;", Bloco(semClique, ".of-color-swatch:focus:not(:focus-visible)"), StringComparison.Ordinal);
+        Assert.Contains("outline: 2px solid #1E2A33;", Bloco(semClique, ".of-color-swatch:focus"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void OkNoClaroPassaDeQuatroEMeio_EComentarioNaoConta()
+    {
+        var css = Ler("OrcaFacil", "wwwroot", "css", "orcafacil-theme.css");
+        var limpo = SemComentarios(css);
+        var dialogo = SemComentarios(Ler("OrcaFacil", "Components", "Shared", "PaletaCategoriaDialog.razor"));
+        var tema = Ler("OrcaFacil", "Theme", "OrcaFacilThemes.cs");
+        var botao = Bloco(limpo, "html.of-tema-claro .mud-dialog.of-dialogo-paleta .of-paleta-ok.mud-button-filled");
+
+        Assert.Contains("Class=\"of-paleta-ok\"", dialogo, StringComparison.Ordinal);
+        Assert.Contains("background-color: #1E2A33;", botao, StringComparison.Ordinal);
+        Assert.Contains("color: #ffffff;", botao, StringComparison.Ordinal);
+        Assert.True(Contraste("#ffffff", "#1E2A33") >= 4.5);
+        Assert.Contains("Primary = \"#6EA8FE\"", tema, StringComparison.Ordinal);
+        Assert.Contains("PrimaryContrastText = \"#0B1220\"", tema, StringComparison.Ordinal);
+        Assert.True(Contraste("#0B1220", "#6EA8FE") >= 4.5);
+        Assert.DoesNotContain("of-tema-escuro .mud-dialog.of-dialogo-paleta .of-paleta-ok", limpo, StringComparison.Ordinal);
+
+        var mutado = SemComentarios(css.Replace(
+            "background-color: #1E2A33;",
+            "/* background-color: #1E2A33; */",
+            StringComparison.Ordinal));
+
+        Assert.DoesNotContain("#1E2A33", Bloco(mutado, "html.of-tema-claro .mud-dialog.of-dialogo-paleta .of-paleta-ok.mud-button-filled"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CancelarFechaComCancelENaoGrava_EComentarioNaoConta()
+    {
+        var fonte = Ler("OrcaFacil", "Components", "Shared", "PaletaCategoriaDialog.razor");
+        var dialogo = SemComentarios(fonte);
+        var corpo = Metodo(dialogo, "Cancelar");
+
+        Assert.Contains("OnClick=\"Cancelar\"", dialogo, StringComparison.Ordinal);
+        Assert.True(CancelaSemGravar(corpo));
+
+        var mutado = SemComentarios(fonte.Replace(
+            "private void Cancelar() => MudDialog.Cancel();",
+            "private void Cancelar() => MudDialog.Close(DialogResult.Ok(_escolha));",
+            StringComparison.Ordinal));
+
+        Assert.False(CancelaSemGravar(Metodo(mutado, "Cancelar")));
+    }
+
+    [Fact]
+    public void BordaOutrasCoresPassaDeTres_EComentarioNaoConta()
+    {
+        var css = Ler("OrcaFacil", "wwwroot", "css", "orcafacil-theme.css");
+        var borda = Bloco(SemComentarios(css), ".of-abrir-paleta");
+
+        Assert.Contains("border: 1px solid #767676;", borda, StringComparison.Ordinal);
+        Assert.True(Contraste("#767676", "#ffffff") >= 3);
+        Assert.True(Contraste("#767676", "#EFF3F7") >= 3);
+        Assert.True(Contraste("#767676", "#1B1F27") >= 3);
+        Assert.True(Contraste("#767676", "#12151B") >= 3);
+
+        var mutado = SemComentarios(css.Replace(
+            "border: 1px solid #767676;",
+            "/* border: 1px solid #767676; */",
+            StringComparison.Ordinal));
+
+        Assert.DoesNotContain("#767676", Bloco(mutado, ".of-abrir-paleta"), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -257,6 +339,12 @@ public class PaletaCategoriaPopoverTests
         Assert.DoesNotContain("voltar", fonte, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("Cancelar", fonte, StringComparison.Ordinal);
     }
+
+    private static bool CancelaSemGravar(string corpo) =>
+        corpo.Contains("MudDialog.Cancel()", StringComparison.Ordinal)
+        && !corpo.Contains("Close", StringComparison.Ordinal)
+        && !corpo.Contains("Ok", StringComparison.Ordinal)
+        && !corpo.Contains("Resolver", StringComparison.Ordinal);
 
     private static bool SoAtualizaEscolha(string corpo) =>
         !corpo.Contains("Close", StringComparison.Ordinal)
