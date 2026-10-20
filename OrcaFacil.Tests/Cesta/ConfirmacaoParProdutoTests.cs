@@ -306,6 +306,84 @@ public class ConfirmacaoParProdutoTests : IDisposable
         Assert.False(CssDoPar(css.Replace("display: flex;", "display: flex;\n    gap: 8px;", StringComparison.Ordinal)));
     }
 
+    [Fact]
+    public void DestaqueEChip_CabemNaLista_ComentarioNaoConta()
+    {
+        var dialog = Ler("OrcaFacil", "Components", "Pages", "Cesta", "PreviaComprovanteDialog.razor");
+        var lista = Ler("OrcaFacil", "Components", "Shared", "ItemList.razor");
+        var css = Ler("OrcaFacil", "Components", "Shared", "ItemList.razor.css");
+        Assert.True(DestaqueNaLista(dialog, lista));
+        Assert.True(ChipCabeNaLista(css));
+
+        var semDestacado = dialog.Replace(
+            "Destacado=\"Destacado\"",
+            "<!-- Destacado=\"Destacado\" -->",
+            StringComparison.Ordinal);
+        Assert.Contains("Destacado=\"Destacado\"", semDestacado, StringComparison.Ordinal);
+        Assert.False(DestaqueNaLista(semDestacado, lista));
+
+        var semItem = lista.Replace(
+            "classe += \" of-lista-item-pendente\";",
+            "// classe += \" of-lista-item-pendente\";",
+            StringComparison.Ordinal);
+        Assert.False(DestaqueNaLista(dialog, semItem));
+
+        var semChip = lista.Replace(
+            "return \"of-lista-chip-pendente\";",
+            "// return \"of-lista-chip-pendente\";",
+            StringComparison.Ordinal);
+        Assert.False(DestaqueNaLista(dialog, semChip));
+
+        var comentarioNowrap = css.Replace(
+            "white-space: normal;",
+            "white-space: normal;\n    /* white-space: nowrap; */",
+            StringComparison.Ordinal);
+        Assert.Contains("nowrap", comentarioNowrap, StringComparison.Ordinal);
+        Assert.True(ChipCabeNaLista(comentarioNowrap));
+
+        var comNowrap = css.Replace(
+            "white-space: normal;",
+            "white-space: nowrap;",
+            StringComparison.Ordinal);
+        Assert.False(ChipCabeNaLista(comNowrap));
+
+        var semToque = css.Replace(
+            """
+            .of-lista-marca {
+                flex: 0 0 auto;
+                width: var(--of-touch);
+                height: var(--of-touch);
+            """,
+            """
+            .of-lista-marca {
+                flex: 0 0 auto;
+                /* width: var(--of-touch); */
+                /* height: var(--of-touch); */
+            """,
+            StringComparison.Ordinal);
+        Assert.False(ChipCabeNaLista(semToque));
+
+        var semFundo = css.Replace(
+            "background: #9B2C3A;",
+            "/* background: #9B2C3A; */",
+            StringComparison.Ordinal);
+        Assert.False(ChipCabeNaLista(semFundo));
+        Assert.False(ChipCabeNaLista(css.Replace(
+            "background: #F59A9A;",
+            "background: #1B1F27;",
+            StringComparison.Ordinal)));
+        Assert.False(ChipCabeNaLista(css.Replace(
+            """
+                background: #9B2C3A;
+                color: #ffffff;
+            """,
+            """
+                background: #9B2C3A;
+                color: #9B2C3A;
+            """,
+            StringComparison.Ordinal)));
+    }
+
     public void Dispose() => _factory.Dispose();
 
     private List<ProdutoCesta> Catalogo() => [_arroz, _feijao, _inativo];
@@ -449,6 +527,92 @@ public class ConfirmacaoParProdutoTests : IDisposable
             && Contraste("#E8EAF0", "#1B1F27") >= 4.5
             && Contraste("#9B2C3A", "#ffffff") >= 4.5
             && Contraste("#F59A9A", "#1B1F27") >= 4.5;
+    }
+
+    private static bool DestaqueNaLista(string dialog, string lista)
+    {
+        var dialogo = SemComentarios(dialog);
+        var componente = SemComentarios(lista);
+        return dialogo.Contains("Destacado=\"Destacado\"", StringComparison.Ordinal)
+            && componente.Contains("of-lista-item-pendente", StringComparison.Ordinal)
+            && componente.Contains("of-lista-chip-pendente", StringComparison.Ordinal);
+    }
+
+    private static bool ChipCabeNaLista(string css)
+    {
+        var limpo = SemComentarios(css);
+        if (limpo.Contains(":focus-visible", StringComparison.Ordinal) || limpo.Contains(":has(", StringComparison.Ordinal))
+            return false;
+        if (limpo.Contains("gap:", StringComparison.Ordinal))
+            return false;
+
+        var marca = Regra(limpo, ".of-lista-marca");
+        var chip = Regra(limpo, ".of-lista-chip");
+        if (!marca.Contains("width: var(--of-touch);", StringComparison.Ordinal)
+            || !marca.Contains("height: var(--of-touch);", StringComparison.Ordinal))
+            return false;
+        if (chip.Contains("nowrap", StringComparison.Ordinal))
+            return false;
+
+        var pendentes = Regras(limpo, ".of-lista-chip-pendente");
+        var claro = pendentes.Find(bloco => bloco.Contains("background: #9B2C3A;", StringComparison.Ordinal));
+        var escuro = pendentes.Find(bloco => bloco.Contains("background: #F59A9A;", StringComparison.Ordinal));
+        if (claro is null || escuro is null)
+            return false;
+
+        var corClara = CorDeclarada(claro);
+        var corEscura = CorDeclarada(escuro);
+        return corClara is not null
+            && corEscura is not null
+            && Contraste("#9B2C3A", corClara) >= 4.5
+            && Contraste("#F59A9A", corEscura) >= 4.5;
+    }
+
+    private static string? CorDeclarada(string bloco)
+    {
+        const string chave = "color:";
+        var indice = bloco.IndexOf(chave, StringComparison.Ordinal);
+        if (indice < 0)
+            return null;
+
+        var resto = bloco[(indice + chave.Length)..].Trim();
+        var fim = resto.IndexOf(';');
+        return fim < 0 ? null : resto[..fim].Trim();
+    }
+
+    private static string Regra(string css, string seletor)
+    {
+        var regras = Regras(css, seletor);
+        return regras.Count == 0 ? string.Empty : regras[0];
+    }
+
+    private static List<string> Regras(string css, string seletor)
+    {
+        var lista = new List<string>();
+        var inicio = 0;
+        while (inicio < css.Length)
+        {
+            var indice = css.IndexOf(seletor, inicio, StringComparison.Ordinal);
+            if (indice < 0)
+                break;
+
+            var depois = indice + seletor.Length;
+            if (depois < css.Length && css[depois] is not (' ' or '{' or '\r' or '\n' or ','))
+            {
+                inicio = depois;
+                continue;
+            }
+
+            var abre = css.IndexOf('{', indice);
+            var fecha = abre < 0 ? -1 : css.IndexOf('}', abre);
+            if (fecha < 0)
+                break;
+
+            lista.Add(css[indice..(fecha + 1)]);
+            inicio = fecha + 1;
+        }
+
+        return lista;
     }
 
     private static double Contraste(string frente, string fundo)
