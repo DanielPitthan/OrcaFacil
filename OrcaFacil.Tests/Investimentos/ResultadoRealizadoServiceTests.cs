@@ -2,6 +2,7 @@ using OrcaFacil.Core.Ativos;
 using OrcaFacil.Core.Dtos;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
+using OrcaFacil.Core.Lancamentos;
 using OrcaFacil.Core.Services;
 
 namespace OrcaFacil.Tests.Investimentos;
@@ -230,7 +231,54 @@ public class ResultadoRealizadoServiceTests : IDisposable
         Assert.Equal(OrigemOperacaoAtivo.ExtratoB3, atual.Origem);
         Assert.Equal("hash-preservado", atual.HashImportacao);
         Assert.Equal(12m, atual.Quantidade);
+        Assert.Equal(11m, atual.PrecoUnitario);
+        Assert.Equal(132m, atual.ValorOperacao);
         Assert.Equal(new DateTime(2026, 1, 11), atual.Data);
+    }
+
+    [Fact]
+    public async Task EditarImportada_SemMudarQuantidadeNemPreco_PreservaValorOperacao()
+    {
+        var modelo = Operacao(_petroId, TipoOperacao.Compra, new DateTime(2026, 1, 10), 10, 15.01m, 0m);
+        modelo.Origem = OrigemOperacaoAtivo.ExtratoB3;
+        modelo.HashImportacao = "hash-do-total";
+        modelo.ValorOperacao = 149.97m;
+        var gravada = await _servico.SalvarAsync(modelo, _membroId);
+
+        var edicao = Operacao(_petroId, TipoOperacao.Compra, new DateTime(2026, 1, 10), 10, 15.01m, 0m, gravada.Id);
+        edicao.Corretora = "Clear";
+        await _servico.SalvarAsync(edicao, _membroId);
+
+        using var contexto = _factory.CreateDbContext();
+        var atual = Assert.Single(contexto.OperacoesAtivo);
+        Assert.Equal(149.97m, atual.ValorOperacao);
+        Assert.Equal(15.01m, atual.PrecoUnitario);
+        Assert.Equal(10m, atual.Quantidade);
+        Assert.Equal("Clear", atual.Corretora);
+        Assert.Equal(OrigemOperacaoAtivo.ExtratoB3, atual.Origem);
+        Assert.Equal("hash-do-total", atual.HashImportacao);
+    }
+
+    [Fact]
+    public async Task EditarImportada_MudarQuantidade_RecalculaValorOperacao()
+    {
+        var modelo = Operacao(_petroId, TipoOperacao.Compra, new DateTime(2026, 1, 10), 10, 15.01m, 0m);
+        modelo.Origem = OrigemOperacaoAtivo.ExtratoB3;
+        modelo.HashImportacao = "hash-da-quantidade";
+        modelo.ValorOperacao = 149.97m;
+        var gravada = await _servico.SalvarAsync(modelo, _membroId);
+
+        await _servico.SalvarAsync(
+            Operacao(_petroId, TipoOperacao.Compra, new DateTime(2026, 1, 10), 8, 15.01m, 0m, gravada.Id),
+            _membroId);
+
+        using var contexto = _factory.CreateDbContext();
+        var atual = Assert.Single(contexto.OperacoesAtivo);
+        Assert.Equal(8m, atual.Quantidade);
+        Assert.Equal(15.01m, atual.PrecoUnitario);
+        Assert.Equal(120.08m, atual.ValorOperacao);
+        Assert.Equal(OrigemOperacaoAtivo.ExtratoB3, atual.Origem);
+        Assert.Equal("hash-da-quantidade", atual.HashImportacao);
     }
 
     [Fact]
@@ -380,9 +428,15 @@ public class ResultadoRealizadoServiceTests : IDisposable
     [Fact]
     public void LancamentoGerado_NaoSeEditaPelaTela()
     {
-        var ex = Assert.Throws<InvalidOperationException>(() => ProtecaoLancamentoAtivo.GarantirEditavelNaTela(4));
-        Assert.Equal(ProtecaoLancamentoAtivo.Mensagem, ex.Message);
-        ProtecaoLancamentoAtivo.GarantirEditavelNaTela(null);
+        var ativo = Assert.Throws<InvalidOperationException>(() =>
+            ProtecaoLancamentoOperacao.GarantirEditavelNaTela(4, null));
+        Assert.Equal(ProtecaoLancamentoOperacao.MensagemAtivo, ativo.Message);
+
+        var rendaFixa = Assert.Throws<InvalidOperationException>(() =>
+            ProtecaoLancamentoOperacao.GarantirEditavelNaTela(null, 9));
+        Assert.Equal(ProtecaoLancamentoOperacao.MensagemRendaFixa, rendaFixa.Message);
+
+        ProtecaoLancamentoOperacao.GarantirEditavelNaTela(null, null);
     }
 
     [Fact]

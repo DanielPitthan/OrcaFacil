@@ -10,6 +10,18 @@ namespace OrcaFacil.Core.Data.Migrations
     /// <inheritdoc />
     public partial class AddResultadoRealizadoVariavel : Migration
     {
+        /// <summary>
+        /// Preenche só o total ainda vazio. Multiplicação no SQLite destes textos
+        /// (100 × 10,01) cai em 1001 exato; um valor já informado não é reescrito.
+        /// </summary>
+        public const string PreencherValorOperacao =
+            """
+            UPDATE "OperacoesAtivo"
+            SET "ValorOperacao" = "Quantidade" * "PrecoUnitario"
+            WHERE "ValorOperacao" IS NULL
+               OR CAST("ValorOperacao" AS REAL) = 0
+            """;
+
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
@@ -40,11 +52,7 @@ namespace OrcaFacil.Core.Data.Migrations
                 nullable: false,
                 defaultValue: 0m);
 
-            migrationBuilder.Sql(
-                """
-                UPDATE "OperacoesAtivo"
-                SET "ValorOperacao" = "Quantidade" * "PrecoUnitario"
-                """);
+            migrationBuilder.Sql(PreencherValorOperacao);
 
             migrationBuilder.CreateTable(
                 name: "RegrasFiscais",

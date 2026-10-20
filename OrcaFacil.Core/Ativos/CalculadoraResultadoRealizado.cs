@@ -1,3 +1,5 @@
+using System.Globalization;
+using OrcaFacil.Core;
 using OrcaFacil.Core.Enums;
 
 namespace OrcaFacil.Core.Ativos;
@@ -14,7 +16,7 @@ public sealed class PosicaoComResultado
 
 /// <summary>
 /// Único cálculo de posição e de resultado realizado da renda variável.
-/// A ordem é a data e, no mesmo dia, o Id. Operação nova (Id 0) fica por último.
+/// A ordem é <see cref="OrdemPorDataEId"/>: a data e, no mesmo dia, o Id.
 /// Compra: o custo soma quantidade × preço + custos. Venda: o preço médio não muda.
 /// O resultado da venda usa o Valor da Operação informado, menos o custo baixado
 /// e, se a regra da data mandar, menos os custos.
@@ -23,6 +25,8 @@ public sealed class PosicaoComResultado
 /// </summary>
 public static class CalculadoraResultadoRealizado
 {
+    private static readonly CultureInfo PtBr = new("pt-BR");
+
     public static PosicaoComResultado Calcular(
         IEnumerable<MovimentoPosicao> operacoes,
         Func<DateTime, RegraResultado>? regraDaData = null)
@@ -31,7 +35,7 @@ public static class CalculadoraResultadoRealizado
         decimal custo = 0m;
         var vendas = new List<ResultadoVenda>();
 
-        foreach (var operacao in operacoes.OrderBy(o => o.Data.Date).ThenBy(o => o.Id == 0 ? int.MaxValue : o.Id))
+        foreach (var operacao in OrdemPorDataEId.Ordenar(operacoes, o => o.Data, o => o.Id))
         {
             if (operacao.Quantidade <= 0)
                 throw new InvalidOperationException("A quantidade deve ser maior que zero.");
@@ -50,7 +54,7 @@ public static class CalculadoraResultadoRealizado
             if (operacao.Quantidade > quantidade)
             {
                 throw new InvalidOperationException(
-                    $"A venda de {operacao.Quantidade:0.########} em {operacao.Data:dd/MM/yyyy} excede a quantidade em carteira ({quantidade:0.########}).");
+                    $"A venda de {Formatar(operacao.Quantidade)} em {operacao.Data:dd/MM/yyyy} excede a quantidade em carteira ({Formatar(quantidade)}).");
             }
 
             decimal custoBaixado;
@@ -100,4 +104,7 @@ public static class CalculadoraResultadoRealizado
 
         return Math.Round(valor, casas, MidpointRounding.AwayFromZero);
     }
+
+    private static string Formatar(decimal valor)
+        => valor.ToString("0.########", PtBr);
 }

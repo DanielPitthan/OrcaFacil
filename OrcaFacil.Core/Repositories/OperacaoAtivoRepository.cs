@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using OrcaFacil.Core;
 using OrcaFacil.Core.Data;
 using OrcaFacil.Core.Entities;
 
@@ -30,22 +31,20 @@ public class OperacaoAtivoRepository : GenericRepository<OperacaoAtivo>, IOperac
     public async Task<List<OperacaoAtivo>> ListarPorAtivoAsync(int ativoId, int membroFamiliaId)
     {
         await using var context = await ContextFactory.CreateDbContextAsync();
-        return await context.OperacoesAtivo
+        var operacoes = await context.OperacoesAtivo
             .Where(o => o.AtivoId == ativoId && o.MembroFamiliaId == membroFamiliaId)
-            .OrderBy(o => o.Data)
-            .ThenBy(o => o.Id)
             .ToListAsync();
+        return OrdemPorDataEId.Ordenar(operacoes, o => o.Data, o => o.Id).ToList();
     }
 
     public async Task<List<OperacaoAtivo>> ListarPorMembroAsync(int membroFamiliaId)
     {
         await using var context = await ContextFactory.CreateDbContextAsync();
-        return await context.OperacoesAtivo
+        var operacoes = await context.OperacoesAtivo
             .Include(o => o.Ativo)
             .Where(o => o.MembroFamiliaId == membroFamiliaId)
-            .OrderBy(o => o.Data)
-            .ThenBy(o => o.Id)
             .ToListAsync();
+        return OrdemPorDataEId.Ordenar(operacoes, o => o.Data, o => o.Id).ToList();
     }
 
     public async Task<bool> ExistePorAtivoAsync(int ativoId)

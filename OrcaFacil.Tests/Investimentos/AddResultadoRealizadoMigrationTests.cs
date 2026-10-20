@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.Data;
+using OrcaFacil.Core.Data.Migrations;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
 
@@ -29,7 +30,7 @@ public class AddResultadoRealizadoMigrationTests
                 INSERT INTO AtivosFinanceiros (Ticker, Nome, Tipo, Ativo, CriadoEm)
                 VALUES ('PETR4', 'Petrobras', 0, 1, '2026-01-15 00:00:00');
                 INSERT INTO OperacoesAtivo (AtivoId, MembroFamiliaId, Tipo, Data, Quantidade, PrecoUnitario, Custos, Corretora, CriadoEm)
-                VALUES (1, 1, 0, '2026-03-10 00:00:00', '100', '10.5', '1.25', 'XP', '2026-03-10 00:00:00');
+                VALUES (1, 1, 0, '2026-03-10 00:00:00', '100', '10.01', '1.25', 'XP', '2026-03-10 00:00:00');
                 INSERT INTO Transacoes (Descricao, Valor, Data, Tipo, Recorrencia, Pago, CategoriaId, MembroFamiliaId, CriadoEm)
                 VALUES ('Mercado', '42.50', '2026-02-03 00:00:00', 1, 0, 1, 1, 1, '2026-02-03 00:00:00');
                 """);
@@ -46,9 +47,25 @@ public class AddResultadoRealizadoMigrationTests
             Assert.Equal(OrigemOperacaoAtivo.Manual, operacao.Origem);
             Assert.Null(operacao.HashImportacao);
             Assert.Equal(100m, operacao.Quantidade);
-            Assert.Equal(10.5m, operacao.PrecoUnitario);
-            Assert.Equal(1050m, operacao.ValorOperacao);
+            Assert.Equal(10.01m, operacao.PrecoUnitario);
+            Assert.Equal(1001m, operacao.ValorOperacao);
             Assert.Equal("XP", operacao.Corretora);
+
+            atual.Database.ExecuteSqlRaw(
+                """
+                INSERT INTO OperacoesAtivo
+                    (AtivoId, MembroFamiliaId, Tipo, Data, Quantidade, PrecoUnitario, Custos, Corretora, CriadoEm, Origem, ValorOperacao)
+                VALUES
+                    (1, 1, 0, '2026-04-01 00:00:00', '100', '10.01', '0', 'Clear', '2026-04-01 00:00:00', 0, '77.77');
+                UPDATE OperacoesAtivo SET ValorOperacao = '0' WHERE Corretora = 'XP';
+                """);
+            atual.Database.ExecuteSqlRaw(AddResultadoRealizadoVariavel.PreencherValorOperacao);
+            atual.ChangeTracker.Clear();
+            Assert.Equal(1001m, atual.OperacoesAtivo.Single(o => o.Corretora == "XP").ValorOperacao);
+            Assert.Equal(77.77m, atual.OperacoesAtivo.Single(o => o.Corretora == "Clear").ValorOperacao);
+            var preservada = atual.OperacoesAtivo.Single(o => o.Corretora == "Clear");
+            atual.OperacoesAtivo.Remove(preservada);
+            atual.SaveChanges();
 
             var mercado = atual.Transacoes.Single(t => t.Descricao == "Mercado");
             Assert.Null(mercado.OperacaoAtivoId);

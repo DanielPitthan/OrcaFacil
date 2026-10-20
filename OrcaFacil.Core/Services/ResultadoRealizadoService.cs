@@ -11,7 +11,8 @@ namespace OrcaFacil.Core.Services;
 /// Único caminho de gravação da renda variável: lança, edita e exclui a operação e,
 /// na mesma transação, recalcula a sequência do ativo e o lançamento do resultado.
 /// Lucro vira receita do mês e prejuízo vira despesa, com base no Valor da Operação.
-/// Sem total informado, grava quantidade × preço — é o que a tela manual faz.
+/// Sem total informado, operação nova ou com quantidade ou preço alterados grava
+/// quantidade × preço. Edição que não mexe nesses dois campos preserva o total gravado.
 /// A regra fiscal vem da tabela vigente na data da venda. Alíquota não entra na conta.
 /// </summary>
 public class ResultadoRealizadoService
@@ -87,13 +88,13 @@ public class ResultadoRealizadoService
                 Origem = modelo.Origem,
                 HashImportacao = hash
             };
-            CopiarCampos(alvo, modelo);
+            CopiarCampos(alvo, modelo, nova: true);
             operacoes.Add(alvo);
         }
         else
         {
             alvo = operacoes.First(o => o.Id == existente.Id);
-            CopiarCampos(alvo, modelo);
+            CopiarCampos(alvo, modelo, nova: false);
             alvo.AtualizadoEm = DateTime.UtcNow;
         }
 
@@ -398,14 +399,15 @@ public class ResultadoRealizadoService
             throw new InvalidOperationException(MensagemHashRepetido);
     }
 
-    private static void CopiarCampos(OperacaoAtivo destino, OperacaoAtivoFormModel modelo)
+    private static void CopiarCampos(OperacaoAtivo destino, OperacaoAtivoFormModel modelo, bool nova)
     {
+        var valor = ResolverValorOperacao(destino, modelo, nova);
         destino.AtivoId = modelo.AtivoId;
         destino.Tipo = modelo.Tipo;
         destino.Data = modelo.Data.Date;
         destino.Quantidade = modelo.Quantidade;
         destino.PrecoUnitario = modelo.PrecoUnitario;
-        destino.ValorOperacao = ValorInformado(modelo);
+        destino.ValorOperacao = valor;
         destino.Custos = modelo.Custos;
         destino.Corretora = NormalizarCorretora(modelo.Corretora);
     }
@@ -450,8 +452,18 @@ public class ResultadoRealizadoService
             throw new InvalidOperationException("O hash de importação deve ter no máximo 64 caracteres.");
     }
 
-    private static decimal ValorInformado(OperacaoAtivoFormModel modelo)
-        => modelo.ValorOperacao ?? modelo.Quantidade * modelo.PrecoUnitario;
+    private static decimal ResolverValorOperacao(OperacaoAtivo destino, OperacaoAtivoFormModel modelo, bool nova)
+    {
+        if (modelo.ValorOperacao is decimal informado)
+            return informado;
+
+        if (!nova
+            && destino.Quantidade == modelo.Quantidade
+            && destino.PrecoUnitario == modelo.PrecoUnitario)
+            return destino.ValorOperacao;
+
+        return modelo.Quantidade * modelo.PrecoUnitario;
+    }
 
     private static string? NormalizarHash(string? hash)
         => string.IsNullOrWhiteSpace(hash) ? null : hash.Trim();
