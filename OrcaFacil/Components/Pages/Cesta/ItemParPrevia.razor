@@ -7,7 +7,6 @@
         <p class="of-par-lido">@Linha.DescricaoLida</p>
     }
     <div class="of-par-acoes">
-        <button type="button" class="of-par-botao" @onclick="Confirmar">Confirmar</button>
         <button type="button" class="of-par-botao" @onclick="AbrirTroca">Trocar</button>
         <button type="button" class="of-par-botao" @onclick="Desfazer">Desfazer</button>
     </div>
@@ -34,19 +33,12 @@
 @code {
     [Parameter] public LinhaPreviaComprovante Linha { get; set; } = null!;
     [Parameter] public IReadOnlyList<ProdutoCesta> Catalogo { get; set; } = [];
-    [Parameter] public EventCallback OnConfirmar { get; set; }
     [Parameter] public EventCallback<ProdutoCesta> OnTrocar { get; set; }
     [Parameter] public EventCallback OnDesfazer { get; set; }
 
     private bool _troca;
 
     private void AbrirTroca() => _troca = !_troca;
-
-    private Task Confirmar()
-    {
-        _troca = false;
-        return OnConfirmar.InvokeAsync();
-    }
 
     private Task Trocar(ProdutoCesta produto)
     {

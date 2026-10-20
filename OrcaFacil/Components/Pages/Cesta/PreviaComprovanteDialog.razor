@@ -124,8 +124,6 @@
         _catalogo.AddRange(Produtos.Where(p => p.Ativo).OrderBy(p => p.Nome, StringComparer.CurrentCultureIgnoreCase));
     }
 
-    private bool PodeGravarCompra => Previa.PodeConfirmar && ConfirmacaoParProduto.PodeGravar(Previa.Linhas);
-
     private void Cancelar()
     {
         Previa.CancelarCadastro();

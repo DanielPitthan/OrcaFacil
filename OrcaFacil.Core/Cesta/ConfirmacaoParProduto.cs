@@ -4,41 +4,18 @@ using OrcaFacil.Core.Llm;
 namespace OrcaFacil.Core.Cesta;
 
 /// <summary>
-/// Confirma o par na própria linha da prévia. Confiança e pendente não entram na decisão.
+/// Trocar e Desfazer na prévia. Os dois desmarcam a linha.
+/// A marcação e o Confirmar ficam em <see cref="PreviaComprovante"/>.
 /// </summary>
 public static class ConfirmacaoParProduto
 {
-    public static bool ExigeConfirmacao(LinhaPreviaComprovante linha)
+    public static bool PodeAjustar(LinhaPreviaComprovante linha)
     {
         ArgumentNullException.ThrowIfNull(linha);
-        return linha.ProdutoCestaId is > 0 && !linha.CasamentoConfirmado;
+        return linha.ProdutoCestaId is > 0 && !linha.NaoIdentificado;
     }
 
-    public static bool PodeGravar(IReadOnlyList<LinhaPreviaComprovante> linhas)
-    {
-        ArgumentNullException.ThrowIfNull(linhas);
-        foreach (var linha in linhas)
-        {
-            if (linha is not null && linha.ProdutoCestaId is > 0 && !linha.CasamentoConfirmado)
-                return false;
-        }
-
-        return true;
-    }
-
-    public static string? MensagemBloqueio(IReadOnlyList<LinhaPreviaComprovante> linhas) =>
-        PodeGravar(linhas) ? null : CasamentoComprovante.MensagemConfirmacaoObrigatoria;
-
-    public static void Confirmar(LinhaPreviaComprovante linha)
-    {
-        ArgumentNullException.ThrowIfNull(linha);
-        if (linha.ProdutoCestaId is not > 0 || linha.CasamentoConfirmado)
-            return;
-
-        linha.CasamentoConfirmado = true;
-    }
-
-    /// <summary>Escolhe outro produto ativo do catálogo. A escolha confirma o casamento da linha.</summary>
+    /// <summary>Escolhe outro produto ativo do catálogo e desmarca a linha.</summary>
     public static bool Trocar(
         PreviaComprovante previa,
         LinhaPreviaComprovante linha,
@@ -49,7 +26,7 @@ public static class ConfirmacaoParProduto
         ArgumentNullException.ThrowIfNull(linha);
         ArgumentNullException.ThrowIfNull(produto);
         ArgumentNullException.ThrowIfNull(catalogo);
-        if (linha.ProdutoCestaId is not > 0 || linha.NaoIdentificado)
+        if (!PodeAjustar(linha))
             return false;
         if (produto.Id <= 0 || !produto.Ativo)
             return false;
@@ -57,14 +34,15 @@ public static class ConfirmacaoParProduto
             return false;
 
         previa.Classificar(linha, produto);
-        linha.CasamentoConfirmado = true;
+        linha.Marcado = false;
+        linha.CasamentoConfirmado = false;
         return true;
     }
 
     public static void Desfazer(LinhaPreviaComprovante linha)
     {
         ArgumentNullException.ThrowIfNull(linha);
-        if (linha.ProdutoCestaId is not > 0 || linha.NaoIdentificado)
+        if (!PodeAjustar(linha))
             return;
 
         AplicarNaoIdentificado(linha);
@@ -87,6 +65,7 @@ public static class ConfirmacaoParProduto
         linha.ProdutoNovoChave = null;
         linha.PodeDesfazerNovo = false;
         linha.CasamentoConfirmado = false;
+        linha.Marcado = false;
         linha.Nome = NormalizadorComprovante.Cortar(linha.DescricaoLida);
     }
 }

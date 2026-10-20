@@ -1,6 +1,5 @@
 .of-par-bloco,
-.of-par-secao,
-.of-par-alerta {
+.of-par-secao {
     min-width: 0;
     max-width: 100%;
 }

@@ -1,34 +1,26 @@
 @using OrcaFacil.Core.Llm
 
-@if (Previa.Linhas.Any(ConfirmacaoParProduto.ExigeConfirmacao))
+@if (Previa.Linhas.Any(ConfirmacaoParProduto.PodeAjustar))
 {
     <div class="of-par-bloco">
-        <p class="of-par-secao">Confirme o produto de cada item.</p>
+        <p class="of-par-secao">Trocar ou desfazer o produto.</p>
         @foreach (var linha in Previa.Linhas)
         {
-            if (!ConfirmacaoParProduto.ExigeConfirmacao(linha))
+            if (!ConfirmacaoParProduto.PodeAjustar(linha))
                 continue;
 
             var atual = linha;
             <ItemParPrevia Linha="atual" Catalogo="Catalogo"
-                           OnConfirmar="() => Confirmar(atual)"
                            OnTrocar="produto => Trocar(atual, produto)"
                            OnDesfazer="() => Desfazer(atual)" />
         }
     </div>
-}
-@if (ConfirmacaoParProduto.MensagemBloqueio(Previa.Linhas) is string mensagem)
-{
-    <p class="of-par-alerta of-previa-erro" role="alert">@mensagem</p>
 }
 
 @code {
     [Parameter] public PreviaComprovante Previa { get; set; } = null!;
     [Parameter] public IReadOnlyList<ProdutoCesta> Catalogo { get; set; } = [];
     [Parameter] public EventCallback<LinhaPreviaComprovante> OnLinhaDesfeita { get; set; }
-
-    private void Confirmar(LinhaPreviaComprovante linha) =>
-        ConfirmacaoParProduto.Confirmar(linha);
 
     private void Trocar(LinhaPreviaComprovante linha, ProdutoCesta produto) =>
         ConfirmacaoParProduto.Trocar(Previa, linha, produto, Catalogo);
