@@ -7,9 +7,12 @@ namespace OrcaFacil.Core.Dirpf;
 /// Semente dos códigos da DIRPF 2026, vigente a partir de 2021 (grupos atuais de Bens e Direitos).
 /// Ano anterior não tem linha: a exportação recusa em vez de reaproveitar o código novo.
 /// Fiagro continua FII no cadastro. Na exportação de bens, a variante Fiagro usa o código 07/02.
-/// ETF de mercado usa o código 09; o 08 é o de índice de renda fixa, e o tipo não distingue.
-/// Rendimento isento de FII e Fiagro permanece 99, configurável. O manual da DIRPF 2026
-/// nomeia o tipo "Outros rendimentos isentos" e não publica o código numérico.
+/// ETF usa 07/06. Fundo de índice de renda fixa é 07/08 na mesma página da Receita,
+/// mas o cadastro tem um único tipo ETF, então a ficha não separa o 08.
+/// Fonte: Bens Financeiros, Receita Federal, atualizado em 26/05/2026.
+/// https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/preenchimento/manual-mir/patrimonio/bens-financeiros
+/// Rendimento isento de FII e Fiagro permanece 99, configurável.
+/// O 26 aparece em matéria do Seu Dinheiro, não em fonte da Receita.
 /// BDR e ETF não têm rendimento isento nesta semente.
 /// </summary>
 public static class CatalogoCodigosDirpf
@@ -22,7 +25,7 @@ public static class CatalogoCodigosDirpf
     [
         Linha(1, TipoFichaDirpf.Bem, TipoAtivo.Acao, "03", "01", "Ações (inclusive as listadas em bolsa)"),
         Linha(2, TipoFichaDirpf.Bem, TipoAtivo.Fii, "07", "03", "Fundos de Investimento Imobiliário (FII)"),
-        Linha(3, TipoFichaDirpf.Bem, TipoAtivo.Etf, "07", "09", "Demais fundos de índice de mercado (ETF)"),
+        Linha(3, TipoFichaDirpf.Bem, TipoAtivo.Etf, "07", "06", "ETF - Entidade de investimento"),
         Linha(4, TipoFichaDirpf.Bem, TipoAtivo.Bdr, "04", "04", "Ativos negociados em bolsa no Brasil (BDRs, opções e outros, exceto ações e fundos)"),
         Linha(5, TipoFichaDirpf.RendimentoIsento, TipoAtivo.Acao, "", "09", "Lucros e dividendos recebidos"),
         Linha(6, TipoFichaDirpf.RendimentoIsento, TipoAtivo.Fii, "", "99", "Outros"),

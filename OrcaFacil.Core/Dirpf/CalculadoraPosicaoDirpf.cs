@@ -6,7 +6,7 @@ namespace OrcaFacil.Core.Dirpf;
 
 /// <summary>
 /// Posição de Bens e Direitos em uma data de corte.
-/// A compra soma o Valor da Operação e os custos. O preço unitário não entra.
+/// A compra soma quantidade × preço unitário e os custos, como o lançamento travado.
 /// A venda parcial baixa a quantidade pelo custo médio e não altera o médio.
 /// A venda total zera o custo, sem sobra. Custos da venda não mudam o que ficou.
 /// A ordem é a data e, no mesmo dia, o Id. Operação depois do corte fica de fora.
@@ -27,15 +27,14 @@ public static class CalculadoraPosicaoDirpf
         {
             if (operacao.Quantidade <= 0)
                 throw new InvalidOperationException("A quantidade deve ser maior que zero.");
+            if (operacao.PrecoUnitario <= 0)
+                throw new InvalidOperationException("O preço deve ser maior que zero.");
             if (operacao.Custos < 0)
                 throw new InvalidOperationException("Os custos não podem ser negativos.");
 
             if (operacao.Tipo == TipoOperacao.Compra)
             {
-                if (operacao.ValorOperacao <= 0)
-                    throw new InvalidOperationException("O valor da operação deve ser maior que zero.");
-
-                custo += operacao.ValorOperacao + operacao.Custos;
+                custo += operacao.Quantidade * operacao.PrecoUnitario + operacao.Custos;
                 quantidade += operacao.Quantidade;
                 continue;
             }

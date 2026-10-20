@@ -212,8 +212,8 @@ namespace OrcaFacil.Core.Data.Migrations
                         new
                         {
                             Id = 3,
-                            Codigo = "09",
-                            Descricao = "Demais fundos de índice de mercado (ETF)",
+                            Codigo = "06",
+                            Descricao = "ETF - Entidade de investimento",
                             EhSistema = true,
                             Ficha = 0,
                             Grupo = "07",

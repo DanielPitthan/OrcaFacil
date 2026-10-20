@@ -72,7 +72,7 @@ public class ExportadorDirpfTests : IDisposable
         Assert.Equal("03", bens.Cell(2, 6).GetText());
         Assert.Equal("01", bens.Cell(2, 7).GetText());
         Assert.True(bens.Cell(2, 9).IsEmpty());
-        Assert.Equal(100m, (decimal)bens.Cell(2, 11).GetDouble());
+        Assert.Equal(10m, (decimal)bens.Cell(2, 11).GetDouble());
         Assert.Equal(2, bens.LastRowUsed()!.RowNumber());
 
         var isentos = pasta.Worksheet(ExportadorDirpf.AbaRendimentosIsentos);

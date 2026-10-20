@@ -149,7 +149,7 @@ public static class MontadorDirpf
             if (valor == 0)
                 continue;
 
-            var natureza = Natureza(ativo.Tipo);
+            var natureza = Natureza(ativo);
             linhas.Add(new LinhaRendimentoIsentoDirpf(
                 anoBase,
                 TextoPerfil(perfil),
@@ -169,12 +169,18 @@ public static class MontadorDirpf
             .ToList();
     }
 
-    private static string Natureza(TipoAtivo tipo) => tipo switch
+    private static string Natureza(AtivoFinanceiro ativo)
     {
-        TipoAtivo.Acao => "Dividendo",
-        TipoAtivo.Fii => "Rendimento de FII",
-        _ => throw new InvalidOperationException($"Não há natureza de rendimento isento para {tipo}.")
-    };
+        if (ReconhecedorFiagroDirpf.Eh(ativo))
+            return "Rendimento de Fiagro";
+
+        return ativo.Tipo switch
+        {
+            TipoAtivo.Acao => "Dividendo",
+            TipoAtivo.Fii => "Rendimento de FII",
+            _ => throw new InvalidOperationException($"Não há natureza de rendimento isento para {ativo.Tipo}.")
+        };
+    }
 
     private static MovimentoPosicao ParaMovimento(OperacaoAtivo operacao) => new()
     {

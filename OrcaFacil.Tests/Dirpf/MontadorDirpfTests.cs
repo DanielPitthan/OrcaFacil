@@ -26,8 +26,8 @@ public class MontadorDirpfTests : IDisposable
 
         var petr = dirpf.Bens.Single(linha => linha.Ticker == "PETR4" && linha.Perfil == "Ana (Nica)");
         Assert.Equal(150m, petr.Quantidade);
-        Assert.Equal(2812.50m, petr.CustoAquisicao);
-        Assert.Equal(18.75m, petr.PrecoMedio);
+        Assert.Equal(2287.50m, petr.CustoAquisicao);
+        Assert.Equal(15.25m, petr.PrecoMedio);
         Assert.Equal("03", petr.Grupo);
         Assert.Equal("01", petr.Codigo);
         Assert.Equal("Ações (inclusive as listadas em bolsa)", petr.DescricaoCodigo);
@@ -49,7 +49,8 @@ public class MontadorDirpfTests : IDisposable
 
         var etf = dirpf.Bens.Single(linha => linha.Ticker == "BOVA11");
         Assert.Equal("07", etf.Grupo);
-        Assert.Equal("09", etf.Codigo);
+        Assert.Equal("06", etf.Codigo);
+        Assert.Equal("ETF - Entidade de investimento", etf.DescricaoCodigo);
 
         var bdr = dirpf.Bens.Single(linha => linha.Ticker == "AAPL34");
         Assert.Equal("04", bdr.Grupo);
@@ -91,7 +92,7 @@ public class MontadorDirpfTests : IDisposable
 
         var petr = dirpf.Bens.Single(linha => linha.Ticker == "PETR4" && linha.Perfil == "Ana (Nica)");
         Assert.Equal(160m, petr.Quantidade);
-        Assert.Equal(12811.50m, petr.CustoAquisicao);
+        Assert.Equal(2297.50m, petr.CustoAquisicao);
     }
 
     [Fact]
@@ -212,8 +213,9 @@ public class MontadorDirpfTests : IDisposable
 
         var rendimento = dirpf.RendimentosIsentos.Single(linha => linha.Ticker == "SNAG11");
         Assert.Equal("99", rendimento.Codigo);
-        Assert.Equal("Rendimento de FII", rendimento.Natureza);
+        Assert.Equal("Rendimento de Fiagro", rendimento.Natureza);
         Assert.Equal(6m, rendimento.Valor);
+        Assert.Equal("Rendimento de FII", dirpf.RendimentosIsentos.Single(linha => linha.Ticker == "MXRF11").Natureza);
     }
 
     private void Semear()
