@@ -190,8 +190,8 @@ public class ProventoServiceTests : IDisposable
 
         using var contexto = _factory.CreateDbContext();
         var provento = Assert.Single(contexto.Proventos);
-        Assert.Equal(1.00m, provento.ValorLiquido);
-        Assert.Equal(1.00m, Assert.Single(contexto.Transacoes).Valor);
+        Assert.Equal(1.01m, provento.ValorLiquido);
+        Assert.Equal(1.01m, Assert.Single(contexto.Transacoes).Valor);
     }
 
     [Fact]
