@@ -221,7 +221,7 @@
            Valor="_precoItem" ValorChanged="AlterarPreco" Dica="@DicaItem" Erro="@_erroItem"
            MostrarOutro="@(_editando is null)" TextoConfirmar="@(_editando is null ? "Adicionar" : "Salvar")"
            TextoOutro="Adicionar outro" OnConfirmar="ConfirmarAsync" OnConfirmarOutro="ConfirmarOutroAsync">
-    @if (Produtos.Count == 0)
+    @if (!Produtos.Any(p => p.Id > 0))
     {
         <p class="of-cesta-apoio">Não há produto cadastrado para a cesta.</p>
     }
@@ -230,7 +230,7 @@
         <div class="of-cesta-cats">
             <MudButton Variant="Variant.Text" Color="Color.Primary" OnClick="FecharLista">Principais</MudButton>
             <MudList T="ProdutoCesta" Dense="true">
-                @foreach (var produto in Produtos)
+                @foreach (var produto in Produtos.Where(p => p.Id > 0))
                 {
                     <MudListItem T="ProdutoCesta" OnClick="@(() => EscolherProduto(produto.Id))">
                         <span class="of-cesta-opcao">@produto.Nome</span>
@@ -366,25 +366,21 @@
     }
 
     private IReadOnlyList<ProdutoCesta> ProdutosVisiveis =>
-        CompraCestaEditor.EmDestaque(Produtos, p => p.Id == _produtoId);
+        CompraCestaEditor.EmDestaque(Produtos.Where(p => p.Id > 0).ToList(), p => p.Id == _produtoId);
 
     private string? DicaItem =>
-        _editando is null && _linhas.Any(l => l.ProdutoCestaId == _produtoId)
+        _editando is null && _produtoId > 0 && _linhas.Any(l => l.ProdutoCestaId == _produtoId && string.IsNullOrEmpty(l.ProdutoNovoChave))
             ? "Este produto já está na compra. O preço será atualizado."
             : null;
 
     protected override async Task OnInitializedAsync()
     {
         _localId = Modelo.LocalCompraId > 0 ? Modelo.LocalCompraId : Locais.FirstOrDefault()?.Id ?? 0;
-        _produtoId = Produtos.FirstOrDefault()?.Id ?? 0;
+        _produtoId = Produtos.FirstOrDefault(p => p.Id > 0)?.Id ?? 0;
         _data = Modelo.Data == default ? DateTime.Today : Modelo.Data;
         _usarBeneficio = Modelo.ValorBeneficio > 0;
         _beneficio = Modelo.ValorBeneficio;
-        _linhas.AddRange(Modelo.Itens.Select(item => new ItemCompraCestaFormModel
-        {
-            ProdutoCestaId = item.ProdutoCestaId,
-            Preco = item.Preco
-        }));
+        _linhas.AddRange(CompraCestaItens.CopiarItens(Modelo));
         _modo = CompraCestaEditor.DefinirModo(Modelo.ValorDinheiro, Modelo.ValorCartaoCredito);
         _dinheiroInformado = Modelo.ValorDinheiro;
 
@@ -522,8 +518,8 @@
 
     private void GarantirProduto()
     {
-        if (!Produtos.Any(p => p.Id == _produtoId))
-            _produtoId = Produtos.FirstOrDefault()?.Id ?? 0;
+        if (!Produtos.Any(p => p.Id > 0 && p.Id == _produtoId))
+            _produtoId = Produtos.FirstOrDefault(p => p.Id > 0)?.Id ?? 0;
     }
 
     private void EscolherProduto(int produtoId)
@@ -562,6 +558,22 @@
 
     private bool AplicarRascunho()
     {
+        if (_editando is not null
+            && !string.IsNullOrEmpty(_editando.ProdutoNovoChave)
+            && (_produtoId <= 0 || _produtoId == _editando.ProdutoCestaId))
+        {
+            if (_precoItem <= 0)
+            {
+                _erroItem = "Informe o preço do item.";
+                return false;
+            }
+
+            CompraCestaEditor.AplicarEdicao(_linhas, _editando, _produtoId, _precoItem);
+            _erroItem = null;
+            _erro = null;
+            return true;
+        }
+
         var erro = CompraCestaEditor.ValidarItem(_produtoId, _precoItem);
         if (erro is not null)
         {
@@ -608,27 +620,30 @@
         Modelo.ValorCartaoCredito = CartaoEfetivo;
         Modelo.CartaoCreditoId = CartaoEfetivo > 0 ? _cartaoCreditoId : null;
         Modelo.FaturaTransacaoId = CartaoEfetivo > 0 ? _faturaTransacaoId : null;
-        Modelo.Itens = _linhas.Select(linha => new ItemCompraCestaFormModel
+        Modelo.Itens = CompraCestaItens.CopiarItens(new CompraCestaFormModel
         {
-            ProdutoCestaId = linha.ProdutoCestaId,
-            Preco = linha.Preco
-        }).ToList();
+            Itens = _linhas,
+            ProdutosNovos = Modelo.ProdutosNovos
+        });
         MudDialog.Close(DialogResult.Ok(Modelo));
     }
 
     private string TituloItem(ItemCompraCestaFormModel item)
-        => Produtos.FirstOrDefault(p => p.Id == item.ProdutoCestaId)?.Nome ?? "Produto";
+        => CompraCestaItens.Titulo(item, Produtos);
 
     private string SubtituloItem(ItemCompraCestaFormModel item)
-        => CompraCestaEditor.Subtitulo(Produtos.FirstOrDefault(p => p.Id == item.ProdutoCestaId)?.Categoria?.Nome);
+        => CompraCestaEditor.Subtitulo(
+            !string.IsNullOrEmpty(item.ProdutoNovoChave)
+                ? item.CategoriaPendente
+                : Produtos.FirstOrDefault(p => p.Id > 0 && p.Id == item.ProdutoCestaId)?.Categoria?.Nome);
 
     private string ValorItem(ItemCompraCestaFormModel item) => item.Preco.ToString("C");
 
     private string IconeItem(ItemCompraCestaFormModel item)
-        => Produtos.FirstOrDefault(p => p.Id == item.ProdutoCestaId)?.Categoria?.Icone ?? "🏷️";
+        => Produtos.FirstOrDefault(p => p.Id > 0 && p.Id == item.ProdutoCestaId)?.Categoria?.Icone ?? "🏷️";
 
     private string? CorItem(ItemCompraCestaFormModel item)
-        => Produtos.FirstOrDefault(p => p.Id == item.ProdutoCestaId)?.Categoria?.CorHex;
+        => Produtos.FirstOrDefault(p => p.Id > 0 && p.Id == item.ProdutoCestaId)?.Categoria?.CorHex;
 
     private static object ChaveItem(ItemCompraCestaFormModel item) => item;
 }

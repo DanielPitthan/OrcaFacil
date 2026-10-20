@@ -49,6 +49,51 @@ public class CompraCestaEditorTests
         Assert.Single(itens);
         Assert.Equal(1, itens[0].ProdutoCestaId);
         Assert.Equal(15m, itens[0].Preco);
+        Assert.NotEqual(10m + 15m, itens[0].Preco);
+    }
+
+    [Fact]
+    public void CompraManual_ProdutoRepetido_AtualizaOPrecoSemSomar()
+    {
+        var itens = new List<ItemCompraCestaFormModel>
+        {
+            new() { ProdutoCestaId = 4, Preco = 2.10m }
+        };
+
+        CompraCestaEditor.AcrescentarOuAtualizar(itens, 4, 3.25m);
+
+        var item = Assert.Single(itens);
+        Assert.Equal(4, item.ProdutoCestaId);
+        Assert.Equal(3.25m, item.Preco);
+        Assert.Null(item.ProdutoNovoChave);
+        Assert.NotEqual(2.10m + 3.25m, item.Preco);
+    }
+
+    [Fact]
+    public void EditarPendente_PrecoOuNome_PreservaChaveENome()
+    {
+        var atual = new ItemCompraCestaFormModel
+        {
+            ProdutoNovoChave = "acucar",
+            NomePendente = "Açúcar",
+            CategoriaPendente = "Alimentos",
+            Preco = 2m
+        };
+        var itens = new List<ItemCompraCestaFormModel> { atual };
+
+        CompraCestaEditor.AplicarEdicao(itens, atual, 0, 4.5m);
+
+        Assert.Equal("acucar", atual.ProdutoNovoChave);
+        Assert.Equal("Açúcar", atual.NomePendente);
+        Assert.Equal("Alimentos", atual.CategoriaPendente);
+        Assert.Equal(4.5m, atual.Preco);
+        Assert.Equal(0, atual.ProdutoCestaId);
+
+        CompraCestaEditor.AplicarEdicao(itens, atual, 0, 4.5m, "Açúcar cristal");
+
+        Assert.Equal("acucar", atual.ProdutoNovoChave);
+        Assert.Equal("Açúcar cristal", atual.NomePendente);
+        Assert.Single(itens);
     }
 
     [Theory]

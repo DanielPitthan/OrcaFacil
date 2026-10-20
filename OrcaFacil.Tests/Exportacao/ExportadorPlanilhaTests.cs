@@ -377,7 +377,7 @@ public class ExportadorPlanilhaTests
     [InlineData("\r/var/fotos/duda.jpg", "")]
     [InlineData("\t/var/fotos/duda.jpg", "")]
     [InlineData(" /var/fotos/duda.jpg", "duda.jpg")]
-    [InlineData("content://X", "X")]
+    [InlineData("content://X", "")]
     [InlineData("\u00A0content://X", "")]
     [InlineData("content://midia/bia.jpg", "bia.jpg")]
     [InlineData("\u200B/var/fotos/duda.jpg", "")]
@@ -473,6 +473,18 @@ public class ExportadorPlanilhaTests
     [InlineData("_foto.jpg", "")]
     [InlineData("...", "")]
     [InlineData(". .", "")]
+    [InlineData("foto.jpg\n", "")]
+    [InlineData("/home/daniel", "")]
+    [InlineData("content://media/12345", "")]
+    [InlineData("foto.jpg", "foto.jpg")]
+    [InlineData("foto.jpeg", "foto.jpeg")]
+    [InlineData("foto.png", "foto.png")]
+    [InlineData("foto.webp", "foto.webp")]
+    [InlineData("foto.heic", "foto.heic")]
+    [InlineData("foto.JPG", "foto.JPG")]
+    [InlineData("foto.gif", "")]
+    [InlineData("foto", "")]
+    [InlineData("foto.jpg.txt", "")]
     public void NomeDeFoto_SaiSoONomeDoArquivo(string valor, string esperado)
     {
         var nome = ExportadorPlanilha.NomeDeFoto(valor);
@@ -483,14 +495,32 @@ public class ExportadorPlanilhaTests
     }
 
     [Fact]
+    public void NomePermitido_RecusaFotoJpgComQuebraDeLinha()
+    {
+        Assert.DoesNotMatch(ExportadorPlanilha.NomePermitido, "foto.jpg\n");
+        Assert.Matches(ExportadorPlanilha.NomePermitido, "foto.jpg");
+        Assert.Matches(ExportadorPlanilha.NomePermitido, "foto.JPG");
+        Assert.Matches(ExportadorPlanilha.NomePermitido, "foto-20261017120000.jpg");
+    }
+
+    [Fact]
     public void NomeDeFoto_LimiteDe128Caracteres()
     {
-        var passa = new string('a', 128);
-        var longo = new string('a', 129);
+        var passa = new string('a', 124) + ".jpg";
+        var longo = new string('a', 125) + ".jpg";
+        Assert.Equal(128, passa.Length);
+        Assert.Equal(129, longo.Length);
         Assert.Equal(passa, ExportadorPlanilha.NomeDeFoto(passa));
         Assert.Equal(passa, ExportadorPlanilha.NomeDeFoto("pasta/" + passa));
         Assert.Equal("", ExportadorPlanilha.NomeDeFoto(longo));
         Assert.Equal("", ExportadorPlanilha.NomeDeFoto("C:\\Fotos\\" + longo));
+
+        var jpeg = new string('b', 123) + ".jpeg";
+        var jpegLongo = new string('b', 124) + ".jpeg";
+        Assert.Equal(128, jpeg.Length);
+        Assert.Equal(129, jpegLongo.Length);
+        Assert.Equal(jpeg, ExportadorPlanilha.NomeDeFoto(jpeg));
+        Assert.Equal("", ExportadorPlanilha.NomeDeFoto(jpegLongo));
     }
 
     [Fact]

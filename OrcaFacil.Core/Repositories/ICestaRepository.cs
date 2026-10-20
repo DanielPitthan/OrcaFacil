@@ -1,3 +1,4 @@
+using OrcaFacil.Core.Dtos;
 using OrcaFacil.Core.Entities;
 
 namespace OrcaFacil.Core.Repositories;
@@ -22,7 +23,11 @@ public interface ICestaRepository
 
     Task<List<CompraCesta>> ListarComprasAsync(int? mes, int? ano);
     Task<CompraCesta?> ObterCompraAsync(int id);
-    Task<CompraCesta> SalvarCompraAsync(CompraCesta compra, Transacao? despesa, Core.Cesta.FaturaCreditoCesta? faturaCredito = null);
+    Task<CompraCesta> SalvarCompraAsync(
+        CompraCesta compra,
+        Transacao? despesa,
+        Core.Cesta.FaturaCreditoCesta? faturaCredito = null,
+        IReadOnlyList<ProdutoNovoCompra>? produtosNovos = null);
     Task ExcluirCompraAsync(int id);
 
     Task<int> ObterOuCriarCategoriaCestaAsync();

@@ -289,6 +289,8 @@ else
     private RenderFragment? _barraCache;
     private bool _cascoLigado;
     private bool _carregando = true;
+    private bool _sessaoPronta;
+    private int? _idAplicado;
     private int _itemCategoriaId;
     private string? _itemDescritivo;
     private decimal _itemValor;
@@ -341,10 +343,30 @@ else
 
     private bool SomaEstoura => MostrarItens && _modelo.Itens.Count > 0 && SomaItens > _modelo.Valor;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
     {
+        if (_sessaoPronta && _idAplicado == Id)
+            return;
+
+        _sessaoPronta = true;
+        _idAplicado = Id;
+        await AbrirSessaoAsync();
+    }
+
+    private async Task AbrirSessaoAsync()
+    {
+        _carregando = true;
         _categorias = await CategoriaService.ListarAsync();
         _cartoesCredito = await CartaoService.ListarAsync(somenteAtivos: false, TipoCartao.Credito);
+        _periodoOriginalFechado = false;
+        _dataOriginal = null;
+        _linhaEditando = null;
+        _erroItem = null;
+        _itemValor = 0;
+        _itemDescritivo = null;
+        _itemNatureza = NaturezaItemLancamento.Avulsa;
+        _itemParcelaAtual = null;
+        _itemTotalParcelas = null;
 
         if (Id.HasValue)
         {
@@ -366,6 +388,14 @@ else
                 _dataOriginal = transacao.Data;
                 _periodoOriginalFechado = await FechamentoService.EstaFechadoAsync(transacao.Data.Month, transacao.Data.Year);
             }
+            else
+            {
+                FluxoLancamento.IniciarNovo(_modelo, DateTime.Today);
+                _data = _modelo.Data;
+                GarantirCategoriaValida();
+                Snackbar.Add("Lançamento não encontrado.", Severity.Warning);
+                NavigationManager.NavigateTo("/lancamentos");
+            }
         }
         else
         {
@@ -377,6 +407,8 @@ else
             }
             else
             {
+                FluxoLancamento.IniciarNovo(_modelo, DateTime.Today);
+                _data = _modelo.Data;
                 GarantirCategoriaValida();
             }
         }
@@ -521,8 +553,9 @@ else
             return;
         }
 
-        if (_modelo.CartaoId is null)
-            _modelo.CartaoId = CartoesCreditoDisponiveis.FirstOrDefault()?.Id;
+        _modelo.CartaoId = FluxoLancamento.CartaoInicial(
+            _modelo.CartaoId,
+            CartoesCreditoDisponiveis.Select(c => c.Id).ToList());
     }
 
     private void GarantirCategoriaValida()
@@ -531,8 +564,13 @@ else
         if (filtradas.Count == 0)
             return;
 
-        if (filtradas.All(c => c.Id != _modelo.CategoriaId))
-            _modelo.CategoriaId = filtradas[0].Id;
+        if (filtradas.Any(c => c.Id == _modelo.CategoriaId))
+            return;
+
+        _modelo.CategoriaId = FluxoLancamento.CategoriaInicial(
+            filtradas.Select(c => new FluxoLancamento.CategoriaDeLancamento(
+                c.Id, c.Nome, c.PermiteItensFatura, c.TipoPadrao)).ToList(),
+            _modelo.Tipo);
     }
 
     private void GarantirItemCategoriaValida()
