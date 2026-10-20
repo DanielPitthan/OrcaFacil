@@ -468,8 +468,10 @@
             Configuracao.ProvedorInteligencia,
             Configuracao.UrlInteligencia,
             Configuracao.ModeloInteligencia);
-        var provedor = PerfilProvedor.DaUrl(efetiva.Url).Provedor;
-        if (AvisoPrivacidadeComprovante.JaVisto(Preferencias, provedor))
+        var provedor = semUrlGravada
+            ? AvisoPrivacidadeComprovante.ProvedorDoAvisoSemPreferencia
+            : PerfilProvedor.DaUrl(efetiva.Url).Provedor;
+        if (AvisoPrivacidadeComprovante.JaVisto(Preferencias, provedor, semUrlGravada))
             return true;
 
         var parametros = new DialogParameters<AvisoPrivacidadeComprovanteDialog>
@@ -485,7 +487,7 @@
         if (resultado is not { Canceled: false })
             return false;
 
-        AvisoPrivacidadeComprovante.MarcarVisto(Preferencias, provedor);
+        AvisoPrivacidadeComprovante.MarcarVisto(Preferencias, provedor, semUrlGravada);
         return true;
     }
 

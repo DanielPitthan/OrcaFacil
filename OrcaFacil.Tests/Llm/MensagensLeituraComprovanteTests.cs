@@ -330,54 +330,105 @@ public class MensagensLeituraComprovanteTests
     [Theory]
     [InlineData(ProvedorDetectado.Anthropic)]
     [InlineData(ProvedorDetectado.Desconhecido)]
-    public void TextoAvisoPrivacidade_ForaDoDeepSeek_IgualAoAtual(ProvedorDetectado provedor)
+    [InlineData(ProvedorDetectado.DeepSeek)]
+    public void TextoAvisoPrivacidade_ForaDaAlibaba_IgualAoGenerico(ProvedorDetectado provedor)
     {
-        var texto = AvisoPrivacidadeComprovante.TextoAvisoPrivacidade(provedor);
+        var texto = AvisoPrivacidadeComprovante.TextoAvisoPrivacidade(provedor, semUrlGravada: false);
 
         Assert.Equal(MensagensLeituraComprovante.TextoAvisoPrivacidade, texto);
         Assert.Equal(
             "A foto do comprovante sai deste aparelho e vai para o provedor da URL configurada. O OrcaFacil não guarda essa foto.",
             texto);
         Assert.DoesNotContain("sede na China", texto, StringComparison.Ordinal);
-        Assert.DoesNotContain(MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeek, texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("Alibaba Cloud", texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("Como não há URL gravada", texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(MensagensLeituraComprovante.ComplementoPrivacidadeAlibaba, texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(MensagensLeituraComprovante.ComplementoPrivacidadeAlibabaPadrao, texto, StringComparison.Ordinal);
         Assert.DoesNotContain(Chave, texto, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void TextoAvisoPrivacidade_DeepSeek_AnexaSedeNaChina()
+    public void TextoAvisoPrivacidade_AlibabaConfigurada_AnexaSedeNaChina()
     {
-        var texto = AvisoPrivacidadeComprovante.TextoAvisoPrivacidade(ProvedorDetectado.DeepSeek);
+        var texto = AvisoPrivacidadeComprovante.TextoAvisoPrivacidade(ProvedorDetectado.Alibaba, semUrlGravada: false);
 
         Assert.Equal(
-            "O provedor configurado é o DeepSeek, empresa com sede na China. A foto do comprovante será enviada para os servidores dele.",
-            MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeek);
+            "O provedor configurado é a Alibaba Cloud, empresa com sede na China. A foto do comprovante será enviada para os servidores dela.",
+            MensagensLeituraComprovante.ComplementoPrivacidadeAlibaba);
         Assert.Equal(
-            MensagensLeituraComprovante.TextoAvisoPrivacidade + " " + MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeek,
+            MensagensLeituraComprovante.TextoAvisoPrivacidade + " " + MensagensLeituraComprovante.ComplementoPrivacidadeAlibaba,
             texto);
+        Assert.Contains("provedor da URL configurada", texto, StringComparison.Ordinal);
+        Assert.Contains("servidores dela", texto, StringComparison.Ordinal);
         Assert.Contains("sede na China", texto, StringComparison.Ordinal);
         Assert.StartsWith(MensagensLeituraComprovante.TextoAvisoPrivacidade, texto, StringComparison.Ordinal);
-        Assert.EndsWith(MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeek, texto, StringComparison.Ordinal);
+        Assert.EndsWith(MensagensLeituraComprovante.ComplementoPrivacidadeAlibaba, texto, StringComparison.Ordinal);
         Assert.DoesNotContain("sede na China", MensagensLeituraComprovante.TextoAvisoPrivacidade, StringComparison.Ordinal);
         Assert.DoesNotContain("Como não há URL gravada", texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(MensagensLeituraComprovante.ComplementoPrivacidadeAlibabaPadrao, texto, StringComparison.Ordinal);
         Assert.DoesNotContain(Chave, texto, StringComparison.Ordinal);
         Assert.DoesNotContain("Authorization", texto, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("x-api-key", texto, StringComparison.OrdinalIgnoreCase);
     }
 
-    [Fact]
-    public void TextoAvisoPrivacidade_DeepSeekConfigurado_MantemOComplementoConfirmado()
+    [Theory]
+    [InlineData("https://api.qwencloudapi.com")]
+    [InlineData("https://dashscope.qwencloudapi.com")]
+    [InlineData("https://qwencloudapi.com")]
+    [InlineData("https://API.QWENCLOUDAPI.COM/v1")]
+    [InlineData("https://DashScope.QwenCloudApi.Com")]
+    public void TextoAvisoPrivacidade_UrlQwenCloud_AnexaAlibabaConfigurada(string url)
     {
-        var texto = AvisoPrivacidadeComprovante.TextoAvisoPrivacidade(ProvedorDetectado.DeepSeek, semUrlGravada: false);
+        var provedor = PerfilProvedor.DaUrl(url).Provedor;
+        var texto = AvisoPrivacidadeComprovante.TextoAvisoPrivacidade(provedor, semUrlGravada: false);
 
+        Assert.Equal(ProvedorDetectado.Alibaba, provedor);
         Assert.Equal(
-            MensagensLeituraComprovante.TextoAvisoPrivacidade + " " + MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeek,
+            MensagensLeituraComprovante.TextoAvisoPrivacidade + " " + MensagensLeituraComprovante.ComplementoPrivacidadeAlibaba,
             texto);
-        Assert.Equal(
-            "O provedor configurado é o DeepSeek, empresa com sede na China. A foto do comprovante será enviada para os servidores dele.",
-            MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeek);
-        Assert.EndsWith(MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeek, texto, StringComparison.Ordinal);
+        Assert.Contains("provedor da URL configurada", texto, StringComparison.Ordinal);
+        Assert.Contains("servidores dela", texto, StringComparison.Ordinal);
         Assert.DoesNotContain("Como não há URL gravada", texto, StringComparison.Ordinal);
-        Assert.DoesNotContain(MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeekPadrao, texto, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("https://qwencloudapi.com.evil.com")]
+    [InlineData("https://api.qwencloudapi.com.evil.com")]
+    [InlineData("https://notqwencloudapi.com")]
+    [InlineData("https://dashscope.aliyuncs.com")]
+    public void TextoAvisoPrivacidade_HostParecido_NaoAnexaAlibaba(string url)
+    {
+        var provedor = PerfilProvedor.DaUrl(url).Provedor;
+        var texto = AvisoPrivacidadeComprovante.TextoAvisoPrivacidade(provedor, semUrlGravada: false);
+
+        Assert.NotEqual(ProvedorDetectado.Alibaba, provedor);
+        Assert.Equal(MensagensLeituraComprovante.TextoAvisoPrivacidade, texto);
+        Assert.DoesNotContain("Alibaba Cloud", texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("Como não há URL gravada", texto, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(ProvedorDetectado.DeepSeek)]
+    [InlineData(ProvedorDetectado.Alibaba)]
+    [InlineData(ProvedorDetectado.Anthropic)]
+    [InlineData(ProvedorDetectado.Desconhecido)]
+    public void TextoAvisoPrivacidade_Padrao_NaoJuntaProvedorDaUrlConfigurada(ProvedorDetectado provedor)
+    {
+        var texto = AvisoPrivacidadeComprovante.TextoAvisoPrivacidade(provedor, semUrlGravada: true);
+        const string padrao =
+            "Como não há URL gravada, o OrcaFacil vai usar a Alibaba Cloud, empresa com sede na China, que é o provedor padrão do app.";
+
+        Assert.Equal(ProvedorDetectado.Alibaba, AvisoPrivacidadeComprovante.ProvedorDoAvisoSemPreferencia);
+        Assert.Equal(padrao, MensagensLeituraComprovante.ComplementoPrivacidadeAlibabaPadrao);
+        Assert.Equal(padrao, texto);
+        Assert.Contains("Como não há URL gravada", texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("provedor da URL configurada", texto, StringComparison.Ordinal);
+        Assert.False(
+            texto.Contains("provedor da URL configurada", StringComparison.Ordinal)
+            && texto.Contains("Como não há URL gravada", StringComparison.Ordinal));
+        Assert.DoesNotContain(MensagensLeituraComprovante.TextoAvisoPrivacidade, texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(MensagensLeituraComprovante.ComplementoPrivacidadeAlibaba, texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("O provedor configurado é a Alibaba Cloud", texto, StringComparison.Ordinal);
         Assert.Equal(
             "A foto do comprovante sai deste aparelho e vai para o provedor da URL configurada. O OrcaFacil não guarda essa foto.",
             MensagensLeituraComprovante.TextoAvisoPrivacidade);
@@ -387,42 +438,47 @@ public class MensagensLeituraComprovanteTests
     [InlineData(null, null, null)]
     [InlineData(null, "", "")]
     [InlineData(null, "   ", "   ")]
-    public void TextoAvisoPrivacidade_DeepSeekPadrao_UsaComplementoDeUrlNaoGravada(
+    public void TextoAvisoPrivacidade_SoAChaveSalva_UsaAvisoEChaveDoPadrao(
         string? provedor,
         string? url,
         string? modelo)
     {
-        Assert.True(ChipsInteligencia.SemProvedorUrlNemModelo(ChipsInteligencia.Interpretar(provedor), url, modelo));
+        var chip = ChipsInteligencia.Interpretar(provedor);
+        var semUrlGravada = ChipsInteligencia.SemProvedorUrlNemModelo(chip, url, modelo);
+        var efetiva = ChipsInteligencia.Efetiva(chip, url, modelo);
+        var detectado = semUrlGravada
+            ? AvisoPrivacidadeComprovante.ProvedorDoAvisoSemPreferencia
+            : PerfilProvedor.DaUrl(efetiva.Url).Provedor;
+        var texto = AvisoPrivacidadeComprovante.TextoAvisoPrivacidade(detectado, semUrlGravada);
 
-        var texto = AvisoPrivacidadeComprovante.TextoAvisoPrivacidade(ProvedorDetectado.DeepSeek, semUrlGravada: true);
-        const string complemento =
-            "Como não há URL gravada, o OrcaFacil vai usar o DeepSeek, empresa com sede na China, que é o provedor padrão do app.";
-
-        Assert.Equal(complemento, MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeekPadrao);
-        Assert.Equal(MensagensLeituraComprovante.TextoAvisoPrivacidade + " " + complemento, texto);
-        Assert.StartsWith(MensagensLeituraComprovante.TextoAvisoPrivacidade, texto, StringComparison.Ordinal);
-        Assert.EndsWith(complemento, texto, StringComparison.Ordinal);
-        Assert.DoesNotContain(MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeek, texto, StringComparison.Ordinal);
-        Assert.DoesNotContain("O provedor configurado é o DeepSeek", texto, StringComparison.Ordinal);
+        Assert.True(semUrlGravada);
+        Assert.Equal(ProvedorDetectado.Alibaba, detectado);
+        Assert.Equal(MensagensLeituraComprovante.ComplementoPrivacidadeAlibabaPadrao, texto);
+        Assert.Contains("Como não há URL gravada", texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("provedor da URL configurada", texto, StringComparison.Ordinal);
         Assert.Equal(
-            "A foto do comprovante sai deste aparelho e vai para o provedor da URL configurada. O OrcaFacil não guarda essa foto.",
-            MensagensLeituraComprovante.TextoAvisoPrivacidade);
+            AvisoPrivacidadeComprovante.ChavePreferenciaAlibabaPadrao,
+            AvisoPrivacidadeComprovante.ChaveDe(detectado, semUrlGravada));
     }
 
     [Theory]
     [InlineData(ProvedorIa.DeepSeek, null, null)]
     [InlineData(null, "https://api.deepseek.com/anthropic", "deepseek-flash")]
-    [InlineData(null, "https://api.deepseek.com/anthropic", null)]
+    [InlineData(null, "https://api.qwencloudapi.com", null)]
     [InlineData(null, null, "deepseek-flash")]
     public void PreferenciaParcial_NaoEPadraoDoApp(ProvedorIa? provedor, string? url, string? modelo)
     {
         Assert.False(ChipsInteligencia.SemProvedorUrlNemModelo(provedor, url, modelo));
 
-        var configurado = AvisoPrivacidadeComprovante.TextoAvisoPrivacidade(ProvedorDetectado.DeepSeek, semUrlGravada: false);
-        var padrao = AvisoPrivacidadeComprovante.TextoAvisoPrivacidade(ProvedorDetectado.DeepSeek, semUrlGravada: true);
+        var configurado = AvisoPrivacidadeComprovante.TextoAvisoPrivacidade(ProvedorDetectado.Alibaba, semUrlGravada: false);
+        var padrao = AvisoPrivacidadeComprovante.TextoAvisoPrivacidade(ProvedorDetectado.Alibaba, semUrlGravada: true);
 
         Assert.NotEqual(padrao, configurado);
-        Assert.EndsWith(MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeek, configurado, StringComparison.Ordinal);
+        Assert.Contains("provedor da URL configurada", configurado, StringComparison.Ordinal);
+        Assert.DoesNotContain("Como não há URL gravada", configurado, StringComparison.Ordinal);
+        Assert.DoesNotContain("provedor da URL configurada", padrao, StringComparison.Ordinal);
+        Assert.EndsWith(MensagensLeituraComprovante.ComplementoPrivacidadeAlibaba, configurado, StringComparison.Ordinal);
+        Assert.Equal(MensagensLeituraComprovante.ComplementoPrivacidadeAlibabaPadrao, padrao);
     }
 
     [Fact]
@@ -478,7 +534,100 @@ public class MensagensLeituraComprovanteTests
         Assert.True(AvisoPrivacidadeComprovante.JaVisto(preferencias, ProvedorDetectado.DeepSeek));
         Assert.False(AvisoPrivacidadeComprovante.JaVisto(preferencias, ProvedorDetectado.Anthropic));
         Assert.False(preferencias.Contem(AvisoPrivacidadeComprovante.ChavePreferencia));
+        Assert.False(preferencias.Contem(AvisoPrivacidadeComprovante.ChavePreferenciaAlibaba));
+        Assert.False(preferencias.Contem(AvisoPrivacidadeComprovante.ChavePreferenciaAlibabaPadrao));
         Assert.Equal("visto", preferencias.ValorOuNulo(AvisoPrivacidadeComprovante.ChavePreferenciaDeepSeek));
+    }
+
+    [Fact]
+    public void Alibaba_ChavesDeVistoSaoDistintasENovas()
+    {
+        Assert.Equal(
+            AvisoPrivacidadeComprovante.ChavePreferencia + "Alibaba",
+            AvisoPrivacidadeComprovante.ChavePreferenciaAlibaba);
+        Assert.Equal("Cesta.Leitura.AvisoPrivacidadeAlibaba", AvisoPrivacidadeComprovante.ChavePreferenciaAlibaba);
+        Assert.Equal(
+            AvisoPrivacidadeComprovante.ChavePreferencia + "AlibabaPadrao",
+            AvisoPrivacidadeComprovante.ChavePreferenciaAlibabaPadrao);
+        Assert.Equal("Cesta.Leitura.AvisoPrivacidadeAlibabaPadrao", AvisoPrivacidadeComprovante.ChavePreferenciaAlibabaPadrao);
+        Assert.NotEqual(
+            AvisoPrivacidadeComprovante.ChavePreferenciaAlibaba,
+            AvisoPrivacidadeComprovante.ChavePreferenciaAlibabaPadrao);
+        Assert.NotEqual(AvisoPrivacidadeComprovante.ChavePreferencia, AvisoPrivacidadeComprovante.ChavePreferenciaAlibaba);
+        Assert.NotEqual(AvisoPrivacidadeComprovante.ChavePreferencia, AvisoPrivacidadeComprovante.ChavePreferenciaAlibabaPadrao);
+        Assert.NotEqual(AvisoPrivacidadeComprovante.ChavePreferenciaDeepSeek, AvisoPrivacidadeComprovante.ChavePreferenciaAlibaba);
+        Assert.NotEqual(AvisoPrivacidadeComprovante.ChavePreferenciaDeepSeek, AvisoPrivacidadeComprovante.ChavePreferenciaAlibabaPadrao);
+        Assert.Equal(
+            AvisoPrivacidadeComprovante.ChavePreferenciaAlibaba,
+            AvisoPrivacidadeComprovante.ChaveDe(ProvedorDetectado.Alibaba));
+        Assert.Equal(
+            AvisoPrivacidadeComprovante.ChavePreferenciaAlibaba,
+            AvisoPrivacidadeComprovante.ChaveDe(ProvedorDetectado.Alibaba, semUrlGravada: false));
+        Assert.Equal(
+            AvisoPrivacidadeComprovante.ChavePreferenciaAlibabaPadrao,
+            AvisoPrivacidadeComprovante.ChaveDe(ProvedorDetectado.Alibaba, semUrlGravada: true));
+        Assert.DoesNotContain("Chave", AvisoPrivacidadeComprovante.ChavePreferenciaAlibaba, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Chave", AvisoPrivacidadeComprovante.ChavePreferenciaAlibabaPadrao, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ChavesAntigasMarcadas_NaoEscondemOsAvisosDaAlibaba()
+    {
+        var preferencias = new PreferenciasEmMemoria();
+        preferencias.Definir(AvisoPrivacidadeComprovante.ChavePreferencia, AvisoPrivacidadeComprovante.ValorVisto);
+        preferencias.Definir(AvisoPrivacidadeComprovante.ChavePreferenciaDeepSeek, AvisoPrivacidadeComprovante.ValorVisto);
+
+        Assert.False(AvisoPrivacidadeComprovante.JaVisto(preferencias, ProvedorDetectado.Alibaba));
+        Assert.False(AvisoPrivacidadeComprovante.JaVisto(preferencias, ProvedorDetectado.Alibaba, semUrlGravada: false));
+        Assert.False(AvisoPrivacidadeComprovante.JaVisto(preferencias, ProvedorDetectado.Alibaba, semUrlGravada: true));
+        Assert.False(preferencias.Contem(AvisoPrivacidadeComprovante.ChavePreferenciaAlibaba));
+        Assert.False(preferencias.Contem(AvisoPrivacidadeComprovante.ChavePreferenciaAlibabaPadrao));
+    }
+
+    [Fact]
+    public void DispensarPadrao_AindaMostraAlibabaConfigurada()
+    {
+        var preferencias = new PreferenciasEmMemoria();
+
+        AvisoPrivacidadeComprovante.MarcarVisto(preferencias, ProvedorDetectado.Alibaba, semUrlGravada: true);
+
+        Assert.True(AvisoPrivacidadeComprovante.JaVisto(preferencias, ProvedorDetectado.Alibaba, semUrlGravada: true));
+        Assert.False(AvisoPrivacidadeComprovante.JaVisto(preferencias, ProvedorDetectado.Alibaba, semUrlGravada: false));
+        Assert.False(AvisoPrivacidadeComprovante.JaVisto(preferencias, ProvedorDetectado.Alibaba));
+        Assert.Equal("visto", preferencias.ValorOuNulo(AvisoPrivacidadeComprovante.ChavePreferenciaAlibabaPadrao));
+        Assert.False(preferencias.Contem(AvisoPrivacidadeComprovante.ChavePreferenciaAlibaba));
+        Assert.False(preferencias.Contem(AvisoPrivacidadeComprovante.ChavePreferencia));
+        Assert.False(preferencias.Contem(AvisoPrivacidadeComprovante.ChavePreferenciaDeepSeek));
+        Assert.DoesNotContain(Chave, preferencias.ValorOuNulo(AvisoPrivacidadeComprovante.ChavePreferenciaAlibabaPadrao)!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DispensarAlibabaConfigurada_AindaMostraOPadrao()
+    {
+        var preferencias = new PreferenciasEmMemoria();
+
+        AvisoPrivacidadeComprovante.MarcarVisto(preferencias, ProvedorDetectado.Alibaba, semUrlGravada: false);
+
+        Assert.True(AvisoPrivacidadeComprovante.JaVisto(preferencias, ProvedorDetectado.Alibaba));
+        Assert.False(AvisoPrivacidadeComprovante.JaVisto(preferencias, ProvedorDetectado.Alibaba, semUrlGravada: true));
+        Assert.Equal("visto", preferencias.ValorOuNulo(AvisoPrivacidadeComprovante.ChavePreferenciaAlibaba));
+        Assert.False(preferencias.Contem(AvisoPrivacidadeComprovante.ChavePreferenciaAlibabaPadrao));
+        Assert.False(preferencias.Contem(AvisoPrivacidadeComprovante.ChavePreferencia));
+        Assert.False(preferencias.Contem(AvisoPrivacidadeComprovante.ChavePreferenciaDeepSeek));
+    }
+
+    [Fact]
+    public void DispensarOsDoisAvisosDaAlibaba_EscondeOsDois()
+    {
+        var preferencias = new PreferenciasEmMemoria();
+
+        AvisoPrivacidadeComprovante.MarcarVisto(preferencias, ProvedorDetectado.Alibaba, semUrlGravada: true);
+        AvisoPrivacidadeComprovante.MarcarVisto(preferencias, ProvedorDetectado.Alibaba, semUrlGravada: false);
+
+        Assert.True(AvisoPrivacidadeComprovante.JaVisto(preferencias, ProvedorDetectado.Alibaba, semUrlGravada: true));
+        Assert.True(AvisoPrivacidadeComprovante.JaVisto(preferencias, ProvedorDetectado.Alibaba, semUrlGravada: false));
+        Assert.Equal("visto", preferencias.ValorOuNulo(AvisoPrivacidadeComprovante.ChavePreferenciaAlibabaPadrao));
+        Assert.Equal("visto", preferencias.ValorOuNulo(AvisoPrivacidadeComprovante.ChavePreferenciaAlibaba));
     }
 
     [Fact]
@@ -492,20 +641,24 @@ public class MensagensLeituraComprovanteTests
 
         Assert.Contains("AvisoPrivacidadeComprovante.TextoAvisoPrivacidade(Provedor, SemUrlGravada)", dialog, StringComparison.Ordinal);
         Assert.DoesNotContain("sede na China", dialog, StringComparison.Ordinal);
-        Assert.DoesNotContain("O provedor configurado é o DeepSeek", dialog, StringComparison.Ordinal);
+        Assert.DoesNotContain("Alibaba Cloud", dialog, StringComparison.Ordinal);
         Assert.DoesNotContain("Como não há URL gravada", dialog, StringComparison.Ordinal);
+        Assert.DoesNotContain("provedor da URL configurada", dialog, StringComparison.Ordinal);
         Assert.DoesNotContain(MensagensLeituraComprovante.TextoAvisoPrivacidade, dialog, StringComparison.Ordinal);
-        Assert.DoesNotContain(MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeek, dialog, StringComparison.Ordinal);
-        Assert.DoesNotContain(MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeekPadrao, dialog, StringComparison.Ordinal);
+        Assert.DoesNotContain(MensagensLeituraComprovante.ComplementoPrivacidadeAlibaba, dialog, StringComparison.Ordinal);
+        Assert.DoesNotContain(MensagensLeituraComprovante.ComplementoPrivacidadeAlibabaPadrao, dialog, StringComparison.Ordinal);
         Assert.Contains("ChipsInteligencia.Efetiva(", confirmar, StringComparison.Ordinal);
         Assert.Contains("ChipsInteligencia.SemProvedorUrlNemModelo(", confirmar, StringComparison.Ordinal);
         Assert.Contains("PerfilProvedor.DaUrl(efetiva.Url)", confirmar, StringComparison.Ordinal);
         Assert.DoesNotContain("PerfilProvedor.DaUrl(Configuracao.UrlInteligencia)", confirmar, StringComparison.Ordinal);
-        Assert.Contains("AvisoPrivacidadeComprovante.JaVisto(Preferencias, provedor)", confirmar, StringComparison.Ordinal);
-        Assert.Contains("AvisoPrivacidadeComprovante.MarcarVisto(Preferencias, provedor)", confirmar, StringComparison.Ordinal);
+        Assert.Contains("AvisoPrivacidadeComprovante.ProvedorDoAvisoSemPreferencia", confirmar, StringComparison.Ordinal);
+        Assert.Contains("AvisoPrivacidadeComprovante.JaVisto(Preferencias, provedor, semUrlGravada)", confirmar, StringComparison.Ordinal);
+        Assert.Contains("AvisoPrivacidadeComprovante.MarcarVisto(Preferencias, provedor, semUrlGravada)", confirmar, StringComparison.Ordinal);
         Assert.Contains("x => x.Provedor, provedor", confirmar, StringComparison.Ordinal);
         Assert.Contains("x => x.SemUrlGravada, semUrlGravada", confirmar, StringComparison.Ordinal);
         Assert.DoesNotContain("sede na China", confirmar, StringComparison.Ordinal);
+        Assert.DoesNotContain("Alibaba Cloud", confirmar, StringComparison.Ordinal);
+        Assert.DoesNotContain("Como não há URL gravada", confirmar, StringComparison.Ordinal);
         Assert.DoesNotContain("api.deepseek.com", confirmar, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(".Host", confirmar, StringComparison.Ordinal);
     }

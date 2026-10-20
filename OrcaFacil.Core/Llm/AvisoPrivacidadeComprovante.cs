@@ -13,14 +13,35 @@ public static class AvisoPrivacidadeComprovante
     /// <summary>Quem já viu o aviso antigo torna a vê-lo uma vez quando o provedor é o DeepSeek.</summary>
     public const string ChavePreferenciaDeepSeek = ChavePreferencia + "DeepSeek";
 
+    public const string ChavePreferenciaAlibaba = ChavePreferencia + "Alibaba";
+
+    public const string ChavePreferenciaAlibabaPadrao = ChavePreferencia + "AlibabaPadrao";
+
     public const string ValorVisto = "visto";
 
-    public static string ChaveDe(ProvedorDetectado provedor) =>
-        provedor == ProvedorDetectado.DeepSeek ? ChavePreferenciaDeepSeek : ChavePreferencia;
+    /// <summary>
+    /// Provedor do aviso quando não há preferência salva.
+    /// O chip padrão do app pode ser outro; este é o ponto a alinhar com esse padrão.
+    /// </summary>
+    public const ProvedorDetectado ProvedorDoAvisoSemPreferencia = ProvedorDetectado.Alibaba;
+
+    public static string ChaveDe(ProvedorDetectado provedor, bool semUrlGravada = false)
+    {
+        if (semUrlGravada && ProvedorDoAvisoSemPreferencia == ProvedorDetectado.Alibaba)
+            return ChavePreferenciaAlibabaPadrao;
+
+        return provedor switch
+        {
+            ProvedorDetectado.Alibaba => ChavePreferenciaAlibaba,
+            ProvedorDetectado.DeepSeek => ChavePreferenciaDeepSeek,
+            _ => ChavePreferencia
+        };
+    }
 
     /// <summary>
-    /// Texto do aviso. No DeepSeek configurado, anexa <see cref="MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeek"/>.
-    /// Quando o DeepSeek veio do padrão do app, anexa <see cref="MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeekPadrao"/>.
+    /// Texto do aviso. Na Alibaba configurada, anexa <see cref="MensagensLeituraComprovante.ComplementoPrivacidadeAlibaba"/>.
+    /// Sem preferência salva, e só então, o aviso é <see cref="MensagensLeituraComprovante.ComplementoPrivacidadeAlibabaPadrao"/>,
+    /// sem a frase do provedor da URL configurada.
     /// Nos outros provedores, devolve o texto genérico.
     /// </summary>
     public static string TextoAvisoPrivacidade(ProvedorDetectado provedor) =>
@@ -28,24 +49,24 @@ public static class AvisoPrivacidadeComprovante
 
     public static string TextoAvisoPrivacidade(ProvedorDetectado provedor, bool semUrlGravada)
     {
-        if (provedor != ProvedorDetectado.DeepSeek)
+        if (semUrlGravada && ProvedorDoAvisoSemPreferencia == ProvedorDetectado.Alibaba)
+            return MensagensLeituraComprovante.ComplementoPrivacidadeAlibabaPadrao;
+
+        if (provedor != ProvedorDetectado.Alibaba)
             return MensagensLeituraComprovante.TextoAvisoPrivacidade;
 
-        var complemento = semUrlGravada
-            ? MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeekPadrao
-            : MensagensLeituraComprovante.ComplementoPrivacidadeDeepSeek;
-
-        return MensagensLeituraComprovante.TextoAvisoPrivacidade + " " + complemento;
+        return MensagensLeituraComprovante.TextoAvisoPrivacidade
+            + " " + MensagensLeituraComprovante.ComplementoPrivacidadeAlibaba;
     }
 
     public static bool JaVisto(IPreferenciasSimples preferencias) =>
         JaVisto(preferencias, ProvedorDetectado.Desconhecido);
 
-    public static bool JaVisto(IPreferenciasSimples preferencias, ProvedorDetectado provedor)
+    public static bool JaVisto(IPreferenciasSimples preferencias, ProvedorDetectado provedor, bool semUrlGravada = false)
     {
         ArgumentNullException.ThrowIfNull(preferencias);
         return string.Equals(
-            preferencias.Obter(ChaveDe(provedor), string.Empty),
+            preferencias.Obter(ChaveDe(provedor, semUrlGravada), string.Empty),
             ValorVisto,
             StringComparison.Ordinal);
     }
@@ -53,9 +74,9 @@ public static class AvisoPrivacidadeComprovante
     public static void MarcarVisto(IPreferenciasSimples preferencias) =>
         MarcarVisto(preferencias, ProvedorDetectado.Desconhecido);
 
-    public static void MarcarVisto(IPreferenciasSimples preferencias, ProvedorDetectado provedor)
+    public static void MarcarVisto(IPreferenciasSimples preferencias, ProvedorDetectado provedor, bool semUrlGravada = false)
     {
         ArgumentNullException.ThrowIfNull(preferencias);
-        preferencias.Definir(ChaveDe(provedor), ValorVisto);
+        preferencias.Definir(ChaveDe(provedor, semUrlGravada), ValorVisto);
     }
 }

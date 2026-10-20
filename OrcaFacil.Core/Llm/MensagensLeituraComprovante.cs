@@ -54,11 +54,11 @@ public static class MensagensLeituraComprovante
     public const string TextoAvisoPrivacidade =
         "A foto do comprovante sai deste aparelho e vai para o provedor da URL configurada. O OrcaFacil não guarda essa foto.";
 
-    public const string ComplementoPrivacidadeDeepSeek =
-        "O provedor configurado é o DeepSeek, empresa com sede na China. A foto do comprovante será enviada para os servidores dele.";
+    public const string ComplementoPrivacidadeAlibaba =
+        "O provedor configurado é a Alibaba Cloud, empresa com sede na China. A foto do comprovante será enviada para os servidores dela.";
 
-    public const string ComplementoPrivacidadeDeepSeekPadrao =
-        "Como não há URL gravada, o OrcaFacil vai usar o DeepSeek, empresa com sede na China, que é o provedor padrão do app.";
+    public const string ComplementoPrivacidadeAlibabaPadrao =
+        "Como não há URL gravada, o OrcaFacil vai usar a Alibaba Cloud, empresa com sede na China, que é o provedor padrão do app.";
 
     public const string TextoFotoInvalida = "Não foi possível ler essa foto.";
 
