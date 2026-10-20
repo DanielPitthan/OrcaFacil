@@ -484,6 +484,9 @@ namespace OrcaFacil.Core.Data.Migrations
                     b.Property<int>("Tipo")
                         .HasColumnType("INTEGER");
 
+                    b.Property<decimal>("ValorOperacao")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("HashImportacao")

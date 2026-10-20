@@ -10,5 +10,9 @@ public sealed class MovimentoPosicao
     public TipoOperacao Tipo { get; init; }
     public decimal Quantidade { get; init; }
     public decimal PrecoUnitario { get; init; }
+
+    /// <summary>Valor total da operação. O resultado da venda usa este campo.</summary>
+    public decimal ValorOperacao { get; init; }
+
     public decimal Custos { get; init; }
 }

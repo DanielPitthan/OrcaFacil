@@ -22,6 +22,12 @@ public class OperacaoAtivo
 
     public decimal PrecoUnitario { get; set; }
 
+    /// <summary>
+    /// Valor total da operação. O resultado realizado usa este valor.
+    /// Operação antiga e a tela manual recebem quantidade × preço.
+    /// </summary>
+    public decimal ValorOperacao { get; set; }
+
     /// <summary>Corretagem e emolumentos. Entram no preço médio apenas na compra.</summary>
     public decimal Custos { get; set; }
 

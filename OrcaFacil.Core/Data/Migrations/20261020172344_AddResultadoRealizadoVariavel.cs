@@ -33,6 +33,19 @@ namespace OrcaFacil.Core.Data.Migrations
                 nullable: false,
                 defaultValue: 0);
 
+            migrationBuilder.AddColumn<decimal>(
+                name: "ValorOperacao",
+                table: "OperacoesAtivo",
+                type: "TEXT",
+                nullable: false,
+                defaultValue: 0m);
+
+            migrationBuilder.Sql(
+                """
+                UPDATE "OperacoesAtivo"
+                SET "ValorOperacao" = "Quantidade" * "PrecoUnitario"
+                """);
+
             migrationBuilder.CreateTable(
                 name: "RegrasFiscais",
                 columns: table => new
@@ -119,6 +132,10 @@ namespace OrcaFacil.Core.Data.Migrations
 
             migrationBuilder.DropColumn(
                 name: "Origem",
+                table: "OperacoesAtivo");
+
+            migrationBuilder.DropColumn(
+                name: "ValorOperacao",
                 table: "OperacoesAtivo");
         }
     }

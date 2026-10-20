@@ -11,6 +11,7 @@ namespace OrcaFacil.Core.Services;
 /// Único caminho de gravação da renda variável: lança, edita e exclui a operação e,
 /// na mesma transação, recalcula a sequência do ativo e o lançamento do resultado.
 /// Lucro vira receita do mês e prejuízo vira despesa, com base no Valor da Operação.
+/// Sem total informado, grava quantidade × preço — é o que a tela manual faz.
 /// A regra fiscal vem da tabela vigente na data da venda. Alíquota não entra na conta.
 /// </summary>
 public class ResultadoRealizadoService
@@ -404,6 +405,7 @@ public class ResultadoRealizadoService
         destino.Data = modelo.Data.Date;
         destino.Quantidade = modelo.Quantidade;
         destino.PrecoUnitario = modelo.PrecoUnitario;
+        destino.ValorOperacao = ValorInformado(modelo);
         destino.Custos = modelo.Custos;
         destino.Corretora = NormalizarCorretora(modelo.Corretora);
     }
@@ -415,6 +417,7 @@ public class ResultadoRealizadoService
         Tipo = operacao.Tipo,
         Quantidade = operacao.Quantidade,
         PrecoUnitario = operacao.PrecoUnitario,
+        ValorOperacao = operacao.ValorOperacao,
         Custos = operacao.Custos
     };
 
@@ -435,6 +438,8 @@ public class ResultadoRealizadoService
             throw new InvalidOperationException("A quantidade deve ser maior que zero.");
         if (modelo.PrecoUnitario <= 0)
             throw new InvalidOperationException("O preço deve ser maior que zero.");
+        if (modelo.ValorOperacao is <= 0)
+            throw new InvalidOperationException("O valor da operação deve ser maior que zero.");
         if (modelo.Custos < 0)
             throw new InvalidOperationException("Os custos não podem ser negativos.");
         if (modelo.Corretora?.Trim().Length > 40)
@@ -444,6 +449,9 @@ public class ResultadoRealizadoService
         if (hash is not null && hash.Length > 64)
             throw new InvalidOperationException("O hash de importação deve ter no máximo 64 caracteres.");
     }
+
+    private static decimal ValorInformado(OperacaoAtivoFormModel modelo)
+        => modelo.ValorOperacao ?? modelo.Quantidade * modelo.PrecoUnitario;
 
     private static string? NormalizarHash(string? hash)
         => string.IsNullOrWhiteSpace(hash) ? null : hash.Trim();

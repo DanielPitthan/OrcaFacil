@@ -50,6 +50,7 @@ public class ResultadoRealizadoServiceTests : IDisposable
         Assert.Equal(150m, depois.Quantidade);
         Assert.Equal(11.05m, depois.PrecoMedio);
         Assert.Equal(1657.50m, depois.CustoTotal);
+        Assert.Equal(750m, gravadas.Single(o => o.Tipo == TipoOperacao.Venda).ValorOperacao);
 
         var lancamento = Assert.Single(contexto.Transacoes);
         Assert.Equal(TipoTransacao.Receita, lancamento.Tipo);
@@ -90,6 +91,30 @@ public class ResultadoRealizadoServiceTests : IDisposable
         var depois = PosicaoCalculator.Calcular(contexto.OperacoesAtivo.ToList().Select(ParaMovimento));
         Assert.Equal(1657.50m, depois.CustoTotal);
         Assert.Equal(193.50m, Assert.Single(contexto.Transacoes).Valor);
+    }
+
+    [Fact]
+    public async Task ValorOperacaoInformado_DiferenteDeQuantidadeVezesPreco_EntraNoResultado()
+    {
+        await _servico.SalvarAsync(Operacao(_petroId, TipoOperacao.Compra, new DateTime(2026, 1, 10), 10, 10m, 0m), _membroId);
+
+        var venda = Operacao(_petroId, TipoOperacao.Venda, new DateTime(2026, 3, 10), 10, 15.01m, 0m);
+        venda.ValorOperacao = 149.97m;
+        await _servico.SalvarAsync(venda, _membroId);
+
+        using var contexto = _factory.CreateDbContext();
+        var gravada = contexto.OperacoesAtivo.Single(o => o.Tipo == TipoOperacao.Venda);
+        Assert.Equal(15.01m, gravada.PrecoUnitario);
+        Assert.Equal(150.10m, gravada.Quantidade * gravada.PrecoUnitario);
+        Assert.Equal(149.97m, gravada.ValorOperacao);
+
+        var posicao = PosicaoCalculator.Calcular(contexto.OperacoesAtivo.ToList().Select(ParaMovimento));
+        Assert.Equal(0m, posicao.Quantidade);
+        Assert.Equal(0m, posicao.CustoTotal);
+
+        var lancamento = Assert.Single(contexto.Transacoes);
+        Assert.Equal(TipoTransacao.Receita, lancamento.Tipo);
+        Assert.Equal(49.97m, lancamento.Valor);
     }
 
     [Fact]

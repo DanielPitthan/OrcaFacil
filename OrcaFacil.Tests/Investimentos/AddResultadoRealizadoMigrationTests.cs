@@ -47,6 +47,7 @@ public class AddResultadoRealizadoMigrationTests
             Assert.Null(operacao.HashImportacao);
             Assert.Equal(100m, operacao.Quantidade);
             Assert.Equal(10.5m, operacao.PrecoUnitario);
+            Assert.Equal(1050m, operacao.ValorOperacao);
             Assert.Equal("XP", operacao.Corretora);
 
             var mercado = atual.Transacoes.Single(t => t.Descricao == "Mercado");
@@ -132,6 +133,7 @@ public class AddResultadoRealizadoMigrationTests
             voltar.Database.Migrate(Anterior);
             Assert.Equal(0L, Escalar(connection, "SELECT COUNT(*) FROM pragma_table_info('OperacoesAtivo') WHERE name = 'HashImportacao'"));
             Assert.Equal(0L, Escalar(connection, "SELECT COUNT(*) FROM pragma_table_info('OperacoesAtivo') WHERE name = 'Origem'"));
+            Assert.Equal(0L, Escalar(connection, "SELECT COUNT(*) FROM pragma_table_info('OperacoesAtivo') WHERE name = 'ValorOperacao'"));
             Assert.Equal(0L, Escalar(connection, "SELECT COUNT(*) FROM pragma_table_info('Transacoes') WHERE name = 'OperacaoAtivoId'"));
             Assert.Equal(0L, Escalar(connection, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'RegrasFiscais'"));
             Assert.Equal("100", EscalarTexto(connection, "SELECT Quantidade FROM OperacoesAtivo WHERE Corretora = 'XP'"));

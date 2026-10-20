@@ -16,8 +16,8 @@ public sealed class PosicaoComResultado
 /// Único cálculo de posição e de resultado realizado da renda variável.
 /// A ordem é a data e, no mesmo dia, o Id. Operação nova (Id 0) fica por último.
 /// Compra: o custo soma quantidade × preço + custos. Venda: o preço médio não muda.
-/// O Valor da Operação da venda é quantidade × preço. O resultado é esse valor
-/// menos o custo baixado e, se a regra da data mandar, menos os custos.
+/// O resultado da venda usa o Valor da Operação informado, menos o custo baixado
+/// e, se a regra da data mandar, menos os custos.
 /// Venda total baixa o custo restante, sem sobra. O arredondamento afasta do zero;
 /// o número de casas vem da regra vigente. A alíquota da regra não entra na conta.
 /// </summary>
@@ -73,8 +73,10 @@ public static class CalculadoraResultadoRealizado
 
             var regra = regraDaData(operacao.Data);
             var deducao = regra.CustosReduzemResultado ? operacao.Custos : 0m;
-            var valorOperacao = operacao.Quantidade * operacao.PrecoUnitario;
-            var bruto = valorOperacao - custoBaixado - deducao;
+            if (operacao.ValorOperacao <= 0)
+                throw new InvalidOperationException("O valor da operação deve ser maior que zero.");
+
+            var bruto = operacao.ValorOperacao - custoBaixado - deducao;
             vendas.Add(new ResultadoVenda(operacao.Id, operacao.Data.Date, Arredondar(bruto, regra.CasasDecimais)));
         }
 
