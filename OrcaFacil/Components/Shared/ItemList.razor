@@ -28,12 +28,12 @@
                             @(Marcado?.Invoke(item) == true ? "✓" : "")
                         </button>
                     }
-                    @if (!string.IsNullOrEmpty(marcador))
-                    {
-                        <span class="of-lista-chip @SufixoChip(item)">@marcador</span>
-                    }
                     <span class="of-lista-texto">
                         <span class="of-lista-titulo@(emErro ? " of-lista-titulo-erro" : null)">@Titulo(item)</span>
+                        @if (!string.IsNullOrEmpty(marcador))
+                        {
+                            <span class="of-lista-chip @SufixoChip(item)">@marcador</span>
+                        }
                         <span class="of-lista-sub">@Subtitulo(item)</span>
                     </span>
                     <span class="of-lista-valor of-moeda @(EhCredito?.Invoke(item) == true ? "of-lista-valor-credito" : null)">@Valor(item)</span>

@@ -56,7 +56,7 @@
 
                 @if (Previa.MensagemBloqueio is not null)
                 {
-                    <p class="of-previa-erro" role="alert">@Previa.MensagemBloqueio</p>
+                    <p id="previa-motivo-bloqueio" class="of-previa-erro" role="alert">@Previa.MensagemBloqueio</p>
                 }
             </div>
         </div>
@@ -64,7 +64,8 @@
     <DialogActions>
         <StickyActionBar Contido="true" TextoCancelar="Cancelar" TextoPrimario="Confirmar"
                          OnCancelar="Cancelar" OnPrimario="Confirmar" TipoPrimario="ButtonType.Button"
-                         PrimarioDesabilitado="@(!Previa.PodeConfirmar)" />
+                         PrimarioDesabilitado="@(!Previa.PodeConfirmar)"
+                         AriaDescribedBy="@(Previa.MensagemBloqueio is null ? null : "previa-motivo-bloqueio")" />
     </DialogActions>
 </MudDialog>
 
@@ -361,7 +362,10 @@
 
     private static bool EstaMarcado(LinhaPreviaComprovante linha) => linha.Marcado;
 
-    private static void AlternarMarcacao(LinhaPreviaComprovante linha) => linha.Marcado = !linha.Marcado;
+    private void AlternarMarcacao(LinhaPreviaComprovante linha)
+    {
+        Previa.AlternarMarcacao(linha);
+    }
 
     private static string AriaMarcacao(LinhaPreviaComprovante linha)
     {

@@ -316,6 +316,13 @@ public sealed class PreviaComprovante
             linha.Marcado = true;
     }
 
+    public void AlternarMarcacao(LinhaPreviaComprovante linha)
+    {
+        ArgumentNullException.ThrowIfNull(linha);
+        ExigirLinha(linha);
+        linha.Marcado = !linha.Marcado;
+    }
+
     /// <summary>Marca só linhas com produto que não estão pendentes. Não confirma.</summary>
     public void MarcarNaoPendentes()
     {

@@ -463,6 +463,58 @@ public class CasamentoComprovanteTests
     }
 
     [Fact]
+    public void MarcarTodos_Confianca079_NaoMarca()
+    {
+        var catalogo = Catalogo();
+        var item = new ItemComprovanteLido(
+            "ARROZ", "Arroz", true, 10m, null, null, null, null, 4, true, 0.79m);
+        var previa = PreviaComprovante.Criar(
+            NormalizadorComprovante.Normalizar(Cupom(item), catalogo),
+            [],
+            catalogo,
+            new DateTime(2026, 10, 1));
+        var linha = Assert.Single(previa.Linhas);
+        var saida = Assert.Single(linha.Saidas);
+        Assert.Equal(0.79m, saida.Confianca);
+        Assert.True(saida.Pendente);
+        Assert.True(linha.Pendente);
+        Assert.False(linha.Marcado);
+        Assert.False(linha.CasamentoConfirmado);
+
+        previa.MarcarNaoPendentes();
+        Assert.False(linha.Marcado);
+        Assert.False(linha.CasamentoConfirmado);
+        Assert.False(previa.PodeConfirmar);
+    }
+
+    [Fact]
+    public void AlternarMarcacao_MarcarEDesmarcarVoltaAFalse()
+    {
+        var catalogo = Catalogo();
+        var item = new ItemComprovanteLido(
+            "ARROZ", "Arroz", true, 10m, null, null, null, null, 4, true, 0.95m);
+        var previa = PreviaComprovante.Criar(
+            NormalizadorComprovante.Normalizar(Cupom(item), catalogo),
+            [],
+            catalogo,
+            new DateTime(2026, 10, 1));
+        var linha = Assert.Single(previa.Linhas);
+        Assert.False(linha.Pendente);
+        Assert.False(linha.Marcado);
+        Assert.False(previa.PodeConfirmar);
+
+        previa.AlternarMarcacao(linha);
+        Assert.True(linha.Marcado);
+        Assert.True(previa.PodeConfirmar);
+
+        previa.AlternarMarcacao(linha);
+        Assert.False(linha.Marcado);
+        Assert.False(previa.PodeConfirmar);
+        var excecao = Assert.Throws<InvalidOperationException>(() => previa.ParaCompra());
+        Assert.Equal(CasamentoComprovante.MensagemConfirmacaoObrigatoria, excecao.Message);
+    }
+
+    [Fact]
     public async Task MarcarTodos_IgnoraPendente_ESoGravaDepoisDoCheckManual()
     {
         using var factory = new TestDbContextFactory();
@@ -683,12 +735,27 @@ public class CasamentoComprovanteTests
         var marcar = ficha.IndexOf("Previa.Marcar(", preco, StringComparison.Ordinal);
         Assert.True(classificar >= 0 && preco > classificar && marcar > preco);
         var lista = File.ReadAllText(Path.Combine(raiz, "OrcaFacil", "Components", "Shared", "ItemList.razor"));
-        var chip = lista.IndexOf("of-lista-chip", StringComparison.Ordinal);
         var texto = lista.IndexOf("class=\"of-lista-texto\"", StringComparison.Ordinal);
-        var sub = lista.IndexOf("class=\"of-lista-sub\"", StringComparison.Ordinal);
-        Assert.True(chip >= 0 && chip < texto && texto < sub);
+        var titulo = lista.IndexOf("of-lista-titulo", texto, StringComparison.Ordinal);
+        var chip = lista.IndexOf("of-lista-chip", titulo, StringComparison.Ordinal);
+        var sub = lista.IndexOf("class=\"of-lista-sub\"", chip, StringComparison.Ordinal);
+        Assert.True(texto >= 0 && titulo > texto && chip > titulo && sub > chip);
+        var css = File.ReadAllText(Path.Combine(raiz, "OrcaFacil", "Components", "Shared", "ItemList.razor.css"));
+        var regraChip = css.IndexOf(".of-lista-chip {", StringComparison.Ordinal);
+        Assert.True(regraChip >= 0);
+        var regra = css[regraChip..css.IndexOf('}', regraChip)];
+        Assert.Contains("max-width: 100%;", regra, StringComparison.Ordinal);
+        Assert.Contains("min-width: 0;", regra, StringComparison.Ordinal);
+        Assert.Contains("white-space: normal;", regra, StringComparison.Ordinal);
+        Assert.DoesNotContain("flex:", regra, StringComparison.Ordinal);
         Assert.Contains("role=\"checkbox\"", lista, StringComparison.Ordinal);
         Assert.Contains("aria-label=", lista, StringComparison.Ordinal);
+        var alternar = ExtrairBloco(dialog, "void AlternarMarcacao(");
+        Assert.Contains("Previa.AlternarMarcacao(linha)", alternar, StringComparison.Ordinal);
+        Assert.Contains("id=\"previa-motivo-bloqueio\" class=\"of-previa-erro\" role=\"alert\"", dialog, StringComparison.Ordinal);
+        Assert.Contains("AriaDescribedBy=\"@(Previa.MensagemBloqueio is null ? null : \"previa-motivo-bloqueio\")\"", dialog, StringComparison.Ordinal);
+        var barra = File.ReadAllText(Path.Combine(raiz, "OrcaFacil", "Components", "Shared", "StickyActionBar.razor"));
+        Assert.Contains("aria-describedby=\"@AriaDescribedBy\"", barra, StringComparison.Ordinal);
 
         var paraCompra = ExtrairBloco(
             File.ReadAllText(Path.Combine(raiz, "OrcaFacil.Core", "Llm", "PreviaComprovante.cs")),
