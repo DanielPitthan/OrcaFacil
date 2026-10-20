@@ -1,8 +1,9 @@
 namespace OrcaFacil.Core;
 
 /// <summary>
-/// Ordem única das operações: a data (sem hora) e, no mesmo dia, o Id.
-/// Id 0 ainda não foi gravado e fica por último. Renda variável e renda fixa usam este critério.
+/// Ordem da renda variável: a data (sem hora) e, no mesmo dia, o Id.
+/// Id 0 ainda não foi gravado e fica por último.
+/// A renda fixa desempata o mesmo dia com a aplicação antes do resgate.
 /// </summary>
 public static class OrdemPorDataEId
 {
