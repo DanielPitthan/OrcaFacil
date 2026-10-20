@@ -25,6 +25,8 @@ public class AppDbContext : DbContext
     public DbSet<CompraCestaItem> ItensCompraCesta => Set<CompraCestaItem>();
     public DbSet<Cartao> Cartoes => Set<Cartao>();
     public DbSet<RecargaCartao> RecargasCartao => Set<RecargaCartao>();
+    public DbSet<TituloRendaFixa> TitulosRendaFixa => Set<TituloRendaFixa>();
+    public DbSet<OperacaoRendaFixa> OperacoesRendaFixa => Set<OperacaoRendaFixa>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -66,6 +68,15 @@ public class AppDbContext : DbContext
                   .WithMany(c => c.Transacoes)
                   .HasForeignKey(t => t.CartaoId)
                   .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(t => t.OperacaoRendaFixa)
+                  .WithMany()
+                  .HasForeignKey(t => t.OperacaoRendaFixaId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(t => t.OperacaoRendaFixaId)
+                  .IsUnique()
+                  .HasDatabaseName("IX_Transacoes_OperacaoRendaFixaId");
 
             entity.HasMany(t => t.Itens)
                   .WithOne(i => i.Transacao)
@@ -201,6 +212,36 @@ public class AppDbContext : DbContext
                   .WithMany(p => p.Itens)
                   .HasForeignKey(i => i.ProdutoCestaId)
                   .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<TituloRendaFixa>(entity =>
+        {
+            entity.Property(t => t.Codigo).UseCollation("NOCASE");
+            entity.Property(t => t.Corretora).UseCollation("NOCASE");
+            entity.HasIndex(t => new { t.Codigo, t.Corretora })
+                  .IsUnique()
+                  .HasDatabaseName("IX_TitulosRendaFixa_Codigo_Corretora");
+        });
+
+        modelBuilder.Entity<OperacaoRendaFixa>(entity =>
+        {
+            // SQLite guarda decimal como TEXT. A precisão fica no modelo para o cálculo.
+            entity.Property(o => o.Quantidade).HasPrecision(18, 8);
+            entity.Property(o => o.PrecoUnitario).HasPrecision(18, 8);
+            entity.Property(o => o.Valor).HasPrecision(18, 2);
+            entity.Property(o => o.Custos).HasPrecision(18, 2).HasDefaultValue(0m);
+            entity.Property(o => o.IrRetido).HasPrecision(18, 2).HasDefaultValue(0m);
+
+            entity.HasOne(o => o.Titulo)
+                  .WithMany(t => t.Operacoes)
+                  .HasForeignKey(o => o.TituloRendaFixaId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            // Várias operações manuais, sem hash, continuam válidas: o único ignora nulos.
+            entity.HasIndex(o => o.HashImportacao)
+                  .IsUnique()
+                  .HasFilter("\"HashImportacao\" IS NOT NULL")
+                  .HasDatabaseName("IX_OperacoesRendaFixa_HashImportacao");
         });
     }
 }

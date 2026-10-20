@@ -61,6 +61,9 @@ public class ExportadorPlanilhaTests
         Assert.Contains(nameof(AppDbContext.LogsEvento), excluidos);
         Assert.Contains(nameof(AppDbContext.AtivosFinanceiros), incluidos);
         Assert.Contains(nameof(AppDbContext.OperacoesAtivo), incluidos);
+        Assert.Contains(nameof(AppDbContext.TitulosRendaFixa), incluidos);
+        Assert.Contains(nameof(AppDbContext.OperacoesRendaFixa), incluidos);
+        Assert.Equal(18, ExportadorPlanilha.NomesDeAba.Count);
     }
 
     [Fact]
@@ -213,6 +216,32 @@ public class ExportadorPlanilhaTests
         Moeda(operacoes.Cell(2, 7), 36.50m);
         Moeda(operacoes.Cell(2, 8), 1.25m);
         Assert.Equal("Clara", operacoes.Cell(2, 9).GetText());
+
+        var rendaFixa = pasta.Worksheet("Renda fixa");
+        Cabecalho(rendaFixa, "Tipo", "Código", "Nome", "Emissor", "Ano de vencimento", "Corretora", "Ativo", "Criado em");
+        Assert.Equal("CDB", rendaFixa.Cell(2, 1).GetText());
+        Assert.Equal("CDB9268YCA7", rendaFixa.Cell(2, 2).GetText());
+        Assert.Equal("CDB Banco X", rendaFixa.Cell(2, 3).GetText());
+        Assert.Equal("Banco X", rendaFixa.Cell(2, 4).GetText());
+        Numero(rendaFixa.Cell(2, 5), 2029m);
+        Assert.Equal("XP", rendaFixa.Cell(2, 6).GetText());
+        Assert.Equal(PlanilhaPtBr.Sim, rendaFixa.Cell(2, 7).GetText());
+        Assert.Equal(PlanilhaPtBr.LarguraColuna, rendaFixa.Column(1).Width);
+
+        var operacoesRendaFixa = pasta.Worksheet("Operações de renda fixa");
+        Cabecalho(operacoesRendaFixa,
+            "Código", "Nome do título", "Operação", "Data", "Quantidade", "Preço unitário",
+            "Valor", "Custos", "IR retido", "Origem", "Criado em", "Atualizado em");
+        Assert.Equal("CDB9268YCA7", operacoesRendaFixa.Cell(2, 1).GetText());
+        Assert.Equal("CDB Banco X", operacoesRendaFixa.Cell(2, 2).GetText());
+        Assert.Equal("Aplicação", operacoesRendaFixa.Cell(2, 3).GetText());
+        Data(operacoesRendaFixa.Cell(2, 4), new DateTime(2026, 4, 10));
+        Numero(operacoesRendaFixa.Cell(2, 5), 0.25m);
+        Numero(operacoesRendaFixa.Cell(2, 6), 101.125m);
+        Moeda(operacoesRendaFixa.Cell(2, 7), 25.28m);
+        Moeda(operacoesRendaFixa.Cell(2, 8), 0.10m);
+        Moeda(operacoesRendaFixa.Cell(2, 9), 1.37m);
+        Assert.Equal("Manual", operacoesRendaFixa.Cell(2, 10).GetText());
 
         var compras = pasta.Worksheet("Compras da cesta");
         Cabecalho(compras,
@@ -961,6 +990,17 @@ public class ExportadorPlanilhaTests
             Ativo = true,
             CriadoEm = criado
         };
+        var titulo = new TituloRendaFixa
+        {
+            Tipo = TipoTituloRendaFixa.CDB,
+            Codigo = "CDB9268YCA7",
+            Nome = "CDB Banco X",
+            Emissor = "Banco X",
+            AnoVencimento = 2029,
+            Corretora = "XP",
+            Ativo = true,
+            CriadoEm = criado
+        };
         var produto = new ProdutoCesta { Nome = "Arroz", Categoria = categoria, Ativo = true, CriadoEm = criado };
         var local = new LocalCompra { Nome = "Mercado Central", Ativo = true, CriadoEm = criado };
         var compra = new CompraCesta
@@ -981,7 +1021,7 @@ public class ExportadorPlanilhaTests
         };
 
         contexto.AddRange(
-            perfil, categoria, credito, beneficio, origem, filha, item, ativo, produto, local, compra,
+            perfil, categoria, credito, beneficio, origem, filha, item, ativo, titulo, produto, local, compra,
             new OperacaoAtivo
             {
                 Ativo = ativo,
@@ -992,6 +1032,21 @@ public class ExportadorPlanilhaTests
                 PrecoUnitario = 36.50m,
                 Custos = 1.25m,
                 Corretora = "Clara",
+                CriadoEm = criado,
+                AtualizadoEm = criado
+            },
+            new OperacaoRendaFixa
+            {
+                Titulo = titulo,
+                Data = new DateTime(2026, 4, 10),
+                Tipo = TipoOperacaoRendaFixa.Aplicacao,
+                Quantidade = 0.25m,
+                PrecoUnitario = 101.125m,
+                Valor = 25.28m,
+                Custos = 0.10m,
+                IrRetido = 1.37m,
+                Origem = OrigemOperacaoRendaFixa.Manual,
+                HashImportacao = SentinelaHash,
                 CriadoEm = criado,
                 AtualizadoEm = criado
             },

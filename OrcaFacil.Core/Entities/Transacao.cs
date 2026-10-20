@@ -39,6 +39,10 @@ public class Transacao
     public int? CartaoId { get; set; }
     public Cartao? Cartao { get; set; }
 
+    /// <summary>Lançamento gerado por um resgate de renda fixa. Nulo nos demais.</summary>
+    public int? OperacaoRendaFixaId { get; set; }
+    public OperacaoRendaFixa? OperacaoRendaFixa { get; set; }
+
     public ICollection<ItemLancamento> Itens { get; set; } = new List<ItemLancamento>();
 
     public DateTime CriadoEm { get; set; } = DateTime.UtcNow;

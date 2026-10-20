@@ -1151,6 +1151,27 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
                     PrecoUnitario = 7m
                 });
                 break;
+            case nameof(AppDbContext.TitulosRendaFixa):
+                ctx.TitulosRendaFixa.Add(new TituloRendaFixa
+                {
+                    Tipo = TipoTituloRendaFixa.CDB,
+                    Codigo = "CDB9268YCA7",
+                    Nome = "dado-real",
+                    Corretora = "XP"
+                });
+                break;
+            case nameof(AppDbContext.OperacoesRendaFixa):
+                ctx.OperacoesRendaFixa.Add(new OperacaoRendaFixa
+                {
+                    TituloRendaFixaId = 1,
+                    Tipo = TipoOperacaoRendaFixa.Aplicacao,
+                    Data = quando,
+                    Quantidade = 0.06m,
+                    PrecoUnitario = 1.12345678m,
+                    Valor = 12.34m,
+                    Origem = OrigemOperacaoRendaFixa.Manual
+                });
+                break;
             case nameof(AppDbContext.ProdutosCesta):
                 ctx.ProdutosCesta.Add(new ProdutoCesta { Nome = "dado-real", CategoriaId = 1 });
                 break;
@@ -1189,6 +1210,8 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
             nameof(AppDbContext.LogsEvento) => await ctx.LogsEvento.AnyAsync(log => log.Mensagem == "dado-real"),
             nameof(AppDbContext.AtivosFinanceiros) => await ctx.AtivosFinanceiros.AnyAsync(ativo => ativo.Ticker == "PETR4"),
             nameof(AppDbContext.OperacoesAtivo) => await ctx.OperacoesAtivo.AnyAsync(operacao => operacao.Quantidade == 3m && operacao.PrecoUnitario == 7m),
+            nameof(AppDbContext.TitulosRendaFixa) => await ctx.TitulosRendaFixa.AnyAsync(titulo => titulo.Codigo == "CDB9268YCA7"),
+            nameof(AppDbContext.OperacoesRendaFixa) => await ctx.OperacoesRendaFixa.AnyAsync(operacao => operacao.Quantidade == 0.06m && operacao.Valor == 12.34m),
             nameof(AppDbContext.ProdutosCesta) => await ctx.ProdutosCesta.AnyAsync(produto => produto.Nome == "dado-real"),
             nameof(AppDbContext.LocaisCompra) => await ctx.LocaisCompra.AnyAsync(local => local.Nome == "dado-real"),
             nameof(AppDbContext.ComprasCesta) => await ctx.ComprasCesta.AnyAsync(compra => compra.Mes == 8 && compra.Ano == 2026),
