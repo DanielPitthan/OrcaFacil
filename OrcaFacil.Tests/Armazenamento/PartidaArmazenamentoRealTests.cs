@@ -1151,6 +1151,16 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
                     PrecoUnitario = 7m
                 });
                 break;
+            case nameof(AppDbContext.Proventos):
+                ctx.Proventos.Add(new Provento
+                {
+                    AtivoId = 1,
+                    MembroFamiliaId = 1,
+                    Tipo = TipoProvento.Rendimento,
+                    DataPagamento = quando,
+                    ValorLiquido = 8.5m
+                });
+                break;
             case nameof(AppDbContext.TitulosRendaFixa):
                 ctx.TitulosRendaFixa.Add(new TituloRendaFixa
                 {
@@ -1222,6 +1232,7 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
             nameof(AppDbContext.LogsEvento) => await ctx.LogsEvento.AnyAsync(log => log.Mensagem == "dado-real"),
             nameof(AppDbContext.AtivosFinanceiros) => await ctx.AtivosFinanceiros.AnyAsync(ativo => ativo.Ticker == "PETR4"),
             nameof(AppDbContext.OperacoesAtivo) => await ctx.OperacoesAtivo.AnyAsync(operacao => operacao.Quantidade == 3m && operacao.PrecoUnitario == 7m),
+            nameof(AppDbContext.Proventos) => await ctx.Proventos.AnyAsync(provento => provento.ValorLiquido == 8.5m),
             nameof(AppDbContext.TitulosRendaFixa) => await ctx.TitulosRendaFixa.AnyAsync(titulo => titulo.Codigo == "CDB9268YCA7"),
             nameof(AppDbContext.OperacoesRendaFixa) => await ctx.OperacoesRendaFixa.AnyAsync(operacao => operacao.Quantidade == 0.06m && operacao.Valor == 12.34m),
             nameof(AppDbContext.ProdutosCesta) => await ctx.ProdutosCesta.AnyAsync(produto => produto.Nome == "dado-real"),

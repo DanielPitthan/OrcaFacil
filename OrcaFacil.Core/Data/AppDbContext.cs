@@ -21,6 +21,7 @@ public class AppDbContext : DbContext
     public DbSet<LogEvento> LogsEvento => Set<LogEvento>();
     public DbSet<AtivoFinanceiro> AtivosFinanceiros => Set<AtivoFinanceiro>();
     public DbSet<OperacaoAtivo> OperacoesAtivo => Set<OperacaoAtivo>();
+    public DbSet<Provento> Proventos => Set<Provento>();
     public DbSet<ProdutoCesta> ProdutosCesta => Set<ProdutoCesta>();
     public DbSet<LocalCompra> LocaisCompra => Set<LocalCompra>();
     public DbSet<CompraCesta> ComprasCesta => Set<CompraCesta>();
@@ -91,6 +92,15 @@ public class AppDbContext : DbContext
                   .IsUnique()
                   .HasDatabaseName("IX_Transacoes_OperacaoAtivoId");
 
+            entity.HasOne(t => t.Provento)
+                  .WithMany()
+                  .HasForeignKey(t => t.ProventoId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(t => t.ProventoId)
+                  .IsUnique()
+                  .HasDatabaseName("IX_Transacoes_ProventoId");
+
             entity.HasMany(t => t.Itens)
                   .WithOne(i => i.Transacao)
                   .HasForeignKey(i => i.TransacaoId)
@@ -158,6 +168,28 @@ public class AppDbContext : DbContext
                   .IsUnique()
                   .HasFilter("\"HashImportacao\" IS NOT NULL")
                   .HasDatabaseName("IX_OperacoesAtivo_HashImportacao");
+        });
+
+        modelBuilder.Entity<Provento>(entity =>
+        {
+            entity.Property(p => p.ValorLiquido).HasPrecision(18, 2);
+            entity.Property(p => p.Origem).HasDefaultValue(OrigemProvento.Manual);
+
+            entity.HasOne(p => p.Ativo)
+                  .WithMany()
+                  .HasForeignKey(p => p.AtivoId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(p => p.MembroFamilia)
+                  .WithMany()
+                  .HasForeignKey(p => p.MembroFamiliaId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            // Vários proventos manuais, sem hash, continuam válidos: o único ignora nulos.
+            entity.HasIndex(p => p.HashImportacao)
+                  .IsUnique()
+                  .HasFilter("\"HashImportacao\" IS NOT NULL")
+                  .HasDatabaseName("IX_Proventos_HashImportacao");
         });
 
         modelBuilder.Entity<ProdutoCesta>(entity =>

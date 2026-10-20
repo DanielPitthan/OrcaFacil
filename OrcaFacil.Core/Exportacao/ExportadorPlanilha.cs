@@ -29,6 +29,7 @@ public static class ExportadorPlanilha
         "Fechamentos",
         "Ativos",
         "Operações",
+        "Proventos",
         "Renda fixa",
         "Operações de renda fixa",
         "Produtos da cesta",
@@ -53,6 +54,7 @@ public static class ExportadorPlanilha
             [nameof(AppDbContext.FechamentosPeriodo)] = "Fechamentos",
             [nameof(AppDbContext.AtivosFinanceiros)] = "Ativos",
             [nameof(AppDbContext.OperacoesAtivo)] = "Operações",
+            [nameof(AppDbContext.Proventos)] = "Proventos",
             [nameof(AppDbContext.TitulosRendaFixa)] = "Renda fixa",
             [nameof(AppDbContext.OperacoesRendaFixa)] = "Operações de renda fixa",
             [nameof(AppDbContext.ProdutosCesta)] = "Produtos da cesta",
@@ -97,6 +99,7 @@ public static class ExportadorPlanilha
         GravarFechamentos(contexto, pasta);
         GravarAtivos(contexto, pasta);
         GravarOperacoes(contexto, pasta);
+        GravarProventos(contexto, pasta);
         GravarTitulosRendaFixa(contexto, pasta);
         GravarOperacoesRendaFixa(contexto, pasta);
         GravarProdutos(contexto, pasta);
@@ -296,6 +299,32 @@ public static class ExportadorPlanilha
             PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 9), operacao.Corretora);
             GravarInstante(PlanilhaPtBr.Celula(aba, linha, 10), operacao.CriadoEm);
             GravarInstante(PlanilhaPtBr.Celula(aba, linha, 11), operacao.AtualizadoEm);
+        });
+    }
+
+    private static void GravarProventos(AppDbContext contexto, XLWorkbook pasta)
+    {
+        var aba = Abrir(pasta, "Proventos");
+        PlanilhaPtBr.GravarCabecalho(aba,
+        [
+            "Ticker", "Nome do ativo", "Perfil", "Tipo", "Data do pagamento",
+            "Valor líquido", "Origem", "Criado em", "Atualizado em"
+        ]);
+        EmLotes(contexto.Proventos.AsNoTracking()
+            .Include(p => p.Ativo)
+            .Include(p => p.MembroFamilia)
+            .OrderBy(p => p.Id), "Proventos", (provento, indice) =>
+        {
+            var linha = LinhaDeDados(indice);
+            PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 1), provento.Ativo?.Ticker);
+            PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 2), provento.Ativo?.Nome);
+            PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 3), TextoPerfil(provento.MembroFamilia));
+            PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 4), TextoProvento(provento.Tipo));
+            PlanilhaPtBr.GravarData(PlanilhaPtBr.Celula(aba, linha, 5), provento.DataPagamento);
+            PlanilhaPtBr.GravarMoeda(PlanilhaPtBr.Celula(aba, linha, 6), provento.ValorLiquido);
+            PlanilhaPtBr.GravarTexto(PlanilhaPtBr.Celula(aba, linha, 7), TextoOrigemProvento(provento.Origem));
+            GravarInstante(PlanilhaPtBr.Celula(aba, linha, 8), provento.CriadoEm);
+            GravarInstante(PlanilhaPtBr.Celula(aba, linha, 9), provento.AtualizadoEm);
         });
     }
 
@@ -812,6 +841,20 @@ public static class ExportadorPlanilha
         TipoAtivo.Etf => "ETF",
         TipoAtivo.Bdr => "BDR",
         _ => throw new InvalidOperationException($"Tipo de ativo desconhecido: {tipo}.")
+    };
+
+    internal static string TextoProvento(TipoProvento tipo) => tipo switch
+    {
+        TipoProvento.Rendimento => "Rendimento",
+        TipoProvento.Jcp => "JCP",
+        _ => throw new InvalidOperationException($"Tipo de provento desconhecido: {tipo}.")
+    };
+
+    internal static string TextoOrigemProvento(OrigemProvento origem) => origem switch
+    {
+        OrigemProvento.Manual => "Manual",
+        OrigemProvento.ExtratoB3 => "Extrato B3",
+        _ => throw new InvalidOperationException($"Origem de provento desconhecida: {origem}.")
     };
 
     internal static string TextoOperacao(TipoOperacao tipo) => tipo switch

@@ -63,7 +63,7 @@ public class ExportadorPlanilhaTests
         Assert.Contains(nameof(AppDbContext.OperacoesAtivo), incluidos);
         Assert.Contains(nameof(AppDbContext.TitulosRendaFixa), incluidos);
         Assert.Contains(nameof(AppDbContext.OperacoesRendaFixa), incluidos);
-        Assert.Equal(18, ExportadorPlanilha.NomesDeAba.Count);
+        Assert.Equal(19, ExportadorPlanilha.NomesDeAba.Count);
     }
 
     [Fact]
@@ -216,6 +216,18 @@ public class ExportadorPlanilhaTests
         Moeda(operacoes.Cell(2, 7), 36.50m);
         Moeda(operacoes.Cell(2, 8), 1.25m);
         Assert.Equal("Clara", operacoes.Cell(2, 9).GetText());
+
+        var proventos = pasta.Worksheet("Proventos");
+        Cabecalho(proventos,
+            "Ticker", "Nome do ativo", "Perfil", "Tipo", "Data do pagamento",
+            "Valor líquido", "Origem", "Criado em", "Atualizado em");
+        Assert.Equal("PETR4", proventos.Cell(2, 1).GetText());
+        Assert.Equal("Petrobras", proventos.Cell(2, 2).GetText());
+        Assert.Equal("Daniel (Dani)", proventos.Cell(2, 3).GetText());
+        Assert.Equal("Rendimento", proventos.Cell(2, 4).GetText());
+        Data(proventos.Cell(2, 5), new DateTime(2026, 3, 15));
+        Moeda(proventos.Cell(2, 6), 18.40m);
+        Assert.Equal("Extrato B3", proventos.Cell(2, 7).GetText());
 
         var rendaFixa = pasta.Worksheet("Renda fixa");
         Cabecalho(rendaFixa, "Tipo", "Código", "Nome", "Emissor", "Ano de vencimento", "Corretora", "Ativo", "Criado em");
@@ -1032,6 +1044,18 @@ public class ExportadorPlanilhaTests
                 PrecoUnitario = 36.50m,
                 Custos = 1.25m,
                 Corretora = "Clara",
+                CriadoEm = criado,
+                AtualizadoEm = criado
+            },
+            new Provento
+            {
+                Ativo = ativo,
+                MembroFamilia = perfil,
+                Tipo = TipoProvento.Rendimento,
+                DataPagamento = new DateTime(2026, 3, 15),
+                ValorLiquido = 18.40m,
+                Origem = OrigemProvento.ExtratoB3,
+                HashImportacao = SentinelaHash,
                 CriadoEm = criado,
                 AtualizadoEm = criado
             },

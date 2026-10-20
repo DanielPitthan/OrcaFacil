@@ -37,11 +37,14 @@
                         <span class="of-lista-sub">@Subtitulo(item)</span>
                     </span>
                     <span class="of-lista-valor of-moeda @(EhCredito?.Invoke(item) == true ? "of-lista-valor-credito" : null)">@Valor(item)</span>
-                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" AriaLabel="@AriaMenu(item)" Size="Size.Medium"
-                             AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopRight">
-                        <MudMenuItem OnClick="@(() => OnEditar.InvokeAsync(item))">Editar</MudMenuItem>
-                        <MudMenuItem OnClick="@(() => OnRemover.InvokeAsync(item))">Remover</MudMenuItem>
-                    </MudMenu>
+                    @if (MostrarMenu)
+                    {
+                        <MudMenu Icon="@Icons.Material.Filled.MoreVert" AriaLabel="@AriaMenu(item)" Size="Size.Medium"
+                                 AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopRight">
+                            <MudMenuItem OnClick="@(() => OnEditar.InvokeAsync(item))">Editar</MudMenuItem>
+                            <MudMenuItem OnClick="@(() => OnRemover.InvokeAsync(item))">Remover</MudMenuItem>
+                        </MudMenu>
+                    }
                 </li>
             }
         </ul>
@@ -121,6 +124,9 @@
 
     /// <summary>Opcional. Falso esconde só o botão de incluir, quando não há estorno.</summary>
     [Parameter] public bool MostrarAdicionar { get; set; } = true;
+
+    /// <summary>Opcional. Falso esconde o menu de editar e remover. O padrão mantém as telas atuais.</summary>
+    [Parameter] public bool MostrarMenu { get; set; } = true;
 
     private object Chave(TItem item) => ChaveItem?.Invoke(item) ?? (object)item!;
 

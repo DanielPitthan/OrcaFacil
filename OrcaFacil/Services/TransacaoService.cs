@@ -83,7 +83,8 @@ public class TransacaoService : ITransacaoService
         var transacao = await _transacaoRepository.GetByIdAsync(id)
             ?? throw new InvalidOperationException("Lançamento não encontrado.");
 
-        ProtecaoLancamentoOperacao.GarantirEditavelNaTela(transacao.OperacaoAtivoId, transacao.OperacaoRendaFixaId);
+        ProtecaoLancamentoOperacao.GarantirEditavelNaTela(
+            transacao.OperacaoAtivoId, transacao.OperacaoRendaFixaId, transacao.ProventoId);
         await _fechamentoService.GarantirPeriodoAbertoAsync(transacao.Data);
         await _fechamentoService.GarantirPeriodoAbertoAsync(dto.Data);
 
@@ -112,7 +113,8 @@ public class TransacaoService : ITransacaoService
         var transacao = await _transacaoRepository.GetByIdAsync(id)
             ?? throw new InvalidOperationException("Lançamento não encontrado.");
 
-        ProtecaoLancamentoOperacao.GarantirEditavelNaTela(transacao.OperacaoAtivoId, transacao.OperacaoRendaFixaId);
+        ProtecaoLancamentoOperacao.GarantirEditavelNaTela(
+            transacao.OperacaoAtivoId, transacao.OperacaoRendaFixaId, transacao.ProventoId);
         await _fechamentoService.GarantirPeriodoAbertoAsync(transacao.Data);
 
         await _transacaoRepository.DeleteAsync(transacao);
@@ -124,7 +126,8 @@ public class TransacaoService : ITransacaoService
         var transacao = await _transacaoRepository.GetByIdAsync(id)
             ?? throw new InvalidOperationException("Lançamento não encontrado.");
 
-        ProtecaoLancamentoOperacao.GarantirEditavelNaTela(transacao.OperacaoAtivoId, transacao.OperacaoRendaFixaId);
+        ProtecaoLancamentoOperacao.GarantirEditavelNaTela(
+            transacao.OperacaoAtivoId, transacao.OperacaoRendaFixaId, transacao.ProventoId);
         await _fechamentoService.GarantirPeriodoAbertoAsync(transacao.Data);
 
         transacao.Pago = pago;
