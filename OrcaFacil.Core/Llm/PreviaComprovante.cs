@@ -1,3 +1,4 @@
+using System.Globalization;
 using OrcaFacil.Core.Cesta;
 using OrcaFacil.Core.Dtos;
 using OrcaFacil.Core.Entities;
@@ -112,6 +113,9 @@ public sealed class PreviaComprovante
 
             if (SomaExcedida || _linhas.Any(linha => linha.SomaExcedida))
                 return NormalizadorComprovante.MotivoSomaExcedida;
+
+            if (_linhas.Any(linha => linha.ProdutoCestaId is > 0 && !linha.Marcado))
+                return CasamentoComprovante.MensagemConfirmacaoObrigatoria;
 
             return null;
         }
@@ -295,6 +299,8 @@ public sealed class PreviaComprovante
         linha.CasadoPelaDescricao = false;
         linha.NovoSeraCriado = false;
         linha.PodeDesfazerNovo = false;
+        linha.CasamentoConfirmado = false;
+        linha.Marcado = false;
 
         if (chave is not null && _linhas.All(item => item.ProdutoNovoChave != chave))
             _pendentes.RemoveAll(produto => produto.Chave == chave);
@@ -302,10 +308,76 @@ public sealed class PreviaComprovante
         AtualizarSomas();
     }
 
+    public void Marcar(LinhaPreviaComprovante linha)
+    {
+        ArgumentNullException.ThrowIfNull(linha);
+        ExigirLinha(linha);
+        if (linha.ProdutoCestaId is > 0)
+            linha.Marcado = true;
+    }
+
+    public void AlternarMarcacao(LinhaPreviaComprovante linha)
+    {
+        ArgumentNullException.ThrowIfNull(linha);
+        ExigirLinha(linha);
+        linha.Marcado = !linha.Marcado;
+    }
+
+    /// <summary>Marca só linhas com produto que não estão pendentes. Não confirma.</summary>
+    public void MarcarNaoPendentes()
+    {
+        foreach (var linha in _linhas)
+        {
+            if (linha.ProdutoCestaId is > 0 && !linha.Pendente)
+                linha.Marcado = true;
+        }
+    }
+
+    public void ConfirmarMarcados()
+    {
+        foreach (var linha in _linhas)
+        {
+            if (linha.ProdutoCestaId is > 0 && linha.Marcado)
+                linha.CasamentoConfirmado = true;
+        }
+    }
+
+    public void ConfirmarCasamentos() => ConfirmarMarcados();
+
+    public IReadOnlyList<ItemSaidaComprovante> ItensComProduto()
+    {
+        var itens = new List<ItemSaidaComprovante>();
+        foreach (var linha in _linhas)
+        {
+            if (linha.ProdutoCestaId is not int produtoId || produtoId <= 0)
+                continue;
+
+            var existente = linha.Saidas.FirstOrDefault(item => item.ProdutoId == produtoId);
+            var saida = (existente ?? new ItemSaidaComprovante
+            {
+                DescricaoLida = linha.DescricaoLida,
+                ProdutoId = produtoId,
+                Confianca = linha.Saidas.Count == 0 ? 0m : linha.Saidas.Min(item => item.Confianca),
+                Pendente = linha.Pendente
+            }) with
+            {
+                ProdutoId = produtoId,
+                Confirmado = false
+            };
+            itens.Add(linha.CasamentoConfirmado ? saida.Confirmar() : saida);
+        }
+
+        return itens;
+    }
+
     public CompraCestaFormModel ParaCompra()
     {
         if (!PodeConfirmar)
             throw new InvalidOperationException(MensagemBloqueio ?? MensagemSemProdutoOuCategoria);
+
+        var confirmacoes = ItensComProduto();
+        if (confirmacoes.Count > 0)
+            CasamentoComprovante.GarantirConfirmacao(confirmacoes);
 
         var novos = new List<ProdutoNovoCompra>();
         var itens = new List<ItemCompraCestaFormModel>();
@@ -347,7 +419,8 @@ public sealed class PreviaComprovante
             LocalCompraId = LocalCompraId ?? 0,
             Data = Data.Date,
             ProdutosNovos = novos,
-            Itens = itens
+            Itens = itens,
+            ItensSaida = confirmacoes.ToList()
         };
     }
 
@@ -371,8 +444,10 @@ public sealed class PreviaComprovante
 
     private void AplicarProduto(LinhaPreviaComprovante linha, ProdutoCesta produto)
     {
+        int? novoId = produto.Id > 0 ? produto.Id : null;
+        var mudouProduto = linha.ProdutoCestaId != novoId;
         linha.Nome = (produto.Nome ?? string.Empty).Trim();
-        linha.ProdutoCestaId = produto.Id > 0 ? produto.Id : null;
+        linha.ProdutoCestaId = novoId;
         linha.CategoriaId = produto.CategoriaId > 0 ? produto.CategoriaId : null;
         linha.CategoriaNome = string.IsNullOrWhiteSpace(produto.Categoria?.Nome) ? null : produto.Categoria.Nome.Trim();
         linha.CategoriaFaltando = produto.CategoriaId <= 0;
@@ -385,6 +460,11 @@ public sealed class PreviaComprovante
         linha.NovoSeraCriado = false;
         linha.ProdutoNovoChave = null;
         linha.PodeDesfazerNovo = false;
+        if (mudouProduto)
+        {
+            linha.CasamentoConfirmado = false;
+            linha.Marcado = false;
+        }
     }
 
     private static void AplicarPendente(LinhaPreviaComprovante linha, ProdutoPendente pendente)
@@ -403,6 +483,8 @@ public sealed class PreviaComprovante
         linha.CasadoPelaDescricao = false;
         linha.NovoSeraCriado = true;
         linha.PodeDesfazerNovo = false;
+        linha.CasamentoConfirmado = false;
+        linha.Marcado = false;
     }
 
     private ResultadoNome AplicarNome(
@@ -569,6 +651,38 @@ public sealed class LinhaPreviaComprovante
 
     public int? ProdutoCestaId { get; set; }
 
+    public bool CasamentoConfirmado { get; set; }
+
+    public bool Marcado { get; set; }
+
+    public bool Revisar { get; set; }
+
+    public List<ItemSaidaComprovante> Saidas { get; init; } = [];
+
+    public bool Pendente =>
+        ProdutoCestaId is > 0
+        && (Revisar || Saidas.Count == 0 || Saidas.Any(item => item.Pendente));
+
+    public string? MarcadorCasamento
+    {
+        get
+        {
+            if (ProdutoCestaId is not > 0)
+                return null;
+
+            var estado = Marcado || CasamentoConfirmado
+                ? "confirmado"
+                : Pendente
+                    ? "pendente"
+                    : "não confirmado";
+            if (Saidas.Count == 0)
+                return estado;
+
+            var confianca = Saidas.Min(item => item.Confianca).ToString("0.00", CultureInfo.GetCultureInfo("pt-BR"));
+            return $"{estado} · confiança {confianca}";
+        }
+    }
+
     public int? CategoriaId { get; set; }
 
     public string? CategoriaNome { get; set; }
@@ -676,12 +790,14 @@ public sealed class LinhaPreviaComprovante
             ItemAusente = linha.ItemAusente,
             CategoriaFaltando = linha.CategoriaFaltando,
             ProdutoCestaId = linha.ProdutoCestaId,
+            Revisar = linha.Revisar,
             CategoriaId = linha.CategoriaId,
             CategoriaNome = string.IsNullOrWhiteSpace(categoriaNome) ? null : categoriaNome.Trim(),
             Nome = linha.Nome,
             NomeLido = linha.NomeLido,
             CandidatosIds = linha.CandidatosIds,
-            Avisos = linha.Avisos
+            Avisos = linha.Avisos,
+            Saidas = linha.Saidas.ToList()
         };
     }
 

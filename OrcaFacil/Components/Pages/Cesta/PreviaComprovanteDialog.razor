@@ -39,19 +39,24 @@
 
                 <div class="of-previa-bloco">
                     <FormSection Titulo="Itens">
+                        <button type="button" class="of-previa-marcar" @onclick="MarcarTodos"
+                                aria-label="Marcar todos os itens não pendentes">Marcar todos</button>
                         <ItemList TItem="LinhaPreviaComprovante" Itens="@Previa.Linhas" Contagem="@Contagem"
                                   SomaFormatada="@Previa.SomaLinhas.ToString("C")"
                                   Titulo="Titulo" Subtitulo="Subtitulo" Valor="Valor" Icone="Icone"
                                   ChaveItem="Chave" EmErro="EmErro" MostrarAdicionar="@Previa.PodeCadastrarTudo"
                                   TextoAdicionar="Cadastrar tudo" OnAdicionar="CadastrarTudoAsync"
                                   TextoVazio="Nenhum item na leitura."
+                                  ExigeMarcacao="ExigeMarcacao" Marcado="EstaMarcado" OnAlternarMarcacao="AlternarMarcacao"
+                                  AriaMarcacao="AriaMarcacao" Marcador="Marcador" Destacado="Destacado"
+                                  ConfirmadoVisual="ConfirmadoVisual" ComplementoAriaMenu="ComplementoAria"
                                   OnEditar="Editar" OnRemover="Remover" />
                     </FormSection>
                 </div>
 
                 @if (Previa.MensagemBloqueio is not null)
                 {
-                    <p class="of-previa-erro" role="alert">@Previa.MensagemBloqueio</p>
+                    <p id="previa-motivo-bloqueio" class="of-previa-erro" role="alert">@Previa.MensagemBloqueio</p>
                 }
             </div>
         </div>
@@ -59,7 +64,8 @@
     <DialogActions>
         <StickyActionBar Contido="true" TextoCancelar="Cancelar" TextoPrimario="Confirmar"
                          OnCancelar="Cancelar" OnPrimario="Confirmar" TipoPrimario="ButtonType.Button"
-                         PrimarioDesabilitado="@(!Previa.PodeConfirmar)" />
+                         PrimarioDesabilitado="@(!Previa.PodeConfirmar)"
+                         AriaDescribedBy="@(Previa.MensagemBloqueio is null ? null : "previa-motivo-bloqueio")" />
     </DialogActions>
 </MudDialog>
 
@@ -127,6 +133,19 @@
     {
         if (!Previa.PodeConfirmar || _confirmando)
             return;
+
+        try
+        {
+            Previa.ConfirmarMarcados();
+            var comProduto = Previa.ItensComProduto();
+            if (comProduto.Count > 0)
+                CasamentoComprovante.GarantirConfirmacao(comProduto);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+            return;
+        }
 
         _confirmando = true;
         MudDialog.Close(DialogResult.Ok(Previa.ParaCompra()));
@@ -207,6 +226,7 @@
             Previa.Classificar(_editando, produto);
 
         Previa.AlterarPreco(_editando, _preco);
+        Previa.Marcar(_editando);
         _sheetAberto = false;
     }
 
@@ -335,6 +355,42 @@
     }
 
     private static string Titulo(LinhaPreviaComprovante linha) => linha.Titulo;
+
+    private void MarcarTodos() => Previa.MarcarNaoPendentes();
+
+    private static bool ExigeMarcacao(LinhaPreviaComprovante linha) => linha.ProdutoCestaId is > 0;
+
+    private static bool EstaMarcado(LinhaPreviaComprovante linha) => linha.Marcado;
+
+    private void AlternarMarcacao(LinhaPreviaComprovante linha)
+    {
+        Previa.AlternarMarcacao(linha);
+    }
+
+    private static string AriaMarcacao(LinhaPreviaComprovante linha)
+    {
+        var acao = linha.Marcado ? "Desmarcar" : "Marcar";
+        return linha.Pendente ? $"{acao} {linha.Nome}, pendente" : $"{acao} {linha.Nome}";
+    }
+
+    private static string? Marcador(LinhaPreviaComprovante linha) => linha.MarcadorCasamento;
+
+    private static bool Destacado(LinhaPreviaComprovante linha) =>
+        linha.ProdutoCestaId is > 0 && linha.Pendente && !linha.Marcado && !linha.CasamentoConfirmado;
+
+    private static bool ConfirmadoVisual(LinhaPreviaComprovante linha) =>
+        linha.ProdutoCestaId is > 0 && (linha.Marcado || linha.CasamentoConfirmado);
+
+    private static string? ComplementoAria(LinhaPreviaComprovante linha)
+    {
+        if (linha.ProdutoCestaId is not > 0)
+            return null;
+
+        if (linha.Marcado || linha.CasamentoConfirmado)
+            return linha.Pendente ? "pendente, confirmado" : "confirmado";
+
+        return linha.Pendente ? "pendente, não confirmado" : "não confirmado";
+    }
 
     private static string Subtitulo(LinhaPreviaComprovante linha) => linha.Subtitulo;
 

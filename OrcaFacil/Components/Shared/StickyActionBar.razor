@@ -6,7 +6,8 @@
         @TextoCancelar
     </MudButton>
     <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="of-action-botao"
-               ButtonType="TipoPrimario" Disabled="PrimarioDesabilitado" OnClick="OnPrimario">
+               ButtonType="TipoPrimario" Disabled="PrimarioDesabilitado"
+               aria-describedby="@AriaDescribedBy" OnClick="OnPrimario">
         @TextoPrimario
     </MudButton>
 </div>
@@ -19,6 +20,8 @@
     [Parameter] public bool CancelarDesabilitado { get; set; }
     [Parameter] public EventCallback OnPrimario { get; set; }
     [Parameter] public bool PrimarioDesabilitado { get; set; }
+
+    [Parameter] public string? AriaDescribedBy { get; set; }
     [Parameter] public ButtonType TipoPrimario { get; set; } = ButtonType.Submit;
 
     /// <summary>

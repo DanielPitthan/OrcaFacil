@@ -633,6 +633,27 @@ namespace OrcaFacil.Core.Data.Migrations
                     b.ToTable("RecargasCartao");
                 });
 
+            modelBuilder.Entity("OrcaFacil.Core.Entities.RegraCatalogoComprovante", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("LimiteProdutos")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("RegrasCatalogoComprovante");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            LimiteProdutos = 300
+                        });
+                });
+
             modelBuilder.Entity("OrcaFacil.Core.Entities.TituloRendaFixa", b =>
                 {
                     b.Property<int>("Id")

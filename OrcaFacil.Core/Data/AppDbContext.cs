@@ -27,6 +27,7 @@ public class AppDbContext : DbContext
     public DbSet<RecargaCartao> RecargasCartao => Set<RecargaCartao>();
     public DbSet<TituloRendaFixa> TitulosRendaFixa => Set<TituloRendaFixa>();
     public DbSet<OperacaoRendaFixa> OperacoesRendaFixa => Set<OperacaoRendaFixa>();
+    public DbSet<RegraCatalogoComprovante> RegrasCatalogoComprovante => Set<RegraCatalogoComprovante>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -242,6 +243,15 @@ public class AppDbContext : DbContext
                   .IsUnique()
                   .HasFilter("\"HashImportacao\" IS NOT NULL")
                   .HasDatabaseName("IX_OperacoesRendaFixa_HashImportacao");
+        });
+
+        modelBuilder.Entity<RegraCatalogoComprovante>(entity =>
+        {
+            entity.HasData(new RegraCatalogoComprovante
+            {
+                Id = 1,
+                LimiteProdutos = RegraCatalogoComprovante.LimitePadrao
+            });
         });
     }
 }

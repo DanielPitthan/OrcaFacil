@@ -482,17 +482,28 @@ public static class LeitorRespostaComprovante
         if (!TextoObrigatorio(item, "descricao_lida", prefixo, falha, out var descricao) ||
             !Produto(item, prefixo, falha, out var produto) ||
             !Reconhecido(item, prefixo, falha, out var reconhecido) ||
+            !ProdutoId(item, out var produtoId, out var produtoIdInformado) ||
             !DecimalObrigatorio(item, "preco", prefixo, falha, out var preco) ||
             !TextoOpcional(item, "quantidade", falha, out var quantidade, prefixo) ||
             !TextoOpcional(item, "unidade", falha, out var unidade, prefixo) ||
             !DecimalOpcional(item, "desconto", falha, out var desconto, prefixo) ||
-            !Confianca(item, prefixo, falha, out var confianca))
+            !Confianca(item, prefixo, falha, out var confianca, out var confiancaNumero))
         {
             return false;
         }
 
         lido = new ItemComprovanteLido(
-            descricao, produto, reconhecido, preco, quantidade, unidade, desconto, confianca);
+            descricao,
+            produto,
+            reconhecido,
+            preco,
+            quantidade,
+            unidade,
+            desconto,
+            confianca,
+            produtoId,
+            produtoIdInformado,
+            confiancaNumero);
         return true;
     }
 
@@ -546,6 +557,49 @@ public static class LeitorRespostaComprovante
             return falha.Recusar(MotivoCampoInvalido(prefixo + "produto"));
 
         produto = objeto.GetProperty("produto").GetString() ?? string.Empty;
+        return true;
+    }
+
+    /// <summary>
+    /// <c>produto_id</c> ausente não informa casamento. Null, inteiro ou texto inteiro entram.
+    /// Forma inválida não derruba o comprovante: o id fica null e o item segue não identificado.
+    /// </summary>
+    private static bool ProdutoId(JsonElement objeto, out int? id, out bool informado)
+    {
+        id = null;
+        informado = false;
+        if (!objeto.TryGetProperty("produto_id", out var valor) || valor.ValueKind == JsonValueKind.Undefined)
+            return true;
+
+        informado = true;
+        if (valor.ValueKind is JsonValueKind.Null)
+            return true;
+
+        if (valor.ValueKind == JsonValueKind.Number)
+        {
+            if (valor.TryGetInt32(out var inteiro))
+            {
+                id = inteiro;
+                return true;
+            }
+
+            if (valor.TryGetDecimal(out var numero) &&
+                numero == decimal.Truncate(numero) &&
+                numero >= int.MinValue &&
+                numero <= int.MaxValue)
+            {
+                id = (int)numero;
+            }
+
+            return true;
+        }
+
+        if (valor.ValueKind == JsonValueKind.String &&
+            int.TryParse(valor.GetString(), NumberStyles.Integer, Invariante, out var texto))
+        {
+            id = texto;
+        }
+
         return true;
     }
 
@@ -675,16 +729,32 @@ public static class LeitorRespostaComprovante
         return true;
     }
 
-    private static bool Confianca(JsonElement objeto, string prefixo, MotivoCaixa falha, out ConfiancaLeitura? confianca)
+    private static bool Confianca(
+        JsonElement objeto,
+        string prefixo,
+        MotivoCaixa falha,
+        out ConfiancaLeitura? confianca,
+        out decimal? numero)
     {
         confianca = null;
+        numero = null;
         if (Ausente(objeto, "confianca"))
             return true;
 
-        if (objeto.GetProperty("confianca").ValueKind != JsonValueKind.String)
+        var valor = objeto.GetProperty("confianca");
+        if (valor.ValueKind == JsonValueKind.Number)
+        {
+            if (!valor.TryGetDecimal(out var lido) || lido < 0m || lido > 1m)
+                return falha.Recusar(MotivoCampoInvalido(prefixo + "confianca"));
+
+            numero = lido;
+            return true;
+        }
+
+        if (valor.ValueKind != JsonValueKind.String)
             return falha.Recusar(MotivoCampoInvalido(prefixo + "confianca"));
 
-        confianca = objeto.GetProperty("confianca").GetString() switch
+        confianca = valor.GetString() switch
         {
             "alta" => ConfiancaLeitura.Alta,
             "media" => ConfiancaLeitura.Media,

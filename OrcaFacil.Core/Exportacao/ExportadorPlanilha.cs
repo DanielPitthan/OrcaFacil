@@ -67,7 +67,8 @@ public static class ExportadorPlanilha
     public static IReadOnlySet<string> ConjuntosExcluidos { get; } =
         new HashSet<string>(StringComparer.Ordinal)
         {
-            nameof(AppDbContext.LogsEvento)
+            nameof(AppDbContext.LogsEvento),
+            nameof(AppDbContext.RegrasCatalogoComprovante)
         };
 
     private static readonly (PrazoAviso Flag, string Texto)[] TextosPrazo =

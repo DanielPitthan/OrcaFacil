@@ -57,6 +57,19 @@
     min-width: 0;
 }
 
+.of-previa-marcar {
+    width: 100%;
+    min-height: var(--of-touch);
+    margin: 0;
+    padding: 8px 16px;
+    border: 1px solid var(--of-text);
+    border-radius: var(--of-radius-control);
+    background: var(--of-background);
+    color: var(--of-text);
+    font: inherit;
+    text-align: left;
+}
+
 .of-previa-opcao {
     width: 100%;
     min-height: var(--of-touch);

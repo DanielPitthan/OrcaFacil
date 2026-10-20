@@ -16,10 +16,24 @@
             @foreach (var item in Itens)
             {
                 var emErro = EmErro?.Invoke(item) == true;
-                <li @key="Chave(item)" class="of-lista-item@(emErro ? " of-lista-item-erro" : null)">
+                var marcador = Marcador?.Invoke(item);
+                <li @key="Chave(item)" class="@ClasseItem(item, emErro)">
                     <span class="of-lista-icone" style="@Fundo(item)" aria-hidden="true">@Icone(item)</span>
+                    @if (ExigeMarcacao?.Invoke(item) == true)
+                    {
+                        <button type="button" class="of-lista-marca" role="checkbox"
+                                aria-checked="@(Marcado?.Invoke(item) == true ? "true" : "false")"
+                                aria-label="@(AriaMarcacao?.Invoke(item) ?? "Marcar item")"
+                                @onclick="() => OnAlternarMarcacao.InvokeAsync(item)">
+                            @(Marcado?.Invoke(item) == true ? "✓" : "")
+                        </button>
+                    }
                     <span class="of-lista-texto">
                         <span class="of-lista-titulo@(emErro ? " of-lista-titulo-erro" : null)">@Titulo(item)</span>
+                        @if (!string.IsNullOrEmpty(marcador))
+                        {
+                            <span class="of-lista-chip @SufixoChip(item)">@marcador</span>
+                        }
                         <span class="of-lista-sub">@Subtitulo(item)</span>
                     </span>
                     <span class="of-lista-valor of-moeda @(EhCredito?.Invoke(item) == true ? "of-lista-valor-credito" : null)">@Valor(item)</span>
@@ -89,6 +103,22 @@
     /// <summary>Opcional. Sem o delegate, a lista continua igual às telas atuais.</summary>
     [Parameter] public Func<TItem, bool>? EmErro { get; set; }
 
+    [Parameter] public Func<TItem, bool>? ExigeMarcacao { get; set; }
+
+    [Parameter] public Func<TItem, bool>? Marcado { get; set; }
+
+    [Parameter] public EventCallback<TItem> OnAlternarMarcacao { get; set; }
+
+    [Parameter] public Func<TItem, string>? AriaMarcacao { get; set; }
+
+    [Parameter] public Func<TItem, string?>? Marcador { get; set; }
+
+    [Parameter] public Func<TItem, bool>? Destacado { get; set; }
+
+    [Parameter] public Func<TItem, bool>? ConfirmadoVisual { get; set; }
+
+    [Parameter] public Func<TItem, string?>? ComplementoAriaMenu { get; set; }
+
     /// <summary>Opcional. Falso esconde só o botão de incluir, quando não há estorno.</summary>
     [Parameter] public bool MostrarAdicionar { get; set; } = true;
 
@@ -100,5 +130,30 @@
         return string.IsNullOrWhiteSpace(cor) ? null : $"background:{cor}";
     }
 
-    private string AriaMenu(TItem item) => $"Ações de {Titulo(item)}";
+    private string AriaMenu(TItem item)
+    {
+        var extra = ComplementoAriaMenu?.Invoke(item);
+        return string.IsNullOrWhiteSpace(extra)
+            ? $"Ações de {Titulo(item)}"
+            : $"Ações de {Titulo(item)}, {extra}";
+    }
+
+    private string ClasseItem(TItem item, bool emErro)
+    {
+        var classe = "of-lista-item";
+        if (emErro)
+            classe += " of-lista-item-erro";
+        if (Destacado?.Invoke(item) == true)
+            classe += " of-lista-item-pendente";
+        return classe;
+    }
+
+    private string? SufixoChip(TItem item)
+    {
+        if (Destacado?.Invoke(item) == true)
+            return "of-lista-chip-pendente";
+        if (ConfirmadoVisual?.Invoke(item) == true)
+            return "of-lista-chip-confirmado";
+        return null;
+    }
 }
