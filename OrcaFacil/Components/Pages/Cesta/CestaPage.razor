@@ -460,34 +460,17 @@
 
     private async Task<bool> ConfirmarAvisoAsync()
     {
-        var semUrlGravada = ChipsInteligencia.SemProvedorUrlNemModelo(
-            Configuracao.ProvedorInteligencia,
-            Configuracao.UrlInteligencia,
-            Configuracao.ModeloInteligencia);
-        var efetiva = ChipsInteligencia.Efetiva(
-            Configuracao.ProvedorInteligencia,
-            Configuracao.UrlInteligencia,
-            Configuracao.ModeloInteligencia);
-        var provedor = semUrlGravada
-            ? AvisoPrivacidadeComprovante.ProvedorDoAvisoSemPreferencia
-            : PerfilProvedor.DaUrl(efetiva.Url).Provedor;
-        if (AvisoPrivacidadeComprovante.JaVisto(Preferencias, provedor, semUrlGravada))
+        if (AvisoPrivacidadeComprovante.JaVisto(Preferencias))
             return true;
 
-        var parametros = new DialogParameters<AvisoPrivacidadeComprovanteDialog>
-        {
-            { x => x.Provedor, provedor },
-            { x => x.SemUrlGravada, semUrlGravada }
-        };
         var dialog = await DialogService.ShowAsync<AvisoPrivacidadeComprovanteDialog>(
             "Privacidade",
-            parametros,
             Opcoes(MaxWidth.ExtraSmall));
         var resultado = await dialog.Result;
         if (resultado is not { Canceled: false })
             return false;
 
-        AvisoPrivacidadeComprovante.MarcarVisto(Preferencias, provedor, semUrlGravada);
+        AvisoPrivacidadeComprovante.MarcarVisto(Preferencias);
         return true;
     }
 

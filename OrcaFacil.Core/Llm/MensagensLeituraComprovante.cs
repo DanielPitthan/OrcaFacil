@@ -52,13 +52,7 @@ public static class MensagensLeituraComprovante
     public const string TextoPreviaASeguir = "A prévia editável vem a seguir.";
 
     public const string TextoAvisoPrivacidade =
-        "A foto do comprovante sai deste aparelho e vai para o provedor da URL configurada. O OrcaFacil não guarda essa foto.";
-
-    public const string ComplementoPrivacidadeAlibaba =
-        "O provedor configurado é a Alibaba Cloud, empresa com sede na China. A foto do comprovante será enviada para os servidores dela.";
-
-    public const string ComplementoPrivacidadeAlibabaPadrao =
-        "Como não há URL gravada, o OrcaFacil vai usar a Alibaba Cloud, empresa com sede na China, que é o provedor padrão do app.";
+        "Aviso, seus dados serão enviados para um provedor externo.";
 
     public const string TextoFotoInvalida = "Não foi possível ler essa foto.";
 
