@@ -218,24 +218,34 @@ html, body {
     border-color: var(--of-blue-grey);
 }
 
-/* O campo fechado continua estreito. A largura não vai no Style do picker:
+/* O campo fechado continua em 180px. A largura não vai no Style do picker:
    o MudBlazor copia Style para o papel e o espectro de 312px seria cortado. */
 .of-campo-paleta {
     width: 180px;
-    max-width: 100%;
+    max-width: calc(100% - 32px);
 }
 
-/* A paleta abre no overlay, por cima do diálogo da categoria. O papel do picker
-   leva a classe mud-dialog: a animação deixa transform e o MudBlazor limita a
-   altura com overflow. No WebView do Android 11 isso recorta o espectro.
-   Não altera .mud-dialog-container .mud-dialog. */
+/* No 9.9.0 o overlay do PickerVariant.Dialog tem filho, então renderiza
+   dentro do papel da categoria. A animação mud-open-dialog-center (fill both)
+   deixa transform, e o overflow hidden desse papel recorta o position fixed.
+   Sem transform o fixed volta a ser da viewport. Não usa :has(). */
+.mud-dialog-container .mud-dialog.of-dialogo-categoria {
+    transform: none;
+    animation: none;
+}
+
+/* Tela baixa: o espectro cabe e a linha RGB segue rolando. 100vh vale no
+   Chrome 83, que ignora 100dvh. A borda dos campos RGB fica só neste papel. */
 .mud-overlay.mud-overlay-dialog .mud-picker.mud-dialog {
     width: auto;
     max-width: calc(100% - 32px);
-    max-height: none;
-    overflow: visible;
+    max-height: calc(100vh - 32px);
+    max-height: calc(100dvh - 32px);
+    overflow-x: hidden;
+    overflow-y: auto;
     transform: none;
     animation: none;
+    --mud-palette-lines-inputs: #767676;
 }
 
 .mud-overlay.mud-overlay-dialog .mud-picker.mud-dialog .mud-picker-content {

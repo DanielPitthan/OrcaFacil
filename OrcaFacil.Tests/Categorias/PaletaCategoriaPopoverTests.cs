@@ -3,8 +3,9 @@ using System.Text;
 namespace OrcaFacil.Tests.Categorias;
 
 /// <summary>
-/// No Android 11 o diálogo da categoria recorta a paleta inline. O espectro abre
-/// em overlay. Comentário no fonte não conta como a abertura real.
+/// No 9.9.0 o overlay do PickerVariant.Dialog nasce dentro do papel da categoria.
+/// A animação deixa transform e o overflow hidden recorta o position fixed.
+/// Comentário no fonte não conta como regra.
 /// </summary>
 public class PaletaCategoriaPopoverTests
 {
@@ -29,29 +30,132 @@ public class PaletaCategoriaPopoverTests
     }
 
     [Fact]
-    public void OverlayDaPaletaNaoHerdaORecorteDoDialogo()
+    public void CampoFechadoMantem180px_EComentarioNaoConta()
+    {
+        var css = File.ReadAllText(Caminho("OrcaFacil", "wwwroot", "css", "orcafacil-theme.css"));
+        var bloco = Bloco(SemComentarios(css), ".of-campo-paleta");
+
+        Assert.Contains("width: 180px;", bloco, StringComparison.Ordinal);
+        Assert.Contains("max-width: calc(100% - 32px);", bloco, StringComparison.Ordinal);
+
+        var mutado = css.Replace(
+            """
+            .of-campo-paleta {
+                width: 180px;
+                max-width: calc(100% - 32px);
+            }
+            """,
+            """
+            .of-campo-paleta {
+                /* width: 180px; */
+                /* max-width: calc(100% - 32px); */
+            }
+            """,
+            StringComparison.Ordinal);
+        var blocoMutado = Bloco(SemComentarios(mutado), ".of-campo-paleta");
+
+        Assert.DoesNotContain("width: 180px", blocoMutado, StringComparison.Ordinal);
+        Assert.DoesNotContain("max-width: calc(100% - 32px)", blocoMutado, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DialogoDaCategoriaNaoDeixaTransform_EComentarioNaoConta()
+    {
+        var razor = File.ReadAllText(Caminho("OrcaFacil", "Components", "Pages", "Categorias", "CategoriaForm.razor"));
+        var css = File.ReadAllText(Caminho("OrcaFacil", "wwwroot", "css", "orcafacil-theme.css"));
+        var limpo = SemComentarios(css);
+        var bloco = Bloco(limpo, ".mud-dialog-container .mud-dialog.of-dialogo-categoria");
+        var demais = Bloco(limpo, ".mud-dialog-container .mud-dialog");
+
+        Assert.Contains("Class=\"of-dialogo-categoria\"", SemComentarios(razor), StringComparison.Ordinal);
+        Assert.Contains("transform: none;", bloco, StringComparison.Ordinal);
+        Assert.Contains("animation: none;", bloco, StringComparison.Ordinal);
+        Assert.DoesNotContain(":has(", bloco, StringComparison.Ordinal);
+        Assert.Contains("overflow: hidden;", demais, StringComparison.Ordinal);
+
+        var razorMutado = razor.Replace(
+            "Class=\"of-dialogo-categoria\"",
+            "@* Class=\"of-dialogo-categoria\" *@",
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("of-dialogo-categoria", SemComentarios(razorMutado), StringComparison.Ordinal);
+
+        var cssMutado = css.Replace(
+            """
+            .mud-dialog-container .mud-dialog.of-dialogo-categoria {
+                transform: none;
+                animation: none;
+            }
+            """,
+            """
+            .mud-dialog-container .mud-dialog.of-dialogo-categoria {
+                /* transform: none; */
+                /* animation: none; */
+            }
+            """,
+            StringComparison.Ordinal);
+        var blocoMutado = Bloco(SemComentarios(cssMutado), ".mud-dialog-container .mud-dialog.of-dialogo-categoria");
+
+        Assert.DoesNotContain("transform: none", blocoMutado, StringComparison.Ordinal);
+        Assert.DoesNotContain("animation: none", blocoMutado, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PapelDaPaletaRolaEmTelaBaixa_EComentarioNaoConta()
+    {
+        var css = File.ReadAllText(Caminho("OrcaFacil", "wwwroot", "css", "orcafacil-theme.css"));
+        var bloco = Bloco(SemComentarios(css), ".mud-overlay.mud-overlay-dialog .mud-picker.mud-dialog");
+
+        Assert.Contains("max-height: calc(100vh - 32px);", bloco, StringComparison.Ordinal);
+        Assert.Contains("max-height: calc(100dvh - 32px);", bloco, StringComparison.Ordinal);
+        Assert.Contains("overflow-x: hidden;", bloco, StringComparison.Ordinal);
+        Assert.Contains("overflow-y: auto;", bloco, StringComparison.Ordinal);
+        Assert.Contains("max-width: calc(100% - 32px);", bloco, StringComparison.Ordinal);
+
+        var mutado = css.Replace(
+            """
+                max-height: calc(100vh - 32px);
+                max-height: calc(100dvh - 32px);
+                overflow-x: hidden;
+                overflow-y: auto;
+                transform: none;
+                animation: none;
+            """,
+            """
+                /* max-height: calc(100vh - 32px); */
+                /* max-height: calc(100dvh - 32px); */
+                /* overflow-x: hidden; */
+                /* overflow-y: auto; */
+                transform: none;
+                animation: none;
+            """,
+            StringComparison.Ordinal);
+        var blocoMutado = Bloco(SemComentarios(mutado), ".mud-overlay.mud-overlay-dialog .mud-picker.mud-dialog");
+
+        Assert.DoesNotContain("100dvh - 32px", blocoMutado, StringComparison.Ordinal);
+        Assert.DoesNotContain("overflow-y: auto", blocoMutado, StringComparison.Ordinal);
+        Assert.Contains("max-width: calc(100% - 32px);", blocoMutado, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void BordaDosCamposRgbFicaSoNoPapelDaPaleta_EComentarioNaoConta()
     {
         var css = File.ReadAllText(Caminho("OrcaFacil", "wwwroot", "css", "orcafacil-theme.css"));
         var limpo = SemComentarios(css);
         var paleta = Bloco(limpo, ".mud-overlay.mud-overlay-dialog .mud-picker.mud-dialog");
-        var conteudo = Bloco(limpo, ".mud-overlay.mud-overlay-dialog .mud-picker.mud-dialog .mud-picker-content");
-        var dialogo = Bloco(limpo, ".mud-dialog-container .mud-dialog");
+        var categoria = Bloco(limpo, ".mud-dialog-container .mud-dialog.of-dialogo-categoria");
 
-        Assert.Contains("overflow: visible;", paleta, StringComparison.Ordinal);
-        Assert.Contains("transform: none;", paleta, StringComparison.Ordinal);
-        Assert.Contains("max-height: none;", paleta, StringComparison.Ordinal);
-        Assert.Contains("animation: none;", paleta, StringComparison.Ordinal);
-        Assert.Contains("overflow: visible;", conteudo, StringComparison.Ordinal);
-        Assert.Contains("overflow: hidden;", dialogo, StringComparison.Ordinal);
+        Assert.Contains("--mud-palette-lines-inputs: #767676;", paleta, StringComparison.Ordinal);
+        Assert.DoesNotContain("--mud-palette-lines-inputs", categoria, StringComparison.Ordinal);
+        Assert.DoesNotContain(":has(", limpo, StringComparison.Ordinal);
 
         var mutado = css.Replace(
-            "transform: none;",
-            "/* transform: none; */",
+            "--mud-palette-lines-inputs: #767676;",
+            "/* --mud-palette-lines-inputs: #767676; */",
             StringComparison.Ordinal);
         var paletaMutada = Bloco(SemComentarios(mutado), ".mud-overlay.mud-overlay-dialog .mud-picker.mud-dialog");
 
-        Assert.DoesNotContain("transform: none", paletaMutada, StringComparison.Ordinal);
-        Assert.Contains("overflow: visible;", paletaMutada, StringComparison.Ordinal);
+        Assert.DoesNotContain("#767676", paletaMutada, StringComparison.Ordinal);
+        Assert.Contains("overflow-y: auto;", paletaMutada, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -1,6 +1,6 @@
 <EditForm Model="Modelo" OnValidSubmit="Salvar">
     <DataAnnotationsValidator />
-    <MudDialog>
+    <MudDialog Class="of-dialogo-categoria">
         <DialogContent>
             <MudTextField T="string" Label="Nome" @bind-Value="Modelo.Nome" For="@(() => Modelo.Nome)" Class="mb-3" />
 
