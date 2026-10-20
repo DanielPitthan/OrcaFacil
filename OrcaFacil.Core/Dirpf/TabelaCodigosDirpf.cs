@@ -13,22 +13,25 @@ public sealed class TabelaCodigosDirpf
         _codigos = codigos.ToList();
     }
 
-    public CodigoDirpf Exigir(TipoFichaDirpf ficha, TipoAtivo tipo, DateTime data)
+    public CodigoDirpf Exigir(TipoFichaDirpf ficha, TipoAtivo tipo, DateTime data, string variante = "")
     {
-        var vigente = Vigente(ficha, tipo, data);
+        var vigente = Vigente(ficha, tipo, data, variante);
         if (vigente is null)
             throw new InvalidOperationException(
-                $"Não há código DIRPF vigente em {data.Date:dd/MM/yyyy} para {ficha} e {tipo}.");
+                variante.Length == 0
+                    ? $"Não há código DIRPF vigente em {data.Date:dd/MM/yyyy} para {ficha} e {tipo}."
+                    : $"Não há código DIRPF vigente em {data.Date:dd/MM/yyyy} para {ficha}, {tipo} e {variante}.");
 
         return vigente;
     }
 
-    public CodigoDirpf? Vigente(TipoFichaDirpf ficha, TipoAtivo tipo, DateTime data)
+    public CodigoDirpf? Vigente(TipoFichaDirpf ficha, TipoAtivo tipo, DateTime data, string variante = "")
     {
         var dia = data.Date;
         return _codigos
             .Where(codigo => codigo.Ficha == ficha
                 && codigo.TipoAtivo == tipo
+                && string.Equals(codigo.Variante ?? "", variante, StringComparison.Ordinal)
                 && codigo.VigenciaInicio.Date <= dia
                 && (codigo.VigenciaFim is null || codigo.VigenciaFim.Value.Date >= dia))
             .OrderByDescending(codigo => codigo.VigenciaInicio)

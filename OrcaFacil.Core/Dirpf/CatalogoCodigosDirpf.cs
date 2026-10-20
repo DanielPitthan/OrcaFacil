@@ -6,13 +6,16 @@ namespace OrcaFacil.Core.Dirpf;
 /// <summary>
 /// Semente dos códigos da DIRPF 2026, vigente a partir de 2021 (grupos atuais de Bens e Direitos).
 /// Ano anterior não tem linha: a exportação recusa em vez de reaproveitar o código novo.
-/// Fiagro usa a linha de FII porque o cadastro não separa os dois.
+/// Fiagro continua FII no cadastro. Na exportação de bens, a variante Fiagro usa o código 07/02.
 /// ETF de mercado usa o código 09; o 08 é o de índice de renda fixa, e o tipo não distingue.
-/// Rendimento isento de FII entra como 99 (Outros). Há guia antigo citando 26.
+/// Rendimento isento de FII e Fiagro permanece 99, configurável. O manual da DIRPF 2026
+/// nomeia o tipo "Outros rendimentos isentos" e não publica o código numérico.
 /// BDR e ETF não têm rendimento isento nesta semente.
 /// </summary>
 public static class CatalogoCodigosDirpf
 {
+    public const string VarianteFiagro = "Fiagro";
+
     public static readonly DateTime Inicio = new(2021, 1, 1);
 
     public static IReadOnlyList<CodigoDirpf> Linhas() =>
@@ -22,7 +25,8 @@ public static class CatalogoCodigosDirpf
         Linha(3, TipoFichaDirpf.Bem, TipoAtivo.Etf, "07", "09", "Demais fundos de índice de mercado (ETF)"),
         Linha(4, TipoFichaDirpf.Bem, TipoAtivo.Bdr, "04", "04", "Ativos negociados em bolsa no Brasil (BDRs, opções e outros, exceto ações e fundos)"),
         Linha(5, TipoFichaDirpf.RendimentoIsento, TipoAtivo.Acao, "", "09", "Lucros e dividendos recebidos"),
-        Linha(6, TipoFichaDirpf.RendimentoIsento, TipoAtivo.Fii, "", "99", "Outros")
+        Linha(6, TipoFichaDirpf.RendimentoIsento, TipoAtivo.Fii, "", "99", "Outros"),
+        Linha(7, TipoFichaDirpf.Bem, TipoAtivo.Fii, "07", "02", "Fundos de Investimento nas Cadeias Produtivas Agroindustriais (Fiagro)", VarianteFiagro)
     ];
 
     private static CodigoDirpf Linha(
@@ -31,11 +35,13 @@ public static class CatalogoCodigosDirpf
         TipoAtivo tipo,
         string grupo,
         string codigo,
-        string descricao) => new()
+        string descricao,
+        string variante = "") => new()
     {
         Id = id,
         Ficha = ficha,
         TipoAtivo = tipo,
+        Variante = variante,
         Grupo = grupo,
         Codigo = codigo,
         Descricao = descricao,

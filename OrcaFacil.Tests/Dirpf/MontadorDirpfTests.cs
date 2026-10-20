@@ -1,4 +1,5 @@
 using OrcaFacil.Core.Ativos;
+using OrcaFacil.Core.B3;
 using OrcaFacil.Core.Dirpf;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
@@ -168,6 +169,51 @@ public class MontadorDirpfTests : IDisposable
         var vazio = MontadorDirpf.Montar(_fabrica.CreateDbContext(), 2020);
         Assert.Empty(vazio.Bens);
         Assert.Empty(vazio.RendimentosIsentos);
+    }
+
+    [Fact]
+    public void Fiagro_NaExportacaoUsa0702_ENoClassificadorContinuaFii()
+    {
+        Semear();
+        using (var contexto = _fabrica.CreateDbContext())
+        {
+            var ana = contexto.MembrosFamilia.Single(membro => membro.Nome == "Ana");
+            var fiagro = new AtivoFinanceiro { Ticker = "SNAG11", Nome = "Suno Agro fiagro", Tipo = TipoAtivo.Fii };
+            var acao = new AtivoFinanceiro { Ticker = "AGRO3", Nome = "BrasilAgro Fiagro", Tipo = TipoAtivo.Acao };
+            contexto.AddRange(fiagro, acao);
+            contexto.SaveChanges();
+            contexto.OperacoesAtivo.AddRange(
+                Operacao(ana, fiagro, TipoOperacao.Compra, new DateTime(2024, 2, 1), 8, 80m, 0m, 10m),
+                Operacao(ana, acao, TipoOperacao.Compra, new DateTime(2024, 2, 2), 3, 30m, 0m, 10m));
+            contexto.Proventos.Add(Provento(ana, fiagro, TipoProvento.Rendimento, new DateTime(2024, 6, 1), 6m, new DateTime(2024, 6, 1)));
+            contexto.SaveChanges();
+        }
+
+        Assert.Equal(ClasseAtivoB3.FII, ClassificadorAtivoB3.Classificar("SNAG11", "SNAG11 - SUNO AGRO FIAGRO"));
+        Assert.Equal(ClasseAtivoB3.Acao, ClassificadorAtivoB3.Classificar("AGRO3", "AGRO3 - BRASILAGRO"));
+
+        var dirpf = MontadorDirpf.Montar(_fabrica.CreateDbContext(), 2024);
+        var bem = dirpf.Bens.Single(linha => linha.Ticker == "SNAG11");
+        Assert.Equal("FII", bem.Tipo);
+        Assert.Equal("07", bem.Grupo);
+        Assert.Equal("02", bem.Codigo);
+        Assert.Equal("Fundos de Investimento nas Cadeias Produtivas Agroindustriais (Fiagro)", bem.DescricaoCodigo);
+        Assert.Equal(8m, bem.Quantidade);
+        Assert.Equal(80m, bem.CustoAquisicao);
+        Assert.Equal(10m, bem.PrecoMedio);
+
+        var fii = dirpf.Bens.Single(linha => linha.Ticker == "MXRF11");
+        Assert.Equal("07", fii.Grupo);
+        Assert.Equal("03", fii.Codigo);
+
+        var acaoComNome = dirpf.Bens.Single(linha => linha.Ticker == "AGRO3");
+        Assert.Equal("03", acaoComNome.Grupo);
+        Assert.Equal("01", acaoComNome.Codigo);
+
+        var rendimento = dirpf.RendimentosIsentos.Single(linha => linha.Ticker == "SNAG11");
+        Assert.Equal("99", rendimento.Codigo);
+        Assert.Equal("Rendimento de FII", rendimento.Natureza);
+        Assert.Equal(6m, rendimento.Valor);
     }
 
     private void Semear()

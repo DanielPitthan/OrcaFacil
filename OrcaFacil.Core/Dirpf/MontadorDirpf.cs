@@ -92,7 +92,8 @@ public static class MontadorDirpf
             if (posicao.Quantidade <= 0)
                 continue;
 
-            var codigo = tabela.Exigir(TipoFichaDirpf.Bem, ativo.Tipo, corte);
+            var variante = ReconhecedorFiagroDirpf.Eh(ativo) ? CatalogoCodigosDirpf.VarianteFiagro : "";
+            var codigo = tabela.Exigir(TipoFichaDirpf.Bem, ativo.Tipo, corte, variante);
             var casas = fiscais.Para(corte, ativo.Tipo).CasasDecimais;
             var custo = CalculadoraResultadoRealizado.Arredondar(posicao.CustoTotal, casas);
             var medio = CalculadoraResultadoRealizado.Arredondar(posicao.PrecoMedio, casas);

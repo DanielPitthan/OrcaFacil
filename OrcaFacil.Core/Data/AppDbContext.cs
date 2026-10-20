@@ -320,12 +320,13 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<CodigoDirpf>(entity =>
         {
+            entity.Property(c => c.Variante).HasMaxLength(16);
             entity.Property(c => c.Grupo).HasMaxLength(2);
             entity.Property(c => c.Codigo).HasMaxLength(2);
             entity.Property(c => c.Descricao).HasMaxLength(160);
-            entity.HasIndex(c => new { c.Ficha, c.TipoAtivo, c.VigenciaInicio })
+            entity.HasIndex(c => new { c.Ficha, c.TipoAtivo, c.Variante, c.VigenciaInicio })
                   .IsUnique()
-                  .HasDatabaseName("IX_CodigosDirpf_Ficha_TipoAtivo_VigenciaInicio");
+                  .HasDatabaseName("IX_CodigosDirpf_Ficha_TipoAtivo_Variante_VigenciaInicio");
             entity.HasData(CatalogoCodigosDirpf.Linhas());
         });
     }

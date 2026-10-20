@@ -772,6 +772,7 @@ public static class PoliticaSemeadura
             if (gravada.Id != esperada.Id
                 || gravada.Ficha != esperada.Ficha
                 || gravada.TipoAtivo != esperada.TipoAtivo
+                || !string.Equals(gravada.Variante, esperada.Variante, StringComparison.Ordinal)
                 || !string.Equals(gravada.Grupo, esperada.Grupo, StringComparison.Ordinal)
                 || !string.Equals(gravada.Codigo, esperada.Codigo, StringComparison.Ordinal)
                 || !string.Equals(gravada.Descricao, esperada.Descricao, StringComparison.Ordinal)

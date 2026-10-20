@@ -39,7 +39,8 @@ public class AddCodigoDirpfMigrationTests
 
             Assert.Equal(CatalogoCodigosDirpf.Linhas().Count, atual.CodigosDirpf.Count());
             Assert.All(atual.CodigosDirpf, codigo => Assert.True(codigo.EhSistema));
-            Assert.Equal(1L, Escalar(connection, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'IX_CodigosDirpf_Ficha_TipoAtivo_VigenciaInicio'"));
+            Assert.Equal(0L, Escalar(connection, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'IX_CodigosDirpf_Ficha_TipoAtivo_VigenciaInicio'"));
+            Assert.Equal(1L, Escalar(connection, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'IX_CodigosDirpf_Ficha_TipoAtivo_Variante_VigenciaInicio'"));
             Assert.Equal("42.50", EscalarTexto(connection, "SELECT Valor FROM Transacoes WHERE Descricao = 'Mercado'"));
 
             var semente = atual.CodigosDirpf.Single(codigo => codigo.Ficha == TipoFichaDirpf.Bem && codigo.TipoAtivo == TipoAtivo.Acao);

@@ -15,6 +15,13 @@ public class CodigoDirpf
 
     public TipoAtivo TipoAtivo { get; set; }
 
+    /// <summary>
+    /// Vazio na linha do tipo. "Fiagro" guarda o código de bem 07/02
+    /// sem criar outro tipo de ativo: no cálculo e na importação o Fiagro continua FII.
+    /// </summary>
+    [MaxLength(16)]
+    public string Variante { get; set; } = string.Empty;
+
     /// <summary>Grupo de Bens e Direitos, com dois dígitos. Vazio na ficha de rendimentos.</summary>
     [MaxLength(2)]
     public string Grupo { get; set; } = string.Empty;

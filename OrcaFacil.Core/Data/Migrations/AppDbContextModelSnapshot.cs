@@ -165,6 +165,11 @@ namespace OrcaFacil.Core.Data.Migrations
                     b.Property<int>("TipoAtivo")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("Variante")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime?>("VigenciaFim")
                         .HasColumnType("TEXT");
 
@@ -173,9 +178,9 @@ namespace OrcaFacil.Core.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Ficha", "TipoAtivo", "VigenciaInicio")
+                    b.HasIndex("Ficha", "TipoAtivo", "Variante", "VigenciaInicio")
                         .IsUnique()
-                        .HasDatabaseName("IX_CodigosDirpf_Ficha_TipoAtivo_VigenciaInicio");
+                        .HasDatabaseName("IX_CodigosDirpf_Ficha_TipoAtivo_Variante_VigenciaInicio");
 
                     b.ToTable("CodigosDirpf");
 
@@ -189,6 +194,7 @@ namespace OrcaFacil.Core.Data.Migrations
                             Ficha = 0,
                             Grupo = "03",
                             TipoAtivo = 0,
+                            Variante = "",
                             VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
                         },
                         new
@@ -200,6 +206,7 @@ namespace OrcaFacil.Core.Data.Migrations
                             Ficha = 0,
                             Grupo = "07",
                             TipoAtivo = 1,
+                            Variante = "",
                             VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
                         },
                         new
@@ -211,6 +218,7 @@ namespace OrcaFacil.Core.Data.Migrations
                             Ficha = 0,
                             Grupo = "07",
                             TipoAtivo = 2,
+                            Variante = "",
                             VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
                         },
                         new
@@ -222,6 +230,7 @@ namespace OrcaFacil.Core.Data.Migrations
                             Ficha = 0,
                             Grupo = "04",
                             TipoAtivo = 3,
+                            Variante = "",
                             VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
                         },
                         new
@@ -233,6 +242,7 @@ namespace OrcaFacil.Core.Data.Migrations
                             Ficha = 1,
                             Grupo = "",
                             TipoAtivo = 0,
+                            Variante = "",
                             VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
                         },
                         new
@@ -244,6 +254,19 @@ namespace OrcaFacil.Core.Data.Migrations
                             Ficha = 1,
                             Grupo = "",
                             TipoAtivo = 1,
+                            Variante = "",
+                            VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 7,
+                            Codigo = "02",
+                            Descricao = "Fundos de Investimento nas Cadeias Produtivas Agroindustriais (Fiagro)",
+                            EhSistema = true,
+                            Ficha = 0,
+                            Grupo = "07",
+                            TipoAtivo = 1,
+                            Variante = "Fiagro",
                             VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
                         });
                 });

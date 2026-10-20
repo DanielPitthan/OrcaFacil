@@ -28,6 +28,7 @@ public class MigracaoUpgradeTests
     private const string ResultadoRealizado = "20261020172344_AddResultadoRealizadoVariavel";
     private const string Provento = "20261020175956_AddProvento";
     private const string CodigoDirpf = "20261020225810_AddCodigoDirpf";
+    private const string VarianteFiagro = "20261020231813_AddVarianteFiagroDirpf";
 
     [Fact]
     public async Task BancoAntigo_MigraAteOAtual_PreservaDadosEAplicaDefaults()
@@ -147,10 +148,11 @@ public class MigracaoUpgradeTests
             Assert.Empty(ctx.OperacoesRendaFixa);
             Assert.Equal(6, await ctx.RegrasFiscais.CountAsync());
             Assert.Contains(await ctx.RegrasFiscais.ToListAsync(), regra => regra.Codigo == "RV.CustosReduzemResultado" && regra.EhSistema);
-            Assert.Equal(6, await ctx.CodigosDirpf.CountAsync());
+            Assert.Equal(7, await ctx.CodigosDirpf.CountAsync());
             Assert.Contains(await ctx.CodigosDirpf.ToListAsync(), codigo => codigo.Codigo == "01" && codigo.EhSistema);
+            Assert.Contains(await ctx.CodigosDirpf.ToListAsync(), codigo => codigo.Codigo == "02" && codigo.Variante == "Fiagro" && codigo.EhSistema);
 
-            Assert.Equal(CodigoDirpf, (await ctx.Database.GetAppliedMigrationsAsync()).Last());
+            Assert.Equal(VarianteFiagro, (await ctx.Database.GetAppliedMigrationsAsync()).Last());
             Assert.True(File.Exists(banco.Caminho));
             Assert.True(new FileInfo(banco.Caminho).Length > 0);
         }
@@ -169,7 +171,7 @@ public class MigracaoUpgradeTests
         Assert.Contains(IndiceHashImportacao, ids);
         Assert.Contains(RendaFixa, ids);
         Assert.Contains(RegraCatalogo, ids);
-        Assert.Equal(CodigoDirpf, ids[^1]);
+        Assert.Equal(VarianteFiagro, ids[^1]);
 
         for (var i = 1; i < ids.Count; i++)
         {
