@@ -24,6 +24,7 @@ public class PreviaComprovanteTests
         Assert.Equal("Arroz · casado pela descrição · arroz", linha.Titulo);
         Assert.Equal("Alimentos · 2 kg", linha.Subtitulo);
         Assert.Equal(1, linha.ProdutoCestaId);
+        MarcarProdutos(previa);
         Assert.True(previa.PodeConfirmar);
         Assert.Null(previa.MensagemBloqueio);
 
@@ -96,6 +97,7 @@ public class PreviaComprovanteTests
         previa.Classificar(sabao, Produto(9, "Sabão", 3, "Limpeza"));
         Assert.Equal(0, previa.NaoIdentificados);
         Assert.Equal("0 não identificados", previa.TextoNaoIdentificados);
+        MarcarProdutos(previa);
         Assert.True(previa.PodeConfirmar);
 
         var compra = Compra(previa);
@@ -255,6 +257,7 @@ public class PreviaComprovanteTests
 
         previa.Remover(previa.Linhas[1]);
         Assert.Equal(0, previa.NaoIdentificados);
+        MarcarProdutos(previa);
         Assert.True(previa.PodeConfirmar);
         Assert.Equal(8m, Assert.Single(Compra(previa).Itens).Preco);
 
@@ -264,6 +267,7 @@ public class PreviaComprovanteTests
             Item("FEIJAO", "Feijão", reconhecido: true, 5m));
         previa = outra;
         previa.Classificar(previa.Linhas[1], arroz);
+        MarcarProdutos(previa);
         Assert.Null(previa.MensagemBloqueio);
         Assert.True(previa.PodeConfirmar);
         Assert.Equal(2, previa.Linhas.Count);
@@ -301,6 +305,7 @@ public class PreviaComprovanteTests
         Assert.Equal(10m, previa.SomaLinhas);
         Assert.True(previa.TotalDivergente);
         Assert.False(previa.Legivel);
+        MarcarProdutos(previa);
         Assert.True(previa.PodeConfirmar);
         Assert.Equal("PreviaComprovante", previa.ToString());
         Assert.Equal("LinhaPreviaComprovante", previa.Linhas[0].ToString());
@@ -531,6 +536,7 @@ public class PreviaComprovanteTests
         Assert.Equal("Açúcar", repetido.NomeGravado);
         Assert.True(sabao.NovoSeraCriado);
         Assert.Equal("sabão  líquido", sabao.NomeGravado);
+        MarcarProdutos(previa);
         Assert.True(previa.PodeConfirmar);
         Assert.Contains(PreviaComprovante.EtiquetaSeraSomado, acucar.Titulo, StringComparison.Ordinal);
         Assert.Contains(PreviaComprovante.EtiquetaSeraSomado, repetido.Titulo, StringComparison.Ordinal);
@@ -556,9 +562,19 @@ public class PreviaComprovanteTests
         Assert.Equal(2, Compra(previa).ProdutosNovos.Count);
     }
 
+    private static void MarcarProdutos(PreviaComprovante previa)
+    {
+        foreach (var linha in previa.Linhas)
+        {
+            if (linha.ProdutoCestaId is > 0)
+                linha.Marcado = true;
+        }
+    }
+
     private static CompraCestaFormModel Compra(PreviaComprovante previa)
     {
-        previa.ConfirmarCasamentos();
+        MarcarProdutos(previa);
+        previa.ConfirmarMarcados();
         return previa.ParaCompra();
     }
 

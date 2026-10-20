@@ -304,6 +304,8 @@ public class ProdutoNovoNaCompraTests : IDisposable
         previa.CadastrarTudo(_alimentacao.Id, _alimentacao.Nome);
 
         Assert.Equal(2, previa.Linhas.Count);
+        foreach (var linha in previa.Linhas)
+            linha.Marcado = linha.ProdutoCestaId is > 0;
         Assert.True(previa.PodeConfirmar);
         Assert.All(previa.Linhas, linha =>
         {
@@ -352,6 +354,8 @@ public class ProdutoNovoNaCompraTests : IDisposable
         previa.ConfirmarCadastro(segundo, previa.Linhas[1].Preco, "Outra");
 
         Assert.Equal(2, previa.Linhas.Count);
+        foreach (var linha in previa.Linhas)
+            linha.Marcado = linha.ProdutoCestaId is > 0;
         Assert.True(previa.PodeConfirmar);
         Assert.All(previa.Linhas, linha =>
         {

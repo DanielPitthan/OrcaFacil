@@ -389,19 +389,167 @@ public class CasamentoComprovanteTests
 
         Assert.Equal(4, linha.ProdutoCestaId);
         Assert.False(linha.CasadoPelaDescricao);
+        Assert.True(linha.Pendente);
+        Assert.Equal("pendente", linha.MarcadorCasamento);
+        Assert.DoesNotContain("confiança", linha.MarcadorCasamento, StringComparison.Ordinal);
+        Assert.False(linha.Marcado);
         Assert.False(linha.CasamentoConfirmado);
-        Assert.True(previa.PodeConfirmar);
+        Assert.False(previa.PodeConfirmar);
+        Assert.Equal(CasamentoComprovante.MensagemConfirmacaoObrigatoria, previa.MensagemBloqueio);
 
         var excecao = Assert.Throws<InvalidOperationException>(() => previa.ParaCompra());
         Assert.Equal(CasamentoComprovante.MensagemConfirmacaoObrigatoria, excecao.Message);
 
         previa.ConfirmarCasamentos();
+        Assert.False(linha.CasamentoConfirmado);
+
+        linha.Marcado = true;
+        previa.ConfirmarMarcados();
         Assert.True(linha.CasamentoConfirmado);
+        Assert.StartsWith("confirmado", linha.MarcadorCasamento, StringComparison.Ordinal);
         var compra = previa.ParaCompra();
         Assert.Equal(4, Assert.Single(compra.Itens).ProdutoCestaId);
         var saida = Assert.Single(compra.ItensSaida);
         Assert.Equal(4, saida.ProdutoId);
         Assert.True(saida.Confirmado);
+    }
+
+    [Fact]
+    public void Classificar_MesmoProduto_MantemAConfirmacao()
+    {
+        var catalogo = Catalogo();
+        var item = new ItemComprovanteLido("ARROZ", "Arroz", true, 8m, null, null, null, null, 4, true, 0.95m);
+        var previa = PreviaComprovante.Criar(
+            NormalizadorComprovante.Normalizar(Cupom(item), catalogo),
+            [],
+            catalogo,
+            new DateTime(2026, 10, 1));
+        var linha = Assert.Single(previa.Linhas);
+        Assert.False(linha.CasamentoConfirmado);
+        linha.Marcado = true;
+        previa.ConfirmarMarcados();
+        Assert.True(linha.CasamentoConfirmado);
+
+        previa.Classificar(linha, catalogo[0]);
+        Assert.Equal(4, linha.ProdutoCestaId);
+        Assert.True(linha.Marcado);
+        Assert.True(linha.CasamentoConfirmado);
+        Assert.True(Assert.Single(previa.ParaCompra().ItensSaida).Confirmado);
+    }
+
+    [Fact]
+    public void Classificar_DepoisDeConfirmar_RearmaALinha()
+    {
+        var catalogo = Catalogo();
+        var item = new ItemComprovanteLido("ARROZ", "Arroz", true, 8m, null, null, null, null, 4, true, 0.95m);
+        var previa = PreviaComprovante.Criar(
+            NormalizadorComprovante.Normalizar(Cupom(item), catalogo),
+            [],
+            catalogo,
+            new DateTime(2026, 10, 1));
+        var linha = Assert.Single(previa.Linhas);
+        Assert.Equal(4, linha.ProdutoCestaId);
+        Assert.False(linha.CasamentoConfirmado);
+        linha.Marcado = true;
+        previa.ConfirmarMarcados();
+        Assert.True(linha.CasamentoConfirmado);
+
+        previa.Classificar(linha, catalogo[1]);
+        Assert.Equal(8, linha.ProdutoCestaId);
+        Assert.False(linha.CasamentoConfirmado);
+        Assert.False(linha.Marcado);
+        var excecao = Assert.Throws<InvalidOperationException>(() => previa.ParaCompra());
+        Assert.Equal(CasamentoComprovante.MensagemConfirmacaoObrigatoria, excecao.Message);
+    }
+
+    [Fact]
+    public async Task MarcarTodos_IgnoraPendente_ESoGravaDepoisDoCheckManual()
+    {
+        using var factory = new TestDbContextFactory();
+        var cestas = new CestaRepository(factory);
+        var service = new CestaCadastroService(cestas);
+        var membros = new MembroFamiliaRepository(factory);
+        var membro = new MembroFamilia { Nome = "Usuário" };
+        await membros.AddAsync(membro);
+
+        int categoriaId;
+        await using (var ctx = factory.CreateDbContext())
+        {
+            var categoria = new Categoria { Nome = "Alimentos", Icone = "A", CorHex = "#112233" };
+            ctx.Categorias.Add(categoria);
+            await ctx.SaveChangesAsync();
+            categoriaId = categoria.Id;
+        }
+
+        var arroz = await service.SalvarProdutoAsync(new ProdutoCestaFormModel { Nome = "Arroz", CategoriaId = categoriaId });
+        var feijao = await service.SalvarProdutoAsync(new ProdutoCestaFormModel { Nome = "Feijão", CategoriaId = categoriaId });
+        arroz.Categoria = new Categoria { Id = categoriaId, Nome = "Alimentos" };
+        feijao.Categoria = arroz.Categoria;
+        var local = await service.SalvarLocalAsync(new LocalCompraFormModel { Nome = "Mercado" });
+        var catalogo = new List<ProdutoCesta> { arroz, feijao };
+        var comprovante = new ComprovanteLido(
+            "Mercado",
+            new DateOnly(2026, 10, 5),
+            null,
+            true,
+            [
+                new ItemComprovanteLido("ARROZ", "Arroz", true, 10m, null, null, null, null, arroz.Id, true, 0.95m),
+                new ItemComprovanteLido("pacote", "Feijão", true, 4m, null, null, null, null)
+            ]);
+        var previa = PreviaComprovante.Criar(
+            NormalizadorComprovante.Normalizar(comprovante, catalogo),
+            [local],
+            catalogo,
+            new DateTime(2026, 10, 5));
+        var porId = Assert.Single(previa.Linhas, linha => linha.ProdutoCestaId == arroz.Id);
+        var porNome = Assert.Single(previa.Linhas, linha => linha.ProdutoCestaId == feijao.Id);
+
+        Assert.False(porId.Pendente);
+        Assert.True(porNome.Pendente);
+        Assert.Equal("pendente", porNome.MarcadorCasamento);
+        Assert.Contains("não confirmado", porId.MarcadorCasamento, StringComparison.Ordinal);
+        Assert.DoesNotContain("pendente", porId.MarcadorCasamento, StringComparison.Ordinal);
+        Assert.All(previa.Linhas, linha =>
+        {
+            Assert.False(linha.Marcado);
+            Assert.False(linha.CasamentoConfirmado);
+        });
+        Assert.False(previa.PodeConfirmar);
+        Assert.Throws<InvalidOperationException>(() => previa.ParaCompra());
+
+        previa.MarcarNaoPendentes();
+        Assert.True(porId.Marcado);
+        Assert.False(porId.CasamentoConfirmado);
+        Assert.False(porNome.Marcado);
+        Assert.False(porNome.CasamentoConfirmado);
+        Assert.StartsWith("confirmado", porId.MarcadorCasamento, StringComparison.Ordinal);
+        Assert.Equal("pendente", porNome.MarcadorCasamento);
+        Assert.False(previa.PodeConfirmar);
+        var bloqueio = Assert.Throws<InvalidOperationException>(() => previa.ParaCompra());
+        Assert.Equal(CasamentoComprovante.MensagemConfirmacaoObrigatoria, bloqueio.Message);
+
+        await using (var antes = factory.CreateDbContext())
+        {
+            Assert.Equal(0, await antes.ComprasCesta.CountAsync());
+            Assert.Equal(0, await antes.ItensCompraCesta.CountAsync());
+        }
+
+        porNome.Marcado = true;
+        Assert.True(previa.PodeConfirmar);
+        previa.ConfirmarMarcados();
+        Assert.True(porId.CasamentoConfirmado);
+        Assert.True(porNome.CasamentoConfirmado);
+        Assert.StartsWith("confirmado", porNome.MarcadorCasamento, StringComparison.Ordinal);
+        var compra = previa.ParaCompra();
+        Assert.Equal(2, compra.ItensSaida.Count);
+        Assert.All(compra.ItensSaida, saida => Assert.True(saida.Confirmado));
+
+        var gravada = await service.SalvarCompraAsync(compra, membro.Id);
+        Assert.Equal([arroz.Id, feijao.Id], gravada.Itens.Select(item => item.ProdutoCestaId).Order().ToArray());
+
+        await using var depois = factory.CreateDbContext();
+        Assert.Equal(1, await depois.ComprasCesta.CountAsync());
+        Assert.Equal(2, await depois.ItensCompraCesta.CountAsync());
     }
 
     [Fact]
@@ -518,11 +666,29 @@ public class CasamentoComprovanteTests
             "void Confirmar()");
         var fechar = confirmar.IndexOf("MudDialog.Close", StringComparison.Ordinal);
         var barreiraDialogo = confirmar.IndexOf("CasamentoComprovante.GarantirConfirmacao", StringComparison.Ordinal);
+        var soMarcados = confirmar.IndexOf("Previa.ConfirmarMarcados()", StringComparison.Ordinal);
+        Assert.True(soMarcados >= 0 && soMarcados < barreiraDialogo);
         Assert.True(barreiraDialogo >= 0 && barreiraDialogo < fechar);
-        var subtitulo = ExtrairBloco(
-            File.ReadAllText(Path.Combine(raiz, "OrcaFacil", "Components", "Pages", "Cesta", "PreviaComprovanteDialog.razor")),
-            "string Subtitulo(LinhaPreviaComprovante linha)");
-        Assert.Contains("MarcadorCasamento", subtitulo, StringComparison.Ordinal);
+        Assert.DoesNotContain("ConfirmarCasamentos()", confirmar, StringComparison.Ordinal);
+        var dialog = File.ReadAllText(Path.Combine(raiz, "OrcaFacil", "Components", "Pages", "Cesta", "PreviaComprovanteDialog.razor"));
+        var subtitulo = ExtrairBloco(dialog, "string Subtitulo(LinhaPreviaComprovante linha)");
+        Assert.DoesNotContain("MarcadorCasamento", subtitulo, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"Marcar todos os itens não pendentes\"", dialog, StringComparison.Ordinal);
+        Assert.Contains(">Marcar todos<", dialog, StringComparison.Ordinal);
+        Assert.Contains("pendente, não confirmado", dialog, StringComparison.Ordinal);
+        Assert.Contains("AriaMarcacao", dialog, StringComparison.Ordinal);
+        var ficha = ExtrairBloco(dialog, "void ConfirmarSheet(");
+        var classificar = ficha.IndexOf("Previa.Classificar(", StringComparison.Ordinal);
+        var preco = ficha.IndexOf("Previa.AlterarPreco(", classificar, StringComparison.Ordinal);
+        var marcar = ficha.IndexOf("Previa.Marcar(", preco, StringComparison.Ordinal);
+        Assert.True(classificar >= 0 && preco > classificar && marcar > preco);
+        var lista = File.ReadAllText(Path.Combine(raiz, "OrcaFacil", "Components", "Shared", "ItemList.razor"));
+        var chip = lista.IndexOf("of-lista-chip", StringComparison.Ordinal);
+        var texto = lista.IndexOf("class=\"of-lista-texto\"", StringComparison.Ordinal);
+        var sub = lista.IndexOf("class=\"of-lista-sub\"", StringComparison.Ordinal);
+        Assert.True(chip >= 0 && chip < texto && texto < sub);
+        Assert.Contains("role=\"checkbox\"", lista, StringComparison.Ordinal);
+        Assert.Contains("aria-label=", lista, StringComparison.Ordinal);
 
         var paraCompra = ExtrairBloco(
             File.ReadAllText(Path.Combine(raiz, "OrcaFacil.Core", "Llm", "PreviaComprovante.cs")),
@@ -559,6 +725,10 @@ public class CasamentoComprovanteTests
         Assert.Contains("CatalogoPedidoComprovante.Texto(produtosCatalogo)", leitura, StringComparison.Ordinal);
         Assert.Contains("Normalizar(resultado.Comprovante, produtosCatalogo)", leitura, StringComparison.Ordinal);
         Assert.DoesNotContain("Normalizar(resultado.Comprovante, _produtos)", leitura, StringComparison.Ordinal);
+        var textoCatalogo = leitura.IndexOf("CatalogoPedidoComprovante.Texto(produtosCatalogo)", StringComparison.Ordinal);
+        var normalizar = leitura.IndexOf("Normalizar(resultado.Comprovante, produtosCatalogo)", StringComparison.Ordinal);
+        Assert.True(textoCatalogo >= 0 && normalizar > textoCatalogo);
+        Assert.DoesNotContain("ProdutosCatalogoLeituraAsync", leitura[textoCatalogo..normalizar], StringComparison.Ordinal);
     }
 
     private static List<ProdutoCesta> Catalogo() =>
