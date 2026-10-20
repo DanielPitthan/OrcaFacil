@@ -16,6 +16,7 @@ public class VerificadorIntegridadeBancoTests
     private const string RendaFixa = "20261020032353_AddRendaFixa";
     private const string RegraCatalogo = "20261020135920_AddRegraCatalogoComprovante";
     private const string ResultadoRealizado = "20261020172344_AddResultadoRealizadoVariavel";
+    private const string Provento = "20261020175956_AddProvento";
     private const string IndiceHash = "IX_ItensLancamento_TransacaoId_HashImportacao";
 
     [Fact]
@@ -61,17 +62,21 @@ public class VerificadorIntegridadeBancoTests
         Assert.False(parcial.Integro);
         Assert.Contains("ItensLancamento", parcial.TabelasExistentes);
         Assert.Contains("Cartoes", parcial.TabelasExistentes);
-        Assert.Equal(["OperacoesRendaFixa", "RegrasCatalogoComprovante", "RegrasFiscais", "TitulosRendaFixa"], parcial.TabelasFaltando);
+        Assert.Equal(["OperacoesRendaFixa", "Proventos", "RegrasCatalogoComprovante", "RegrasFiscais", "TitulosRendaFixa"], parcial.TabelasFaltando);
         Assert.Equal(
             [
                 IndiceHash,
                 "IX_OperacoesAtivo_HashImportacao",
                 "IX_OperacoesRendaFixa_HashImportacao",
                 "IX_OperacoesRendaFixa_TituloRendaFixaId",
+                "IX_Proventos_AtivoId",
+                "IX_Proventos_HashImportacao",
+                "IX_Proventos_MembroFamiliaId",
                 "IX_RegrasFiscais_Codigo_VigenciaInicio",
                 "IX_TitulosRendaFixa_Codigo_Corretora",
                 "IX_Transacoes_OperacaoAtivoId",
-                "IX_Transacoes_OperacaoRendaFixaId"
+                "IX_Transacoes_OperacaoRendaFixaId",
+                "IX_Transacoes_ProventoId"
             ],
             parcial.IndicesFaltando);
         Assert.Equal(
@@ -95,6 +100,16 @@ public class VerificadorIntegridadeBancoTests
                 "OperacoesRendaFixa.Tipo",
                 "OperacoesRendaFixa.TituloRendaFixaId",
                 "OperacoesRendaFixa.Valor",
+                "Proventos.AtivoId",
+                "Proventos.AtualizadoEm",
+                "Proventos.CriadoEm",
+                "Proventos.DataPagamento",
+                "Proventos.HashImportacao",
+                "Proventos.Id",
+                "Proventos.MembroFamiliaId",
+                "Proventos.Origem",
+                "Proventos.Tipo",
+                "Proventos.ValorLiquido",
                 "RegrasCatalogoComprovante.Id",
                 "RegrasCatalogoComprovante.LimiteProdutos",
                 "RegrasFiscais.Codigo",
@@ -113,10 +128,11 @@ public class VerificadorIntegridadeBancoTests
                 "TitulosRendaFixa.Nome",
                 "TitulosRendaFixa.Tipo",
                 "Transacoes.OperacaoAtivoId",
-                "Transacoes.OperacaoRendaFixaId"
+                "Transacoes.OperacaoRendaFixaId",
+                "Transacoes.ProventoId"
             ],
             parcial.ColunasFaltando);
-        Assert.Equal([Descritivo, Estorno, HashImportacao, IndiceHashImportacao, RendaFixa, RegraCatalogo, ResultadoRealizado], parcial.MigrationsAusentesNoHistorico);
+        Assert.Equal([Descritivo, Estorno, HashImportacao, IndiceHashImportacao, RendaFixa, RegraCatalogo, ResultadoRealizado, Provento], parcial.MigrationsAusentesNoHistorico);
         Assert.Empty(parcial.MigrationsPelaMetade);
         Assert.DoesNotContain(Cartoes, parcial.MigrationsAusentesNoHistorico);
         Assert.Equal(antes, await FotografarAsync(ctx));
@@ -164,6 +180,16 @@ public class VerificadorIntegridadeBancoTests
                 "OperacoesRendaFixa.Tipo",
                 "OperacoesRendaFixa.TituloRendaFixaId",
                 "OperacoesRendaFixa.Valor",
+                "Proventos.AtivoId",
+                "Proventos.AtualizadoEm",
+                "Proventos.CriadoEm",
+                "Proventos.DataPagamento",
+                "Proventos.HashImportacao",
+                "Proventos.Id",
+                "Proventos.MembroFamiliaId",
+                "Proventos.Origem",
+                "Proventos.Tipo",
+                "Proventos.ValorLiquido",
                 "RegrasCatalogoComprovante.Id",
                 "RegrasCatalogoComprovante.LimiteProdutos",
                 "RegrasFiscais.Codigo",
@@ -182,7 +208,8 @@ public class VerificadorIntegridadeBancoTests
                 "TitulosRendaFixa.Nome",
                 "TitulosRendaFixa.Tipo",
                 "Transacoes.OperacaoAtivoId",
-                "Transacoes.OperacaoRendaFixaId"
+                "Transacoes.OperacaoRendaFixaId",
+                "Transacoes.ProventoId"
             ],
             relatorio.ColunasFaltando);
         Assert.DoesNotContain("ItensLancamento.EhEstorno", relatorio.ColunasFaltando);
@@ -192,22 +219,26 @@ public class VerificadorIntegridadeBancoTests
                 "IX_OperacoesAtivo_HashImportacao",
                 "IX_OperacoesRendaFixa_HashImportacao",
                 "IX_OperacoesRendaFixa_TituloRendaFixaId",
+                "IX_Proventos_AtivoId",
+                "IX_Proventos_HashImportacao",
+                "IX_Proventos_MembroFamiliaId",
                 "IX_RegrasFiscais_Codigo_VigenciaInicio",
                 "IX_TitulosRendaFixa_Codigo_Corretora",
                 "IX_Transacoes_OperacaoAtivoId",
-                "IX_Transacoes_OperacaoRendaFixaId"
+                "IX_Transacoes_OperacaoRendaFixaId",
+                "IX_Transacoes_ProventoId"
             ],
             relatorio.IndicesFaltando);
-        Assert.Equal([Estorno, HashImportacao, IndiceHashImportacao, RendaFixa, RegraCatalogo, ResultadoRealizado], relatorio.MigrationsAusentesNoHistorico);
+        Assert.Equal([Estorno, HashImportacao, IndiceHashImportacao, RendaFixa, RegraCatalogo, ResultadoRealizado, Provento], relatorio.MigrationsAusentesNoHistorico);
         Assert.Empty(relatorio.MigrationsPelaMetade);
-        Assert.Equal(["OperacoesRendaFixa", "RegrasCatalogoComprovante", "RegrasFiscais", "TitulosRendaFixa"], relatorio.TabelasFaltando);
+        Assert.Equal(["OperacoesRendaFixa", "Proventos", "RegrasCatalogoComprovante", "RegrasFiscais", "TitulosRendaFixa"], relatorio.TabelasFaltando);
         Assert.Contains(Estorno, relatorio.Resumo);
 
         var excecao = await Assert.ThrowsAsync<IntegridadeBancoException>(() => PreparoBanco.ExigirIntegroAsync(ctx));
         Assert.True(excecao.Resultado.ExigeRecuperacao);
         Assert.NotNull(excecao.Resultado.FalhaMigrate);
         Assert.Equal(
-            [Estorno, HashImportacao, IndiceHashImportacao, RendaFixa, RegraCatalogo, ResultadoRealizado],
+            [Estorno, HashImportacao, IndiceHashImportacao, RendaFixa, RegraCatalogo, ResultadoRealizado, Provento],
             excecao.Resultado.Relatorio.MigrationsAusentesNoHistorico);
         Assert.DoesNotContain("ItensLancamento.EhEstorno", excecao.Resultado.Relatorio.ColunasFaltando);
         Assert.Contains("ItensLancamento.HashImportacao", excecao.Resultado.Relatorio.ColunasFaltando);

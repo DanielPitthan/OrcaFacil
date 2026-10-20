@@ -47,6 +47,10 @@ public class Transacao
     public int? OperacaoAtivoId { get; set; }
     public OperacaoAtivo? OperacaoAtivo { get; set; }
 
+    /// <summary>Lançamento gerado por um provento. Nulo nos demais.</summary>
+    public int? ProventoId { get; set; }
+    public Provento? Provento { get; set; }
+
     public ICollection<ItemLancamento> Itens { get; set; } = new List<ItemLancamento>();
 
     public DateTime CriadoEm { get; set; } = DateTime.UtcNow;

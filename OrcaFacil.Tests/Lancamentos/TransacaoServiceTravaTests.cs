@@ -6,7 +6,7 @@ namespace OrcaFacil.Tests.Lancamentos;
 public class TransacaoServiceTravaTests
 {
     [Fact]
-    public void EditarPelaTela_BloqueiaAtivoERendaFixa()
+    public void EditarPelaTela_BloqueiaAtivoRendaFixaEProvento()
     {
         var fonte = File.ReadAllText(Path.Combine(EncontrarRaiz(), "OrcaFacil", "Services", "TransacaoService.cs"));
         var arvore = CSharpSyntaxTree.ParseText(fonte);
@@ -27,7 +27,7 @@ public class TransacaoServiceTravaTests
         foreach (var argumentos in porMetodo.Values)
         {
             Assert.Equal(
-                ["transacao.OperacaoAtivoId", "transacao.OperacaoRendaFixaId"],
+                ["transacao.OperacaoAtivoId", "transacao.OperacaoRendaFixaId", "transacao.ProventoId"],
                 argumentos);
         }
     }

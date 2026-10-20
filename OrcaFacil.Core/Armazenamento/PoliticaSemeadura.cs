@@ -48,6 +48,7 @@ public static class PoliticaSemeadura
         nameof(AppDbContext.LogsEvento),
         nameof(AppDbContext.AtivosFinanceiros),
         nameof(AppDbContext.OperacoesAtivo),
+        nameof(AppDbContext.Proventos),
         nameof(AppDbContext.ProdutosCesta),
         nameof(AppDbContext.LocaisCompra),
         nameof(AppDbContext.ComprasCesta),
@@ -76,6 +77,7 @@ public static class PoliticaSemeadura
         nameof(Transacao.CartaoId),
         nameof(Transacao.OperacaoRendaFixaId),
         nameof(Transacao.OperacaoAtivoId),
+        nameof(Transacao.ProventoId),
         nameof(Transacao.AtualizadoEm)
     ];
 
@@ -190,6 +192,9 @@ public static class PoliticaSemeadura
         if (await contexto.OperacoesAtivo.AnyAsync(cancellationToken))
             return true;
 
+        if (await contexto.Proventos.AnyAsync(cancellationToken))
+            return true;
+
         if (await contexto.TitulosRendaFixa.AnyAsync(cancellationToken))
             return true;
 
@@ -250,6 +255,9 @@ public static class PoliticaSemeadura
             return SituacaoConteudoBanco.DadoReal;
 
         if (await contexto.OperacoesAtivo.AnyAsync(cancellationToken))
+            return SituacaoConteudoBanco.DadoReal;
+
+        if (await contexto.Proventos.AnyAsync(cancellationToken))
             return SituacaoConteudoBanco.DadoReal;
 
         if (await contexto.TitulosRendaFixa.AnyAsync(cancellationToken))

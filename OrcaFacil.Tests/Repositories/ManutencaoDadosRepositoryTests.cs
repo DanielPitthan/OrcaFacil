@@ -108,6 +108,14 @@ public class ManutencaoDadosRepositoryTests : IDisposable
                 Quantidade = 10,
                 PrecoUnitario = 30
             });
+            ctx.Proventos.Add(new Provento
+            {
+                AtivoId = ativo.Id,
+                MembroFamiliaId = membro.Id,
+                Tipo = TipoProvento.Rendimento,
+                DataPagamento = new DateTime(2026, 10, 15),
+                ValorLiquido = 12.34m
+            });
             await ctx.SaveChangesAsync();
         }
 
@@ -116,6 +124,7 @@ public class ManutencaoDadosRepositoryTests : IDisposable
         var registros = await _repository.ContarRegistrosAsync();
         Assert.Equal(0, registros["Ativos"]);
         Assert.Equal(0, registros["Operações de ativos"]);
+        Assert.Equal(0, registros["Proventos"]);
     }
 
     [Fact]
