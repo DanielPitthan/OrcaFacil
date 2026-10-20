@@ -104,8 +104,17 @@ namespace OrcaFacil.Core.Data.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
+            // No SQLite o DropForeignKey só entra no rebuild do DropColumn,
+            // e esse rebuild sai depois do DropTable. Anular o vínculo agora
+            // solta a FK antes de apagar OperacoesRendaFixa.
+            migrationBuilder.Sql("""UPDATE "Transacoes" SET "OperacaoRendaFixaId" = NULL;""");
+
             migrationBuilder.DropForeignKey(
                 name: "FK_Transacoes_OperacoesRendaFixa_OperacaoRendaFixaId",
+                table: "Transacoes");
+
+            migrationBuilder.DropIndex(
+                name: "IX_Transacoes_OperacaoRendaFixaId",
                 table: "Transacoes");
 
             migrationBuilder.DropTable(
@@ -113,10 +122,6 @@ namespace OrcaFacil.Core.Data.Migrations
 
             migrationBuilder.DropTable(
                 name: "TitulosRendaFixa");
-
-            migrationBuilder.DropIndex(
-                name: "IX_Transacoes_OperacaoRendaFixaId",
-                table: "Transacoes");
 
             migrationBuilder.DropColumn(
                 name: "OperacaoRendaFixaId",

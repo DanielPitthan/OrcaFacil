@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.Data;
@@ -256,6 +258,119 @@ public class AddRendaFixaMigrationTests
         Assert.Equal(operacao.Id, atual.Transacoes.Single(t => t.Id == primeira.Entity.Id).OperacaoRendaFixaId);
     }
 
+    [Fact]
+    public void Down_ComVinculoPreenchido_VoltaOSchemaEPreservaLancamentos()
+    {
+        using var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connection).Options;
+
+        using (var atual = new AppDbContext(options))
+        {
+            atual.Database.Migrate();
+            var categoria = new Categoria
+            {
+                Nome = "Investimentos",
+                Icone = "I",
+                CorHex = "#112233",
+                TipoPadrao = TipoTransacao.Receita
+            };
+            var membro = new MembroFamilia { Nome = "Daniel" };
+            var titulo = new TituloRendaFixa
+            {
+                Tipo = TipoTituloRendaFixa.CDB,
+                Codigo = "CDB9268YCA7",
+                Nome = "CDB Banco X",
+                Corretora = "XP"
+            };
+            atual.AddRange(categoria, membro, titulo);
+            atual.SaveChanges();
+
+            var operacao = new OperacaoRendaFixa
+            {
+                TituloRendaFixaId = titulo.Id,
+                Data = new DateTime(2026, 4, 10),
+                Tipo = TipoOperacaoRendaFixa.Resgate,
+                Quantidade = 0.06m,
+                Valor = 8.93m,
+                Origem = OrigemOperacaoRendaFixa.Manual
+            };
+            atual.OperacoesRendaFixa.Add(operacao);
+            atual.SaveChanges();
+            atual.Transacoes.AddRange(
+                new Transacao
+                {
+                    Descricao = "Resgate do CDB",
+                    Valor = 8.93m,
+                    Data = new DateTime(2026, 4, 10),
+                    Tipo = TipoTransacao.Receita,
+                    Pago = true,
+                    CategoriaId = categoria.Id,
+                    MembroFamiliaId = membro.Id,
+                    OperacaoRendaFixaId = operacao.Id
+                },
+                new Transacao
+                {
+                    Descricao = "Mercado",
+                    Valor = 42.50m,
+                    Data = new DateTime(2026, 2, 3),
+                    Tipo = TipoTransacao.Despesa,
+                    Pago = true,
+                    CategoriaId = categoria.Id,
+                    MembroFamiliaId = membro.Id
+                });
+            atual.SaveChanges();
+            Assert.Equal(operacao.Id, atual.Transacoes.Single(t => t.Descricao == "Resgate do CDB").OperacaoRendaFixaId);
+        }
+
+        using (var voltar = new AppDbContext(options))
+            voltar.Database.Migrate(Anterior);
+
+        Assert.Equal(0L, Escalar(connection, "SELECT COUNT(*) FROM pragma_table_info('Transacoes') WHERE name = 'OperacaoRendaFixaId'"));
+        Assert.Equal(0L, Escalar(connection, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'OperacoesRendaFixa'"));
+        Assert.Equal(0L, Escalar(connection, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'TitulosRendaFixa'"));
+        Assert.Equal(2L, Escalar(connection, "SELECT COUNT(*) FROM Transacoes"));
+        Assert.Equal(8.93m, DecimalDe(connection, "SELECT Valor FROM Transacoes WHERE Descricao = 'Resgate do CDB'"));
+        Assert.Equal(42.50m, DecimalDe(connection, "SELECT Valor FROM Transacoes WHERE Descricao = 'Mercado'"));
+    }
+
+    [Fact]
+    public void Down_AnulaOVinculoAntesDeApagarATabela()
+    {
+        var fonte = File.ReadAllText(Path.Combine(EncontrarRaiz(), "OrcaFacil.Core", "Data", "Migrations", "20261020032353_AddRendaFixa.cs"));
+        var codigo = SemComentarios(fonte);
+        var inicio = codigo.IndexOf("void Down", StringComparison.Ordinal);
+        Assert.True(inicio >= 0);
+        var down = codigo[inicio..];
+        var anula = down.IndexOf("SET \"OperacaoRendaFixaId\" = NULL", StringComparison.Ordinal);
+        var tabela = down.IndexOf("DropTable", StringComparison.Ordinal);
+        Assert.True(anula >= 0 && tabela > anula, "O UPDATE que anula OperacaoRendaFixaId tem de vir antes do DropTable de OperacoesRendaFixa.");
+
+        var comentario =
+            "// migrationBuilder.Sql(\"\"\"UPDATE \"Transacoes\" SET \"OperacaoRendaFixaId\" = NULL;\"\"\");\n" +
+            "/* migrationBuilder.Sql(\"\"\"UPDATE \"Transacoes\" SET \"OperacaoRendaFixaId\" = NULL;\"\"\"); */\n" +
+            "migrationBuilder.Sql(\"\"\"UPDATE \"Transacoes\" SET \"OperacaoRendaFixaId\" = NULL;\"\"\");\n" +
+            "migrationBuilder.DropTable(name: \"OperacoesRendaFixa\");\n";
+        var limpo = SemComentarios(comentario);
+        var anulaLimpo = limpo.IndexOf("SET \"OperacaoRendaFixaId\" = NULL", StringComparison.Ordinal);
+        var tabelaLimpa = limpo.IndexOf("DropTable", StringComparison.Ordinal);
+        Assert.Equal(1, Contar(limpo, "SET \"OperacaoRendaFixaId\" = NULL"));
+        Assert.True(anulaLimpo >= 0 && tabelaLimpa > anulaLimpo);
+    }
+
+    private static int Contar(string texto, string trecho)
+    {
+        var total = 0;
+        var indice = 0;
+        while ((indice = texto.IndexOf(trecho, indice, StringComparison.Ordinal)) >= 0)
+        {
+            total++;
+            indice += trecho.Length;
+        }
+
+        return total;
+    }
+
     private static long Escalar(SqliteConnection connection, string sql)
     {
         using var comando = connection.CreateCommand();
@@ -268,5 +383,74 @@ public class AddRendaFixaMigrationTests
         using var comando = connection.CreateCommand();
         comando.CommandText = sql;
         return (string)comando.ExecuteScalar()!;
+    }
+
+    private static decimal DecimalDe(SqliteConnection connection, string sql)
+        => decimal.Parse(EscalarTexto(connection, sql), CultureInfo.InvariantCulture);
+
+    private static string SemComentarios(string fonte)
+    {
+        var texto = new StringBuilder(fonte.Length);
+        for (var i = 0; i < fonte.Length; i++)
+        {
+            var c = fonte[i];
+            if (c == '"')
+            {
+                texto.Append(c);
+                i++;
+                while (i < fonte.Length)
+                {
+                    texto.Append(fonte[i]);
+                    if (fonte[i] == '\\')
+                    {
+                        if (i + 1 < fonte.Length)
+                            texto.Append(fonte[++i]);
+                        i++;
+                        continue;
+                    }
+
+                    if (fonte[i] == '"')
+                        break;
+
+                    i++;
+                }
+
+                continue;
+            }
+
+            if (c == '/' && i + 1 < fonte.Length && fonte[i + 1] == '/')
+            {
+                while (i < fonte.Length && fonte[i] != '\n')
+                    i++;
+                continue;
+            }
+
+            if (c == '/' && i + 1 < fonte.Length && fonte[i + 1] == '*')
+            {
+                i += 2;
+                while (i + 1 < fonte.Length && !(fonte[i] == '*' && fonte[i + 1] == '/'))
+                    i++;
+                i++;
+                continue;
+            }
+
+            texto.Append(c);
+        }
+
+        return texto.ToString();
+    }
+
+    private static string EncontrarRaiz()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "OrcaFacil.Core", "Data", "Migrations", "20261020032353_AddRendaFixa.cs")))
+                return dir.FullName;
+
+            dir = dir.Parent;
+        }
+
+        throw new InvalidOperationException("Não foi possível localizar a migration AddRendaFixa.");
     }
 }
