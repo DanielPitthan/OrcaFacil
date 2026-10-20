@@ -85,3 +85,152 @@
     width: 100%;
     min-height: var(--of-touch);
 }
+
+.of-par-bloco,
+.of-par,
+.of-par-nome,
+.of-par-lido,
+.of-par-confianca,
+.of-par-revisao,
+.of-par-secao,
+.of-par-acoes,
+.of-par-opcoes,
+.of-par-botao {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.of-par-bloco {
+    padding: 4px 0 8px;
+    background-color: #ffffff;
+    color: #1E2A33;
+}
+
+.of-par {
+    padding: 8px 16px 4px;
+    border-top: 1px solid var(--of-border);
+    background-color: #ffffff;
+    color: #1E2A33;
+}
+
+.of-par-revisar {
+    box-shadow: inset 4px 0 0 #1E4E79;
+}
+
+.of-par-secao,
+.of-par-nome,
+.of-par-lido,
+.of-par-confianca,
+.of-par-revisao {
+    margin: 0;
+    color: #1E2A33;
+    font-size: 0.875rem;
+    line-height: 1.4;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+.of-par-secao,
+.of-par-nome {
+    font-weight: 600;
+}
+
+.of-par-secao {
+    padding: 8px 16px 0;
+}
+
+.of-par-lido,
+.of-par-confianca,
+.of-par-revisao {
+    margin-top: 2px;
+}
+
+.of-par-acoes {
+    display: flex;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+.of-par-botao {
+    -webkit-appearance: none;
+    appearance: none;
+    flex: 1 1 5.5rem;
+    box-sizing: border-box;
+    min-height: var(--of-touch);
+    margin: 0 8px 8px 0;
+    padding: 8px 6px;
+    border: 1px solid #1E2A33;
+    border-radius: var(--of-radius-control);
+    background-color: #ffffff;
+    color: #1E2A33;
+    font: inherit;
+    font-size: 0.875rem;
+    line-height: 1.2;
+    text-align: center;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+.of-par-botao:hover,
+.of-par-botao:focus,
+.of-par-botao:active {
+    background-color: #ffffff;
+    color: #1E2A33;
+    border-color: #1E2A33;
+}
+
+.of-par-botao:focus {
+    outline: 2px solid #1E2A33;
+    outline-offset: 2px;
+}
+
+:global(html.of-tema-claro) .of-par-bloco,
+:global(html.of-tema-claro) .of-par,
+:global(html.of-tema-claro) button.of-par-botao,
+:global(html.of-tema-claro) button.of-par-botao:hover,
+:global(html.of-tema-claro) button.of-par-botao:focus,
+:global(html.of-tema-claro) button.of-par-botao:active {
+    background-color: #ffffff;
+    color: #1E2A33;
+    border-color: #1E2A33;
+}
+
+:global(html.of-tema-claro) .of-par-secao,
+:global(html.of-tema-claro) .of-par-nome,
+:global(html.of-tema-claro) .of-par-lido,
+:global(html.of-tema-claro) .of-par-confianca,
+:global(html.of-tema-claro) .of-par-revisao {
+    color: #1E2A33;
+}
+
+:global(html.of-tema-escuro) .of-par-bloco,
+:global(html.of-tema-escuro) .of-par {
+    background-color: #1B1F27;
+    color: #E8EAF0;
+}
+
+:global(html.of-tema-escuro) .of-par-revisar {
+    box-shadow: inset 4px 0 0 #9CC7F0;
+}
+
+:global(html.of-tema-escuro) .of-par-secao,
+:global(html.of-tema-escuro) .of-par-nome,
+:global(html.of-tema-escuro) .of-par-lido,
+:global(html.of-tema-escuro) .of-par-confianca,
+:global(html.of-tema-escuro) .of-par-revisao {
+    color: #E8EAF0;
+}
+
+:global(html.of-tema-escuro) button.of-par-botao,
+:global(html.of-tema-escuro) button.of-par-botao:hover,
+:global(html.of-tema-escuro) button.of-par-botao:focus,
+:global(html.of-tema-escuro) button.of-par-botao:active {
+    background-color: #1B1F27;
+    color: #E8EAF0;
+    border-color: #E8EAF0;
+}
+
+:global(html.of-tema-escuro) button.of-par-botao:focus {
+    outline: 2px solid #E8EAF0;
+    outline-offset: 2px;
+}
