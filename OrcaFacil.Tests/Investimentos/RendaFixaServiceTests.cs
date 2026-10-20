@@ -5,6 +5,7 @@ using OrcaFacil.Core.Data;
 using OrcaFacil.Core.Dtos;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
+using OrcaFacil.Core.RendaFixa;
 using OrcaFacil.Core.Services;
 
 namespace OrcaFacil.Tests.Investimentos;
@@ -448,6 +449,14 @@ public class RendaFixaServiceTests
         Assert.Contains("CDB0 em 10/05/2026", ex.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("15/06/2026", ex.Message, StringComparison.Ordinal);
         Assert.Equal(new DateTime(2026, 5, 10), (await ambiente.OperacaoAsync(resgate.Id)).Data);
+    }
+
+    [Fact]
+    public void LancamentoGerado_NaoSeEditaPelaTela()
+    {
+        var ex = Assert.Throws<InvalidOperationException>(() => ProtecaoLancamentoRendaFixa.GarantirEditavelNaTela(4));
+        Assert.Equal(ProtecaoLancamentoRendaFixa.Mensagem, ex.Message);
+        ProtecaoLancamentoRendaFixa.GarantirEditavelNaTela(null);
     }
 
     private static OperacaoRendaFixaFormModel Operacao(
