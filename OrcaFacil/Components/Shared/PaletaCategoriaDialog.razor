@@ -1,0 +1,31 @@
+<MudDialog Class="of-dialogo-paleta" DefaultFocus="DefaultFocus.FirstChild">
+    <DialogContent>
+        <MudColorPicker Value="_escolha"
+                        ValueChanged="AoArrastar"
+                        PickerVariant="PickerVariant.Static"
+                        ShowAlpha="false" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancelar">Cancelar</MudButton>
+        <MudButton Class="of-paleta-ok" Variant="Variant.Filled" Color="Color.Primary" OnClick="Confirmar">OK</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string CorOriginal { get; set; } = "#A2B94F";
+
+    private MudColor _escolha = new("#A2B94F");
+
+    protected override void OnInitialized() => _escolha = new MudColor(CorOriginal);
+
+    private void AoArrastar(MudColor cor) => _escolha = cor;
+
+    private void Cancelar() => MudDialog.Cancel();
+
+    private void Confirmar()
+    {
+        var hex = _escolha.ToString(MudColorOutputFormats.Hex);
+        MudDialog.Close(DialogResult.Ok(DecisaoCorPaleta.Resolver(CorOriginal, hex, confirmou: true)));
+    }
+}

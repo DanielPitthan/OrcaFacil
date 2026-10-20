@@ -208,14 +208,158 @@ html, body {
 .of-color-swatch {
     width: 32px;
     height: 32px;
+    margin: 0;
+    padding: 0;
     border-radius: 50%;
     cursor: pointer;
     display: inline-block;
+    box-sizing: border-box;
     border: 2px solid transparent;
+    appearance: none;
+    -webkit-appearance: none;
+    font: inherit;
+    line-height: 0;
+    vertical-align: middle;
+}
+
+/* Chrome 83 não conhece :focus-visible e descarta a regra inteira se os
+   seletores estiverem juntos. O anel fica em regras separadas.
+   #1E2A33 sobre #fff é 14,6:1; #E8EAF0 sobre #1B1F27 é 13,7:1. */
+.of-color-swatch:focus {
+    outline: 2px solid #1E2A33;
+    outline-offset: 2px;
+}
+
+html.of-tema-escuro .of-color-swatch:focus {
+    outline-color: #E8EAF0;
+}
+
+.of-color-swatch:focus-visible {
+    outline: 2px solid #1E2A33;
+    outline-offset: 2px;
+}
+
+html.of-tema-escuro .of-color-swatch:focus-visible {
+    outline-color: #E8EAF0;
+}
+
+/* Regra separada: o Chrome 83 não conhece :focus-visible e descarta o bloco
+   inteiro. O anel do :focus continua. Nos navegadores novos, o clique some. */
+.of-color-swatch:focus:not(:focus-visible) {
+    outline: none;
 }
 
 .of-color-swatch.selected {
     border-color: var(--of-blue-grey);
+}
+
+/* O campo fechado continua em 180px. A paleta em si abre noutro diálogo. */
+.of-campo-paleta {
+    width: 180px;
+    max-width: calc(100% - 32px);
+}
+
+.of-abrir-paleta {
+    width: 100%;
+    margin: 0;
+    padding: 6px 10px;
+    /* #767676 sobre #fff é 4,54:1 e sobre #1B1F27 é 3,63:1. Componente de UI, mínimo 3:1. */
+    border: 1px solid #767676;
+    border-radius: var(--of-radius-control);
+    background: transparent;
+    color: var(--of-text);
+    text-align: left;
+    cursor: pointer;
+    font: inherit;
+}
+
+.of-abrir-paleta-rotulo {
+    display: block;
+    font-size: 12px;
+    line-height: 1.2;
+    /* #5A6B78 sobre #fff é 5,51:1. No escuro, #C9D1DD sobre #1B1F27 é 10,7:1. */
+    color: #5A6B78;
+}
+
+html.of-tema-escuro .of-abrir-paleta-rotulo {
+    color: #C9D1DD;
+}
+
+.of-abrir-paleta-valor {
+    display: block;
+    font-size: 0.875rem;
+    line-height: 1.3;
+    color: var(--of-text);
+}
+
+/* Diálogo próprio da paleta, irmão do diálogo da categoria no provider.
+   100vh vale no Chrome 83, que ignora 100dvh. A borda dos campos fica só aqui.
+   Em 360px o papel fica em 344px. O miolo encolhe: o espectro (até 312px) e a
+   fileira HEX cabem inteiros, sem corte e sem rolagem horizontal. */
+.mud-dialog-container .mud-dialog.of-dialogo-paleta {
+    width: min(392px, calc(100% - 16px));
+    max-width: calc(100% - 16px);
+    max-height: calc(100vh - 32px);
+    max-height: calc(100dvh - 32px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    --mud-palette-lines-inputs: #767676;
+}
+
+.mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-dialog-content {
+    padding-left: 8px;
+    padding-right: 8px;
+    overflow-x: hidden;
+}
+
+.mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-picker-static,
+.mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-picker-content {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
+    box-sizing: border-box;
+    padding-right: 4px;
+}
+
+.mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-picker-color-picker {
+    width: 100%;
+    max-width: 312px;
+}
+
+.mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-picker-color-controls {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-picker-color-controls-row {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-picker-color-inputs,
+.mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-picker-color-inputfield {
+    min-width: 0;
+}
+
+.mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-picker-control-switch {
+    margin-left: 4px;
+    margin-inline-start: 4px;
+}
+
+/* Texto branco sobre #1E2A33 é 14,6:1. O primário #659ECD com texto branco fica em 2,87:1.
+   Só no tema claro; no escuro o par #0B1220 sobre #6EA8FE já passa de 4,5:1. */
+html.of-tema-claro .mud-dialog.of-dialogo-paleta .of-paleta-ok.mud-button-filled {
+    background-color: #1E2A33;
+    color: #ffffff;
+}
+
+html.of-tema-claro .mud-dialog.of-dialogo-paleta .of-paleta-ok.mud-button-filled:hover,
+html.of-tema-claro .mud-dialog.of-dialogo-paleta .of-paleta-ok.mud-button-filled:active {
+    background-color: #1E2A33;
+    color: #ffffff;
 }
 
 .of-mascara-numerica input {

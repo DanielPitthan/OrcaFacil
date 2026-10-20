@@ -1,12 +1,22 @@
+@inject IDialogService DialogService
+
 <div class="d-flex flex-wrap ga-2 align-center">
     @foreach (var cor in CoresCategoria.Opcoes)
     {
-        <div class="of-color-swatch @(string.Equals(cor, Value, StringComparison.OrdinalIgnoreCase) ? "selected" : "")"
-             style="background-color:@cor;"
-             @onclick="() => Selecionar(cor)">
-        </div>
+        <button type="button"
+                class="of-color-swatch @(string.Equals(cor, Value, StringComparison.OrdinalIgnoreCase) ? "selected" : "")"
+                style="background-color:@cor;"
+                aria-label="@cor"
+                aria-pressed="@(string.Equals(cor, Value, StringComparison.OrdinalIgnoreCase) ? "true" : "false")"
+                @onclick="() => Selecionar(cor)">
+        </button>
     }
-    <MudColorPicker Value="@(new MudColor(Value))" ValueChanged="OnColorPickerChanged" Label="Outras cores" Style="width:180px" ShowAlpha="false" />
+    <div class="of-campo-paleta">
+        <button type="button" class="of-abrir-paleta" @onclick="AbrirPaletaAsync" aria-label="@($"Outras cores, {Value}")">
+            <span class="of-abrir-paleta-rotulo">Outras cores</span>
+            <span class="of-abrir-paleta-valor">@Value</span>
+        </button>
+    </div>
 </div>
 
 @code {
@@ -19,9 +29,40 @@
         await ValueChanged.InvokeAsync(cor);
     }
 
-    private async Task OnColorPickerChanged(MudColor cor)
+    private bool _abrindo;
+
+    private async Task AbrirPaletaAsync()
     {
-        Value = cor.ToString(MudColorOutputFormats.Hex);
-        await ValueChanged.InvokeAsync(Value);
+        if (_abrindo)
+            return;
+
+        _abrindo = true;
+        try
+        {
+            var parametros = new DialogParameters<PaletaCategoriaDialog>
+            {
+                { x => x.CorOriginal, Value }
+            };
+            var opcoes = new DialogOptions
+            {
+                CloseOnEscapeKey = true,
+                BackdropClick = true,
+                MaxWidth = MaxWidth.ExtraSmall,
+                FullWidth = true
+            };
+            var dialog = await DialogService.ShowAsync<PaletaCategoriaDialog>("Outras cores", parametros, opcoes);
+            var resultado = await dialog.Result;
+            var confirmou = resultado is { Canceled: false };
+            var cor = DecisaoCorPaleta.Resolver(Value, resultado?.Data as string, confirmou);
+            if (string.Equals(cor, Value, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            Value = cor;
+            await ValueChanged.InvokeAsync(cor);
+        }
+        finally
+        {
+            _abrindo = false;
+        }
     }
 }
