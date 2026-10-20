@@ -194,6 +194,71 @@ public class ConfirmacaoCadastroProdutoTests : IDisposable
         Assert.DoesNotContain("Immediate=\"true\"", SemComentarios(soComentario), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void Dialogo_ExigeParagrafoDeErro_ComentarioNaoConta()
+    {
+        var dialogo = Ler("OrcaFacil", "Components", "Pages", "Cesta", "ProdutoCestaDialog.razor");
+        Assert.True(MostraErroNoParagrafo(dialogo));
+
+        var mutado = dialogo.Replace(MarcadorErro, string.Empty, StringComparison.Ordinal);
+        Assert.False(MostraErroNoParagrafo(mutado));
+
+        const string soComentario = """
+            @* <p class="of-previa-erro" role="alert">@_erro</p> *@
+            // <p class="of-previa-erro" role="alert">@_erro</p>
+            /* <p class="of-previa-erro" role="alert">@_erro</p> */
+            <!-- <p class="of-previa-erro" role="alert">@_erro</p> -->
+            <p class="of-previa-erro">@_erro</p>
+            """;
+        Assert.Contains(MarcadorErro, soComentario, StringComparison.Ordinal);
+        Assert.False(MostraErroNoParagrafo(soComentario));
+    }
+
+    [Fact]
+    public void Dialogo_ExigeReturnAntesDoClose_ComentarioNaoConta()
+    {
+        var dialogo = Ler("OrcaFacil", "Components", "Pages", "Cesta", "ProdutoCestaDialog.razor");
+        Assert.True(ReturnEntreErroEClose(dialogo));
+
+        var salvar = Metodo(dialogo, "Task SalvarAsync()");
+        var erro = salvar.IndexOf("if (_erro is not null)", StringComparison.Ordinal);
+        var retorno = salvar.IndexOf("return;", erro, StringComparison.Ordinal);
+        var mutado = dialogo.Replace(salvar, salvar.Remove(retorno, "return;".Length).Insert(retorno, "// return;"), StringComparison.Ordinal);
+        Assert.False(ReturnEntreErroEClose(mutado));
+        Assert.Contains("// return;", mutado, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Dialogo_CatchAtribuiErro_ComentarioNaoConta()
+    {
+        var dialogo = Ler("OrcaFacil", "Components", "Pages", "Cesta", "ProdutoCestaDialog.razor");
+        Assert.True(CatchDoDialogoAtribuiErro(dialogo));
+
+        var inicio = dialogo.IndexOf("_erro = string.IsNullOrWhiteSpace", StringComparison.Ordinal);
+        var fim = dialogo.IndexOf("ex.Message;", inicio, StringComparison.Ordinal) + "ex.Message;".Length;
+        var mutado = dialogo.Remove(inicio, fim - inicio).Insert(inicio, "/* _erro = ex.Message; */");
+        Assert.False(CatchDoDialogoAtribuiErro(mutado));
+        Assert.Contains("_erro = null", mutado, StringComparison.Ordinal);
+        Assert.Contains("/* _erro = ex.Message; */", mutado, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Previa_CatchDeCadastrarChamaSnackbar_ComentarioNaoConta()
+    {
+        var previa = Ler("OrcaFacil", "Components", "Pages", "Cesta", "PreviaComprovanteDialog.razor");
+        Assert.True(CatchDeCadastrarChamaSnackbar(previa));
+
+        var metodo = Metodo(previa, "Task CadastrarAsync()");
+        var catchIdx = metodo.IndexOf("catch (Exception ex)", StringComparison.Ordinal);
+        var add = metodo.IndexOf("Snackbar.Add(", catchIdx, StringComparison.Ordinal);
+        var fim = metodo.IndexOf(");", add, StringComparison.Ordinal) + ");".Length;
+        var semAdd = metodo.Remove(add, fim - add).Insert(add, "/* Snackbar.Add(ex.Message, Severity.Warning); */");
+        var mutado = previa.Replace(metodo, semAdd, StringComparison.Ordinal);
+        Assert.False(CatchDeCadastrarChamaSnackbar(mutado));
+        Assert.Contains("Snackbar.Add(", mutado, StringComparison.Ordinal);
+        Assert.Contains("/* Snackbar.Add(ex.Message, Severity.Warning); */", mutado, StringComparison.Ordinal);
+    }
+
     public void Dispose() => _factory.Dispose();
 
     private async Task AssertBancoVazioAsync()
@@ -236,24 +301,92 @@ public class ConfirmacaoCadastroProdutoTests : IDisposable
         return limpo.Contains("Immediate=\"true\"", StringComparison.Ordinal)
             && limpo.Contains("@bind-Value=\"_textoNome\"", StringComparison.Ordinal)
             && limpo.Contains("_textoNome = Modelo.Nome", StringComparison.Ordinal)
-            && limpo.Contains("class=\"of-previa-erro\"", StringComparison.Ordinal)
-            && limpo.Contains("role=\"alert\"", StringComparison.Ordinal)
-            && !limpo.Contains("Color.Error", StringComparison.Ordinal)
+            && MostraErroNoParagrafo(fonte)
             && nome >= 0
             && validar > nome
             && salvar.Contains("_erro = ConfirmacaoCadastroProduto.Validar(", StringComparison.Ordinal)
-            && salvar.Contains("catch (Exception ex)", StringComparison.Ordinal)
-            && salvar.Contains("_erro =", StringComparison.Ordinal)
+            && CatchDoDialogoAtribuiErro(fonte)
+            && ReturnEntreErroEClose(fonte)
             && erro > validar
             && fechar > erro;
     }
 
-    private static bool PreviaMostraExcecao(string fonte)
+    private const string MarcadorErro = "<p class=\"of-previa-erro\" role=\"alert\">@_erro</p>";
+
+    private static bool MostraErroNoParagrafo(string fonte) =>
+        SemComentarios(fonte).Contains(MarcadorErro, StringComparison.Ordinal);
+
+    private static bool ReturnEntreErroEClose(string fonte)
+    {
+        var salvar = Metodo(SemComentarios(fonte), "Task SalvarAsync()");
+        var erro = salvar.IndexOf("if (_erro is not null)", StringComparison.Ordinal);
+        var fechar = salvar.IndexOf("MudDialog.Close", StringComparison.Ordinal);
+        if (erro < 0 || fechar <= erro)
+            return false;
+
+        var inicio = erro + "if (_erro is not null)".Length;
+        return salvar[inicio..fechar].Contains("return", StringComparison.Ordinal);
+    }
+
+    private static bool CatchDoDialogoAtribuiErro(string fonte)
+    {
+        var salvar = Metodo(SemComentarios(fonte), "Task SalvarAsync()");
+        return TemAtribuicao(CorpoCatch(salvar, "catch (Exception ex)"), "_erro");
+    }
+
+    private static bool PreviaMostraExcecao(string fonte) =>
+        CatchDeCadastrarChamaSnackbar(fonte)
+        && !Metodo(SemComentarios(fonte), "Task CadastrarAsync()").Contains(
+            "catch (InvalidOperationException",
+            StringComparison.Ordinal);
+
+    private static bool CatchDeCadastrarChamaSnackbar(string fonte)
     {
         var metodo = Metodo(SemComentarios(fonte), "Task CadastrarAsync()");
-        return metodo.Contains("catch (Exception ex)", StringComparison.Ordinal)
-            && metodo.Contains("Snackbar.Add", StringComparison.Ordinal)
-            && !metodo.Contains("catch (InvalidOperationException", StringComparison.Ordinal);
+        return CorpoCatch(metodo, "catch (Exception ex)").Contains("Snackbar.Add", StringComparison.Ordinal);
+    }
+
+    private static string CorpoCatch(string metodo, string assinatura)
+    {
+        var inicio = metodo.IndexOf(assinatura, StringComparison.Ordinal);
+        if (inicio < 0)
+            return string.Empty;
+
+        var abre = metodo.IndexOf('{', inicio + assinatura.Length);
+        if (abre < 0)
+            return string.Empty;
+
+        var profundidade = 0;
+        for (var i = abre; i < metodo.Length; i++)
+        {
+            if (metodo[i] == '{')
+                profundidade++;
+            else if (metodo[i] == '}')
+            {
+                profundidade--;
+                if (profundidade == 0)
+                    return metodo[abre..(i + 1)];
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private static bool TemAtribuicao(string corpo, string nome)
+    {
+        var marca = nome + " =";
+        for (var i = 0; ;)
+        {
+            i = corpo.IndexOf(marca, i, StringComparison.Ordinal);
+            if (i < 0)
+                return false;
+
+            var depois = i + marca.Length;
+            if (depois >= corpo.Length || corpo[depois] != '=')
+                return true;
+
+            i = depois;
+        }
     }
 
     private static string Metodo(string fonte, string assinatura)
