@@ -204,8 +204,9 @@ public class ImportacaoExtratoB3Service
             });
         }
 
-        foreach (var linha in lido.Linhas)
-            linhas.Add(MontarLinha(linha));
+        var ocorrencias = HashLinhaExtratoB3.Ocorrencias(lido.Linhas);
+        for (var i = 0; i < lido.Linhas.Count; i++)
+            linhas.Add(MontarLinha(lido.Linhas[i], ocorrencias[i]));
 
         return await ClassificarListaAsync(linhas, desejos, membroFamiliaId, cancellationToken);
     }
@@ -274,7 +275,7 @@ public class ImportacaoExtratoB3Service
             if (PeriodoFechado(estado.Fechados, comando.Data))
                 return (StatusLinhaImportacaoB3.MesFechado, "O mês do pagamento está fechado. A linha não será gravada.");
             if (EhManualProvento(estado, comando))
-                return (StatusLinhaImportacaoB3.PossivelDuplicataManual, MotivoManual);
+                return (StatusLinhaImportacaoB3.PossivelDuplicataManual, MotivoManualProvento);
             return (StatusLinhaImportacaoB3.Nova, "Será gravada.");
         }
 
@@ -357,6 +358,9 @@ public class ImportacaoExtratoB3Service
 
     private const string MotivoManual =
         "Há um lançamento manual com o mesmo ativo, data, quantidade e valor.";
+
+    private const string MotivoManualProvento =
+        "Há um lançamento manual com o mesmo ativo, data, tipo e valor.";
 
     private static bool AlterariaMes(
         IEnumerable<(int Id, DateTime Data, decimal Resultado)> depois,
@@ -497,9 +501,9 @@ public class ImportacaoExtratoB3Service
         Comando = linha.Comando
     };
 
-    private static LinhaPreviaExtratoB3 MontarLinha(LinhaExtratoB3 linha)
+    private static LinhaPreviaExtratoB3 MontarLinha(LinhaExtratoB3 linha, int ocorrencia)
     {
-        var comando = MontarComando(linha);
+        var comando = MontarComando(linha, ocorrencia);
         var informativa = comando is null;
         return new LinhaPreviaExtratoB3
         {
@@ -523,7 +527,7 @@ public class ImportacaoExtratoB3Service
         };
     }
 
-    private static ComandoImportacaoB3? MontarComando(LinhaExtratoB3 linha)
+    private static ComandoImportacaoB3? MontarComando(LinhaExtratoB3 linha, int ocorrencia)
     {
         var destino = DestinoDe(linha);
         if (destino is null)
@@ -553,12 +557,13 @@ public class ImportacaoExtratoB3Service
         return new ComandoImportacaoB3
         {
             Destino = destino.Value,
-            Hash = HashLinhaExtratoB3.Calcular(linha),
+            Hash = HashLinhaExtratoB3.Calcular(linha, ocorrencia),
             Data = data,
             Ticker = linha.Ticker,
             Nome = nome,
             Instituicao = linha.Instituicao,
             Corretora = corretora,
+            // ETF permanece Acao. É decisão: ClasseAtivoB3 não separa ETF.
             TipoAtivo = linha.Classe == ClasseAtivoB3.FII ? TipoAtivo.Fii : TipoAtivo.Acao,
             TipoOperacao = linha.Tipo == TipoOperacaoB3.Venda ? TipoOperacao.Venda : TipoOperacao.Compra,
             TipoProvento = linha.Tipo == TipoOperacaoB3.Jcp ? TipoProvento.Jcp : TipoProvento.Rendimento,

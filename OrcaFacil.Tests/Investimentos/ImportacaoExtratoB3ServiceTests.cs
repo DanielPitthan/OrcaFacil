@@ -32,14 +32,16 @@ public class ImportacaoExtratoB3ServiceTests
             1.4909m,
             5002.00m);
 
-        var texto = HashLinhaExtratoB3.Texto(linha);
-        Assert.Equal("2026-09-16|Aplicacao|CDB9268YCA7|5002|5002.00|ITAU UNIBANCO S.A.|2", texto);
+        var texto = HashLinhaExtratoB3.Texto(linha, 0);
+        Assert.Equal("2026-09-16|Aplicacao|CDB9268YCA7|5002|5002.00|ITAU UNIBANCO S.A.|0", texto);
         var esperado = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(texto))).ToLowerInvariant();
-        Assert.Equal(esperado, HashLinhaExtratoB3.Calcular(linha));
+        Assert.Equal(esperado, HashLinhaExtratoB3.Calcular(linha, 0));
         Assert.Equal(64, esperado.Length);
 
-        var outraLinha = linha with { Linha = 3 };
-        Assert.NotEqual(HashLinhaExtratoB3.Calcular(linha), HashLinhaExtratoB3.Calcular(outraLinha));
+        var outraPosicao = linha with { Linha = 40 };
+        Assert.Equal(HashLinhaExtratoB3.Calcular(linha, 0), HashLinhaExtratoB3.Calcular(outraPosicao, 0));
+        Assert.NotEqual(HashLinhaExtratoB3.Calcular(linha, 0), HashLinhaExtratoB3.Calcular(linha, 1));
+        Assert.Equal([0, 1], HashLinhaExtratoB3.Ocorrencias([linha, outraPosicao]));
     }
 
     [Fact]
@@ -87,6 +89,113 @@ public class ImportacaoExtratoB3ServiceTests
             Assert.False(l.Marcada);
             Assert.False(l.PodeMarcar);
         });
+    }
+
+    [Fact]
+    public async Task ReimportarEmbaralhado_TudoGravadoFicaDuplicata()
+    {
+        await using var ambiente = await Ambiente.CriarAsync();
+        var primeira = await ambiente.PreverModeloAsync();
+        var gravadas = await ambiente.Service.GravarAsync(primeira, ambiente.MembroId);
+
+        await using var csv = new MemoryStream(Embaralhar(CaminhoCsv()));
+        var segunda = await ambiente.Service.PreverAsync(csv, ambiente.MembroId);
+
+        Assert.Equal(gravadas, segunda.Contar(StatusLinhaImportacaoB3.DuplicataImportada));
+        Assert.Equal(0, segunda.Contar(StatusLinhaImportacaoB3.Nova));
+        Assert.Equal(1, segunda.Contar(StatusLinhaImportacaoB3.Informativa));
+        Assert.Equal(1, segunda.Contar(StatusLinhaImportacaoB3.SemPosicao));
+        Assert.All(
+            segunda.Linhas.Where(l => l.Status is not StatusLinhaImportacaoB3.Informativa and not StatusLinhaImportacaoB3.SemPosicao),
+            l => Assert.Equal(StatusLinhaImportacaoB3.DuplicataImportada, l.Status));
+    }
+
+    [Fact]
+    public async Task PeriodoMaior_SoAsLinhasExtrasFicamNovas()
+    {
+        await using var ambiente = await Ambiente.CriarAsync();
+        var primeira = await ambiente.PreverModeloAsync();
+        var gravadas = await ambiente.Service.GravarAsync(primeira, ambiente.MembroId);
+
+        await using var csv = new MemoryStream(Acrescentar(CaminhoCsv(), LinhaExtraAntes, LinhaExtraDepois));
+        var segunda = await ambiente.Service.PreverAsync(csv, ambiente.MembroId);
+
+        Assert.Equal(gravadas, segunda.Contar(StatusLinhaImportacaoB3.DuplicataImportada));
+        Assert.Equal(2, segunda.Contar(StatusLinhaImportacaoB3.Nova));
+        Assert.Equal(1, segunda.Contar(StatusLinhaImportacaoB3.Informativa));
+        Assert.Equal(1, segunda.Contar(StatusLinhaImportacaoB3.SemPosicao));
+        Assert.All(segunda.Linhas.Where(l => l.Status == StatusLinhaImportacaoB3.Nova), l =>
+        {
+            Assert.True(l.Titulo is "EXTR3" or "EXTR11");
+            Assert.True(l.Marcada);
+        });
+    }
+
+    [Fact]
+    public async Task LinhasIdenticas_GravaAsDuas_EReimportacaoMarcaDuplicata()
+    {
+        const string csv =
+            """
+            Entrada/Saída;Data;Movimentação;Produto;Instituição;Quantidade;Preço unitário;Valor da Operação
+            Credito;01/02/2024;Transferência - Liquidação;PETR4 - PETROLEO BRASILEIRO;XP INVESTIMENTOS CCTVM S/A;10; R$10,00 ; R$100,00 
+            Credito;01/02/2024;Transferência - Liquidação;PETR4 - PETROLEO BRASILEIRO;XP INVESTIMENTOS CCTVM S/A;10; R$10,00 ; R$100,00 
+            """;
+
+        await using var ambiente = await Ambiente.CriarAsync();
+        await using var primeiraLeitura = new MemoryStream(Encoding.UTF8.GetBytes(csv));
+        var previa = await ambiente.Service.PreverAsync(primeiraLeitura, ambiente.MembroId);
+        Assert.Equal(2, previa.Contar(StatusLinhaImportacaoB3.Nova));
+        Assert.Equal(2, previa.Linhas.Select(l => l.Comando!.Hash).Distinct().Count());
+
+        var gravadas = await ambiente.Service.GravarAsync(previa, ambiente.MembroId);
+        Assert.Equal(2, gravadas);
+
+        await using var contexto = await ambiente.Factory.CreateDbContextAsync();
+        var hashes = await contexto.OperacoesAtivo.Select(o => o.HashImportacao).ToListAsync();
+        Assert.Equal(2, hashes.Distinct().Count());
+
+        await using var releitura = new MemoryStream(Encoding.UTF8.GetBytes(csv));
+        var segunda = await ambiente.Service.PreverAsync(releitura, ambiente.MembroId);
+        Assert.Equal(2, segunda.Contar(StatusLinhaImportacaoB3.DuplicataImportada));
+        Assert.Equal(0, segunda.Contar(StatusLinhaImportacaoB3.Nova));
+    }
+
+    [Fact]
+    public async Task ManualDeProvento_AvisoNaoCitaQuantidade()
+    {
+        await using var ambiente = await Ambiente.CriarAsync();
+        var previa = await ambiente.PreverModeloAsync();
+        var provento = previa.Linhas.First(l => l.Comando?.Destino == DestinoImportacaoB3.Provento);
+        var comando = provento.Comando!;
+
+        await using (var contexto = await ambiente.Factory.CreateDbContextAsync())
+        {
+            var ativo = new AtivoFinanceiro
+            {
+                Ticker = comando.Ticker,
+                Nome = comando.Nome,
+                Tipo = comando.TipoAtivo
+            };
+            contexto.AtivosFinanceiros.Add(ativo);
+            await contexto.SaveChangesAsync();
+            await ambiente.Provento.SalvarAsync(new ProventoFormModel
+            {
+                AtivoId = ativo.Id,
+                Tipo = comando.TipoProvento,
+                DataPagamento = comando.Data,
+                ValorLiquido = comando.Valor,
+                Origem = OrigemProvento.Manual
+            }, ambiente.MembroId);
+        }
+
+        var deNovo = await ambiente.PreverModeloAsync();
+        var linha = deNovo.Linhas.Single(l => l.Numero == provento.Numero);
+        Assert.Equal(StatusLinhaImportacaoB3.PossivelDuplicataManual, linha.Status);
+        Assert.DoesNotContain("quantidade", linha.Motivo, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("ativo", linha.Motivo, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("data", linha.Motivo, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("tipo", linha.Motivo, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("valor", linha.Motivo, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -376,6 +485,51 @@ public class ImportacaoExtratoB3ServiceTests
         return (
             lancamentos.Where(t => t.Tipo == TipoTransacao.Receita).Sum(t => t.Valor),
             lancamentos.Where(t => t.Tipo == TipoTransacao.Despesa).Sum(t => t.Valor));
+    }
+
+    private const string LinhaExtraAntes =
+        "Credito;02/01/2020;Transferência - Liquidação;EXTR3 - EXTRA ANTES;XP INVESTIMENTOS CCTVM S/A;7; R$3,00 ; R$21,00 ";
+
+    private const string LinhaExtraDepois =
+        "Credito;31/12/2026;Rendimento;EXTR11 - EXTRA DEPOIS;CLEAR CORRETORA - GRUPO XP;4; R$0,10 ; R$0,40 ";
+
+    private static byte[] Embaralhar(string caminho)
+    {
+        var dados = LinhasDeDados(caminho);
+        var original = string.Join('\n', dados);
+        var rng = new Random(20261020);
+        for (var i = dados.Count - 1; i > 0; i--)
+        {
+            var j = rng.Next(i + 1);
+            (dados[i], dados[j]) = (dados[j], dados[i]);
+        }
+
+        Assert.NotEqual(original, string.Join('\n', dados));
+        return Codificar(caminho, dados);
+    }
+
+    private static byte[] Acrescentar(string caminho, params string[] extras)
+    {
+        var dados = LinhasDeDados(caminho);
+        dados.Insert(0, extras[0]);
+        dados.Add(extras[1]);
+        return Codificar(caminho, dados);
+    }
+
+    private static List<string> LinhasDeDados(string caminho)
+    {
+        var texto = File.ReadAllText(caminho).Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
+        var linhas = texto.Split('\n').ToList();
+        while (linhas.Count > 0 && linhas[^1].Length == 0)
+            linhas.RemoveAt(linhas.Count - 1);
+        return linhas.Skip(1).ToList();
+    }
+
+    private static byte[] Codificar(string caminho, IReadOnlyList<string> dados)
+    {
+        var cabecalho = File.ReadLines(caminho).First();
+        var texto = cabecalho + "\n" + string.Join('\n', dados) + "\n";
+        return Encoding.UTF8.GetBytes(texto);
     }
 
     private static string CaminhoCsv()
