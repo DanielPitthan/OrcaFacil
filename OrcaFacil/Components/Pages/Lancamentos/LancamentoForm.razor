@@ -127,9 +127,11 @@ else
             @if (_itemNatureza == NaturezaItemLancamento.Parcelada)
             {
                 <div class="d-flex align-center ga-2 mb-2">
-                    <MudNumericField T="int?" @bind-Value="_itemParcelaAtual" Label="Parcela" Min="1" Style="flex:1;" />
+                    <MudNumericField T="int?" @bind-Value="_itemParcelaAtual" Label="Parcela" Min="1" Style="flex:1;"
+                                     InputMode="InputMode.numeric" UserAttributes="@AtributosInteiro" />
                     <MudText Typo="Typo.h6">/</MudText>
-                    <MudNumericField T="int?" @bind-Value="_itemTotalParcelas" Label="de" Min="1" Style="flex:1;" />
+                    <MudNumericField T="int?" @bind-Value="_itemTotalParcelas" Label="de" Min="1" Style="flex:1;"
+                                     InputMode="InputMode.numeric" UserAttributes="@AtributosInteiro" />
                 </div>
             }
             else if (_itemNatureza == NaturezaItemLancamento.Assinatura)
@@ -283,6 +285,11 @@ else
     private DateTime? _dataOriginal;
     private bool _periodoOriginalFechado;
     private bool _periodoDataFechado;
+
+    private static readonly Dictionary<string, object?> AtributosInteiro = new()
+    {
+        ["inputmode"] = "numeric"
+    };
 
     private CampoNumerico<decimal> _valorCampo = null!;
     private FaturaCartaoPainel? _painel;

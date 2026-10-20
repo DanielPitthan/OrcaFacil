@@ -9,7 +9,7 @@
     <MudTextField @ref="_campo" T="string" Value="@_texto" Label="@Label" Placeholder="@Placeholder"
                   HelperText="@HelperText" Class="@Class" Immediate="true"
                   Adornment="@Adornment" AdornmentText="@AdornmentText" AdornmentIcon="@AdornmentIcon"
-                  AdornmentColor="@AdornmentColor" UserAttributes="@_atributos"
+                  AdornmentColor="@AdornmentColor" InputMode="@ModoTeclado" UserAttributes="@_atributos"
                   Error="@_erroVisivel" ErrorText="@_erro"
                   Validation="@(Validation is null ? null : new Func<string, string?>(ValidarTexto))" />
 </div>
@@ -17,14 +17,7 @@
 @code {
     private const decimal LimitePadrao = 1_000_000_000m;
 
-    private readonly Dictionary<string, object> _atributos = new()
-    {
-        ["inputmode"] = "decimal",
-        ["autocomplete"] = "off",
-        ["autocorrect"] = "off",
-        ["autocapitalize"] = "off",
-        ["spellcheck"] = "false"
-    };
+    private Dictionary<string, object?> _atributos = CriarAtributos(semCasas: false);
 
     private ElementReference _raiz;
     private MudTextField<string> _campo = null!;
@@ -58,7 +51,29 @@
 
     private bool PermiteVazio => typeof(TNumber) == typeof(decimal?);
     private int Casas => Math.Clamp(CasasDecimais, 0, 8);
+    private bool SemCasasDecimais => Casas == 0;
+    private InputMode ModoTeclado => SemCasasDecimais ? InputMode.numeric : InputMode.@decimal;
     private bool _erroVisivel => !string.IsNullOrEmpty(_erro) && For is not null;
+
+    private static string TextoModo(bool semCasas) => semCasas ? "numeric" : "decimal";
+
+    private static Dictionary<string, object?> CriarAtributos(bool semCasas) => new()
+    {
+        ["inputmode"] = TextoModo(semCasas),
+        ["autocomplete"] = "off",
+        ["autocorrect"] = "off",
+        ["autocapitalize"] = "off",
+        ["spellcheck"] = "false"
+    };
+
+    private void SincronizarAtributos()
+    {
+        var modo = TextoModo(SemCasasDecimais);
+        if (Equals(_atributos["inputmode"], modo))
+            return;
+
+        _atributos = CriarAtributos(SemCasasDecimais);
+    }
 
     protected override void OnInitialized()
     {
@@ -72,6 +87,8 @@
 
     protected override void OnParametersSet()
     {
+        SincronizarAtributos();
+
         var atual = LerValor();
         if (_inicializado && Nullable.Equals(atual, _ultimoEmitido))
             return;
