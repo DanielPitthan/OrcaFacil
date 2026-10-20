@@ -104,6 +104,27 @@ public class RendaFixaGabaritoB3Tests
         Assert.Equal(0.14m, (await ambiente.UnicoLancamentoAsync()).Valor);
     }
 
+    [Fact]
+    public void Tesouro_TickerNormalizado_EAplicacaoResgateNaoSeguemADirecao()
+    {
+        Assert.Equal("TESOURO IPCA+ 2029", NormalizarTitulo("  tesouro   ipca+   2029 "));
+
+        var linhas = LerLinhas();
+        Assert.Contains(linhas, l => l.Codigo == "TESOURO IPCA+ 2045" && l.Tipo == TipoOperacaoRendaFixa.Resgate);
+        Assert.Contains(linhas, l => l.Codigo == "TESOURO PREFIXADO 2026" && l.Tipo == TipoOperacaoRendaFixa.Aplicacao);
+        Assert.Contains(linhas, l => l.Codigo == "TESOURO IPCA+ 2035" && l.Tipo == TipoOperacaoRendaFixa.Resgate);
+        Assert.DoesNotContain(linhas, l => l.Codigo.Contains("Tesouro ", StringComparison.Ordinal));
+
+        var aplicacoes = linhas.Where(l => l.Codigo.StartsWith("CDB", StringComparison.Ordinal) && l.Tipo == TipoOperacaoRendaFixa.Aplicacao).ToList();
+        Assert.Contains(aplicacoes, l => l.Codigo == "CDB9268YCA7");
+
+        Assert.Equal(TipoOperacaoRendaFixa.Aplicacao, TipoDaLinha("APLICAÇÃO", "Debito"));
+        Assert.Equal(TipoOperacaoRendaFixa.Resgate, TipoDaLinha("RESGATE ANTECIPADO", "Credito"));
+        Assert.Equal(TipoOperacaoRendaFixa.Aplicacao, TipoDaLinha("Compra", "Credito"));
+        Assert.Equal(TipoOperacaoRendaFixa.Resgate, TipoDaLinha("Venda", "Debito"));
+        Assert.Equal(TipoOperacaoRendaFixa.Resgate, TipoDaLinha("COMPRA / VENDA", "Debito"));
+    }
+
     private static OperacaoRendaFixaFormModel ParaModelo(int tituloId, Linha linha) => new()
     {
         TituloRendaFixaId = tituloId,
@@ -138,7 +159,7 @@ public class RendaFixaGabaritoB3Tests
             linhas.Add(new Linha(
                 ordem++,
                 DateTime.ParseExact(colunas[1].Trim(), "dd/MM/yyyy", PtBr),
-                colunas[0].Trim() == "Credito" ? TipoOperacaoRendaFixa.Aplicacao : TipoOperacaoRendaFixa.Resgate,
+                TipoDaLinha(movimento, colunas[0].Trim()),
                 produto.Codigo,
                 produto.Nome,
                 produto.Tipo,
@@ -162,22 +183,46 @@ public class RendaFixaGabaritoB3Tests
         var partes = produto.Split(" - ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         if (partes.Length >= 2 && partes[0].Equals("CDB", StringComparison.OrdinalIgnoreCase))
         {
+            var codigo = partes[1].Trim().ToUpperInvariant();
             var emissor = partes.Length >= 3 ? partes[2] : null;
-            var nome = emissor is null ? partes[1] : $"{partes[1]} — {emissor}";
+            var nome = emissor is null ? codigo : $"{codigo} — {emissor}";
             if (nome.Length > 80)
                 nome = nome[..80];
-            return (partes[1], nome, TipoTituloRendaFixa.CDB, emissor, null);
+            return (codigo, nome, TipoTituloRendaFixa.CDB, emissor, null);
         }
 
-        var tipo = produto.Contains("Prefixado", StringComparison.OrdinalIgnoreCase) ? TipoTituloRendaFixa.TesouroPrefixado
-            : produto.Contains("IPCA", StringComparison.OrdinalIgnoreCase) ? TipoTituloRendaFixa.TesouroIPCA
-            : produto.Contains("Selic", StringComparison.OrdinalIgnoreCase) ? TipoTituloRendaFixa.TesouroSelic
+        var titulo = NormalizarTitulo(produto);
+        var tipo = titulo.Contains("PREFIXADO", StringComparison.Ordinal) ? TipoTituloRendaFixa.TesouroPrefixado
+            : titulo.Contains("IPCA", StringComparison.Ordinal) ? TipoTituloRendaFixa.TesouroIPCA
+            : titulo.Contains("SELIC", StringComparison.Ordinal) ? TipoTituloRendaFixa.TesouroSelic
             : TipoTituloRendaFixa.Outro;
         int? ano = null;
-        var ultimo = produto.Split(' ', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
+        var ultimo = titulo.Split(' ', StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
         if (ultimo is not null && int.TryParse(ultimo, out var anoLido) && anoLido is >= 2000 and <= 2100)
             ano = anoLido;
-        return (produto, produto, tipo, null, ano);
+        return (titulo, titulo, tipo, null, ano);
+    }
+
+    /// <summary>
+    /// Aplicação e resgate antecipado seguem o tipo da movimentação (TipoOperacaoB3.Aplicacao
+    /// e TipoOperacaoB3.ResgateAntecipado). Compra e venda continuam pela direção.
+    /// </summary>
+    private static TipoOperacaoRendaFixa TipoDaLinha(string movimentacao, string direcao)
+    {
+        var chave = string.Join(' ', movimentacao.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries))
+            .ToUpperInvariant();
+        if (chave is "APLICAÇÃO" or "APLICACAO")
+            return TipoOperacaoRendaFixa.Aplicacao;
+        if (chave is "RESGATE ANTECIPADO")
+            return TipoOperacaoRendaFixa.Resgate;
+
+        return direcao == "Credito" ? TipoOperacaoRendaFixa.Aplicacao : TipoOperacaoRendaFixa.Resgate;
+    }
+
+    private static string NormalizarTitulo(string texto)
+    {
+        var aparado = texto.Trim().ToUpperInvariant();
+        return string.Join(' ', aparado.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
     }
 
     private static string Apelido(string instituicao)

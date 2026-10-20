@@ -227,8 +227,10 @@ public class RendaFixaService
             if (!Diverge(lancamento, novo, novaData))
                 continue;
 
-            if (PeriodoFechado(periodos, lancamento.Data) || PeriodoFechado(periodos, novaData))
-                afetados.Add($"{codigo} em {lancamento.Data:dd/MM/yyyy}");
+            // A data citada é a do mês fechado. Se o resgate mudou de dia, a antiga sozinha engana.
+            CitarSeFechado(afetados, codigo, novaData, periodos);
+            if (lancamento.Data.Date != novaData.Date)
+                CitarSeFechado(afetados, codigo, lancamento.Data, periodos);
         }
 
         foreach (var resultado in posicao.Resgates)
@@ -248,6 +250,16 @@ public class RendaFixaService
             "Mês fechado. A gravação mudaria o resultado do resgate já lançado: "
             + string.Join("; ", afetados.Distinct(StringComparer.Ordinal))
             + ". Nada foi gravado.");
+    }
+
+    private static void CitarSeFechado(
+        List<string> afetados,
+        string codigo,
+        DateTime data,
+        HashSet<(int Mes, int Ano)> periodos)
+    {
+        if (PeriodoFechado(periodos, data))
+            afetados.Add($"{codigo} em {data:dd/MM/yyyy}");
     }
 
     private static bool Diverge(Transacao lancamento, decimal resultado, DateTime data)

@@ -5,7 +5,6 @@ using OrcaFacil.Core.Data;
 using OrcaFacil.Core.Dtos;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
-using OrcaFacil.Core.RendaFixa;
 using OrcaFacil.Core.Services;
 
 namespace OrcaFacil.Tests.Investimentos;
@@ -362,12 +361,142 @@ public class RendaFixaServiceTests
     }
 
     [Fact]
-    public void LancamentoGerado_NaoSeEditaPelaTela()
+    public async Task ValorOuQuantidadeMenorOuIgualAZero_NaoGrava()
     {
-        var ex = Assert.Throws<InvalidOperationException>(() => ProtecaoLancamentoRendaFixa.GarantirEditavelNaTela(4));
-        Assert.Equal(ProtecaoLancamentoRendaFixa.Mensagem, ex.Message);
-        ProtecaoLancamentoRendaFixa.GarantirEditavelNaTela(null);
+        await using var ambiente = await Ambiente.CriarAsync();
+        var titulo = await ambiente.TituloAsync("CDB13", TipoTituloRendaFixa.CDB);
+        var baseModelo = Operacao(titulo, new DateTime(2026, 1, 10), TipoOperacaoRendaFixa.Aplicacao, 1m, 10m);
+
+        var valorZero = Clone(baseModelo);
+        valorZero.Valor = 0m;
+        var valorNegativo = Clone(baseModelo);
+        valorNegativo.Valor = -1m;
+        var quantidadeZero = Clone(baseModelo);
+        quantidadeZero.Quantidade = 0m;
+        var quantidadeNegativa = Clone(baseModelo);
+        quantidadeNegativa.Quantidade = -1m;
+
+        foreach (var modelo in new[] { valorZero, valorNegativo })
+        {
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => ambiente.Service.SalvarAsync(modelo, ambiente.MembroId));
+            Assert.Equal("O valor deve ser maior que zero.", ex.Message);
+        }
+
+        foreach (var modelo in new[] { quantidadeZero, quantidadeNegativa })
+        {
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => ambiente.Service.SalvarAsync(modelo, ambiente.MembroId));
+            Assert.Equal("A quantidade deve ser maior que zero.", ex.Message);
+        }
+
+        Assert.Empty(await ambiente.OperacoesAsync());
+        Assert.Empty(await ambiente.LancamentosAsync());
     }
+
+    [Fact]
+    public async Task DataFutura_NaoGrava()
+    {
+        await using var ambiente = await Ambiente.CriarAsync();
+        var titulo = await ambiente.TituloAsync("CDB14", TipoTituloRendaFixa.CDB);
+        var modelo = Operacao(titulo, DateTime.Today.AddDays(1), TipoOperacaoRendaFixa.Aplicacao, 1m, 10m);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => ambiente.Service.SalvarAsync(modelo, ambiente.MembroId));
+
+        Assert.Equal("A data não pode ser futura.", ex.Message);
+        Assert.Empty(await ambiente.OperacoesAsync());
+    }
+
+    [Fact]
+    public async Task ResgateEmDiaAnterior_ComIdMaior_CalculaPelaDataENaoPeloId()
+    {
+        await using var ambiente = await Ambiente.CriarAsync();
+        var titulo = await ambiente.TituloAsync("CDB15", TipoTituloRendaFixa.CDB);
+        var primeira = await ambiente.Service.SalvarAsync(
+            Operacao(titulo, new DateTime(2026, 1, 10), TipoOperacaoRendaFixa.Aplicacao, 10m, 100m),
+            ambiente.MembroId);
+        var posterior = await ambiente.Service.SalvarAsync(
+            Operacao(titulo, new DateTime(2026, 3, 10), TipoOperacaoRendaFixa.Aplicacao, 10m, 200m),
+            ambiente.MembroId);
+        var resgate = await ambiente.Service.SalvarAsync(
+            Operacao(titulo, new DateTime(2026, 2, 10), TipoOperacaoRendaFixa.Resgate, 10m, 150m),
+            ambiente.MembroId);
+
+        Assert.True(resgate.Id > posterior.Id);
+        Assert.True(posterior.Id > primeira.Id);
+        var lancamento = await ambiente.UnicoLancamentoAsync();
+        Assert.Equal(50m, lancamento.Valor);
+        Assert.Equal(new DateTime(2026, 2, 10), lancamento.Data);
+        Assert.Equal(TipoTransacao.Receita, lancamento.Tipo);
+        var posicao = await ambiente.Service.ObterPosicaoAsync(titulo);
+        Assert.Equal(10m, posicao.Quantidade);
+        Assert.Equal(200m, posicao.CustoTotal);
+    }
+
+    [Fact]
+    public async Task ResgateNovoEmMesFechado_NaoGrava_ECitaADataDoResgate()
+    {
+        await using var ambiente = await Ambiente.CriarAsync();
+        var titulo = await ambiente.TituloAsync("CDB16", TipoTituloRendaFixa.CDB);
+        await ambiente.Service.SalvarAsync(
+            Operacao(titulo, new DateTime(2026, 1, 10), TipoOperacaoRendaFixa.Aplicacao, 1m, 100m),
+            ambiente.MembroId);
+        await ambiente.FecharAsync(2, 2026);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => ambiente.Service.SalvarAsync(
+            Operacao(titulo, new DateTime(2026, 2, 15), TipoOperacaoRendaFixa.Resgate, 1m, 110m),
+            ambiente.MembroId));
+
+        Assert.Contains("15/02/2026", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("Nada foi gravado", ex.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("10/01/2026", ex.Message, StringComparison.Ordinal);
+        Assert.Single(await ambiente.OperacoesAsync());
+        Assert.Empty(await ambiente.LancamentosAsync());
+    }
+
+    [Fact]
+    public async Task MoverResgateParaMesFechado_CitaADataNova()
+    {
+        await using var ambiente = await Ambiente.CriarAsync();
+        var titulo = await ambiente.TituloAsync("CDB17", TipoTituloRendaFixa.CDB);
+        await ambiente.Service.SalvarAsync(
+            Operacao(titulo, new DateTime(2026, 1, 10), TipoOperacaoRendaFixa.Aplicacao, 1m, 100m),
+            ambiente.MembroId);
+        var resgate = await ambiente.Service.SalvarAsync(
+            Operacao(titulo, new DateTime(2026, 2, 10), TipoOperacaoRendaFixa.Resgate, 1m, 110m),
+            ambiente.MembroId);
+        await ambiente.FecharAsync(3, 2026);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => ambiente.Service.SalvarAsync(new OperacaoRendaFixaFormModel
+        {
+            Id = resgate.Id,
+            TituloRendaFixaId = titulo,
+            Data = new DateTime(2026, 3, 15),
+            Tipo = TipoOperacaoRendaFixa.Resgate,
+            Quantidade = 1m,
+            PrecoUnitario = 1m,
+            Valor = 110m
+        }, ambiente.MembroId));
+
+        Assert.Contains("15/03/2026", ex.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("10/02/2026", ex.Message, StringComparison.Ordinal);
+        Assert.Contains("Nada foi gravado", ex.Message, StringComparison.Ordinal);
+        Assert.Equal(new DateTime(2026, 2, 10), (await ambiente.OperacaoAsync(resgate.Id)).Data);
+        Assert.Equal(10m, (await ambiente.UnicoLancamentoAsync()).Valor);
+    }
+
+    private static OperacaoRendaFixaFormModel Clone(OperacaoRendaFixaFormModel modelo) => new()
+    {
+        Id = modelo.Id,
+        TituloRendaFixaId = modelo.TituloRendaFixaId,
+        Data = modelo.Data,
+        Tipo = modelo.Tipo,
+        Quantidade = modelo.Quantidade,
+        PrecoUnitario = modelo.PrecoUnitario,
+        Valor = modelo.Valor,
+        Custos = modelo.Custos,
+        IrRetido = modelo.IrRetido,
+        Origem = modelo.Origem,
+        HashImportacao = modelo.HashImportacao
+    };
 
     private static OperacaoRendaFixaFormModel Operacao(
         int tituloId,
