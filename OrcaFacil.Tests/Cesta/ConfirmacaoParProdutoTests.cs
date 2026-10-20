@@ -79,7 +79,11 @@ public class ConfirmacaoParProdutoTests : IDisposable
         Assert.False(par.DestacarRevisao);
         Assert.True(par.AguardandoConfirmacao);
         Assert.False(pares.PodeGravar);
-        Assert.Equal(ConfirmacaoParProduto.MensagemParNaoConfirmado, pares.MensagemBloqueio);
+        Assert.Equal(CasamentoComprovante.MensagemConfirmacaoObrigatoria, pares.MensagemBloqueio);
+        var bloqueado = Assert.Single(pares.ParaBarreira());
+        Assert.Equal(_arroz.Id, bloqueado.ProdutoId);
+        Assert.False(bloqueado.Confirmado);
+        Assert.Equal(0.95m, bloqueado.Confianca);
 
         foreach (var (confianca, pendente) in new[] { (0.8m, false), (1m, false), (0.99m, true) })
         {
@@ -98,11 +102,13 @@ public class ConfirmacaoParProdutoTests : IDisposable
             Catalogo());
         Assert.False(dois.PodeGravar);
         dois.Confirmar(0);
+        Assert.True(dois.ParaBarreira()[0].Confirmado);
+        Assert.False(dois.ParaBarreira()[1].Confirmado);
         Assert.False(dois.PodeGravar);
         await AssertNaoGravaAsync(dois);
         dois.Confirmar(1);
         Assert.True(dois.PodeGravar);
-        dois.GarantirAntesDeGravar();
+        CasamentoComprovante.GarantirConfirmacao(dois.ParaBarreira());
 
         await AssertNaoGravaAsync(pares);
         pares.Confirmar(0);
@@ -111,7 +117,8 @@ public class ConfirmacaoParProdutoTests : IDisposable
         Assert.Equal(_arroz.Id, par.ProdutoId);
         Assert.True(pares.PodeGravar);
         Assert.Null(pares.MensagemBloqueio);
-        pares.GarantirAntesDeGravar();
+        Assert.True(Assert.Single(pares.ParaBarreira()).Confirmado);
+        CasamentoComprovante.GarantirConfirmacao(pares.ParaBarreira());
 
         var compra = await _service.SalvarCompraAsync(Copiar(previa.ParaCompra()), _membroId);
         var item = Assert.Single(compra.Itens);
@@ -220,7 +227,10 @@ public class ConfirmacaoParProdutoTests : IDisposable
         Assert.False(par.AguardandoConfirmacao);
         Assert.Equal(ConfirmacaoParProduto.SituacaoPar.Trocado, par.Situacao);
         Assert.True(pares.PodeGravar);
-        pares.GarantirAntesDeGravar();
+        var trocado = Assert.Single(pares.ParaBarreira());
+        Assert.Equal(_feijao.Id, trocado.ProdutoId);
+        Assert.True(trocado.Confirmado);
+        CasamentoComprovante.GarantirConfirmacao(pares.ParaBarreira());
 
         previa.Classificar(linha, _feijao);
         var compra = await _service.SalvarCompraAsync(Copiar(previa.ParaCompra()), _membroId);
@@ -264,6 +274,11 @@ public class ConfirmacaoParProdutoTests : IDisposable
         Assert.Equal(NormalizadorComprovante.PrefixoNaoIdentificado + "ARROZ TIPO 1", par.NomeExibido);
         Assert.False(par.AguardandoConfirmacao);
         Assert.True(pares.PodeGravar);
+        var desfeito = Assert.Single(pares.ParaBarreira());
+        Assert.Null(desfeito.ProdutoId);
+        Assert.False(desfeito.Confirmado);
+        Assert.True(desfeito.PodeSalvar);
+        CasamentoComprovante.GarantirConfirmacao(pares.ParaBarreira());
         pares.Desfazer(0);
         Assert.True(par.NaoIdentificado);
 
@@ -308,7 +323,11 @@ public class ConfirmacaoParProdutoTests : IDisposable
         Assert.False(pendente.Linhas[0].DestacarRevisao);
         Assert.True(pendente.Linhas[0].Pendente);
         Assert.True(pendente.PodeGravar);
-        pendente.GarantirAntesDeGravar();
+        Assert.True(pendente.Linhas[0].Pendente);
+        var confirmado = Assert.Single(pendente.ParaBarreira());
+        Assert.True(confirmado.Confirmado);
+        Assert.True(confirmado.Pendente);
+        CasamentoComprovante.GarantirConfirmacao(pendente.ParaBarreira());
     }
 
     [Fact]
@@ -318,65 +337,69 @@ public class ConfirmacaoParProdutoTests : IDisposable
         Assert.True(PortaoIgnoraConfianca(fonte));
 
         var mutado = fonte.Replace(
-            "public bool PodeGravar => _linhas.All(linha => !linha.AguardandoConfirmacao);",
-            "public bool PodeGravar => _linhas.All(linha => !linha.AguardandoConfirmacao || linha.Confianca >= 0.8m || !linha.Pendente);",
+            "public bool PodeGravar => _linhas.Count == 0 || CasamentoComprovante.PodeSalvar(ParaBarreira());",
+            "public bool PodeGravar => _linhas.Count == 0 || CasamentoComprovante.PodeSalvar(ParaBarreira()) || _linhas.All(linha => linha.Confianca >= 0.8m || !linha.Pendente);",
             StringComparison.Ordinal);
         Assert.False(PortaoIgnoraConfianca(mutado));
 
         const string soComentario = """
-            // public bool PodeGravar => _linhas.All(linha => !linha.AguardandoConfirmacao);
-            /* AguardandoConfirmacao */
+            // public bool PodeGravar => CasamentoComprovante.PodeSalvar(ParaBarreira());
+            /* PodeSalvar */
             public bool PodeGravar => linha.Confianca >= 0.8m || !linha.Pendente;
             public string? MensagemBloqueio
             """;
-        Assert.Contains("AguardandoConfirmacao", soComentario, StringComparison.Ordinal);
+        Assert.Contains("PodeSalvar", soComentario, StringComparison.Ordinal);
         Assert.False(PortaoIgnoraConfianca(soComentario));
-        Assert.DoesNotContain("AguardandoConfirmacao", SemComentarios(soComentario), StringComparison.Ordinal);
+        Assert.DoesNotContain("PodeSalvar", SemComentarios(soComentario), StringComparison.Ordinal);
     }
 
     [Fact]
     public void Previa_BotoesEBloqueio_ComentarioNaoConta()
     {
         var previa = Ler("OrcaFacil", "Components", "Pages", "Cesta", "PreviaComprovanteDialog.razor");
+        var par = Ler("OrcaFacil", "Components", "Pages", "Cesta", "ParProdutoPrevia.razor");
+        var item = Ler("OrcaFacil", "Components", "Pages", "Cesta", "ItemParPrevia.razor");
         var pagina = Ler("OrcaFacil", "Components", "Pages", "Cesta", "CestaPage.razor");
-        var css = Ler("OrcaFacil", "Components", "Pages", "Cesta", "PreviaComprovanteDialog.razor.css");
-        Assert.True(PreviaProtegeGravacao(previa));
+        var css = Ler("OrcaFacil", "Components", "Pages", "Cesta", "ParProdutoPrevia.razor.css")
+            + Ler("OrcaFacil", "Components", "Pages", "Cesta", "ItemParPrevia.razor.css");
+        Assert.True(DialogoUsaBarreira(previa));
+        Assert.True(ComponenteLigaPares(par));
+        Assert.True(ItemMostraAcoes(item));
         Assert.True(PaginaEntregaSaidas(pagina));
         Assert.True(CssDoPar(css));
 
-        var metodo = Metodo(previa, "void Confirmar()");
         var guarda = "if (!_pares.PodeGravar)\n            return;";
         var mutado = previa.Replace(guarda, "/* if (!_pares.PodeGravar) return; */", StringComparison.Ordinal);
-        Assert.False(PreviaProtegeGravacao(mutado));
+        Assert.False(DialogoUsaBarreira(mutado));
         Assert.Contains("PodeGravar", mutado, StringComparison.Ordinal);
 
         var semGarantir = previa.Replace(
-            "_pares.GarantirAntesDeGravar();",
-            "// _pares.GarantirAntesDeGravar();",
+            "CasamentoComprovante.GarantirConfirmacao(barreira);",
+            "// CasamentoComprovante.GarantirConfirmacao(barreira);",
             StringComparison.Ordinal);
-        Assert.False(PreviaProtegeGravacao(semGarantir));
+        Assert.False(DialogoUsaBarreira(semGarantir));
 
-        var semBotao = previa.Replace(">Confirmar</button>", "<!-- >Confirmar</button> -->", StringComparison.Ordinal);
+        var semBotao = item.Replace(">Confirmar</button>", "<!-- >Confirmar</button> -->", StringComparison.Ordinal);
         Assert.Contains(">Confirmar</button>", semBotao, StringComparison.Ordinal);
-        Assert.False(PreviaProtegeGravacao(semBotao));
+        Assert.False(ItemMostraAcoes(semBotao));
 
-        var semTrocar = previa.Replace(
-            "_pares.Trocar(indice, produto.Id)",
-            "/* _pares.Trocar(indice, produto.Id) */",
+        var semTrocar = par.Replace(
+            "Pares.Trocar(indice, produto.Id)",
+            "/* Pares.Trocar(indice, produto.Id) */",
             StringComparison.Ordinal);
-        Assert.False(PreviaProtegeGravacao(semTrocar));
+        Assert.False(ComponenteLigaPares(semTrocar));
 
-        var semDesfazer = previa.Replace(
-            "_pares.Desfazer(indice);",
-            "// _pares.Desfazer(indice);",
+        var semDesfazer = par.Replace(
+            "Pares.Desfazer(indice);",
+            "// Pares.Desfazer(indice);",
             StringComparison.Ordinal);
-        Assert.False(PreviaProtegeGravacao(semDesfazer));
+        Assert.False(ComponenteLigaPares(semDesfazer));
 
-        var semMensagem = previa.Replace(
-            "<p class=\"of-par-alerta of-previa-erro\" role=\"alert\">@_pares.MensagemBloqueio</p>",
-            "<!-- <p class=\"of-par-alerta of-previa-erro\" role=\"alert\">@_pares.MensagemBloqueio</p> -->",
+        var semMensagem = par.Replace(
+            "<p class=\"of-par-alerta of-previa-erro\" role=\"alert\">@Pares.MensagemBloqueio</p>",
+            "<!-- <p class=\"of-par-alerta of-previa-erro\" role=\"alert\">@Pares.MensagemBloqueio</p> -->",
             StringComparison.Ordinal);
-        Assert.False(PreviaProtegeGravacao(semMensagem));
+        Assert.False(ComponenteLigaPares(semMensagem));
 
         var cssMutado = css.Replace("color: #1E2A33;", "/* color: #1E2A33; */", StringComparison.Ordinal);
         Assert.Contains("color: #1E2A33;", cssMutado, StringComparison.Ordinal);
@@ -387,13 +410,14 @@ public class ConfirmacaoParProdutoTests : IDisposable
 
         const string soComentario = """
             @* >Confirmar</button> *@
-            // _pares.Confirmar(indice)
-            /* _pares.Trocar(indice, produto.Id) */
+            // Pares.Confirmar(indice)
+            /* Pares.Trocar(indice, produto.Id) */
             <!-- >Desfazer</button> -->
-            <!-- <p class="of-par-alerta of-previa-erro" role="alert">@_pares.MensagemBloqueio</p> -->
+            <!-- <p class="of-par-alerta of-previa-erro" role="alert">@Pares.MensagemBloqueio</p> -->
             """;
         Assert.Contains(">Confirmar</button>", soComentario, StringComparison.Ordinal);
-        Assert.False(PreviaProtegeGravacao(soComentario));
+        Assert.False(ItemMostraAcoes(soComentario));
+        Assert.False(ComponenteLigaPares(soComentario));
     }
 
     public void Dispose() => _factory.Dispose();
@@ -409,8 +433,9 @@ public class ConfirmacaoParProdutoTests : IDisposable
     {
         var compras = await ContarComprasAsync();
         var itens = await ContarItensAsync();
-        var excecao = Assert.Throws<InvalidOperationException>(() => pares.GarantirAntesDeGravar());
-        Assert.Equal(ConfirmacaoParProduto.MensagemParNaoConfirmado, excecao.Message);
+        var excecao = Assert.Throws<InvalidOperationException>(
+            () => CasamentoComprovante.GarantirConfirmacao(pares.ParaBarreira()));
+        Assert.Equal(CasamentoComprovante.MensagemConfirmacaoObrigatoria, excecao.Message);
         Assert.Equal(compras, await ContarComprasAsync());
         Assert.Equal(itens, await ContarItensAsync());
     }
@@ -464,45 +489,32 @@ public class ConfirmacaoParProdutoTests : IDisposable
     private static bool PortaoIgnoraConfianca(string fonte)
     {
         var portao = Membro(SemComentarios(fonte), "public bool PodeGravar =>", "public string? MensagemBloqueio");
-        return portao.Contains("AguardandoConfirmacao", StringComparison.Ordinal)
+        return portao.Contains("PodeSalvar", StringComparison.Ordinal)
+            && portao.Contains("ParaBarreira", StringComparison.Ordinal)
             && !portao.Contains("Confianca", StringComparison.Ordinal)
             && !portao.Contains("Pendente", StringComparison.Ordinal);
     }
 
-    private static bool PreviaProtegeGravacao(string fonte)
+    private static bool DialogoUsaBarreira(string fonte)
     {
         var limpo = SemComentarios(fonte);
         if (!limpo.Contains("PrimarioDesabilitado=\"@(!PodeGravarCompra)\"", StringComparison.Ordinal))
             return false;
         if (!limpo.Contains("Previa.PodeConfirmar && _pares.PodeGravar", StringComparison.Ordinal))
             return false;
-        if (!limpo.Contains("<p class=\"of-par-alerta of-previa-erro\" role=\"alert\">@_pares.MensagemBloqueio</p>", StringComparison.Ordinal))
-            return false;
-        if (!limpo.Contains(">Confirmar</button>", StringComparison.Ordinal))
-            return false;
-        if (!limpo.Contains(">Trocar</button>", StringComparison.Ordinal))
-            return false;
-        if (!limpo.Contains(">Desfazer</button>", StringComparison.Ordinal))
-            return false;
-        if (!limpo.Contains("_pares.Confirmar(indice)", StringComparison.Ordinal))
-            return false;
-        if (!limpo.Contains("_pares.Trocar(indice, produto.Id)", StringComparison.Ordinal))
-            return false;
-        if (!limpo.Contains("_pares.Desfazer(indice)", StringComparison.Ordinal))
+        if (!limpo.Contains("<ParProdutoPrevia ", StringComparison.Ordinal))
             return false;
         if (!limpo.Contains("ConfirmacaoParProduto.Criar(", StringComparison.Ordinal))
             return false;
         if (!limpo.Contains(">Cadastrar</MudButton>", StringComparison.Ordinal))
             return false;
-        if (!limpo.Contains("par.TextoConfianca", StringComparison.Ordinal))
-            return false;
-        if (!limpo.Contains("par.DestacarRevisao", StringComparison.Ordinal))
+        if (limpo.Contains("GarantirAntesDeGravar", StringComparison.Ordinal))
             return false;
 
         var confirmar = Metodo(limpo, "void Confirmar()");
         var bloqueio = confirmar.IndexOf("if (!_pares.PodeGravar)", StringComparison.Ordinal);
         var retorno = bloqueio < 0 ? -1 : confirmar.IndexOf("return", bloqueio, StringComparison.Ordinal);
-        var garantir = confirmar.IndexOf("_pares.GarantirAntesDeGravar()", StringComparison.Ordinal);
+        var garantir = confirmar.IndexOf("CasamentoComprovante.GarantirConfirmacao(", StringComparison.Ordinal);
         var compra = confirmar.IndexOf("ParaCompra()", StringComparison.Ordinal);
         var fechar = confirmar.IndexOf("MudDialog.Close", StringComparison.Ordinal);
         if (bloqueio < 0 || retorno <= bloqueio || garantir <= retorno || compra <= garantir || fechar <= garantir)
@@ -511,6 +523,26 @@ public class ConfirmacaoParProdutoTests : IDisposable
         var gravar = Membro(limpo, "bool PodeGravarCompra", "private void Cancelar()");
         return !gravar.Contains("Confianca", StringComparison.Ordinal)
             && !gravar.Contains("Pendente", StringComparison.Ordinal);
+    }
+
+    private static bool ComponenteLigaPares(string fonte)
+    {
+        var limpo = SemComentarios(fonte);
+        return limpo.Contains("<ItemParPrevia ", StringComparison.Ordinal)
+            && limpo.Contains("Pares.Confirmar(indice)", StringComparison.Ordinal)
+            && limpo.Contains("Pares.Trocar(indice, produto.Id)", StringComparison.Ordinal)
+            && limpo.Contains("Pares.Desfazer(indice)", StringComparison.Ordinal)
+            && limpo.Contains("<p class=\"of-par-alerta of-previa-erro\" role=\"alert\">@Pares.MensagemBloqueio</p>", StringComparison.Ordinal);
+    }
+
+    private static bool ItemMostraAcoes(string fonte)
+    {
+        var limpo = SemComentarios(fonte);
+        return limpo.Contains(">Confirmar</button>", StringComparison.Ordinal)
+            && limpo.Contains(">Trocar</button>", StringComparison.Ordinal)
+            && limpo.Contains(">Desfazer</button>", StringComparison.Ordinal)
+            && limpo.Contains("Par.TextoConfianca", StringComparison.Ordinal)
+            && limpo.Contains("Par.DestacarRevisao", StringComparison.Ordinal);
     }
 
     private static bool PaginaEntregaSaidas(string fonte)

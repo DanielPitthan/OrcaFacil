@@ -9,9 +9,6 @@ namespace OrcaFacil.Core.Cesta;
 /// </summary>
 public sealed class ConfirmacaoParProduto
 {
-    public const string MensagemParNaoConfirmado =
-        "Confirme cada produto sugerido antes de gravar a compra.";
-
     private readonly List<ProdutoCesta> _catalogo;
     private readonly List<ItemPar> _linhas;
 
@@ -45,14 +42,17 @@ public sealed class ConfirmacaoParProduto
 
     public bool TemParNaoConfirmado => _linhas.Any(linha => linha.AguardandoConfirmacao);
 
-    public bool PodeGravar => _linhas.All(linha => !linha.AguardandoConfirmacao);
+    public bool PodeGravar => _linhas.Count == 0 || CasamentoComprovante.PodeSalvar(ParaBarreira());
 
-    public string? MensagemBloqueio => PodeGravar ? null : MensagemParNaoConfirmado;
+    public string? MensagemBloqueio => PodeGravar ? null : CasamentoComprovante.MensagemConfirmacaoObrigatoria;
 
-    public void GarantirAntesDeGravar()
+    public IReadOnlyList<ItemSaidaComprovante> ParaBarreira()
     {
-        if (!PodeGravar)
-            throw new InvalidOperationException(MensagemParNaoConfirmado);
+        var itens = new List<ItemSaidaComprovante>(_linhas.Count);
+        foreach (var linha in _linhas)
+            itens.Add(linha.ParaContrato());
+
+        return itens;
     }
 
     public void Confirmar(int indice)
@@ -237,6 +237,21 @@ public sealed class ConfirmacaoParProduto
             Nome = DescricaoLida;
             NaoIdentificado = true;
             Situacao = SituacaoPar.Desfeito;
+        }
+
+        internal ItemSaidaComprovante ParaContrato()
+        {
+            var contrato = new ItemSaidaComprovante
+            {
+                DescricaoLida = DescricaoLida,
+                ProdutoId = Situacao is SituacaoPar.SemPar or SituacaoPar.Desfeito ? null : ProdutoId,
+                Confianca = Confianca,
+                Pendente = Pendente
+            };
+
+            return Situacao is SituacaoPar.Confirmado or SituacaoPar.Trocado
+                ? contrato.Confirmar()
+                : contrato;
         }
 
         internal static ItemPar Criar(Entrada entrada, IReadOnlyList<ProdutoCesta> catalogo)

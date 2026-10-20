@@ -1,0 +1,114 @@
+@using OrcaFacil.Core.Llm
+
+@if (Pares.TemParNaoConfirmado)
+{
+    <div class="of-par-bloco">
+        <p class="of-par-secao">Confirme o produto de cada item.</p>
+        @for (var i = 0; i < Pares.Linhas.Count; i++)
+        {
+            var indice = i;
+            var par = Pares.Linhas[indice];
+            <ItemParPrevia Par="par" Catalogo="Catalogo"
+                           OnConfirmar="() => ConfirmarPar(indice)"
+                           OnTrocar="produto => AplicarTroca(indice, produto)"
+                           OnDesfazer="() => DesfazerPar(indice)" />
+        }
+    </div>
+}
+@if (Pares.MensagemBloqueio is not null)
+{
+    <p class="of-par-alerta of-previa-erro" role="alert">@Pares.MensagemBloqueio</p>
+}
+
+@code {
+    [Parameter] public ConfirmacaoParProduto Pares { get; set; } = null!;
+    [Parameter] public PreviaComprovante Previa { get; set; } = null!;
+    [Parameter] public IReadOnlyList<ProdutoCesta> Catalogo { get; set; } = [];
+    [Parameter] public IReadOnlyList<ProdutoCesta> Produtos { get; set; } = [];
+    [Parameter] public EventCallback<LinhaPreviaComprovante> OnLinhaDesfeita { get; set; }
+
+    private readonly Dictionary<int, Guid> _linhaPorPar = new();
+
+    protected override void OnInitialized()
+    {
+        var chaves = Previa.Linhas
+            .Select(linha => new ConfirmacaoParProduto.LinhaPreviaChave(linha.Id, linha.DescricaoLida, linha.ProdutoCestaId))
+            .ToList();
+        var ligacao = ConfirmacaoParProduto.Ligar(Pares.Linhas, chaves);
+        for (var i = 0; i < ligacao.Length; i++)
+        {
+            if (ligacao[i] is Guid id)
+                _linhaPorPar[i] = id;
+        }
+    }
+
+    public void TrocarProdutoDaLinha(LinhaPreviaComprovante linha, int produtoId)
+    {
+        foreach (var par in _linhaPorPar)
+        {
+            if (par.Value != linha.Id)
+                continue;
+
+            Pares.Trocar(par.Key, produtoId);
+        }
+    }
+
+    private void ConfirmarPar(int indice)
+    {
+        var par = Pares.Linhas[indice];
+        var linha = LinhaLigada(indice);
+        var produto = par.ProdutoId is int id ? Produto(id) : null;
+        Pares.Confirmar(indice);
+        if (linha is not null && produto is not null)
+            Previa.Classificar(linha, produto);
+    }
+
+    private void AplicarTroca(int indice, ProdutoCesta produto)
+    {
+        if (!Pares.Trocar(indice, produto.Id))
+            return;
+
+        var linha = LinhaLigada(indice);
+        if (linha is not null)
+            Previa.Classificar(linha, produto);
+    }
+
+    private void DesfazerPar(int indice)
+    {
+        Pares.Desfazer(indice);
+        if (_linhaPorPar.TryGetValue(indice, out var linhaId) && LinhaLiberada(linhaId))
+        {
+            var linha = Previa.Linhas.FirstOrDefault(item => item.Id == linhaId);
+            if (linha is not null)
+            {
+                ConfirmacaoParProduto.AplicarNaoIdentificado(linha);
+                _ = OnLinhaDesfeita.InvokeAsync(linha);
+            }
+        }
+    }
+
+    private LinhaPreviaComprovante? LinhaLigada(int indice) =>
+        _linhaPorPar.TryGetValue(indice, out var linhaId)
+            ? Previa.Linhas.FirstOrDefault(item => item.Id == linhaId)
+            : null;
+
+    private bool LinhaLiberada(Guid linhaId)
+    {
+        var alguma = false;
+        foreach (var par in _linhaPorPar)
+        {
+            if (par.Value != linhaId)
+                continue;
+
+            alguma = true;
+            if (!Pares.Linhas[par.Key].NaoIdentificado)
+                return false;
+        }
+
+        return alguma;
+    }
+
+    private ProdutoCesta? Produto(int id) =>
+        Catalogo.FirstOrDefault(produto => produto.Id == id)
+        ?? Produtos.FirstOrDefault(produto => produto.Id == id);
+}

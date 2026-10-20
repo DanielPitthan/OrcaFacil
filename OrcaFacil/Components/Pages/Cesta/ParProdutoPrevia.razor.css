@@ -1,0 +1,41 @@
+.of-par-bloco,
+.of-par-secao,
+.of-par-alerta {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.of-par-bloco {
+    padding: 4px 0 8px;
+    background-color: #ffffff;
+    color: #1E2A33;
+}
+
+.of-par-secao {
+    margin: 0;
+    padding: 8px 16px 0;
+    color: #1E2A33;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.4;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+:global(html.of-tema-claro) .of-par-bloco {
+    background-color: #ffffff;
+    color: #1E2A33;
+}
+
+:global(html.of-tema-claro) .of-par-secao {
+    color: #1E2A33;
+}
+
+:global(html.of-tema-escuro) .of-par-bloco {
+    background-color: #1B1F27;
+    color: #E8EAF0;
+}
+
+:global(html.of-tema-escuro) .of-par-secao {
+    color: #E8EAF0;
+}

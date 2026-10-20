@@ -51,68 +51,14 @@
                                   AriaMarcacao="AriaMarcacao" Marcador="Marcador" Destacado="Destacado"
                                   ConfirmadoVisual="ConfirmadoVisual" ComplementoAriaMenu="ComplementoAria"
                                   OnEditar="Editar" OnRemover="Remover" />
-                        @if (_pares.TemParNaoConfirmado)
-                        {
-                            <div class="of-par-bloco">
-                                <p class="of-par-secao">Confirme o produto de cada item.</p>
-                                @for (var i = 0; i < _pares.Linhas.Count; i++)
-                                {
-                                    var indice = i;
-                                    var par = _pares.Linhas[indice];
-                                    if (par.AguardandoConfirmacao)
-                                    {
-                                        <div class="of-par@(par.DestacarRevisao ? " of-par-revisar" : null)">
-                                            <p class="of-par-nome">@par.NomeExibido</p>
-                                            @if (!string.IsNullOrEmpty(par.DescricaoLida))
-                                            {
-                                                <p class="of-par-lido">@par.DescricaoLida</p>
-                                            }
-                                            @if (par.TextoConfianca is not null)
-                                            {
-                                                <p class="of-par-confianca">@par.TextoConfianca</p>
-                                            }
-                                            @if (par.DestacarRevisao)
-                                            {
-                                                <p class="of-par-revisao">Revisar</p>
-                                            }
-                                            <div class="of-par-acoes">
-                                                <button type="button" class="of-par-botao" @onclick="() => ConfirmarPar(indice)">Confirmar</button>
-                                                <button type="button" class="of-par-botao" @onclick="() => AbrirTroca(indice)">Trocar</button>
-                                                <button type="button" class="of-par-botao" @onclick="() => DesfazerPar(indice)">Desfazer</button>
-                                            </div>
-                                            @if (_troca == indice)
-                                            {
-                                                @if (!_catalogo.Any())
-                                                {
-                                                    <p class="of-par-lido">Nenhum produto cadastrado.</p>
-                                                }
-                                                else
-                                                {
-                                                    <div class="of-par-opcoes">
-                                                        @foreach (var produto in _catalogo)
-                                                        {
-                                                            <button type="button" class="of-previa-opcao" @onclick="() => AplicarTroca(indice, produto)">
-                                                                @produto.Nome
-                                                            </button>
-                                                        }
-                                                    </div>
-                                                }
-                                            }
-                                        </div>
-                                    }
-                                }
-                            </div>
-                        }
+                        <ParProdutoPrevia @ref="_parUi" Pares="_pares" Previa="Previa" Catalogo="_catalogo" Produtos="Produtos"
+                                          OnLinhaDesfeita="FecharSeEditando" />
                     </FormSection>
                 </div>
 
                 @if (Previa.MensagemBloqueio is not null)
                 {
                     <p id="previa-motivo-bloqueio" class="of-previa-erro" role="alert">@Previa.MensagemBloqueio</p>
-                }
-                @if (_pares.MensagemBloqueio is not null)
-                {
-                    <p class="of-par-alerta of-previa-erro" role="alert">@_pares.MensagemBloqueio</p>
                 }
             </div>
         </div>
@@ -164,11 +110,10 @@
     [Parameter] public IReadOnlyList<ItemSaidaComprovante> Saidas { get; set; } = [];
 
     private readonly List<ProdutoCesta> _catalogo = [];
-    private readonly Dictionary<int, Guid> _linhaPorPar = new();
     private ConfirmacaoParProduto _pares = ConfirmacaoParProduto.Criar(
         Array.Empty<ConfirmacaoParProduto.Entrada>(),
         Array.Empty<ProdutoCesta>());
-    private int? _troca;
+    private ParProdutoPrevia? _parUi;
     private LinhaPreviaComprovante? _editando;
     private bool _sheetAberto;
     private bool _confirmando;
@@ -190,15 +135,6 @@
                 saida.Pendente,
                 saida.DescricaoLida)).ToList(),
             Produtos);
-        var chaves = Previa.Linhas
-            .Select(linha => new ConfirmacaoParProduto.LinhaPreviaChave(linha.Id, linha.DescricaoLida, linha.ProdutoCestaId))
-            .ToList();
-        var ligacao = ConfirmacaoParProduto.Ligar(_pares.Linhas, chaves);
-        for (var i = 0; i < ligacao.Length; i++)
-        {
-            if (ligacao[i] is Guid id)
-                _linhaPorPar[i] = id;
-        }
     }
 
     private bool PodeGravarCompra => Previa.PodeConfirmar && _pares.PodeGravar;
@@ -305,7 +241,7 @@
         if (_editando.ProdutoCestaId != produto.Id)
         {
             Previa.Classificar(_editando, produto);
-            TrocarParesDaLinha(_editando, produto.Id);
+            _parUi?.TrocarProdutoDaLinha(_editando, produto.Id);
         }
 
         Previa.AlterarPreco(_editando, _preco);
@@ -419,90 +355,14 @@
         }
     }
 
-    private void ConfirmarPar(int indice)
+    private void FecharSeEditando(LinhaPreviaComprovante linha)
     {
-        var par = _pares.Linhas[indice];
-        var linha = LinhaLigada(indice);
-        var produto = par.ProdutoId is int id ? Produto(id) : null;
-        _pares.Confirmar(indice);
-        if (linha is not null && produto is not null)
-            Previa.Classificar(linha, produto);
-
-        if (_troca == indice)
-            _troca = null;
-    }
-
-    private void AbrirTroca(int indice) => _troca = _troca == indice ? null : indice;
-
-    private void AplicarTroca(int indice, ProdutoCesta produto)
-    {
-        if (!_pares.Trocar(indice, produto.Id))
+        if (_editando != linha)
             return;
 
-        var linha = LinhaLigada(indice);
-        if (linha is not null)
-            Previa.Classificar(linha, produto);
-
-        _troca = null;
+        _editando = null;
+        _sheetAberto = false;
     }
-
-    private void DesfazerPar(int indice)
-    {
-        _pares.Desfazer(indice);
-        if (_linhaPorPar.TryGetValue(indice, out var linhaId) && LinhaLiberada(linhaId))
-        {
-            var linha = Previa.Linhas.FirstOrDefault(item => item.Id == linhaId);
-            if (linha is not null)
-            {
-                if (_editando == linha)
-                {
-                    _editando = null;
-                    _sheetAberto = false;
-                }
-
-                ConfirmacaoParProduto.AplicarNaoIdentificado(linha);
-            }
-        }
-
-        if (_troca == indice)
-            _troca = null;
-    }
-
-    private void TrocarParesDaLinha(LinhaPreviaComprovante linha, int produtoId)
-    {
-        foreach (var par in _linhaPorPar)
-        {
-            if (par.Value != linha.Id)
-                continue;
-
-            _pares.Trocar(par.Key, produtoId);
-        }
-    }
-
-    private LinhaPreviaComprovante? LinhaLigada(int indice) =>
-        _linhaPorPar.TryGetValue(indice, out var linhaId)
-            ? Previa.Linhas.FirstOrDefault(item => item.Id == linhaId)
-            : null;
-
-    private bool LinhaLiberada(Guid linhaId)
-    {
-        var alguma = false;
-        foreach (var par in _linhaPorPar)
-        {
-            if (par.Value != linhaId)
-                continue;
-
-            alguma = true;
-            if (!_pares.Linhas[par.Key].NaoIdentificado)
-                return false;
-        }
-
-        return alguma;
-    }
-
-    private ProdutoCesta? Produto(int id) =>
-        _catalogo.FirstOrDefault(produto => produto.Id == id)
-        ?? Produtos.FirstOrDefault(produto => produto.Id == id);
 
     private void DesfazerNovo()
     {
