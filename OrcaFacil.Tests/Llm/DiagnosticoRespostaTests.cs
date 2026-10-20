@@ -191,15 +191,17 @@ public class DiagnosticoRespostaTests
             "motivo",
             "end_turn",
             "stop",
-            @"erro\u0000linha\u2028fim",
+            @"erro\u0000linha\u2028fim\u2029\u005Cu0000\u005Cu2028\u005Cu2029",
             false,
             segredos: null);
 
         Assert.DoesNotContain("\0", diagnostico.Texto, StringComparison.Ordinal);
         Assert.DoesNotContain(@"\u0000", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"\u005C", diagnostico.Texto, StringComparison.Ordinal);
         Assert.DoesNotContain("\u2028", diagnostico.Texto, StringComparison.Ordinal);
         Assert.DoesNotContain(@"\u2028", diagnostico.Texto, StringComparison.Ordinal);
         Assert.DoesNotContain("\u2029", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"\u2029", diagnostico.Texto, StringComparison.Ordinal);
         Assert.Contains("erro", diagnostico.Texto, StringComparison.Ordinal);
         Assert.Contains("linha", diagnostico.Texto, StringComparison.Ordinal);
         var endpoints = diagnostico.Texto.Split('\n').Where(linha => linha.StartsWith("Endpoint:", StringComparison.Ordinal)).ToArray();

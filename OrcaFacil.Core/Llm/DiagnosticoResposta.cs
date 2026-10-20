@@ -267,16 +267,25 @@ public sealed class DiagnosticoResposta
 
     private static string DesescaparJson(string texto)
     {
-        var limpo = EscapeUnicode.Replace(texto, match =>
+        var limpo = texto;
+        for (var volta = 0; volta < 8; volta++)
         {
-            var codigo = Convert.ToInt32(match.Groups[1].Value, 16);
-            if (codigo is >= 0xD800 and <= 0xDFFF)
-                return " ";
+            var passo = EscapeUnicode.Replace(limpo, match =>
+            {
+                var codigo = Convert.ToInt32(match.Groups[1].Value, 16);
+                if (codigo is >= 0xD800 and <= 0xDFFF)
+                    return " ";
 
-            return char.ConvertFromUtf32(codigo);
-        });
+                return char.ConvertFromUtf32(codigo);
+            });
+            passo = passo.Replace("\\/", "/", StringComparison.Ordinal).Replace("\\\"", "\"", StringComparison.Ordinal);
+            if (passo == limpo)
+                break;
 
-        return limpo.Replace("\\/", "/", StringComparison.Ordinal).Replace("\\\"", "\"", StringComparison.Ordinal);
+            limpo = passo;
+        }
+
+        return limpo;
     }
 
     private static string JuntarQuebras(string texto)
