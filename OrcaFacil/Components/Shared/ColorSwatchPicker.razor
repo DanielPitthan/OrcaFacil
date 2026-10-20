@@ -6,7 +6,9 @@
              @onclick="() => Selecionar(cor)">
         </div>
     }
-    <MudColorPicker Value="@(new MudColor(Value))" ValueChanged="OnColorPickerChanged" Label="Outras cores" Style="width:180px" ShowAlpha="false" />
+    <div class="of-campo-paleta">
+        <MudColorPicker Value="@(new MudColor(Value))" ValueChanged="OnColorPickerChanged" Label="Outras cores" ShowAlpha="false" PickerVariant="PickerVariant.Dialog" />
+    </div>
 </div>
 
 @code {
