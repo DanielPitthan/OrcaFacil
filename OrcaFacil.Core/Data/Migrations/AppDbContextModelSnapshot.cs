@@ -460,8 +460,17 @@ namespace OrcaFacil.Core.Data.Migrations
                     b.Property<DateTime>("Data")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("HashImportacao")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("MembroFamiliaId")
                         .HasColumnType("INTEGER");
+
+                    b.Property<int>("Origem")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0);
 
                     b.Property<decimal>("PrecoUnitario")
                         .HasColumnType("TEXT");
@@ -473,6 +482,11 @@ namespace OrcaFacil.Core.Data.Migrations
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("HashImportacao")
+                        .IsUnique()
+                        .HasDatabaseName("IX_OperacoesAtivo_HashImportacao")
+                        .HasFilter("\"HashImportacao\" IS NOT NULL");
 
                     b.HasIndex("MembroFamiliaId");
 
@@ -654,6 +668,89 @@ namespace OrcaFacil.Core.Data.Migrations
                         });
                 });
 
+            modelBuilder.Entity("OrcaFacil.Core.Entities.RegraFiscal", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Codigo")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("EhSistema")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("Valor")
+                        .HasPrecision(18, 8)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("VigenciaFim")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("VigenciaInicio")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Codigo", "VigenciaInicio")
+                        .IsUnique()
+                        .HasDatabaseName("IX_RegrasFiscais_Codigo_VigenciaInicio");
+
+                    b.ToTable("RegrasFiscais");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Codigo = "RV.CustosReduzemResultado",
+                            EhSistema = true,
+                            Valor = 1m,
+                            VigenciaInicio = new DateTime(1995, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Codigo = "RV.CasasDecimaisResultado",
+                            EhSistema = true,
+                            Valor = 2m,
+                            VigenciaInicio = new DateTime(1995, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Codigo = "RV.Aliquota.Acao",
+                            EhSistema = true,
+                            Valor = 0.15m,
+                            VigenciaInicio = new DateTime(1995, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 4,
+                            Codigo = "RV.Aliquota.Fii",
+                            EhSistema = true,
+                            Valor = 0.20m,
+                            VigenciaInicio = new DateTime(1995, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 5,
+                            Codigo = "RV.Aliquota.Etf",
+                            EhSistema = true,
+                            Valor = 0.15m,
+                            VigenciaInicio = new DateTime(1995, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 6,
+                            Codigo = "RV.Aliquota.Bdr",
+                            EhSistema = true,
+                            Valor = 0.15m,
+                            VigenciaInicio = new DateTime(1995, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        });
+                });
+
             modelBuilder.Entity("OrcaFacil.Core.Entities.TituloRendaFixa", b =>
                 {
                     b.Property<int>("Id")
@@ -735,6 +832,9 @@ namespace OrcaFacil.Core.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("OperacaoAtivoId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int?>("OperacaoRendaFixaId")
                         .HasColumnType("INTEGER");
 
@@ -760,6 +860,10 @@ namespace OrcaFacil.Core.Data.Migrations
                     b.HasIndex("CategoriaId");
 
                     b.HasIndex("MembroFamiliaId");
+
+                    b.HasIndex("OperacaoAtivoId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Transacoes_OperacaoAtivoId");
 
                     b.HasIndex("OperacaoRendaFixaId")
                         .IsUnique()
@@ -940,6 +1044,11 @@ namespace OrcaFacil.Core.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("OrcaFacil.Core.Entities.OperacaoAtivo", "OperacaoAtivo")
+                        .WithMany()
+                        .HasForeignKey("OperacaoAtivoId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("OrcaFacil.Core.Entities.OperacaoRendaFixa", "OperacaoRendaFixa")
                         .WithMany()
                         .HasForeignKey("OperacaoRendaFixaId")
@@ -955,6 +1064,8 @@ namespace OrcaFacil.Core.Data.Migrations
                     b.Navigation("Categoria");
 
                     b.Navigation("MembroFamilia");
+
+                    b.Navigation("OperacaoAtivo");
 
                     b.Navigation("OperacaoRendaFixa");
 

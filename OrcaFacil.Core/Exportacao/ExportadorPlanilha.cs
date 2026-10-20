@@ -68,7 +68,8 @@ public static class ExportadorPlanilha
         new HashSet<string>(StringComparer.Ordinal)
         {
             nameof(AppDbContext.LogsEvento),
-            nameof(AppDbContext.RegrasCatalogoComprovante)
+            nameof(AppDbContext.RegrasCatalogoComprovante),
+            nameof(AppDbContext.RegrasFiscais)
         };
 
     private static readonly (PrazoAviso Flag, string Texto)[] TextosPrazo =

@@ -112,6 +112,7 @@ public static class MauiProgram
         builder.Services.AddScoped<IRelatorioService, RelatorioService>();
         builder.Services.AddScoped<ICsvExportService, CsvExportService>();
         builder.Services.AddScoped<IArmazenamentoService, ArmazenamentoService>();
+        builder.Services.AddSingleton<ResultadoRealizadoService>();
         builder.Services.AddScoped<IAtivoService, AtivoService>();
         builder.Services.AddScoped<IOperacaoAtivoService, OperacaoAtivoService>();
         builder.Services.AddScoped<ICestaService, CestaService>();

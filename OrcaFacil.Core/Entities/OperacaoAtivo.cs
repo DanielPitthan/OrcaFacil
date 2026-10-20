@@ -28,6 +28,15 @@ public class OperacaoAtivo
     [MaxLength(40)]
     public string? Corretora { get; set; }
 
+    public OrigemOperacaoAtivo Origem { get; set; } = OrigemOperacaoAtivo.Manual;
+
+    /// <summary>
+    /// Identidade da linha importada. Operação manual fica sem hash;
+    /// o índice único ignora nulos, então manual não colide com importada.
+    /// </summary>
+    [MaxLength(64)]
+    public string? HashImportacao { get; set; }
+
     public DateTime CriadoEm { get; set; } = DateTime.UtcNow;
     public DateTime? AtualizadoEm { get; set; }
 }

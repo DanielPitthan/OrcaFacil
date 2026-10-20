@@ -81,7 +81,7 @@ public class RegraSenhaEspelhoTests
         var versao = VersaoSchemaAplicacao.DoApp;
 
         Assert.Equal(versao.Migrations.Count, versao.Atual);
-        Assert.Equal("20261020135920_AddRegraCatalogoComprovante", versao.UltimaMigration);
+        Assert.Equal("20261020172344_AddResultadoRealizadoVariavel", versao.UltimaMigration);
         Assert.Equal(0, versao.Calcular([]));
         Assert.Equal(versao.Atual, versao.Calcular(versao.Migrations.ToList()));
         Assert.Equal(versao.Atual - 1, versao.Calcular(versao.Migrations.Take(versao.Atual - 1).ToList()));

@@ -11,15 +11,17 @@ public class OperacaoAtivoService : IOperacaoAtivoService
     private readonly IOperacaoAtivoRepository _operacoes;
     private readonly IPerfilContext _perfil;
     private readonly OperacaoCadastroService _cadastro;
+    private readonly ResultadoRealizadoService _resultado;
 
     public OperacaoAtivoService(
         IOperacaoAtivoRepository operacoes,
-        IAtivoFinanceiroRepository ativos,
-        IPerfilContext perfil)
+        IPerfilContext perfil,
+        ResultadoRealizadoService resultado)
     {
         _operacoes = operacoes;
         _perfil = perfil;
-        _cadastro = new OperacaoCadastroService(operacoes, ativos);
+        _cadastro = new OperacaoCadastroService(operacoes);
+        _resultado = resultado;
     }
 
     public Task<List<PosicaoAtivoDto>> ListarPosicaoAsync()
@@ -29,10 +31,10 @@ public class OperacaoAtivoService : IOperacaoAtivoService
         => _operacoes.ListarPorAtivoAsync(ativoId, MembroId());
 
     public Task SalvarAsync(OperacaoAtivoFormModel modelo)
-        => _cadastro.SalvarAsync(modelo, MembroId());
+        => _resultado.SalvarAsync(modelo, MembroId());
 
     public Task ExcluirAsync(int id)
-        => _cadastro.ExcluirAsync(id, MembroId());
+        => _resultado.ExcluirAsync(id, MembroId());
 
     private int MembroId()
         => _perfil.Atual?.Id ?? throw new InvalidOperationException("Nenhum perfil ativo.");

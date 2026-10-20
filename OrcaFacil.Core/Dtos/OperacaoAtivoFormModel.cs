@@ -25,4 +25,10 @@ public class OperacaoAtivoFormModel
 
     [MaxLength(40, ErrorMessage = "A corretora deve ter no máximo 40 caracteres")]
     public string? Corretora { get; set; }
+
+    public OrigemOperacaoAtivo Origem { get; set; } = OrigemOperacaoAtivo.Manual;
+
+    /// <summary>Na edição o serviço preserva o hash já gravado. Manual fica nulo.</summary>
+    [MaxLength(64)]
+    public string? HashImportacao { get; set; }
 }

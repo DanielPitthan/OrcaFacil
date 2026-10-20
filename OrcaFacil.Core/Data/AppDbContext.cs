@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using OrcaFacil.Core.Ativos;
 using OrcaFacil.Core.Entities;
+using OrcaFacil.Core.Enums;
 
 namespace OrcaFacil.Core.Data;
 
@@ -28,6 +30,7 @@ public class AppDbContext : DbContext
     public DbSet<TituloRendaFixa> TitulosRendaFixa => Set<TituloRendaFixa>();
     public DbSet<OperacaoRendaFixa> OperacoesRendaFixa => Set<OperacaoRendaFixa>();
     public DbSet<RegraCatalogoComprovante> RegrasCatalogoComprovante => Set<RegraCatalogoComprovante>();
+    public DbSet<RegraFiscal> RegrasFiscais => Set<RegraFiscal>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -78,6 +81,15 @@ public class AppDbContext : DbContext
             entity.HasIndex(t => t.OperacaoRendaFixaId)
                   .IsUnique()
                   .HasDatabaseName("IX_Transacoes_OperacaoRendaFixaId");
+
+            entity.HasOne(t => t.OperacaoAtivo)
+                  .WithMany()
+                  .HasForeignKey(t => t.OperacaoAtivoId)
+                  .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(t => t.OperacaoAtivoId)
+                  .IsUnique()
+                  .HasDatabaseName("IX_Transacoes_OperacaoAtivoId");
 
             entity.HasMany(t => t.Itens)
                   .WithOne(i => i.Transacao)
@@ -138,6 +150,14 @@ public class AppDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(o => o.MembroFamiliaId)
                   .OnDelete(DeleteBehavior.Restrict);
+
+            entity.Property(o => o.Origem).HasDefaultValue(OrigemOperacaoAtivo.Manual);
+
+            // Várias operações manuais, sem hash, continuam válidas: o único ignora nulos.
+            entity.HasIndex(o => o.HashImportacao)
+                  .IsUnique()
+                  .HasFilter("\"HashImportacao\" IS NOT NULL")
+                  .HasDatabaseName("IX_OperacoesAtivo_HashImportacao");
         });
 
         modelBuilder.Entity<ProdutoCesta>(entity =>
@@ -252,6 +272,16 @@ public class AppDbContext : DbContext
                 Id = 1,
                 LimiteProdutos = RegraCatalogoComprovante.LimitePadrao
             });
+        });
+
+        modelBuilder.Entity<RegraFiscal>(entity =>
+        {
+            entity.Property(r => r.Codigo).HasMaxLength(40);
+            entity.Property(r => r.Valor).HasPrecision(18, 8);
+            entity.HasIndex(r => new { r.Codigo, r.VigenciaInicio })
+                  .IsUnique()
+                  .HasDatabaseName("IX_RegrasFiscais_Codigo_VigenciaInicio");
+            entity.HasData(CatalogoRegrasFiscais.Linhas());
         });
     }
 }
