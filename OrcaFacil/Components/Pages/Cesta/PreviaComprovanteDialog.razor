@@ -227,7 +227,10 @@
 
             var modelo = Previa.IniciarCadastro(linha);
             if (modelo is null)
+            {
+                Snackbar.Add(ConfirmacaoCadastroProduto.MensagemFalha, Severity.Warning);
                 return;
+            }
 
             _sheetAberto = false;
             var parametros = new DialogParameters<ProdutoCestaDialog>
@@ -250,10 +253,12 @@
             {
                 Previa.ConfirmarCadastro(salvo, _preco, categoria);
             }
-            catch (InvalidOperationException ex)
+            catch (Exception ex)
             {
                 Previa.CancelarCadastro();
-                Snackbar.Add(ex.Message, Severity.Warning);
+                Snackbar.Add(
+                    string.IsNullOrWhiteSpace(ex.Message) ? ConfirmacaoCadastroProduto.MensagemFalha : ex.Message,
+                    Severity.Warning);
                 _editando = linha;
                 _sheetAberto = true;
                 return;

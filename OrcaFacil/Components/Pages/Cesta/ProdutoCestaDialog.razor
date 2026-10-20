@@ -3,11 +3,12 @@
         <MudForm @ref="_form">
             @if (!SomenteCategoria)
             {
-                <MudTextField @ref="_nome" T="string" @bind-Value="Modelo.Nome" Label="Produto"
-                              Required="true" RequiredError="Informe o nome" MaxLength="80" Class="mb-3" />
+                <MudTextField @ref="_nome" T="string" @bind-Value="_textoNome" Label="Produto"
+                              Required="true" RequiredError="Informe o nome do produto." MaxLength="80"
+                              Immediate="true" Class="mb-3" />
             }
             <MudSelect T="int" @bind-Value="Modelo.CategoriaId" Label="Categoria" Required="true"
-                       RequiredError="Selecione a categoria" Class="mb-3" AnchorOrigin="Origin.BottomCenter">
+                       RequiredError="Selecione a categoria do produto." Class="mb-3" AnchorOrigin="Origin.BottomCenter">
                 @foreach (var categoria in Categorias)
                 {
                     <MudSelectItem T="int" Value="@categoria.Id">@categoria.Icone @categoria.Nome</MudSelectItem>
@@ -16,6 +17,10 @@
             @if (Modelo.Id is not null)
             {
                 <MudCheckBox T="bool" @bind-Value="Modelo.Ativo" Label="Ativo" />
+            }
+            @if (!string.IsNullOrWhiteSpace(_erro))
+            {
+                <p class="of-previa-erro" role="alert">@_erro</p>
             }
         </MudForm>
     </DialogContent>
@@ -35,19 +40,40 @@
 
     private MudForm _form = null!;
     private MudTextField<string> _nome = null!;
+    private string? _textoNome;
+    private string? _erro;
+
+    protected override void OnInitialized()
+    {
+        _textoNome = Modelo.Nome;
+    }
 
     private async Task SalvarAsync()
     {
-        await _form.ValidateAsync();
-        if (Modelo.CategoriaId <= 0 || (!SomenteCategoria && !_form.IsValid))
+        try
         {
+            _erro = null;
             if (!SomenteCategoria)
+                Modelo.Nome = ConfirmacaoCadastroProduto.NomeParaSalvar(Modelo.Nome, _textoNome);
+
+            await _form.ValidateAsync();
+            _erro = ConfirmacaoCadastroProduto.Validar(Modelo.Nome, Modelo.CategoriaId, SomenteCategoria);
+            if (_erro is null && !SomenteCategoria && !_form.IsValid)
+                _erro = ConfirmacaoCadastroProduto.MensagemFalha;
+        }
+        catch (Exception ex)
+        {
+            _erro = string.IsNullOrWhiteSpace(ex.Message)
+                ? ConfirmacaoCadastroProduto.MensagemFalha
+                : ex.Message;
+        }
+
+        if (_erro is not null)
+        {
+            if (!SomenteCategoria && _nome is not null)
                 await _nome.FocusAsync();
             return;
         }
-
-        if (!SomenteCategoria)
-            Modelo.Nome = Modelo.Nome.Trim();
 
         MudDialog.Close(DialogResult.Ok(Modelo));
     }
