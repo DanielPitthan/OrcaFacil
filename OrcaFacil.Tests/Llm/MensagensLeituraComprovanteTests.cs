@@ -201,7 +201,8 @@ public class MensagensLeituraComprovanteTests
         var exibicao = MensagensLeituraComprovante.De(resultado, null);
 
         Assert.Equal(SituacaoLeituraComprovante.RespostaForaDoSchema, exibicao.Situacao);
-        Assert.Equal("resposta cortada", exibicao.Mensagem);
+        Assert.Equal("A resposta foi cortada por limite de tokens.", exibicao.Mensagem);
+        Assert.Contains("A resposta foi cortada por limite de tokens.", exibicao.Diagnostico!.Texto, StringComparison.Ordinal);
         Assert.Same(diagnostico, exibicao.Diagnostico);
         Assert.DoesNotContain(token, exibicao.Mensagem, StringComparison.Ordinal);
         Assert.DoesNotContain(token, exibicao.ToString(), StringComparison.Ordinal);

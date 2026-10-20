@@ -68,7 +68,7 @@ public sealed record ResultadoMensagem(
     public const string TextoModeloNaoInformado = "Informe o modelo.";
     public const string TextoUrlInvalida = "A URL da API precisa ser https, sem usuário nem parâmetros.";
     public const string TextoRespostaInvalida = "A resposta veio fora do formato esperado.";
-    public const string TextoRespostaCortada = "resposta cortada";
+    public const string TextoRespostaCortada = "A resposta foi cortada por limite de tokens.";
     public const string TextoSemRede = "Não foi possível conectar ao provedor.";
     public const string TextoFalha = "O provedor não concluiu a leitura.";
     public const string TextoConexaoOk = "A conexão com o provedor foi estabelecida.";

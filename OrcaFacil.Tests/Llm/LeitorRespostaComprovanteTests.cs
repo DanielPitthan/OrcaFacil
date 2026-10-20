@@ -566,7 +566,7 @@ public class LeitorRespostaComprovanteTests
 
         Assert.Null(leitura.Comprovante);
         Assert.Null(LeitorRespostaComprovante.Ler(json));
-        Assert.Equal("resposta cortada", leitura.Motivo);
+        Assert.Equal("A resposta foi cortada por limite de tokens.", leitura.Motivo);
         Assert.Equal(LeitorRespostaComprovante.MotivoCortada, leitura.Motivo);
         Assert.Equal("max_tokens", leitura.StopReason);
         Assert.Equal("length", leitura.FinishReason);

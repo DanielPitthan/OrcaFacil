@@ -26,9 +26,10 @@ public readonly record struct ConfiguracaoIaEfetiva(ProvedorIa? Provedor, string
 
 /// <summary>
 /// Chaves de Preferences e o padrão de cada chip.
-/// DeepSeek preenche URL, modelo e o rótulo DeepSeek Flash.
+/// A aba mostra Anthropic e Alibaba. DeepSeek fica só para quem já gravou esse provedor.
 /// Anthropic preenche URL, modelo e o rótulo Haiku 5.5.
-/// Alibaba não preenche URL nem modelo: a URL fica editável e o modelo é livre.
+/// Alibaba preenche a URL do Token Plan e o modelo padrão. Os dois campos continuam editáveis.
+/// A chamada usa a URL gravada no app. O cliente não tem endereço fixo.
 /// </summary>
 public static class ChipsInteligencia
 {
@@ -45,8 +46,17 @@ public static class ChipsInteligencia
     public const string ModeloAnthropic = PedidoMensagem.ModeloAnthropic;
     public const string RotuloAnthropic = "Haiku 5.5";
 
+    public const string UrlAlibaba = "https://token-plan.maas.qwencloudapi.com/apps/anthropic";
+    public const string UrlAlibabaAvulso = "https://maas.qwencloudapi.com/apps/anthropic";
+    public const string ModeloAlibaba = PedidoMensagem.ModeloAlibaba;
+
+    public const string TextoAjudaAlibaba =
+        "A chave do Token Plan (sk-sp-) só funciona em " + UrlAlibaba +
+        ". A chave pay-as-you-go (sk-) usa " + UrlAlibabaAvulso +
+        ". Modelos válidos, por exemplo: " + ModeloAlibaba + ", qwen3.7-flash, qwen3.7-plus, qwen3-vl-plus.";
+
     public static IReadOnlyList<ProvedorIa> Provedores { get; } =
-        [ProvedorIa.DeepSeek, ProvedorIa.Anthropic, ProvedorIa.Alibaba];
+        [ProvedorIa.Anthropic, ProvedorIa.Alibaba];
 
     public static IReadOnlyList<string> ChavesPreferencia { get; } =
         [ChaveUrl, ChaveModelo, ChaveProvedor, ChaveMaxTokens];
@@ -74,20 +84,20 @@ public static class ChipsInteligencia
     {
         ProvedorIa.DeepSeek => new(UrlDeepSeek, ModeloDeepSeek, RotuloDeepSeek),
         ProvedorIa.Anthropic => new(UrlAnthropic, ModeloAnthropic, RotuloAnthropic),
-        ProvedorIa.Alibaba => new(null, null, null),
+        ProvedorIa.Alibaba => new(UrlAlibaba, ModeloAlibaba, null),
         _ => throw new ArgumentOutOfRangeException(nameof(provedor))
     };
 
     /// <summary>
-    /// Sem provedor, URL e modelo salvos, o padrão efetivo é o DeepSeek.
+    /// Sem provedor, URL e modelo salvos, o padrão efetivo é o Alibaba.
     /// Qualquer um dos três preenchido permanece como foi gravado.
     /// </summary>
     public static ConfiguracaoIaEfetiva Efetiva(ProvedorIa? provedor, string? url, string? modelo)
     {
         if (provedor is null && string.IsNullOrWhiteSpace(url) && string.IsNullOrWhiteSpace(modelo))
         {
-            var padrao = Padrao(ProvedorIa.DeepSeek);
-            return new(ProvedorIa.DeepSeek, padrao.Url ?? "", padrao.Modelo ?? "");
+            var padrao = Padrao(ProvedorIa.Alibaba);
+            return new(ProvedorIa.Alibaba, padrao.Url ?? "", padrao.Modelo ?? "");
         }
 
         return new(provedor, url ?? "", modelo ?? "");

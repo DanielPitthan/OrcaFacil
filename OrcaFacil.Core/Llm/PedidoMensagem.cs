@@ -10,6 +10,13 @@ public static class PedidoMensagem
 {
     public const string ModeloAnthropic = "claude-haiku-5-5";
     public const string ModeloDeepSeek = "deepseek-flash";
+
+    /// <summary>
+    /// Modelo padrão do chip Alibaba na doc Anthropic-compatible da QwenCloud.
+    /// O pedido segue com ferramenta. Este id não aceita esquema JSON de saída.
+    /// </summary>
+    public const string ModeloAlibaba = "deepseek-v4.1-flash-1017";
+
     public const string NomeFerramenta = "registrar_comprovante";
 
     /// <summary>
