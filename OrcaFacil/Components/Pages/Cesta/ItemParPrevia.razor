@@ -8,11 +8,13 @@
     }
     <div class="of-par-acoes">
         <button type="button" class="of-par-botao" aria-expanded="@(_troca ? "true" : "false")"
+                aria-controls="@($"of-par-troca-{Linha.Id}")"
                 aria-label="@($"Trocar {Linha.Nome}")" @onclick="AbrirTroca">Trocar</button>
         <button type="button" class="of-par-botao" aria-label="@($"Desfazer {Linha.Nome}")" @onclick="Desfazer">Desfazer</button>
     </div>
     @if (_troca)
     {
+        <div id="@($"of-par-troca-{Linha.Id}")" class="of-par-painel">
         @if (!Catalogo.Any())
         {
             <p class="of-par-lido">Nenhum produto cadastrado.</p>
@@ -28,6 +30,7 @@
                 }
             </div>
         }
+        </div>
     }
 </div>
 

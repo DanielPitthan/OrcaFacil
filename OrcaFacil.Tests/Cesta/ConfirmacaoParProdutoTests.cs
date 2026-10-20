@@ -425,6 +425,31 @@ public class ConfirmacaoParProdutoTests : IDisposable
                 /* min-height: var(--of-touch); */
             """,
             StringComparison.Ordinal)));
+        Assert.False(OpcaoTemAlvo(cssOpcao.Replace(
+            """
+            .of-par-botao {
+                -webkit-appearance: none;
+                appearance: none;
+                flex: 1 1 5.5rem;
+                box-sizing: border-box;
+                min-height: var(--of-touch);
+            """,
+            """
+            .of-par-botao {
+                -webkit-appearance: none;
+                appearance: none;
+                flex: 1 1 5.5rem;
+                box-sizing: border-box;
+                min-height: 20px;
+            """,
+            StringComparison.Ordinal)));
+
+        var semControle = item.Replace(
+            "aria-controls=\"@($\"of-par-troca-{Linha.Id}\")\"",
+            "<!-- aria-controls=\"@($\"of-par-troca-{Linha.Id}\")\" -->",
+            StringComparison.Ordinal);
+        Assert.Contains("aria-controls", semControle, StringComparison.Ordinal);
+        Assert.False(ItemSoTroca(semControle));
 
         var semMarcar = dialog.Replace(
             "Previa.MarcarNaoPendentes()",
@@ -446,7 +471,7 @@ public class ConfirmacaoParProdutoTests : IDisposable
         var lista = Ler("OrcaFacil", "Components", "Shared", "ItemList.razor");
         var css = Ler("OrcaFacil", "Components", "Shared", "ItemList.razor.css");
         Assert.True(DestaqueNaLista(dialog, lista));
-        Assert.True(ChipCabeNaLista(css));
+        Assert.True(ChipCabeNaLista(css, lista));
 
         var semDestacado = dialog.Replace(
             "Destacado=\"Destacado\"",
@@ -472,13 +497,13 @@ public class ConfirmacaoParProdutoTests : IDisposable
             "white-space: normal;\n    /* white-space: nowrap; */",
             StringComparison.Ordinal);
         Assert.Contains("nowrap", comentarioNowrap, StringComparison.Ordinal);
-        Assert.True(ChipCabeNaLista(comentarioNowrap));
+        Assert.True(ChipCabeNaLista(comentarioNowrap, lista));
 
         var comNowrap = css.Replace(
             "white-space: normal;",
             "white-space: nowrap;",
             StringComparison.Ordinal);
-        Assert.False(ChipCabeNaLista(comNowrap));
+        Assert.False(ChipCabeNaLista(comNowrap, lista));
 
         var semToque = css.Replace(
             """
@@ -494,17 +519,17 @@ public class ConfirmacaoParProdutoTests : IDisposable
                 /* height: var(--of-touch); */
             """,
             StringComparison.Ordinal);
-        Assert.False(ChipCabeNaLista(semToque));
+        Assert.False(ChipCabeNaLista(semToque, lista));
 
         var semFundo = css.Replace(
             "background: #9B2C3A;",
             "/* background: #9B2C3A; */",
             StringComparison.Ordinal);
-        Assert.False(ChipCabeNaLista(semFundo));
+        Assert.False(ChipCabeNaLista(semFundo, lista));
         Assert.False(ChipCabeNaLista(css.Replace(
             "background: #F59A9A;",
             "background: #1B1F27;",
-            StringComparison.Ordinal)));
+            StringComparison.Ordinal), lista));
         Assert.False(ChipCabeNaLista(css.Replace(
             """
                 background: #9B2C3A;
@@ -514,7 +539,28 @@ public class ConfirmacaoParProdutoTests : IDisposable
                 background: #9B2C3A;
                 color: #9B2C3A;
             """,
-            StringComparison.Ordinal)));
+            StringComparison.Ordinal), lista));
+
+        var semQuebra = css.Replace(
+            "white-space: normal;\n    overflow-wrap: anywhere;",
+            "white-space: normal;",
+            StringComparison.Ordinal);
+        Assert.False(ChipCabeNaLista(semQuebra, lista));
+        var quebraComentada = css.Replace(
+            "overflow-wrap: anywhere;",
+            "/* overflow-wrap: anywhere; */",
+            StringComparison.Ordinal);
+        Assert.Contains("overflow-wrap: anywhere;", quebraComentada, StringComparison.Ordinal);
+        Assert.False(ChipCabeNaLista(quebraComentada, lista));
+
+        var inicioTitulo = lista.IndexOf("<span class=\"of-lista-titulo", StringComparison.Ordinal);
+        var inicioChip = lista.IndexOf("@if (!string.IsNullOrEmpty(marcador))", inicioTitulo, StringComparison.Ordinal);
+        var fimChip = lista.IndexOf("<span class=\"of-lista-sub\"", inicioChip, StringComparison.Ordinal);
+        var chipAntes = lista[..inicioTitulo]
+            + lista[inicioChip..fimChip]
+            + lista[inicioTitulo..inicioChip]
+            + lista[fimChip..];
+        Assert.False(ChipCabeNaLista(css, chipAntes));
     }
 
     public void Dispose() => _factory.Dispose();
@@ -607,6 +653,7 @@ public class ConfirmacaoParProdutoTests : IDisposable
         var regra = Regra(limpo, "button.of-par-opcao");
         return regra.Contains("width: 100%;", StringComparison.Ordinal)
             && regra.Contains("min-height: var(--of-touch);", StringComparison.Ordinal)
+            && Regras(limpo, ".of-par-botao").Exists(bloco => bloco.Contains("min-height: var(--of-touch);", StringComparison.Ordinal))
             && Contraste("#1E2A33", "#ffffff") >= 4.5
             && Contraste("#E8EAF0", "#1B1F27") >= 4.5;
     }
@@ -662,6 +709,8 @@ public class ConfirmacaoParProdutoTests : IDisposable
         return limpo.Contains(">Trocar</button>", StringComparison.Ordinal)
             && limpo.Contains(">Desfazer</button>", StringComparison.Ordinal)
             && limpo.Contains("aria-expanded=\"@(_troca ? \"true\" : \"false\")\"", StringComparison.Ordinal)
+            && limpo.Contains("aria-controls=\"@($\"of-par-troca-{Linha.Id}\")\"", StringComparison.Ordinal)
+            && limpo.Contains("id=\"@($\"of-par-troca-{Linha.Id}\")\"", StringComparison.Ordinal)
             && limpo.Contains("aria-label=\"@($\"Trocar {Linha.Nome}\")\"", StringComparison.Ordinal)
             && limpo.Contains("aria-label=\"@($\"Desfazer {Linha.Nome}\")\"", StringComparison.Ordinal)
             && limpo.Contains("class=\"of-par-opcao\"", StringComparison.Ordinal);
@@ -702,6 +751,19 @@ public class ConfirmacaoParProdutoTests : IDisposable
             && Contraste("#F59A9A", "#1B1F27") >= 4.5;
     }
 
+    private static bool ChipNaSegundaLinha(string lista)
+    {
+        var limpo = SemComentarios(lista);
+        var texto = limpo.IndexOf("class=\"of-lista-texto\"", StringComparison.Ordinal);
+        if (texto < 0)
+            return false;
+
+        var titulo = limpo.IndexOf("of-lista-titulo", texto, StringComparison.Ordinal);
+        var chip = titulo < 0 ? -1 : limpo.IndexOf("of-lista-chip", titulo, StringComparison.Ordinal);
+        var sub = chip < 0 ? -1 : limpo.IndexOf("class=\"of-lista-sub\"", chip, StringComparison.Ordinal);
+        return titulo > texto && chip > titulo && sub > chip;
+    }
+
     private static bool DestaqueNaLista(string dialog, string lista)
     {
         var dialogo = SemComentarios(dialog);
@@ -711,7 +773,7 @@ public class ConfirmacaoParProdutoTests : IDisposable
             && componente.Contains("of-lista-chip-pendente", StringComparison.Ordinal);
     }
 
-    private static bool ChipCabeNaLista(string css)
+    private static bool ChipCabeNaLista(string css, string lista)
     {
         var limpo = SemComentarios(css);
         if (limpo.Contains(":focus-visible", StringComparison.Ordinal) || limpo.Contains(":has(", StringComparison.Ordinal))
@@ -725,6 +787,14 @@ public class ConfirmacaoParProdutoTests : IDisposable
             || !marca.Contains("height: var(--of-touch);", StringComparison.Ordinal))
             return false;
         if (chip.Contains("nowrap", StringComparison.Ordinal))
+            return false;
+        var normal = chip.IndexOf("white-space: normal;", StringComparison.Ordinal);
+        var quebra = chip.IndexOf("overflow-wrap: anywhere;", StringComparison.Ordinal);
+        if (normal < 0 || quebra < normal)
+            return false;
+        if (!string.IsNullOrWhiteSpace(chip[(normal + "white-space: normal;".Length)..quebra]))
+            return false;
+        if (!ChipNaSegundaLinha(lista))
             return false;
 
         var pendentes = Regras(limpo, ".of-lista-chip-pendente");
