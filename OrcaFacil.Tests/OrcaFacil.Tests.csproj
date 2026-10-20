@@ -23,4 +23,8 @@
     <ProjectReference Include="..\OrcaFacil.Core\OrcaFacil.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="Fixtures\B3\extrato-b3-modelo.csv" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
