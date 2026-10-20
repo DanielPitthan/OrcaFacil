@@ -107,6 +107,27 @@ public static class MensagensLeituraComprovante
         !string.IsNullOrWhiteSpace(modelo) &&
         !string.IsNullOrWhiteSpace(chave);
 
+    /// <summary>
+    /// Nulo quando a leitura pode começar. Chave vazia ou só com espaços pede a chave.
+    /// Sem URL ou modelo, a frase genérica. Não guarda a chave.
+    /// </summary>
+    public static ExibicaoLeituraComprovante? ImpedimentoParaLer(string? url, string? modelo, string? chave)
+    {
+        if (string.IsNullOrWhiteSpace(chave))
+        {
+            return De(
+                ResultadoMensagem.Falha(
+                    TipoResultadoMensagem.PedidoInvalido,
+                    ResultadoMensagem.TextoChaveNaoInformada),
+                null);
+        }
+
+        if (!TemUrlModeloEChave(url, modelo, chave))
+            return SemConfiguracao();
+
+        return null;
+    }
+
     public static ExibicaoLeituraComprovante De(ResultadoMensagem resultado, ComprovanteNormalizado? normalizado)
     {
         ArgumentNullException.ThrowIfNull(resultado);
@@ -115,6 +136,15 @@ public static class MensagensLeituraComprovante
         {
             case TipoResultadoMensagem.Ok:
                 return DeSucesso(normalizado);
+            case TipoResultadoMensagem.NaoAutorizado
+                when resultado.Mensagem == ResultadoMensagem.TextoChaveNaoInformada:
+            case TipoResultadoMensagem.PedidoInvalido
+                when resultado.Mensagem == ResultadoMensagem.TextoChaveNaoInformada:
+                return Erro(
+                    SituacaoLeituraComprovante.SemUrlModeloOuChave,
+                    ResultadoMensagem.TextoChaveNaoInformada,
+                    true,
+                    resultado.Diagnostico);
             case TipoResultadoMensagem.NaoAutorizado:
                 return Erro(SituacaoLeituraComprovante.NaoAutorizado, ResultadoMensagem.TextoNaoAutorizado, false, resultado.Diagnostico);
             case TipoResultadoMensagem.SemPermissao:
@@ -148,8 +178,7 @@ public static class MensagensLeituraComprovante
             case TipoResultadoMensagem.PedidoInvalido
                 when resultado.Mensagem is ResultadoMensagem.TextoUrlNaoInformada
                     or ResultadoMensagem.TextoUrlInvalida
-                    or ResultadoMensagem.TextoModeloNaoInformado
-                    or ResultadoMensagem.TextoChaveNaoInformada:
+                    or ResultadoMensagem.TextoModeloNaoInformado:
                 return SemConfiguracao();
             case TipoResultadoMensagem.PedidoInvalido:
                 return Erro(

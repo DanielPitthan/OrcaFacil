@@ -70,6 +70,24 @@ public class MensagensLeituraComprovanteTests
         Assert.DoesNotContain(Chave, exibicao.Mensagem, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(TipoResultadoMensagem.NaoAutorizado)]
+    [InlineData(TipoResultadoMensagem.PedidoInvalido)]
+    public void ChaveAusente_MostraInformeAChave_ENaoARecusa(TipoResultadoMensagem tipo)
+    {
+        var resultado = ResultadoMensagem.Falha(tipo, ResultadoMensagem.TextoChaveNaoInformada);
+
+        var exibicao = MensagensLeituraComprovante.De(resultado, null);
+
+        Assert.Equal(ResultadoMensagem.TextoChaveNaoInformada, exibicao.Mensagem);
+        Assert.Equal("Informe a chave da API.", exibicao.Mensagem);
+        Assert.NotEqual(ResultadoMensagem.TextoNaoAutorizado, exibicao.Mensagem);
+        Assert.NotEqual(MensagensLeituraComprovante.TextoSemUrlModeloOuChave, exibicao.Mensagem);
+        Assert.Equal(SituacaoLeituraComprovante.SemUrlModeloOuChave, exibicao.Situacao);
+        Assert.True(exibicao.LevaParaInteligenciaArtificial);
+        Assert.DoesNotContain(Chave, exibicao.Mensagem, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void SemRede_TempoEsgotado_E401_UsamAsFrasesDoCliente()
     {

@@ -46,6 +46,8 @@ public class ClienteMensagensTests
         Assert.Equal("claude-haiku-5-5", PedidoMensagem.ModeloAnthropic);
         Assert.Equal(PedidoMensagem.ModeloAnthropic, raiz.GetProperty("model").GetString());
         Assert.Equal(PedidoMensagem.MaxTokens, raiz.GetProperty("max_tokens").GetInt32());
+        Assert.False(raiz.TryGetProperty("thinking", out _));
+        Assert.DoesNotContain("\"thinking\"", captura.Corpo, StringComparison.Ordinal);
         AssertSemAmostragem(raiz);
 
         var mensagens = raiz.GetProperty("messages");
@@ -395,6 +397,7 @@ public class ClienteMensagensTests
 
         var resultado = await cliente.LerComprovanteAsync(Base, Chave, "deepseek-v4-flash", Midia, Imagem);
 
+        Assert.Equal(1, captura.Chamadas);
         Assert.Equal(TipoResultadoMensagem.RespostaInvalida, resultado.Tipo);
         Assert.Equal(ResultadoMensagem.TextoRespostaCortada, resultado.Mensagem);
         Assert.Null(resultado.Comprovante);
@@ -525,9 +528,57 @@ public class ClienteMensagensTests
         var injetada = await cliente.LerComprovanteAsync(Base, "chave\r\nX-Extra: 1", PedidoMensagem.ModeloAnthropic, Midia, Imagem);
 
         Assert.Equal(0, captura.Chamadas);
-        Assert.Equal(TipoResultadoMensagem.NaoAutorizado, vazia.Tipo);
+        Assert.Equal(ResultadoMensagem.TextoChaveNaoInformada, vazia.Mensagem);
+        Assert.Equal("Informe a chave da API.", vazia.Mensagem);
+        Assert.NotEqual(ResultadoMensagem.TextoNaoAutorizado, vazia.Mensagem);
         Assert.Equal(TipoResultadoMensagem.NaoAutorizado, injetada.Tipo);
+        Assert.Equal(ResultadoMensagem.TextoNaoAutorizado, injetada.Mensagem);
         Assert.DoesNotContain("X-Extra", injetada.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Leitura_ChaveAusente_MostraInformeAChave(string? chave)
+    {
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, CorpoValido()));
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.LerComprovanteAsync(Base, chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
+        var exibicao = MensagensLeituraComprovante.De(resultado, null);
+
+        Assert.Equal(0, captura.Chamadas);
+        Assert.Equal(ResultadoMensagem.TextoChaveNaoInformada, resultado.Mensagem);
+        Assert.Equal("Informe a chave da API.", resultado.Mensagem);
+        Assert.Equal("Informe a chave da API.", exibicao.Mensagem);
+        Assert.NotEqual(ResultadoMensagem.TextoNaoAutorizado, resultado.Mensagem);
+        Assert.NotEqual(ResultadoMensagem.TextoNaoAutorizado, exibicao.Mensagem);
+        Assert.NotEqual(MensagensLeituraComprovante.TextoSemUrlModeloOuChave, exibicao.Mensagem);
+    }
+
+    [Fact]
+    public async Task SemPreferencia_LeituraUsaUrlEModeloDeepSeek()
+    {
+        var efetiva = ChipsInteligencia.Efetiva(null, "", "");
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, CorpoValido()));
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.LerComprovanteAsync(
+            efetiva.Url,
+            Chave,
+            efetiva.Modelo,
+            Midia,
+            Imagem);
+
+        Assert.True(resultado.Sucesso);
+        Assert.Equal(1, captura.Chamadas);
+        Assert.Equal("https://api.deepseek.com/anthropic/v1/messages", captura.Uri);
+        Assert.Equal(PedidoMensagem.ModeloDeepSeek, efetiva.Modelo);
+
+        using var doc = JsonDocument.Parse(captura.Corpo);
+        Assert.Equal(PedidoMensagem.ModeloDeepSeek, doc.RootElement.GetProperty("model").GetString());
+        Assert.Equal("disabled", doc.RootElement.GetProperty("thinking").GetProperty("type").GetString());
     }
 
     [Theory]
@@ -893,12 +944,94 @@ public class ClienteMensagensTests
         Assert.False(raiz.TryGetProperty("system", out _));
         Assert.False(raiz.TryGetProperty("tools", out _));
         Assert.False(raiz.TryGetProperty("tool_choice", out _));
+        Assert.False(raiz.TryGetProperty("thinking", out _));
+        Assert.DoesNotContain("\"thinking\"", captura.Corpo, StringComparison.Ordinal);
         AssertSemAmostragem(raiz);
 
         var mensagem = Assert.Single(raiz.GetProperty("messages").EnumerateArray());
         Assert.Equal("user", mensagem.GetProperty("role").GetString());
         Assert.Equal("ping", mensagem.GetProperty("content").GetString());
         Assert.DoesNotContain("image", captura.Corpo, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("https://api.deepseek.com/anthropic", "deepseek-flash", true)]
+    [InlineData("https://API.DEEPSEEK.COM/anthropic", "deepseek-flash", true)]
+    [InlineData("https://api.anthropic.com", "claude-haiku-5-5", false)]
+    [InlineData("https://dashscope.aliyuncs.com", "deepseek-flash", false)]
+    [InlineData("https://api.deepseek.com.evil.com", "deepseek-flash", false)]
+    public async Task Leitura_ThinkingSoNoHostDeepSeek_MantemToolChoiceEChave(
+        string url,
+        string modelo,
+        bool desliga)
+    {
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, CorpoValido()));
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.LerComprovanteAsync(url, Chave, modelo, Midia, Imagem);
+
+        Assert.True(resultado.Sucesso);
+        Assert.Equal(1, captura.Chamadas);
+        Assert.Equal(Chave, captura.Chave);
+        Assert.Equal("x-api-key", ClienteMensagens.CabecalhoChave);
+        Assert.Equal(ClienteMensagens.VersaoAnthropic, captura.Versao);
+        Assert.DoesNotContain(Chave, captura.Corpo, StringComparison.Ordinal);
+        Assert.DoesNotContain(Chave, captura.Uri, StringComparison.Ordinal);
+
+        using var doc = JsonDocument.Parse(captura.Corpo);
+        var raiz = doc.RootElement;
+        Assert.Equal(modelo, raiz.GetProperty("model").GetString());
+        Assert.Equal(PedidoMensagem.MaxTokens, raiz.GetProperty("max_tokens").GetInt32());
+        var escolha = raiz.GetProperty("tool_choice");
+        Assert.Equal("tool", escolha.GetProperty("type").GetString());
+        Assert.Equal(PedidoMensagem.NomeFerramenta, escolha.GetProperty("name").GetString());
+        AssertThinking(raiz, captura.Corpo, desliga);
+    }
+
+    [Theory]
+    [InlineData("https://api.deepseek.com/anthropic/", true)]
+    [InlineData("https://API.DEEPSEEK.COM/anthropic", true)]
+    [InlineData("https://api.anthropic.com/", false)]
+    [InlineData("https://dashscope.aliyuncs.com", false)]
+    [InlineData("https://api.deepseek.com.evil.com/anthropic", false)]
+    public async Task TesteDeConexao_ThinkingSegueOHost(string url, bool desliga)
+    {
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, "ok"));
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.TestarConexaoAsync(url, Chave, "  " + PedidoMensagem.ModeloDeepSeek + "  ");
+
+        Assert.True(resultado.Sucesso);
+        Assert.Equal(1, captura.Chamadas);
+        Assert.Equal(Chave, captura.Chave);
+        Assert.Equal("x-api-key", ClienteMensagens.CabecalhoChave);
+        Assert.Equal(ClienteMensagens.VersaoAnthropic, captura.Versao);
+        Assert.DoesNotContain(Chave, captura.Corpo, StringComparison.Ordinal);
+
+        using var doc = JsonDocument.Parse(captura.Corpo);
+        var raiz = doc.RootElement;
+        Assert.Equal(PedidoMensagem.ModeloDeepSeek, raiz.GetProperty("model").GetString());
+        Assert.Equal(1, raiz.GetProperty("max_tokens").GetInt32());
+        Assert.False(raiz.TryGetProperty("tools", out _));
+        Assert.False(raiz.TryGetProperty("tool_choice", out _));
+        Assert.False(raiz.TryGetProperty("system", out _));
+        AssertThinking(raiz, captura.Corpo, desliga);
+    }
+
+    private static void AssertThinking(JsonElement raiz, string corpo, bool desliga)
+    {
+        if (!desliga)
+        {
+            Assert.False(raiz.TryGetProperty("thinking", out _));
+            Assert.DoesNotContain("\"thinking\"", corpo, StringComparison.Ordinal);
+            return;
+        }
+
+        var thinking = raiz.GetProperty("thinking");
+        Assert.Equal(JsonValueKind.Object, thinking.ValueKind);
+        Assert.Equal("disabled", thinking.GetProperty("type").GetString());
+        Assert.Equal(["type"], thinking.EnumerateObject().Select(p => p.Name).ToArray());
+        Assert.Contains("\"type\":\"disabled\"", corpo, StringComparison.Ordinal);
     }
 
     [Fact]

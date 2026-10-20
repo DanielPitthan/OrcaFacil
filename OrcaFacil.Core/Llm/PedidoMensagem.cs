@@ -9,6 +9,7 @@ namespace OrcaFacil.Core.Llm;
 public static class PedidoMensagem
 {
     public const string ModeloAnthropic = "claude-haiku-5-5";
+    public const string ModeloDeepSeek = "deepseek-flash";
     public const string NomeFerramenta = "registrar_comprovante";
 
     /// <summary>
@@ -130,7 +131,12 @@ public static class PedidoMensagem
         return new Uri(prefixo + "/v1/messages", UriKind.Absolute);
     }
 
-    public static string Montar(string modelo, string tipoMidia, string imagemBase64, int maxTokens = MaxTokens)
+    public static string Montar(
+        string modelo,
+        string tipoMidia,
+        string imagemBase64,
+        int maxTokens = MaxTokens,
+        ModoThinking thinking = ModoThinking.NaoEnviar)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(modelo);
         ArgumentException.ThrowIfNullOrWhiteSpace(tipoMidia);
@@ -187,6 +193,7 @@ public static class PedidoMensagem
             }
         };
 
+        AplicarThinking(raiz, thinking);
         return raiz.ToJsonString();
     }
 
@@ -194,7 +201,7 @@ public static class PedidoMensagem
     /// Pedido mínimo de <c>POST /v1/messages</c> para testar a conexão.
     /// Sem imagem, sem ferramenta e sem a chave.
     /// </summary>
-    public static string MontarTesteConexao(string modelo)
+    public static string MontarTesteConexao(string modelo, ModoThinking thinking = ModoThinking.NaoEnviar)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(modelo);
 
@@ -212,6 +219,28 @@ public static class PedidoMensagem
             }
         };
 
+        AplicarThinking(raiz, thinking);
         return raiz.ToJsonString();
+    }
+
+    /// <summary>
+    /// <see cref="ModoThinking.Desligar"/> escreve <c>thinking.type=disabled</c>.
+    /// <see cref="ModoThinking.NaoEnviar"/> omite a propriedade, inclusive como null.
+    /// </summary>
+    private static void AplicarThinking(JsonObject raiz, ModoThinking thinking)
+    {
+        switch (thinking)
+        {
+            case ModoThinking.NaoEnviar:
+                return;
+            case ModoThinking.Desligar:
+                raiz["thinking"] = new JsonObject
+                {
+                    ["type"] = "disabled"
+                };
+                return;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(thinking));
+        }
     }
 }

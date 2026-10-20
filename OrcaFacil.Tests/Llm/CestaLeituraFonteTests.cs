@@ -1,3 +1,5 @@
+using OrcaFacil.Core.Llm;
+
 namespace OrcaFacil.Tests.Llm;
 
 public class CestaLeituraFonteTests
@@ -53,6 +55,14 @@ public class CestaLeituraFonteTests
 
         Assert.Contains("Configuracao.UrlInteligencia", enviar, StringComparison.Ordinal);
         Assert.Contains("Configuracao.ModeloInteligencia", enviar, StringComparison.Ordinal);
+        Assert.Contains("ChipsInteligencia.Efetiva(", enviar, StringComparison.Ordinal);
+        Assert.Contains("efetiva.Url", enviar, StringComparison.Ordinal);
+        Assert.Contains("efetiva.Modelo", enviar, StringComparison.Ordinal);
+
+        var configurada = ExtrairBloco(pagina, "Task<ExibicaoLeituraComprovante?> TemConfiguracaoAsync()");
+        Assert.Contains("ChipsInteligencia.Efetiva(", configurada, StringComparison.Ordinal);
+        Assert.Contains("efetiva.Url", configurada, StringComparison.Ordinal);
+        Assert.Contains("efetiva.Modelo", configurada, StringComparison.Ordinal);
         Assert.Contains("Configuracao.MaxTokensInteligencia", enviar, StringComparison.Ordinal);
         Assert.Contains("PreparoFotoComprovante.EscolherMediaType(jpeg)", enviar, StringComparison.Ordinal);
         Assert.True(recusa >= 0);
@@ -76,6 +86,87 @@ public class CestaLeituraFonteTests
         var acima = capturar.IndexOf("MensagensLeituraComprovante.FotoAcimaDoTeto()", StringComparison.Ordinal);
         var envio = capturar.IndexOf("EnviarJpegAsync(", StringComparison.Ordinal);
         Assert.True(acima >= 0 && acima < envio);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ChaveVaziaNaLeitura_MostraInformeAChave(string? chave)
+    {
+        Assert.True(string.IsNullOrWhiteSpace(chave));
+        Assert.Equal("Informe a chave da API.", ResultadoMensagem.TextoChaveNaoInformada);
+
+        var exibicao = MensagensLeituraComprovante.De(
+            ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoChaveNaoInformada),
+            null);
+        Assert.Equal("Informe a chave da API.", exibicao.Mensagem);
+        Assert.Equal(ResultadoMensagem.TextoChaveNaoInformada, exibicao.Mensagem);
+        Assert.NotEqual(MensagensLeituraComprovante.TextoSemUrlModeloOuChave, exibicao.Mensagem);
+
+        var pagina = File.ReadAllText(Path.Combine(
+            EncontrarRaiz(), "OrcaFacil", "Components", "Pages", "Cesta", "CestaPage.razor"));
+        var enviar = ExtrairBloco(pagina, "Task EnviarJpegAsync(");
+        var branca = enviar.IndexOf("string.IsNullOrWhiteSpace(chave)", StringComparison.Ordinal);
+        var frase = enviar.IndexOf("ResultadoMensagem.TextoChaveNaoInformada", StringComparison.Ordinal);
+        var generica = enviar.IndexOf("MensagensLeituraComprovante.SemConfiguracao()", StringComparison.Ordinal);
+
+        Assert.True(branca >= 0);
+        Assert.True(frase > branca);
+        Assert.True(generica > frase);
+        Assert.Contains("Informe a chave da API.", ResultadoMensagem.TextoChaveNaoInformada, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ChaveVaziaNoInicioDaLeitura_MostraInformeAChave(string? chave)
+    {
+        var impedimento = MensagensLeituraComprovante.ImpedimentoParaLer(
+            "https://api.anthropic.com",
+            "claude-haiku-5-5",
+            chave);
+
+        Assert.NotNull(impedimento);
+        Assert.Equal("Informe a chave da API.", impedimento.Mensagem);
+        Assert.Equal(ResultadoMensagem.TextoChaveNaoInformada, impedimento.Mensagem);
+        Assert.NotEqual(MensagensLeituraComprovante.TextoSemUrlModeloOuChave, impedimento.Mensagem);
+
+        var pagina = File.ReadAllText(Path.Combine(
+            EncontrarRaiz(), "OrcaFacil", "Components", "Pages", "Cesta", "CestaPage.razor"));
+        var fluxo = ExtrairBloco(pagina, "Task FluxoLeituraAsync()");
+        var configurada = ExtrairBloco(pagina, "Task<ExibicaoLeituraComprovante?> TemConfiguracaoAsync()");
+        var chamada = fluxo.IndexOf("await TemConfiguracaoAsync()", StringComparison.Ordinal);
+        var atribuicao = fluxo.IndexOf("_exibicao = impedimento", StringComparison.Ordinal);
+
+        Assert.Contains("ImpedimentoParaLer(efetiva.Url, efetiva.Modelo, chave)", configurada, StringComparison.Ordinal);
+        Assert.True(chamada >= 0);
+        Assert.True(atribuicao > chamada);
+        Assert.DoesNotContain("SemConfiguracao()", fluxo, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null, "claude-haiku-5-5", "chave")]
+    [InlineData("   ", "claude-haiku-5-5", "chave")]
+    [InlineData("https://api.anthropic.com", null, "chave")]
+    [InlineData("https://api.anthropic.com", "   ", "chave")]
+    public void SemUrlOuModeloNoInicio_MantemFraseGenerica(string? url, string? modelo, string? chave)
+    {
+        var impedimento = MensagensLeituraComprovante.ImpedimentoParaLer(url, modelo, chave);
+
+        Assert.NotNull(impedimento);
+        Assert.Equal(MensagensLeituraComprovante.TextoSemUrlModeloOuChave, impedimento.Mensagem);
+        Assert.NotEqual(ResultadoMensagem.TextoChaveNaoInformada, impedimento.Mensagem);
+    }
+
+    [Fact]
+    public void ConfiguracaoPronta_NaoImpedeOInicioDaLeitura()
+    {
+        Assert.Null(MensagensLeituraComprovante.ImpedimentoParaLer(
+            "https://api.anthropic.com",
+            "claude-haiku-5-5",
+            "chave"));
     }
 
     [Fact]
