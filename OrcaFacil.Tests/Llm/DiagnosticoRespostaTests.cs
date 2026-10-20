@@ -134,6 +134,51 @@ public class DiagnosticoRespostaTests
         Assert.Contains(DiagnosticoResposta.MarcaBase64, diagnostico.Texto, StringComparison.Ordinal);
     }
 
+    public static IEnumerable<object[]> QuebrasNoMeioDaCredencial()
+    {
+        foreach (var escape in new[] { @"\u000a", @"\u000d", @"\u2028" })
+        {
+            yield return new object[] { "Authorization: Basic abc", escape };
+            yield return new object[] { "Authorization: Bearer abc", escape };
+            yield return new object[] { "x-api-key: abc", escape };
+        }
+    }
+
+    [Theory]
+    [MemberData(nameof(QuebrasNoMeioDaCredencial))]
+    public void QuebraUnicode_NaoVazaCaudaDaCredencial(string prefixo, string escape)
+    {
+        const string cauda = "CAUDA-SECRETA-99";
+        var corpo = prefixo + escape + cauda;
+
+        var diagnostico = DiagnosticoResposta.Criar(
+            401,
+            "https://api.anthropic.com/v1/messages",
+            "claude-haiku-5-5",
+            "NaoAutorizado",
+            "A chave da API foi recusada.",
+            null,
+            null,
+            null,
+            corpo,
+            corpoIncompleto: false,
+            segredos: null);
+
+        var log = new StringBuilder();
+        RegistroDiagnosticoLeitura.Registrar(diagnostico, texto => log.Append(texto));
+
+        var dialog = File.ReadAllText(Caminho("OrcaFacil", "Components", "Pages", "Cesta", "DiagnosticoLeituraDialog.razor"));
+        var painel = File.ReadAllText(Caminho("OrcaFacil", "Components", "Pages", "Cesta", "LeituraComprovantePainel.razor"));
+        Assert.Contains("@Texto", dialog, StringComparison.Ordinal);
+        Assert.Contains("Clipboard.Default.SetTextAsync(Texto)", dialog, StringComparison.Ordinal);
+        Assert.Contains("RegistroDiagnosticoLeitura.Registrar", painel, StringComparison.Ordinal);
+
+        Assert.Equal(diagnostico.Texto, log.ToString());
+        Assert.DoesNotContain(cauda, diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(cauda, log.ToString(), StringComparison.Ordinal);
+        Assert.Contains(DiagnosticoResposta.MarcaCabecalho, diagnostico.Texto, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ControleUnicode_DepoisDoDesescape_NaoSobrevive()
     {
@@ -169,10 +214,10 @@ public class DiagnosticoRespostaTests
         const string chave = "sk-x-api-key-nao-listado";
         var corpo = string.Join(
             '\n',
+            "seguiu",
             "Authorization: Bearer " + bearer,
             "AUTHORIZATION: BASIC " + basic,
-            "X-API-KEY: " + chave,
-            "seguiu");
+            "X-API-KEY: " + chave);
 
         var diagnostico = DiagnosticoResposta.Criar(
             401,

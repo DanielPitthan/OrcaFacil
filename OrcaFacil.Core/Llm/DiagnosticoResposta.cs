@@ -117,7 +117,7 @@ public sealed class DiagnosticoResposta
             finishLimpo,
             corpoExibido,
             truncado);
-        texto = Sanitizar(texto, lista);
+        texto = Sanitizar(texto, lista, juntarQuebras: false);
 
         return new DiagnosticoResposta(
             statusHttp,
@@ -279,12 +279,30 @@ public sealed class DiagnosticoResposta
         return limpo.Replace("\\/", "/", StringComparison.Ordinal).Replace("\\\"", "\"", StringComparison.Ordinal);
     }
 
-    private static string Sanitizar(string? texto, List<string> segredos)
+    private static string JuntarQuebras(string texto)
+    {
+        if (texto.IndexOf('\r') < 0 &&
+            texto.IndexOf('\n') < 0 &&
+            texto.IndexOf('\u2028') < 0 &&
+            texto.IndexOf('\u2029') < 0)
+            return texto;
+
+        var saida = new StringBuilder(texto.Length);
+        foreach (var caractere in texto)
+            saida.Append(caractere is '\r' or '\n' or '\u2028' or '\u2029' ? ' ' : caractere);
+
+        return saida.ToString();
+    }
+
+    private static string Sanitizar(string? texto, List<string> segredos, bool juntarQuebras = true)
     {
         if (string.IsNullOrEmpty(texto))
             return string.Empty;
 
         var limpo = DesescaparJson(texto);
+        if (juntarQuebras)
+            limpo = JuntarQuebras(limpo);
+
         limpo = ValorCredencial.Replace(limpo, MarcaCabecalho);
         limpo = CabecalhoPedido.Replace(limpo, MarcaCabecalho);
         limpo = Bearer.Replace(limpo, MarcaCabecalho);

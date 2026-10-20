@@ -428,6 +428,51 @@ public class LeitorRespostaComprovanteTests
         Assert.Equal(1m, Assert.Single(comprovante.Itens).Preco);
     }
 
+    [Fact]
+    public void ItensInvalidos_NaoOcupamAsVagasDoTeto()
+    {
+        var invalido = "{\"legivel\":true,\"itens\":[{\"descricao_lida\":\"A\",\"preco\":\"12,\"}]}";
+        var ruido = string.Join(string.Empty, Enumerable.Repeat(invalido, 40));
+        var cupom = "{\"loja\":\"Mercado\",\"legivel\":true,\"itens\":[{\"descricao_lida\":\"ARROZ\",\"preco\":1}]}";
+        var json = "{\"content\":[{\"type\":\"text\",\"text\":" +
+            System.Text.Json.JsonSerializer.Serialize(ruido + cupom) +
+            "}]}";
+
+        var comprovante = LeitorRespostaComprovante.Ler(json);
+
+        Assert.NotNull(comprovante);
+        Assert.Equal("Mercado", comprovante.Loja);
+        Assert.Equal(1m, Assert.Single(comprovante.Itens).Preco);
+    }
+
+    [Fact]
+    public void FerramentaInvalida_MantemMotivoQuandoOTextoFalha()
+    {
+        const string json = """
+            {
+              "content": [
+                {
+                  "type": "tool_use",
+                  "name": "registrar_comprovante",
+                  "input": {
+                    "legivel": true,
+                    "itens": [ { "descricao_lida": "A", "preco": "12," } ]
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": "{\"itens\":[{\"descricao_lida\":\"B\",\"preco\":1}]}"
+                }
+              ]
+            }
+            """;
+
+        var leitura = LeitorRespostaComprovante.Interpretar(json);
+
+        Assert.Null(leitura.Comprovante);
+        Assert.Equal("campo inválido: itens[0].preco", leitura.Motivo);
+    }
+
     [Theory]
     [InlineData("12,")]
     [InlineData("12.")]

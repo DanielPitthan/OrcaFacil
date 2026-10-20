@@ -180,7 +180,13 @@ public static class LeitorRespostaComprovante
         if (EntradaValida(input))
             return true;
 
-        motivo = LerComoInput(input, null, null).Motivo ?? motivoFerramenta ?? motivoDoTexto;
+        if (motivoFerramenta is not null)
+        {
+            motivo = motivoFerramenta;
+            return false;
+        }
+
+        motivo = LerComoInput(input, null, null).Motivo ?? motivoDoTexto;
         return false;
     }
 
@@ -271,8 +277,8 @@ public static class LeitorRespostaComprovante
     }
 
     /// <summary>
-    /// Uma passagem. Só entra no teto o objeto cujo <c>itens</c> é um array.
-    /// Desses, o último que passa na validação vence. Se nenhum passar, fica o último array.
+    /// Uma passagem. Só ocupa vaga no teto o objeto cujo <c>itens</c> é um array e que passa na validação.
+    /// O último válido vence. Se nenhum passar, fica o último array.
     /// </summary>
     private static bool TentarRecortarObjeto(
         string texto,
@@ -304,10 +310,14 @@ public static class LeitorRespostaComprovante
             if (!ClassificarObjeto(candidato, out var valido))
                 continue;
 
+            if (!valido)
+            {
+                ultimoCandidato = candidato;
+                continue;
+            }
+
             vistos++;
-            ultimoCandidato = candidato;
-            if (valido)
-                ultimoValido = candidato;
+            ultimoValido = candidato;
         }
 
         var escolhido = ultimoValido ?? ultimoCandidato;
