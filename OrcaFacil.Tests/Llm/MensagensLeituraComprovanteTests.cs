@@ -315,16 +315,118 @@ public class MensagensLeituraComprovanteTests
         var preferencias = new PreferenciasEmMemoria();
 
         Assert.False(AvisoPrivacidadeComprovante.JaVisto(preferencias));
-        Assert.DoesNotContain(AvisoPrivacidadeComprovante.ChavePreferencia, ChipsInteligencia.ChavesPreferencia);
-        Assert.DoesNotContain("Chave", AvisoPrivacidadeComprovante.ChavePreferencia, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain(Chave, MensagensLeituraComprovante.TextoAvisoPrivacidade, StringComparison.Ordinal);
         Assert.Equal("visto", AvisoPrivacidadeComprovante.ValorVisto);
+        Assert.DoesNotContain(Chave, MensagensLeituraComprovante.TextoAvisoPrivacidade, StringComparison.Ordinal);
+        Assert.DoesNotContain("Chave", AvisoPrivacidadeComprovante.ChaveAvisoProvedorExterno, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(AvisoPrivacidadeComprovante.ChaveAvisoProvedorExterno, ChipsInteligencia.ChavesPreferencia);
+        Assert.DoesNotContain(AvisoPrivacidadeComprovante.ChavePreferencia, ChipsInteligencia.ChavesPreferencia);
+        Assert.DoesNotContain(AvisoPrivacidadeComprovante.ChavePreferenciaDeepSeek, ChipsInteligencia.ChavesPreferencia);
 
         AvisoPrivacidadeComprovante.MarcarVisto(preferencias);
 
         Assert.True(AvisoPrivacidadeComprovante.JaVisto(preferencias));
-        Assert.Equal("visto", preferencias.ValorOuNulo(AvisoPrivacidadeComprovante.ChavePreferencia));
-        Assert.DoesNotContain(Chave, preferencias.ValorOuNulo(AvisoPrivacidadeComprovante.ChavePreferencia)!, StringComparison.Ordinal);
+        Assert.Equal("visto", preferencias.ValorOuNulo(AvisoPrivacidadeComprovante.ChaveAvisoProvedorExterno));
+        Assert.DoesNotContain(Chave, preferencias.ValorOuNulo(AvisoPrivacidadeComprovante.ChaveAvisoProvedorExterno)!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TextoAvisoPrivacidade_EOmesmoEmQualquerCaso()
+    {
+        const string aviso = "Aviso, seus dados serão enviados para um provedor externo.";
+
+        Assert.Equal(aviso, MensagensLeituraComprovante.TextoAvisoPrivacidade);
+        Assert.Equal(aviso, AvisoPrivacidadeComprovante.TextoAvisoPrivacidade());
+        Assert.DoesNotContain("Como não há URL gravada", aviso, StringComparison.Ordinal);
+        Assert.DoesNotContain("China", aviso, StringComparison.Ordinal);
+        Assert.DoesNotContain("Alibaba", aviso, StringComparison.Ordinal);
+        Assert.DoesNotContain("DeepSeek", aviso, StringComparison.Ordinal);
+        Assert.DoesNotContain("provedor da URL configurada", aviso, StringComparison.Ordinal);
+        Assert.DoesNotContain(Chave, aviso, StringComparison.Ordinal);
+        Assert.DoesNotContain("Authorization", aviso, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("x-api-key", aviso, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void ChaveNova_NaoReaproveitaAsAnteriores()
+    {
+        var preferencias = new PreferenciasEmMemoria();
+
+        Assert.Equal("Cesta.Leitura.AvisoPrivacidade", AvisoPrivacidadeComprovante.ChavePreferencia);
+        Assert.Equal(
+            AvisoPrivacidadeComprovante.ChavePreferencia + "DeepSeek",
+            AvisoPrivacidadeComprovante.ChavePreferenciaDeepSeek);
+        Assert.Equal("Cesta.Leitura.AvisoPrivacidadeDeepSeek", AvisoPrivacidadeComprovante.ChavePreferenciaDeepSeek);
+        Assert.Equal("Cesta.Leitura.AvisoProvedorExterno", AvisoPrivacidadeComprovante.ChaveAvisoProvedorExterno);
+        Assert.NotEqual(AvisoPrivacidadeComprovante.ChavePreferencia, AvisoPrivacidadeComprovante.ChaveAvisoProvedorExterno);
+        Assert.NotEqual(AvisoPrivacidadeComprovante.ChavePreferenciaDeepSeek, AvisoPrivacidadeComprovante.ChaveAvisoProvedorExterno);
+
+        preferencias.Definir(AvisoPrivacidadeComprovante.ChavePreferencia, AvisoPrivacidadeComprovante.ValorVisto);
+        preferencias.Definir(AvisoPrivacidadeComprovante.ChavePreferenciaDeepSeek, AvisoPrivacidadeComprovante.ValorVisto);
+
+        Assert.False(AvisoPrivacidadeComprovante.JaVisto(preferencias));
+        Assert.False(preferencias.Contem(AvisoPrivacidadeComprovante.ChaveAvisoProvedorExterno));
+    }
+
+    [Fact]
+    public void MarcarVisto_GravaSoAChaveNova()
+    {
+        var preferencias = new PreferenciasEmMemoria();
+
+        AvisoPrivacidadeComprovante.MarcarVisto(preferencias);
+
+        Assert.True(AvisoPrivacidadeComprovante.JaVisto(preferencias));
+        Assert.Equal("visto", preferencias.ValorOuNulo(AvisoPrivacidadeComprovante.ChaveAvisoProvedorExterno));
+        Assert.False(preferencias.Contem(AvisoPrivacidadeComprovante.ChavePreferencia));
+        Assert.False(preferencias.Contem(AvisoPrivacidadeComprovante.ChavePreferenciaDeepSeek));
+        Assert.DoesNotContain(Chave, preferencias.ValorOuNulo(AvisoPrivacidadeComprovante.ChaveAvisoProvedorExterno)!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RazorDoAviso_UsaOMetodo_SemOTextoLiteral()
+    {
+        var raiz = EncontrarRaiz();
+        var dialog = File.ReadAllText(Path.Combine(
+            raiz, "OrcaFacil", "Components", "Pages", "Cesta", "AvisoPrivacidadeComprovanteDialog.razor"));
+        var pagina = File.ReadAllText(Path.Combine(raiz, "OrcaFacil", "Components", "Pages", "Cesta", "CestaPage.razor"));
+        var confirmar = ExtrairBloco(pagina, "Task<bool> ConfirmarAvisoAsync()");
+        var aviso = File.ReadAllText(Path.Combine(raiz, "OrcaFacil.Core", "Llm", "AvisoPrivacidadeComprovante.cs"));
+        var mensagens = File.ReadAllText(Path.Combine(raiz, "OrcaFacil.Core", "Llm", "MensagensLeituraComprovante.cs"));
+        const string texto = "Aviso, seus dados serão enviados para um provedor externo.";
+
+        Assert.Contains("AvisoPrivacidadeComprovante.TextoAvisoPrivacidade()", dialog, StringComparison.Ordinal);
+        Assert.DoesNotContain(texto, dialog, StringComparison.Ordinal);
+        Assert.DoesNotContain("sede na China", dialog, StringComparison.Ordinal);
+        Assert.DoesNotContain("Alibaba", dialog, StringComparison.Ordinal);
+        Assert.DoesNotContain("DeepSeek", dialog, StringComparison.Ordinal);
+        Assert.DoesNotContain("Como não há URL gravada", dialog, StringComparison.Ordinal);
+        Assert.DoesNotContain("provedor da URL configurada", dialog, StringComparison.Ordinal);
+        Assert.DoesNotContain("SemUrlGravada", dialog, StringComparison.Ordinal);
+        Assert.Contains("TextoAvisoPrivacidade() =>", aviso, StringComparison.Ordinal);
+        Assert.Contains("MensagensLeituraComprovante.TextoAvisoPrivacidade;", aviso, StringComparison.Ordinal);
+        Assert.DoesNotContain("ComplementoPrivacidade", aviso, StringComparison.Ordinal);
+        Assert.DoesNotContain("semUrlGravada", aviso, StringComparison.Ordinal);
+        Assert.DoesNotContain("ProvedorDetectado", aviso, StringComparison.Ordinal);
+        Assert.DoesNotContain("Alibaba", aviso, StringComparison.Ordinal);
+        Assert.DoesNotContain("AvisoPrivacidadeAlibaba", aviso, StringComparison.Ordinal);
+        Assert.DoesNotContain("Como não há URL gravada", aviso, StringComparison.Ordinal);
+        Assert.Contains(texto, mensagens, StringComparison.Ordinal);
+        Assert.DoesNotContain("ComplementoPrivacidade", mensagens, StringComparison.Ordinal);
+        Assert.DoesNotContain("Como não há URL gravada", mensagens, StringComparison.Ordinal);
+        Assert.DoesNotContain("sede na China", mensagens, StringComparison.Ordinal);
+        Assert.Contains("AvisoPrivacidadeComprovante.JaVisto(Preferencias)", confirmar, StringComparison.Ordinal);
+        Assert.Contains("AvisoPrivacidadeComprovante.MarcarVisto(Preferencias)", confirmar, StringComparison.Ordinal);
+        Assert.DoesNotContain("JaVisto(Preferencias,", confirmar, StringComparison.Ordinal);
+        Assert.DoesNotContain("MarcarVisto(Preferencias,", confirmar, StringComparison.Ordinal);
+        Assert.DoesNotContain("ChavePreferencia", confirmar, StringComparison.Ordinal);
+        Assert.DoesNotContain("AvisoProvedorExterno", confirmar, StringComparison.Ordinal);
+        Assert.DoesNotContain("semUrlGravada", confirmar, StringComparison.Ordinal);
+        Assert.DoesNotContain("DaUrl", confirmar, StringComparison.Ordinal);
+        Assert.DoesNotContain("Efetiva(", confirmar, StringComparison.Ordinal);
+        Assert.DoesNotContain(texto, confirmar, StringComparison.Ordinal);
+        Assert.DoesNotContain("Como não há URL gravada", confirmar, StringComparison.Ordinal);
+        Assert.DoesNotContain("Alibaba", confirmar, StringComparison.Ordinal);
+        Assert.DoesNotContain("sede na China", confirmar, StringComparison.Ordinal);
+        Assert.DoesNotContain(".Host", confirmar, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -346,6 +448,27 @@ public class MensagensLeituraComprovanteTests
     public void Diagnostico_NaoConfundeOutroErroComFaltaDeVisao(string? corpo)
     {
         Assert.False(DiagnosticoErroProvedor.IndicaModeloSemVisao(corpo));
+    }
+
+    private static string ExtrairBloco(string fonte, string assinatura)
+    {
+        var indice = fonte.IndexOf(assinatura, StringComparison.Ordinal);
+        Assert.True(indice >= 0, assinatura);
+        var abre = fonte.IndexOf('{', indice);
+        var profundidade = 0;
+        for (var i = abre; i < fonte.Length; i++)
+        {
+            if (fonte[i] == '{')
+                profundidade++;
+            else if (fonte[i] == '}')
+            {
+                profundidade--;
+                if (profundidade == 0)
+                    return fonte[abre..(i + 1)];
+            }
+        }
+
+        throw new InvalidOperationException("Bloco sem fechamento.");
     }
 
     private static string EncontrarRaiz()

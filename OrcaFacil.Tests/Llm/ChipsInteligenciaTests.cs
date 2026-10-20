@@ -160,6 +160,107 @@ public class ChipsInteligenciaTests
     }
 
     [Theory]
+    [InlineData("https://api.deepseek.com/anthropic", "claude-haiku-5-5", false)]
+    [InlineData("https://api.deepseek.com/anthropic", "claude-sonnet", false)]
+    [InlineData("https://api.deepseek.com/anthropic", "Claude-Haiku-5-5", false)]
+    [InlineData("https://api.deepseek.com/anthropic", "CLAUDE", false)]
+    [InlineData("https://API.DEEPSEEK.COM/anthropic", "  claude-haiku-5-5  ", false)]
+    [InlineData("https://api.deepseek.com/anthropic", "claudeopus", false)]
+    [InlineData("https://api.deepseek.com/anthropic", "claude-opus-4-6", true)]
+    [InlineData("https://api.deepseek.com/anthropic", "Claude-Opus", true)]
+    [InlineData("https://api.deepseek.com/anthropic", "  CLAUDE-OPUS-4  ", true)]
+    public void AvisoMapeamento_DeepSeekComClaude_DevolveOTextoERotuloMapeado(string url, string modelo, bool opus)
+    {
+        const string textoFlash = "No DeepSeek, modelos claude-haiku/sonnet são atendidos pelo deepseek-flash.";
+        const string textoOpus = "No DeepSeek, modelos claude-opus são atendidos pelo deepseek-v4-pro.";
+        var texto = opus ? textoOpus : textoFlash;
+        var rotulo = opus ? "DeepSeek V4 Pro (mapeado)" : "DeepSeek Flash (mapeado)";
+
+        Assert.Equal(texto, ChipsInteligencia.AvisoMapeamento(url, modelo));
+        Assert.Equal(rotulo, ChipsInteligencia.RotuloDoModelo(url, modelo));
+        Assert.Contains("(mapeado)", rotulo, StringComparison.Ordinal);
+        if (opus)
+        {
+            Assert.Equal(ChipsInteligencia.TextoAvisoMapeamentoOpus, ChipsInteligencia.AvisoMapeamento(url, modelo));
+            Assert.Equal(ChipsInteligencia.RotuloMapeadoPro, ChipsInteligencia.RotuloDoModelo(url, modelo));
+            Assert.DoesNotContain("deepseek-flash", texto, StringComparison.Ordinal);
+            Assert.NotEqual(ChipsInteligencia.RotuloMapeado, rotulo);
+        }
+        else
+        {
+            Assert.Equal(ChipsInteligencia.TextoAvisoMapeamento, ChipsInteligencia.AvisoMapeamento(url, modelo));
+            Assert.Equal(ChipsInteligencia.RotuloMapeado, ChipsInteligencia.RotuloDoModelo(url, modelo));
+            Assert.StartsWith(ChipsInteligencia.RotuloDeepSeek, rotulo, StringComparison.Ordinal);
+            Assert.DoesNotContain("deepseek-v4-pro", texto, StringComparison.Ordinal);
+        }
+    }
+
+    [Theory]
+    [InlineData("https://api.deepseek.com/anthropic", "deepseek-flash")]
+    [InlineData("https://api.deepseek.com/anthropic", "  deepseek-flash  ")]
+    [InlineData("https://api.anthropic.com", "claude-haiku-5-5")]
+    [InlineData("https://api.anthropic.com", "claude-sonnet")]
+    [InlineData("https://api.anthropic.com", "claude-opus-4-6")]
+    [InlineData("https://dashscope.aliyuncs.com", "claude-haiku-5-5")]
+    [InlineData("https://exemplo.test/api.deepseek.com", "claude-haiku-5-5")]
+    [InlineData("https://api.deepseek.com.evil.com", "claude")]
+    [InlineData(null, "claude-haiku-5-5")]
+    [InlineData("https://api.deepseek.com/anthropic", null)]
+    [InlineData(null, null)]
+    [InlineData("", "claude")]
+    [InlineData("https://api.deepseek.com/anthropic", "")]
+    [InlineData("https://api.deepseek.com/anthropic", "   ")]
+    public void AvisoMapeamento_ForaDoDeepSeekComClaude_DevolveNulo(string? url, string? modelo)
+    {
+        Assert.Null(ChipsInteligencia.AvisoMapeamento(url, modelo));
+    }
+
+    [Fact]
+    public void RotuloDoModelo_DoisModelosEMapeado_DesconhecidoFicaNulo()
+    {
+        Assert.Equal("DeepSeek Flash", ChipsInteligencia.RotuloDoModelo("deepseek-flash"));
+        Assert.Equal("DeepSeek Flash", ChipsInteligencia.RotuloDoModelo(ChipsInteligencia.UrlDeepSeek, "deepseek-flash"));
+        Assert.Equal("Haiku 5.5", ChipsInteligencia.RotuloDoModelo("claude-haiku-5-5"));
+        Assert.Equal("Haiku 5.5", ChipsInteligencia.RotuloDoModelo(ChipsInteligencia.UrlAnthropic, "claude-haiku-5-5"));
+        Assert.Equal("DeepSeek Flash (mapeado)", ChipsInteligencia.RotuloDoModelo(ChipsInteligencia.UrlDeepSeek, "claude-haiku-5-5"));
+        Assert.Equal("DeepSeek Flash (mapeado)", ChipsInteligencia.RotuloDoModelo(ChipsInteligencia.UrlDeepSeek, "claude-sonnet"));
+        Assert.Equal("DeepSeek V4 Pro (mapeado)", ChipsInteligencia.RotuloDoModelo(ChipsInteligencia.UrlDeepSeek, "claude-opus-4-6"));
+        Assert.NotEqual(
+            "Haiku 5.5",
+            ChipsInteligencia.RotuloDoModelo(ChipsInteligencia.UrlDeepSeek, "claude-haiku-5-5"));
+        Assert.NotEqual(
+            "DeepSeek Flash (mapeado)",
+            ChipsInteligencia.RotuloDoModelo(ChipsInteligencia.UrlDeepSeek, "claude-opus-4-6"));
+        Assert.Null(ChipsInteligencia.RotuloDoModelo("qwen-vl-max"));
+        Assert.Null(ChipsInteligencia.RotuloDoModelo(ChipsInteligencia.UrlDeepSeek, "qwen-vl-max"));
+        Assert.Null(ChipsInteligencia.RotuloDoModelo(ChipsInteligencia.UrlAnthropic, "claude-sonnet"));
+        Assert.Null(ChipsInteligencia.RotuloDoModelo(null, null));
+    }
+
+    [Fact]
+    public void Painel_AvisoERotuloVemDosMetodos_SemUrlNemTextoLiteral()
+    {
+        var painel = File.ReadAllText(CaminhoPainel());
+        var core = File.ReadAllText(CaminhoCore("ChipsInteligencia.cs"));
+        var metodo = ExtrairMetodo(core, "string? AvisoMapeamento(");
+
+        Assert.Contains("ChipsInteligencia.UrlAlibaba", painel, StringComparison.Ordinal);
+        Assert.Contains("ChipsInteligencia.AvisoMapeamento(_url, _modelo)", painel, StringComparison.Ordinal);
+        Assert.Contains("ChipsInteligencia.RotuloDoModelo(_url, _modelo)", painel, StringComparison.Ordinal);
+        Assert.Contains("<p class=\"of-apoio\" role=\"status\">@AvisoMapeamento</p>", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("https://api.", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("No DeepSeek, modelos claude-haiku/sonnet", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("No DeepSeek, modelos claude-opus", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("deepseek-v4-pro", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("(mapeado)", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("api.deepseek.com", painel, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(".Host", painel, StringComparison.Ordinal);
+        Assert.Contains("PerfilProvedor.DaUrl(", metodo, StringComparison.Ordinal);
+        Assert.DoesNotContain("api.deepseek.com", metodo, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(".Host", metodo, StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData(null, null, null)]
     [InlineData(null, "", "")]
     [InlineData(null, "   ", "   ")]
@@ -285,6 +386,27 @@ public class ChipsInteligenciaTests
 
     private static string CaminhoCore(string arquivo) =>
         Path.Combine(EncontrarRaiz(), "OrcaFacil.Core", "Llm", arquivo);
+
+    private static string ExtrairMetodo(string fonte, string assinatura)
+    {
+        var indice = fonte.IndexOf(assinatura, StringComparison.Ordinal);
+        Assert.True(indice >= 0, assinatura);
+        var abre = fonte.IndexOf('{', indice);
+        var profundidade = 0;
+        for (var i = abre; i < fonte.Length; i++)
+        {
+            if (fonte[i] == '{')
+                profundidade++;
+            else if (fonte[i] == '}')
+            {
+                profundidade--;
+                if (profundidade == 0)
+                    return fonte[abre..(i + 1)];
+            }
+        }
+
+        throw new InvalidOperationException("Método sem fechamento.");
+    }
 
     private static string EncontrarRaiz()
     {

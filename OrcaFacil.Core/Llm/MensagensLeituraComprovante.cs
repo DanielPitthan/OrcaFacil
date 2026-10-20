@@ -52,7 +52,7 @@ public static class MensagensLeituraComprovante
     public const string TextoPreviaASeguir = "A prévia editável vem a seguir.";
 
     public const string TextoAvisoPrivacidade =
-        "A foto do comprovante sai deste aparelho e vai para o provedor da URL configurada. O OrcaFacil não guarda essa foto.";
+        "Aviso, seus dados serão enviados para um provedor externo.";
 
     public const string TextoFotoInvalida = "Não foi possível ler essa foto.";
 
