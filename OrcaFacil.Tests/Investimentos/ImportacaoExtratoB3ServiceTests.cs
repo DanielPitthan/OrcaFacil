@@ -33,7 +33,8 @@ public class ImportacaoExtratoB3ServiceTests
             5002.00m);
 
         var texto = HashLinhaExtratoB3.Texto(linha, 0);
-        Assert.Equal("2026-09-16|Aplicacao|CDB9268YCA7|5002|1.4909|5002.00|ITAU UNIBANCO S.A.|0", texto);
+        // 5002,00 / 5002 = 1. O preço lido 1,4909 não entra na chave.
+        Assert.Equal("2026-09-16|Aplicacao|CDB9268YCA7|5002|1|5002|ITAU UNIBANCO S.A.|0", texto);
         var esperado = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(texto))).ToLowerInvariant();
         Assert.Equal(esperado, HashLinhaExtratoB3.Calcular(linha, 0));
         Assert.Equal(64, esperado.Length);
@@ -45,7 +46,7 @@ public class ImportacaoExtratoB3ServiceTests
     }
 
     [Fact]
-    public void PrecosDiferentes_FicamEmSeriesDistintas_AmbasOcorrenciaZero()
+    public void PrecosEfetivosDiferentes_FicamEmSeriesDistintas_AmbasOcorrenciaZero()
     {
         var primeiro = new LinhaExtratoB3(
             2,
@@ -60,12 +61,78 @@ public class ImportacaoExtratoB3ServiceTests
             10m,
             10m,
             100m);
-        var segundo = primeiro with { Linha = 8, PrecoUnitario = 12.5m };
+        var segundo = primeiro with { Linha = 8, Quantidade = 8m };
 
         Assert.Equal(primeiro.ValorOperacao, segundo.ValorOperacao);
-        Assert.NotEqual(primeiro.PrecoUnitario, segundo.PrecoUnitario);
+        Assert.NotEqual(primeiro.Quantidade, segundo.Quantidade);
+        Assert.Equal(primeiro.PrecoUnitario, segundo.PrecoUnitario);
         Assert.Equal([0, 0], HashLinhaExtratoB3.Ocorrencias([primeiro, segundo]));
         Assert.NotEqual(HashLinhaExtratoB3.Chave(primeiro), HashLinhaExtratoB3.Chave(segundo));
+    }
+
+    [Fact]
+    public async Task EscalaDoDecimal_NaoAbreOutraSerie()
+    {
+        const string cab =
+            "Entrada/Saída;Data;Movimentação;Produto;Instituição;Quantidade;Preço unitário;Valor da Operação";
+        static string Arq(string q, string preco, string valor) =>
+            cab + $"\nCredito;01/02/2024;Transferência - Liquidação;PETR4 - PETROLEO BRASILEIRO;XP INVESTIMENTOS CCTVM S/A;{q};{preco};{valor}\n";
+
+        var pares = new (string A, string B)[]
+        {
+            (Arq("10", " R$10,5 ", " R$100,00 "), Arq("10", " R$10,50 ", " R$100,00 ")),
+            (Arq("10", " R$10,00 ", " R$100,00 "), Arq("10,00", " R$10,00 ", " R$100,00 ")),
+            (Arq("10", " R$10,00 ", "100"), Arq("10", " R$10,00 ", " R$100,00 ")),
+        };
+
+        foreach (var (a, b) in pares)
+        {
+            LinhaExtratoB3 Ler(string csv)
+            {
+                using var fluxo = new MemoryStream(Encoding.UTF8.GetBytes(csv));
+                return new ParserExtratoB3().Ler(fluxo).Linhas[0];
+            }
+
+            var linhaA = Ler(a);
+            var linhaB = Ler(b);
+            Assert.Equal(HashLinhaExtratoB3.Chave(linhaA), HashLinhaExtratoB3.Chave(linhaB));
+            Assert.Equal(HashLinhaExtratoB3.Calcular(linhaA, 0), HashLinhaExtratoB3.Calcular(linhaB, 0));
+
+            await using var ambiente = await Ambiente.CriarAsync();
+            await using (var s1 = new MemoryStream(Encoding.UTF8.GetBytes(a)))
+            {
+                var previa = await ambiente.Service.PreverAsync(s1, ambiente.MembroId);
+                Assert.Equal(1, await ambiente.Service.GravarAsync(previa, ambiente.MembroId));
+            }
+
+            await using var s2 = new MemoryStream(Encoding.UTF8.GetBytes(b));
+            var segunda = await ambiente.Service.PreverAsync(s2, ambiente.MembroId);
+            Assert.Equal(1, segunda.Contar(StatusLinhaImportacaoB3.DuplicataImportada));
+            Assert.Equal(0, segunda.Contar(StatusLinhaImportacaoB3.Nova));
+        }
+    }
+
+    [Fact]
+    public async Task PrecoTracoDepoisPreenchido_NaoDuplicaLiquidacao()
+    {
+        const string cab =
+            "Entrada/Saída;Data;Movimentação;Produto;Instituição;Quantidade;Preço unitário;Valor da Operação\n";
+        const string corpo =
+            "Credito;01/02/2024;Transferência - Liquidação;PETR4 - PETROLEO BRASILEIRO;XP INVESTIMENTOS CCTVM S/A;";
+        var semPreco = cab + corpo + "10; - ; R$100,00 \n";
+        var comPreco = cab + corpo + "10; R$10,00 ; R$100,00 \n";
+
+        await using var ambiente = await Ambiente.CriarAsync();
+        await using (var s1 = new MemoryStream(Encoding.UTF8.GetBytes(semPreco)))
+        {
+            var previa = await ambiente.Service.PreverAsync(s1, ambiente.MembroId);
+            Assert.Equal(1, await ambiente.Service.GravarAsync(previa, ambiente.MembroId));
+        }
+
+        await using var s2 = new MemoryStream(Encoding.UTF8.GetBytes(comPreco));
+        var segunda = await ambiente.Service.PreverAsync(s2, ambiente.MembroId);
+        Assert.Equal(0, segunda.Contar(StatusLinhaImportacaoB3.Nova));
+        Assert.Equal(1, segunda.Contar(StatusLinhaImportacaoB3.DuplicataImportada));
     }
 
     [Fact]
