@@ -16,6 +16,15 @@ public readonly record struct AjusteChipIa(string? Url, string? Modelo, string? 
 }
 
 /// <summary>
+/// Provedor, URL e modelo usados na tela e na leitura.
+/// Não carrega a chave da API.
+/// </summary>
+public readonly record struct ConfiguracaoIaEfetiva(ProvedorIa? Provedor, string Url, string Modelo)
+{
+    public override string ToString() => "ConfiguracaoIaEfetiva";
+}
+
+/// <summary>
 /// Chaves de Preferences e o padrão de cada chip.
 /// DeepSeek preenche URL, modelo e o rótulo DeepSeek Flash.
 /// Anthropic preenche URL, modelo e o rótulo Haiku 5.5.
@@ -68,6 +77,21 @@ public static class ChipsInteligencia
         ProvedorIa.Alibaba => new(null, null, null),
         _ => throw new ArgumentOutOfRangeException(nameof(provedor))
     };
+
+    /// <summary>
+    /// Sem provedor, URL e modelo salvos, o padrão efetivo é o DeepSeek.
+    /// Qualquer um dos três preenchido permanece como foi gravado.
+    /// </summary>
+    public static ConfiguracaoIaEfetiva Efetiva(ProvedorIa? provedor, string? url, string? modelo)
+    {
+        if (provedor is null && string.IsNullOrWhiteSpace(url) && string.IsNullOrWhiteSpace(modelo))
+        {
+            var padrao = Padrao(ProvedorIa.DeepSeek);
+            return new(ProvedorIa.DeepSeek, padrao.Url ?? "", padrao.Modelo ?? "");
+        }
+
+        return new(provedor, url ?? "", modelo ?? "");
+    }
 
     public static string? RotuloDoModelo(string? modelo)
     {

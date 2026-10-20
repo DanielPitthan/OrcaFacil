@@ -401,10 +401,11 @@
         try
         {
             chave = await Cofre.LerAsync(_pagina.Token);
-            return MensagensLeituraComprovante.TemUrlModeloEChave(
+            var efetiva = ChipsInteligencia.Efetiva(
+                Configuracao.ProvedorInteligencia,
                 Configuracao.UrlInteligencia,
-                Configuracao.ModeloInteligencia,
-                chave);
+                Configuracao.ModeloInteligencia);
+            return MensagensLeituraComprovante.TemUrlModeloEChave(efetiva.Url, efetiva.Modelo, chave);
         }
         catch (OperationCanceledException)
         {
@@ -574,10 +575,11 @@
             if (Cancelada(atual))
                 return;
 
-            if (!MensagensLeituraComprovante.TemUrlModeloEChave(
-                    Configuracao.UrlInteligencia,
-                    Configuracao.ModeloInteligencia,
-                    chave))
+            var efetiva = ChipsInteligencia.Efetiva(
+                Configuracao.ProvedorInteligencia,
+                Configuracao.UrlInteligencia,
+                Configuracao.ModeloInteligencia);
+            if (!MensagensLeituraComprovante.TemUrlModeloEChave(efetiva.Url, efetiva.Modelo, chave))
             {
                 _exibicao = MensagensLeituraComprovante.SemConfiguracao();
                 return;
@@ -592,9 +594,9 @@
             }
 
             var resultado = await Cliente.LerComprovanteAsync(
-                Configuracao.UrlInteligencia,
+                efetiva.Url,
                 chave,
-                Configuracao.ModeloInteligencia,
+                efetiva.Modelo,
                 media,
                 Convert.ToBase64String(jpeg),
                 _pagina.Token,

@@ -115,6 +115,15 @@ public static class MensagensLeituraComprovante
         {
             case TipoResultadoMensagem.Ok:
                 return DeSucesso(normalizado);
+            case TipoResultadoMensagem.NaoAutorizado
+                when resultado.Mensagem == ResultadoMensagem.TextoChaveNaoInformada:
+            case TipoResultadoMensagem.PedidoInvalido
+                when resultado.Mensagem == ResultadoMensagem.TextoChaveNaoInformada:
+                return Erro(
+                    SituacaoLeituraComprovante.SemUrlModeloOuChave,
+                    ResultadoMensagem.TextoChaveNaoInformada,
+                    true,
+                    resultado.Diagnostico);
             case TipoResultadoMensagem.NaoAutorizado:
                 return Erro(SituacaoLeituraComprovante.NaoAutorizado, ResultadoMensagem.TextoNaoAutorizado, false, resultado.Diagnostico);
             case TipoResultadoMensagem.SemPermissao:
@@ -148,8 +157,7 @@ public static class MensagensLeituraComprovante
             case TipoResultadoMensagem.PedidoInvalido
                 when resultado.Mensagem is ResultadoMensagem.TextoUrlNaoInformada
                     or ResultadoMensagem.TextoUrlInvalida
-                    or ResultadoMensagem.TextoModeloNaoInformado
-                    or ResultadoMensagem.TextoChaveNaoInformada:
+                    or ResultadoMensagem.TextoModeloNaoInformado:
                 return SemConfiguracao();
             case TipoResultadoMensagem.PedidoInvalido:
                 return Erro(

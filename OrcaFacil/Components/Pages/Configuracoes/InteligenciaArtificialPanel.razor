@@ -108,10 +108,14 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _url = Configuracao.UrlInteligencia;
-        _modelo = Configuracao.ModeloInteligencia;
+        var efetiva = ChipsInteligencia.Efetiva(
+            Configuracao.ProvedorInteligencia,
+            Configuracao.UrlInteligencia,
+            Configuracao.ModeloInteligencia);
+        _url = efetiva.Url;
+        _modelo = efetiva.Modelo;
         _maxTokens = Configuracao.MaxTokensInteligencia;
-        _provedor = Configuracao.ProvedorInteligencia;
+        _provedor = efetiva.Provedor;
         try
         {
             var salva = await CofreChave.LerAsync(_cancelamento.Token);

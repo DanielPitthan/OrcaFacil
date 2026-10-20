@@ -528,9 +528,57 @@ public class ClienteMensagensTests
         var injetada = await cliente.LerComprovanteAsync(Base, "chave\r\nX-Extra: 1", PedidoMensagem.ModeloAnthropic, Midia, Imagem);
 
         Assert.Equal(0, captura.Chamadas);
-        Assert.Equal(TipoResultadoMensagem.NaoAutorizado, vazia.Tipo);
+        Assert.Equal(ResultadoMensagem.TextoChaveNaoInformada, vazia.Mensagem);
+        Assert.Equal("Informe a chave da API.", vazia.Mensagem);
+        Assert.NotEqual(ResultadoMensagem.TextoNaoAutorizado, vazia.Mensagem);
         Assert.Equal(TipoResultadoMensagem.NaoAutorizado, injetada.Tipo);
+        Assert.Equal(ResultadoMensagem.TextoNaoAutorizado, injetada.Mensagem);
         Assert.DoesNotContain("X-Extra", injetada.Mensagem, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task Leitura_ChaveAusente_MostraInformeAChave(string? chave)
+    {
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, CorpoValido()));
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.LerComprovanteAsync(Base, chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
+        var exibicao = MensagensLeituraComprovante.De(resultado, null);
+
+        Assert.Equal(0, captura.Chamadas);
+        Assert.Equal(ResultadoMensagem.TextoChaveNaoInformada, resultado.Mensagem);
+        Assert.Equal("Informe a chave da API.", resultado.Mensagem);
+        Assert.Equal("Informe a chave da API.", exibicao.Mensagem);
+        Assert.NotEqual(ResultadoMensagem.TextoNaoAutorizado, resultado.Mensagem);
+        Assert.NotEqual(ResultadoMensagem.TextoNaoAutorizado, exibicao.Mensagem);
+        Assert.NotEqual(MensagensLeituraComprovante.TextoSemUrlModeloOuChave, exibicao.Mensagem);
+    }
+
+    [Fact]
+    public async Task SemPreferencia_LeituraUsaUrlEModeloDeepSeek()
+    {
+        var efetiva = ChipsInteligencia.Efetiva(null, "", "");
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, CorpoValido()));
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.LerComprovanteAsync(
+            efetiva.Url,
+            Chave,
+            efetiva.Modelo,
+            Midia,
+            Imagem);
+
+        Assert.True(resultado.Sucesso);
+        Assert.Equal(1, captura.Chamadas);
+        Assert.Equal("https://api.deepseek.com/anthropic/v1/messages", captura.Uri);
+        Assert.Equal(PedidoMensagem.ModeloDeepSeek, efetiva.Modelo);
+
+        using var doc = JsonDocument.Parse(captura.Corpo);
+        Assert.Equal(PedidoMensagem.ModeloDeepSeek, doc.RootElement.GetProperty("model").GetString());
+        Assert.Equal("disabled", doc.RootElement.GetProperty("thinking").GetProperty("type").GetString());
     }
 
     [Theory]

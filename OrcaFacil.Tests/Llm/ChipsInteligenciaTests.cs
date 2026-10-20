@@ -1,5 +1,6 @@
 using System.Reflection;
 using OrcaFacil.Core.Llm;
+using OrcaFacil.Tests.Tema;
 
 namespace OrcaFacil.Tests.Llm;
 
@@ -131,6 +132,52 @@ public class ChipsInteligenciaTests
         Assert.Contains("Placeholder=\"@ChipsInteligencia.UrlDeepSeek\"", painel, StringComparison.Ordinal);
         Assert.DoesNotContain("https://api.anthropic.com", painel, StringComparison.Ordinal);
         Assert.DoesNotContain("https://api.deepseek.com", painel, StringComparison.Ordinal);
+        Assert.Contains("ChipsInteligencia.Efetiva(", painel, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(null, null, null)]
+    [InlineData(null, "", "")]
+    [InlineData(null, "   ", "   ")]
+    public void SemConfiguracaoSalva_PadraoEfetivoEhDeepSeek(string? provedor, string? url, string? modelo)
+    {
+        var efetiva = ChipsInteligencia.Efetiva(ChipsInteligencia.Interpretar(provedor), url, modelo);
+        var padrao = ChipsInteligencia.Padrao(ProvedorIa.DeepSeek);
+
+        Assert.Equal(ProvedorIa.DeepSeek, efetiva.Provedor);
+        Assert.Equal(padrao.Url, efetiva.Url);
+        Assert.Equal(padrao.Modelo, efetiva.Modelo);
+        Assert.Equal(ChipsInteligencia.UrlDeepSeek, efetiva.Url);
+        Assert.Equal(PedidoMensagem.ModeloDeepSeek, efetiva.Modelo);
+        Assert.True(MensagensLeituraComprovante.TemUrlModeloEChave(efetiva.Url, efetiva.Modelo, "chave"));
+        Assert.Equal("ConfiguracaoIaEfetiva", efetiva.ToString());
+        Assert.DoesNotContain("api.deepseek.com", efetiva.ToString(), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(ProvedorIa.Anthropic, "https://api.anthropic.com", "claude-haiku-5-5")]
+    [InlineData(ProvedorIa.Alibaba, "", "")]
+    [InlineData(ProvedorIa.Alibaba, "https://dashscope.aliyuncs.com", "qwen-vl-max")]
+    public void PreferenciaSalva_NaoViraDeepSeek(ProvedorIa provedor, string url, string modelo)
+    {
+        var memoria = new PreferenciasEmMemoria();
+        memoria.Definir(ChipsInteligencia.ChaveProvedor, ChipsInteligencia.Texto(provedor));
+        memoria.Definir(ChipsInteligencia.ChaveUrl, url);
+        memoria.Definir(ChipsInteligencia.ChaveModelo, modelo);
+
+        var efetiva = ChipsInteligencia.Efetiva(
+            ChipsInteligencia.Interpretar(memoria.Obter(ChipsInteligencia.ChaveProvedor, "")),
+            memoria.Obter(ChipsInteligencia.ChaveUrl, ""),
+            memoria.Obter(ChipsInteligencia.ChaveModelo, ""));
+
+        Assert.Equal(provedor, efetiva.Provedor);
+        Assert.Equal(url, efetiva.Url);
+        Assert.Equal(modelo, efetiva.Modelo);
+        Assert.NotEqual(ProvedorIa.DeepSeek, efetiva.Provedor);
+        Assert.NotEqual(ChipsInteligencia.UrlDeepSeek, efetiva.Url);
+        Assert.Equal(ChipsInteligencia.Texto(provedor), memoria.Obter(ChipsInteligencia.ChaveProvedor, ""));
+        Assert.Equal(url, memoria.Obter(ChipsInteligencia.ChaveUrl, ""));
+        Assert.Equal(modelo, memoria.Obter(ChipsInteligencia.ChaveModelo, ""));
     }
 
     private static string CaminhoPainel()

@@ -254,7 +254,13 @@ public sealed class ClienteMensagens : IDisposable
                 ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoPedidoInvalido));
         }
 
-        if (string.IsNullOrWhiteSpace(chave) || chave.Contains('\r') || chave.Contains('\n'))
+        if (string.IsNullOrWhiteSpace(chave))
+        {
+            return PreparoChamada.Recusa(
+                ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoChaveNaoInformada));
+        }
+
+        if (chave.Contains('\r') || chave.Contains('\n'))
         {
             return PreparoChamada.Recusa(
                 ResultadoMensagem.Falha(TipoResultadoMensagem.NaoAutorizado, ResultadoMensagem.TextoNaoAutorizado));

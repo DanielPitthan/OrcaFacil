@@ -53,6 +53,14 @@ public class CestaLeituraFonteTests
 
         Assert.Contains("Configuracao.UrlInteligencia", enviar, StringComparison.Ordinal);
         Assert.Contains("Configuracao.ModeloInteligencia", enviar, StringComparison.Ordinal);
+        Assert.Contains("ChipsInteligencia.Efetiva(", enviar, StringComparison.Ordinal);
+        Assert.Contains("efetiva.Url", enviar, StringComparison.Ordinal);
+        Assert.Contains("efetiva.Modelo", enviar, StringComparison.Ordinal);
+
+        var configurada = ExtrairBloco(pagina, "Task<bool> TemConfiguracaoAsync()");
+        Assert.Contains("ChipsInteligencia.Efetiva(", configurada, StringComparison.Ordinal);
+        Assert.Contains("efetiva.Url", configurada, StringComparison.Ordinal);
+        Assert.Contains("efetiva.Modelo", configurada, StringComparison.Ordinal);
         Assert.Contains("Configuracao.MaxTokensInteligencia", enviar, StringComparison.Ordinal);
         Assert.Contains("PreparoFotoComprovante.EscolherMediaType(jpeg)", enviar, StringComparison.Ordinal);
         Assert.True(recusa >= 0);
