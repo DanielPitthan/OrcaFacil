@@ -113,6 +113,9 @@
     private PainelLancamentosMes? _painel;
     private DateTime _mesReferencia = new(DateTime.Today.Year, DateTime.Today.Month, 1);
 
+    [SupplyParameterFromQuery(Name = "mes")]
+    public string? MesConsulta { get; set; }
+
     private RenderFragment BarraLancamentos => @<text>
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
                        aria-label="Abrir menu" OnClick="AbrirMenu" />
@@ -126,6 +129,7 @@
     {
         Casco.Definir(BarraLancamentos);
         _cascoLigado = true;
+        _mesReferencia = ConsultaMesLancamentos.Resolver(MesConsulta, DateTime.Today);
         _categorias = await CategoriaService.ListarAsync();
         _opcoesCategoria = _categorias
             .Select(c => new OpcaoCategoriaFiltro(c.Id, c.Nome, c.Icone))

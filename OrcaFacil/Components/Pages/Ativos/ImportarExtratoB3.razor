@@ -152,8 +152,19 @@
         try
         {
             var gravadas = await Importacao.GravarAsync(_previa, MembroId());
-            Snackbar.Add(gravadas == 1 ? "1 linha gravada" : $"{gravadas} linhas gravadas", Severity.Success);
-            Navegacao.NavigateTo("/ativos");
+            var destino = DestinoLancamentosImportacao.Calcular(
+                _previa.Linhas.Where(linha => linha.Marcada && linha.PodeMarcar && linha.Comando is not null));
+            if (destino.Quantidade == 0)
+            {
+                Snackbar.Add(gravadas == 1 ? "1 linha gravada" : $"{gravadas} linhas gravadas", Severity.Success);
+                Snackbar.Add(destino.Texto, Severity.Warning);
+                Navegacao.NavigateTo("/ativos");
+            }
+            else
+            {
+                Snackbar.Add(destino.Texto, Severity.Success);
+                Navegacao.NavigateTo(destino.Rota);
+            }
         }
         catch (InvalidOperationException ex)
         {
