@@ -24,6 +24,7 @@ public class MigracaoUpgradeTests
     private const string HashImportacao = "20261017164213_AddHashImportacaoItemFatura";
     private const string IndiceHashImportacao = "20261017172616_AddIndiceHashImportacaoItemFatura";
     private const string RendaFixa = "20261020032353_AddRendaFixa";
+    private const string RegraCatalogo = "20261020135920_AddRegraCatalogoComprovante";
 
     [Fact]
     public async Task BancoAntigo_MigraAteOAtual_PreservaDadosEAplicaDefaults()
@@ -139,7 +140,7 @@ public class MigracaoUpgradeTests
             Assert.Empty(ctx.TitulosRendaFixa);
             Assert.Empty(ctx.OperacoesRendaFixa);
 
-            Assert.Equal(RendaFixa, (await ctx.Database.GetAppliedMigrationsAsync()).Last());
+            Assert.Equal(RegraCatalogo, (await ctx.Database.GetAppliedMigrationsAsync()).Last());
             Assert.True(File.Exists(banco.Caminho));
             Assert.True(new FileInfo(banco.Caminho).Length > 0);
         }
@@ -156,7 +157,8 @@ public class MigracaoUpgradeTests
         Assert.Equal(Inicial, ids[0]);
         Assert.Contains(HashImportacao, ids);
         Assert.Contains(IndiceHashImportacao, ids);
-        Assert.Equal(RendaFixa, ids[^1]);
+        Assert.Contains(RendaFixa, ids);
+        Assert.Equal(RegraCatalogo, ids[^1]);
 
         for (var i = 1; i < ids.Count; i++)
         {

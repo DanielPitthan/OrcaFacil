@@ -41,7 +41,10 @@ public sealed record ItemComprovanteLido(
     string? Quantidade,
     string? Unidade,
     decimal? Desconto,
-    ConfiancaLeitura? Confianca)
+    ConfiancaLeitura? Confianca,
+    int? ProdutoId = null,
+    bool ProdutoIdInformado = false,
+    decimal? ConfiancaNumero = null)
 {
     public override string ToString() => "ItemComprovanteLido";
 }

@@ -604,6 +604,10 @@
                 return;
             }
 
+            var catalogo = await CestaService.TextoCatalogoLeituraAsync(_pagina.Token);
+            if (Cancelada(atual))
+                return;
+
             var resultado = await Cliente.LerComprovanteAsync(
                 efetiva.Url,
                 chave,
@@ -611,7 +615,8 @@
                 media,
                 Convert.ToBase64String(jpeg),
                 _pagina.Token,
-                Configuracao.MaxTokensInteligencia);
+                Configuracao.MaxTokensInteligencia,
+                catalogo);
             if (Cancelada(atual))
                 return;
 

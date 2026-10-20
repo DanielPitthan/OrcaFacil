@@ -1190,6 +1190,9 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
             case nameof(AppDbContext.RecargasCartao):
                 ctx.RecargasCartao.Add(new RecargaCartao { CartaoId = 1, Data = quando, Valor = 42.5m });
                 break;
+            case nameof(AppDbContext.RegrasCatalogoComprovante):
+                ctx.RegrasCatalogoComprovante.Add(new RegraCatalogoComprovante { LimiteProdutos = 50 });
+                break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(conjunto), conjunto, "Conjunto sem inserção de teste.");
         }
@@ -1218,6 +1221,7 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
             nameof(AppDbContext.ItensCompraCesta) => await ctx.ItensCompraCesta.AnyAsync(item => item.Preco == 4.5m),
             nameof(AppDbContext.Cartoes) => await ctx.Cartoes.AnyAsync(cartao => cartao.Nome == "dado-real"),
             nameof(AppDbContext.RecargasCartao) => await ctx.RecargasCartao.AnyAsync(recarga => recarga.Valor == 42.5m),
+            nameof(AppDbContext.RegrasCatalogoComprovante) => await ctx.RegrasCatalogoComprovante.AnyAsync(regra => regra.LimiteProdutos == 50),
             _ => false
         };
 

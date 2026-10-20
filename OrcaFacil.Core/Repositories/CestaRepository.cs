@@ -336,6 +336,12 @@ public class CestaRepository : ICestaRepository
     public async Task<int> ObterOuCriarCategoriaCestaAsync()
         => await ObterOuCriarCategoriaPadraoAsync(CestaDespesaRegras.NomeCategoria, "🧺", "#6DA538");
 
+    public async Task<string> TextoCatalogoLeituraAsync(CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        return await CatalogoPedidoComprovante.MontarAsync(context, cancellationToken);
+    }
+
     public async Task<int> ObterOuCriarCategoriaCartaoCreditoAsync()
         => await ObterOuCriarCategoriaPadraoAsync(CartaoRepository.NomeCategoriaCartaoCredito, "💳", "#B2CFE6");
 

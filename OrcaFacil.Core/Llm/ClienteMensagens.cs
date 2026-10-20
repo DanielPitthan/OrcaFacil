@@ -120,7 +120,8 @@ public sealed class ClienteMensagens : IDisposable
         string? tipoMidia,
         string? imagemBase64,
         CancellationToken cancellationToken = default,
-        int maxTokens = PedidoMensagem.MaxTokens)
+        int maxTokens = PedidoMensagem.MaxTokens,
+        string? catalogo = null)
     {
         var preparo = PrepararChamada(urlBase, chave);
         if (preparo.Falha is not null)
@@ -141,7 +142,8 @@ public sealed class ClienteMensagens : IDisposable
             tipoMidia.Trim(),
             imagemBase64,
             maxTokens,
-            PerfilProvedor.DaUrl(urlBase).Thinking);
+            PerfilProvedor.DaUrl(urlBase).Thinking,
+            catalogo);
         return EnviarAsync(
             preparo.Uri,
             preparo.Chave,

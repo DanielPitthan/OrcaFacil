@@ -45,7 +45,10 @@ public static class PedidoMensagem
         "quando o produto não for reconhecível. preco é o total da linha em reais, já com o " +
         "desconto aplicado. quantidade e unidade são só apoio e não substituem o preço. " +
         "data, se aparecer, usa yyyy-MM-dd. Se o comprovante não puder ser lido, legivel " +
-        "fica falso e itens fica uma lista vazia.";
+        "fica falso e itens fica uma lista vazia. O catálogo, quando vier, está em linhas id|nome. " +
+        "produto_id é o id de uma dessas linhas, ou null se nenhuma corresponder. Não invente id. " +
+        "confianca é um número de 0 a 1 para o casamento da linha. pendente fica verdadeiro quando " +
+        "a confiança for menor que 0.8 ou quando não houver correspondência, e só destaca a linha.";
 
     private const string InstrucaoUsuario =
         "Leia o comprovante da imagem e registre os dados com a ferramenta.";
@@ -88,6 +91,10 @@ public static class PedidoMensagem
                     "type": "boolean",
                     "description": "Verdadeiro somente quando o produto foi reconhecido."
                   },
+                  "produto_id": {
+                    "type": ["integer", "null"],
+                    "description": "Id do catálogo na linha id|nome. Null quando não houver correspondência."
+                  },
                   "preco": {
                     "type": "number",
                     "description": "Total da linha em reais, já com desconto."
@@ -105,9 +112,14 @@ public static class PedidoMensagem
                     "description": "Desconto da linha em reais, se houver."
                   },
                   "confianca": {
-                    "type": "string",
-                    "enum": ["alta", "media", "baixa"],
-                    "description": "Confiança da leitura da linha."
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Confiança do casamento com o catálogo, de 0 a 1."
+                  },
+                  "pendente": {
+                    "type": "boolean",
+                    "description": "Verdadeiro quando a confiança for menor que 0.8 ou não houver correspondência. Só destaca a linha."
                   }
                 },
                 "required": ["descricao_lida", "produto", "reconhecido", "preco"]
@@ -143,7 +155,8 @@ public static class PedidoMensagem
         string tipoMidia,
         string imagemBase64,
         int maxTokens = MaxTokens,
-        ModoThinking thinking = ModoThinking.NaoEnviar)
+        ModoThinking thinking = ModoThinking.NaoEnviar,
+        string? catalogo = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(modelo);
         ArgumentException.ThrowIfNullOrWhiteSpace(tipoMidia);
@@ -179,7 +192,7 @@ public static class PedidoMensagem
                         new JsonObject
                         {
                             ["type"] = "text",
-                            ["text"] = InstrucaoUsuario
+                            ["text"] = TextoUsuario(catalogo)
                         }
                     }
                 }
@@ -202,6 +215,15 @@ public static class PedidoMensagem
 
         AplicarThinking(raiz, thinking);
         return raiz.ToJsonString();
+    }
+
+    /// <summary>Catálogo em linhas <c>id|nome</c>, depois da instrução. Vazio não entra no texto.</summary>
+    private static string TextoUsuario(string? catalogo)
+    {
+        if (string.IsNullOrWhiteSpace(catalogo))
+            return InstrucaoUsuario;
+
+        return InstrucaoUsuario + "\n\nCatálogo (id|nome):\n" + catalogo.Trim();
     }
 
     /// <summary>

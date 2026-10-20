@@ -45,13 +45,14 @@ public static class NormalizadorComprovante
         ArgumentNullException.ThrowIfNull(catalogo);
 
         var indice = CatalogoNomes.Criar(catalogo);
+        var produtos = catalogo.Where(produto => produto is not null).ToList();
         var ordem = new List<string>();
         var porChave = new Dictionary<string, LinhaEmEdicao>(StringComparer.OrdinalIgnoreCase);
         var avulsos = 0;
 
         foreach (var item in comprovante.Itens ?? [])
         {
-            var linha = item is null ? Ausente() : Classificar(item, indice);
+            var linha = item is null ? Ausente() : Classificar(item, indice, produtos);
             var chave = linha.Separada ? $"x:{avulsos++}" : linha.Chave;
 
             if (!linha.Separada && porChave.TryGetValue(chave, out var existente))
@@ -133,13 +134,28 @@ public static class NormalizadorComprovante
         }
     }
 
-    private static LinhaEmEdicao Classificar(ItemComprovanteLido item, CatalogoNomes catalogo)
+    private static LinhaEmEdicao Classificar(
+        ItemComprovanteLido item,
+        CatalogoNomes catalogo,
+        IReadOnlyList<ProdutoCesta> produtos)
     {
         var descricao = (item.DescricaoLida ?? string.Empty).Trim();
         var produto = (item.Produto ?? string.Empty).Trim();
         // O preço da linha já vem com o desconto aplicado.
         var preco = CestaDespesaRegras.Dinheiro(item.Preco);
         var precoInvalido = preco <= 0;
+
+        if (item.ProdutoIdInformado)
+        {
+            var id = CasamentoComprovante.IdValido(item, produtos);
+            if (id is int produtoId)
+            {
+                var casado = produtos.First(candidato => candidato.Id == produtoId);
+                return DoCatalogo(item, descricao, casado.Nome.Trim(), casado, preco, precoInvalido);
+            }
+
+            return NaoIdentificada(item, descricao, preco, precoInvalido);
+        }
 
         if (produto.Length > 0)
         {

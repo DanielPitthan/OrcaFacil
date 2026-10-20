@@ -86,6 +86,9 @@ public class CestaService : ICestaService
             .ToList();
     }
 
+    public Task<string> TextoCatalogoLeituraAsync(CancellationToken cancellationToken = default) =>
+        _cestas.TextoCatalogoLeituraAsync(cancellationToken);
+
     public async Task<ComparativoCesta> CompararAsync(int mes, int ano)
     {
         var compras = await _cestas.ListarComprasAsync(null, null);

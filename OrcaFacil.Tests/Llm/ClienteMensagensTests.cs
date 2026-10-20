@@ -73,9 +73,12 @@ public class ClienteMensagensTests
         Assert.Equal(
             new[] { "descricao_lida", "produto", "reconhecido", "preco" },
             Nomes(item.GetProperty("required")));
-        Assert.Equal(
-            new[] { "alta", "media", "baixa" },
-            Nomes(item.GetProperty("properties").GetProperty("confianca").GetProperty("enum")));
+        var confianca = item.GetProperty("properties").GetProperty("confianca");
+        Assert.Equal("number", confianca.GetProperty("type").GetString());
+        Assert.Equal(0m, confianca.GetProperty("minimum").GetDecimal());
+        Assert.Equal(1m, confianca.GetProperty("maximum").GetDecimal());
+        Assert.Equal("boolean", item.GetProperty("properties").GetProperty("pendente").GetProperty("type").GetString());
+        Assert.True(item.GetProperty("properties").TryGetProperty("produto_id", out _));
 
         var escolha = raiz.GetProperty("tool_choice");
         Assert.Equal("tool", escolha.GetProperty("type").GetString());

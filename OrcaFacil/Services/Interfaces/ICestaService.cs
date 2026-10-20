@@ -22,4 +22,5 @@ public interface ICestaService
     Task ExcluirCompraAsync(int id);
     Task<List<CompraCestaFormModel>> ListarRascunhosAsync(int mes, int ano);
     Task<ComparativoCesta> CompararAsync(int mes, int ano);
+    Task<string> TextoCatalogoLeituraAsync(CancellationToken cancellationToken = default);
 }
