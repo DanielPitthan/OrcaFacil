@@ -29,25 +29,40 @@
         await ValueChanged.InvokeAsync(cor);
     }
 
+    private bool _abrindo;
+
     private async Task AbrirPaletaAsync()
     {
-        var parametros = new DialogParameters<PaletaCategoriaDialog>
-        {
-            { x => x.CorOriginal, Value }
-        };
-        var opcoes = new DialogOptions
-        {
-            CloseOnEscapeKey = true,
-            BackdropClick = true
-        };
-        var dialog = await DialogService.ShowAsync<PaletaCategoriaDialog>("Outras cores", parametros, opcoes);
-        var resultado = await dialog.Result;
-        var confirmou = resultado is { Canceled: false };
-        var cor = DecisaoCorPaleta.Resolver(Value, resultado?.Data as string, confirmou);
-        if (string.Equals(cor, Value, StringComparison.OrdinalIgnoreCase))
+        if (_abrindo)
             return;
 
-        Value = cor;
-        await ValueChanged.InvokeAsync(cor);
+        _abrindo = true;
+        try
+        {
+            var parametros = new DialogParameters<PaletaCategoriaDialog>
+            {
+                { x => x.CorOriginal, Value }
+            };
+            var opcoes = new DialogOptions
+            {
+                CloseOnEscapeKey = true,
+                BackdropClick = true,
+                MaxWidth = MaxWidth.ExtraSmall,
+                FullWidth = true
+            };
+            var dialog = await DialogService.ShowAsync<PaletaCategoriaDialog>("Outras cores", parametros, opcoes);
+            var resultado = await dialog.Result;
+            var confirmou = resultado is { Canceled: false };
+            var cor = DecisaoCorPaleta.Resolver(Value, resultado?.Data as string, confirmou);
+            if (string.Equals(cor, Value, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            Value = cor;
+            await ValueChanged.InvokeAsync(cor);
+        }
+        finally
+        {
+            _abrindo = false;
+        }
     }
 }

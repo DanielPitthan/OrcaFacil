@@ -222,9 +222,25 @@ html, body {
     vertical-align: middle;
 }
 
-.of-color-swatch:focus-visible {
-    outline: 2px solid var(--of-primary);
+/* Chrome 83 não conhece :focus-visible e descarta a regra inteira se os
+   seletores estiverem juntos. O anel fica em regras separadas.
+   #1E2A33 sobre #fff é 14,6:1; #E8EAF0 sobre #1B1F27 é 13,7:1. */
+.of-color-swatch:focus {
+    outline: 2px solid #1E2A33;
     outline-offset: 2px;
+}
+
+html.of-tema-escuro .of-color-swatch:focus {
+    outline-color: #E8EAF0;
+}
+
+.of-color-swatch:focus-visible {
+    outline: 2px solid #1E2A33;
+    outline-offset: 2px;
+}
+
+html.of-tema-escuro .of-color-swatch:focus-visible {
+    outline-color: #E8EAF0;
 }
 
 .of-color-swatch.selected {
@@ -254,7 +270,12 @@ html, body {
     display: block;
     font-size: 12px;
     line-height: 1.2;
-    color: var(--of-text-muted);
+    /* #5A6B78 sobre #fff é 5,51:1. No escuro, #C9D1DD sobre #1B1F27 é 10,7:1. */
+    color: #5A6B78;
+}
+
+html.of-tema-escuro .of-abrir-paleta-rotulo {
+    color: #C9D1DD;
 }
 
 .of-abrir-paleta-valor {
@@ -265,13 +286,63 @@ html, body {
 }
 
 /* Diálogo próprio da paleta, irmão do diálogo da categoria no provider.
-   100vh vale no Chrome 83, que ignora 100dvh. A borda RGB fica só aqui. */
+   100vh vale no Chrome 83, que ignora 100dvh. A borda dos campos fica só aqui.
+   Em 360px o papel fica em 344px. O miolo encolhe: o espectro (até 312px) e a
+   fileira HEX cabem inteiros, sem corte e sem rolagem horizontal. */
 .mud-dialog-container .mud-dialog.of-dialogo-paleta {
+    width: min(392px, calc(100% - 16px));
+    max-width: calc(100% - 16px);
     max-height: calc(100vh - 32px);
     max-height: calc(100dvh - 32px);
+    overflow-x: hidden;
     overflow-y: auto;
-    max-width: calc(100% - 32px);
     --mud-palette-lines-inputs: #767676;
+}
+
+.mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-dialog-content {
+    padding-left: 8px;
+    padding-right: 8px;
+    overflow-x: hidden;
+}
+
+.mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-picker-static,
+.mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-picker-content {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+.mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-picker-color-picker {
+    width: 100%;
+    max-width: 312px;
+}
+
+.mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-picker-color-controls {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 100%;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-picker-color-controls-row {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-picker-color-inputs,
+.mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-picker-color-inputfield {
+    min-width: 0;
+}
+
+.mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-picker-control-switch {
+    margin-left: 4px;
+    margin-inline-start: 4px;
+}
+
+.mud-dialog-container .mud-dialog.of-dialogo-paleta .mud-picker-control-switch .mud-icon-button {
+    margin-right: 0 !important;
+    margin-inline-end: 0 !important;
 }
 
 .of-mascara-numerica input {

@@ -2,7 +2,7 @@ namespace OrcaFacil.Core.Categorias;
 
 /// <summary>
 /// A cor da categoria só muda no OK da paleta.
-/// Arrastar, Cancelar, Escape, clique no véu e voltar devolvem a cor original.
+/// Arrastar, Cancelar, Escape e o clique no véu devolvem a cor original.
 /// </summary>
 public static class DecisaoCorPaleta
 {
