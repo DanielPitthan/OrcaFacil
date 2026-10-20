@@ -13,6 +13,12 @@
         else if (Exibicao.Situacao == SituacaoLeituraComprovante.Pronta && Comprovante is not null)
         {
             <p class="of-leitura-texto">@Exibicao.Resumo</p>
+            <div class="of-leitura-acoes">
+                <MudButton Class="of-tentar" Variant="Variant.Outlined" Color="Color.Default"
+                           Disabled="Ocupado" OnClick="Abrir">
+                    Abrir prévia
+                </MudButton>
+            </div>
         }
         else
         {
@@ -40,14 +46,17 @@
 @code {
     [Parameter] public ExibicaoLeituraComprovante? Exibicao { get; set; }
 
-    /// <summary>Resultado normalizado, só na memória. A prévia editável é a etapa seguinte.</summary>
+    /// <summary>Resultado normalizado, só na memória. A prévia edita em cima disto e não grava sozinha.</summary>
     [Parameter] public ComprovanteNormalizado? Comprovante { get; set; }
 
     [Parameter] public bool Ocupado { get; set; }
     [Parameter] public EventCallback TentarDeNovo { get; set; }
     [Parameter] public EventCallback AbrirInteligenciaArtificial { get; set; }
+    [Parameter] public EventCallback AbrirPrevia { get; set; }
 
     private Task Tentar() => TentarDeNovo.InvokeAsync();
 
     private Task AbrirInteligencia() => AbrirInteligenciaArtificial.InvokeAsync();
+
+    private Task Abrir() => AbrirPrevia.InvokeAsync();
 }

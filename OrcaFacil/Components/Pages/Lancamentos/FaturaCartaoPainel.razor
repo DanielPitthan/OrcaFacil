@@ -5,6 +5,7 @@
 @inject ITransacaoService TransacaoService
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IJSRuntime Js
 
 <div class="of-fatura">
     @if (!string.IsNullOrWhiteSpace(MensagemPeriodo))
@@ -56,9 +57,13 @@
                     <MudMenu ActivationEvent="@MouseEvent.LeftClick" AnchorOrigin="Origin.BottomCenter"
                              TransformOrigin="Origin.TopCenter" MaxHeight="320">
                         <ActivatorContent Context="menu">
-                            <FormRow Icone="@Icons.Material.Outlined.CreditCard" Rotulo="Cartão"
-                                     Valor="@CartaoAtual?.Rotulo" Chevron="true" Embutido="true"
-                                     AriaLabel="Selecionar cartão" />
+                            <button @ref="_focoCartao" type="button" class="of-seletor-toque"
+                                    aria-label="Selecionar cartão" aria-haspopup="true"
+                                    @onclick="menu.ToggleAsync" @onkeydown:stopPropagation="true">
+                                <FormRow Icone="@Icons.Material.Outlined.CreditCard" Rotulo="Cartão"
+                                         Valor="@CartaoAtual?.Rotulo" Chevron="true" Embutido="true"
+                                         AriaLabel="Selecionar cartão" />
+                            </button>
                         </ActivatorContent>
                         <ChildContent>
                             @foreach (var cartao in Cartoes)
@@ -97,14 +102,18 @@
                 <MudMenu ActivationEvent="@MouseEvent.LeftClick" AnchorOrigin="Origin.BottomCenter"
                          TransformOrigin="Origin.TopCenter">
                     <ActivatorContent Context="menu">
-                        <FormRow Icone="@Icons.Material.Outlined.Repeat" Rotulo="Recorrência"
-                                 Valor="@FaturaCartaoEditor.RotuloRecorrencia(Modelo.Recorrencia)"
-                                 Chevron="true" Embutido="true" AriaLabel="Selecionar recorrência" />
+                        <button @ref="_focoRecorrencia" type="button" class="of-seletor-toque"
+                                aria-label="Selecionar recorrência" aria-haspopup="true"
+                                @onclick="menu.ToggleAsync" @onkeydown:stopPropagation="true">
+                            <FormRow Icone="@Icons.Material.Outlined.Repeat" Rotulo="Recorrência"
+                                     Valor="@FaturaCartaoEditor.RotuloRecorrencia(Modelo.Recorrencia)"
+                                     Chevron="true" Embutido="true" AriaLabel="Selecionar recorrência" />
+                        </button>
                     </ActivatorContent>
                     <ChildContent>
                         @foreach (var recorrencia in Enum.GetValues<TipoRecorrencia>())
                         {
-                            <MudMenuItem OnClick="@(() => Modelo.Recorrencia = recorrencia)">
+                            <MudMenuItem OnClick="@(() => EscolherRecorrencia(recorrencia))">
                                 @FaturaCartaoEditor.RotuloRecorrencia(recorrencia)
                             </MudMenuItem>
                         }
@@ -214,6 +223,8 @@
         new(NaturezaItemLancamento.Assinatura, "Assinatura")
     ];
 
+    private ElementReference _focoCartao;
+    private ElementReference _focoRecorrencia;
     private ItemSheet<ItemLancamentoFormModel>? _sheet;
     private bool _sheetAberto;
     private bool _estornoAberto;
@@ -299,12 +310,37 @@
 
     protected override void OnParametersSet() => GarantirCategoria();
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await UmFocoAsync(_focoCartao);
+        await UmFocoAsync(_focoRecorrencia);
+    }
+
+    private async Task UmFocoAsync(ElementReference botao)
+    {
+        if (botao.Context is null)
+            return;
+
+        try
+        {
+            await Js.InvokeVoidAsync("OrcaFacilMenu.umFoco", botao);
+        }
+        catch (JSException)
+        {
+        }
+    }
+
     private async Task AlterarDataAsync(DateTime? data) => await DataChanged.InvokeAsync(data);
 
     private async Task SelecionarCartaoAsync(Cartao cartao)
     {
-        Modelo.CartaoId = cartao.Id;
+        FluxoLancamento.EscolherCartao(Modelo, cartao.Id);
         await OnAlterouCartao.InvokeAsync();
+    }
+
+    private void EscolherRecorrencia(TipoRecorrencia recorrencia)
+    {
+        FluxoLancamento.EscolherRecorrencia(Modelo, recorrencia);
     }
 
     private void GarantirCategoria()

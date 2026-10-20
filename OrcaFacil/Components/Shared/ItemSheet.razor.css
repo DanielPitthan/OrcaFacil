@@ -100,8 +100,12 @@
 
 .of-sheet-erro {
     margin: 8px 0 0;
-    color: var(--of-error);
+    color: #9B2C3A;
     font-size: 0.8125rem;
+}
+
+:global(html.of-tema-escuro) .of-sheet-erro {
+    color: #F59A9A;
 }
 
 .of-sheet-acoes {

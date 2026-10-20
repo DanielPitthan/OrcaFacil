@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using OrcaFacil.Core.Cesta;
 using OrcaFacil.Core.Entities;
 
@@ -97,6 +98,7 @@ public static class NormalizadorComprovante
             existente.NomeExcedeLimite = true;
         if (nova.Revisar)
             existente.Revisar = true;
+        existente.CasadoPelaDescricao = existente.CasadoPelaDescricao && nova.CasadoPelaDescricao;
     }
 
     private static (decimal Soma, bool Excedida) Somar(List<LinhaComprovanteNormalizada> linhas)
@@ -143,24 +145,21 @@ public static class NormalizadorComprovante
         {
             var peloProduto = catalogo.Buscar(produto);
             if (peloProduto.Ambiguo)
-                return Ambiguo(item, descricao, produto, preco, precoInvalido);
+                return Ambiguo(item, descricao, produto, preco, precoInvalido, peloProduto.Candidatos);
 
             if (peloProduto.Unico is ProdutoCesta casado)
                 return DoCatalogo(item, descricao, produto, casado, preco, precoInvalido);
-
-            var pelaDescricao = catalogo.Buscar(descricao);
-            if (pelaDescricao.Unico is ProdutoCesta unico)
-                return DoCatalogo(item, descricao, descricao, unico, preco, precoInvalido);
-
-            return NomeNovo(item, descricao, produto, preco, precoInvalido);
         }
 
-        var match = catalogo.Buscar(descricao);
-        if (match.Ambiguo)
-            return Ambiguo(item, descricao, descricao, preco, precoInvalido);
+        var pelaDescricao = catalogo.Buscar(descricao);
+        if (pelaDescricao.Ambiguo)
+            return Ambiguo(item, descricao, descricao, preco, precoInvalido, pelaDescricao.Candidatos);
 
-        if (match.Unico is ProdutoCesta encontrado)
-            return DoCatalogo(item, descricao, descricao, encontrado, preco, precoInvalido);
+        if (pelaDescricao.Unico is ProdutoCesta unico)
+            return DoCatalogo(item, descricao, descricao, unico, preco, precoInvalido, casadoPelaDescricao: true);
+
+        if (produto.Length > 0)
+            return NomeNovo(item, descricao, produto, preco, precoInvalido);
 
         return NaoIdentificada(item, descricao, preco, precoInvalido);
     }
@@ -171,7 +170,8 @@ public static class NormalizadorComprovante
         string nomeLido,
         ProdutoCesta produto,
         decimal preco,
-        bool precoInvalido)
+        bool precoInvalido,
+        bool casadoPelaDescricao = false)
     {
         var avisos = new List<string>();
         if (precoInvalido)
@@ -192,6 +192,7 @@ public static class NormalizadorComprovante
             Reconhecido = true,
             Revisar = !item.Reconhecido,
             ProdutoInativo = !produto.Ativo,
+            CasadoPelaDescricao = casadoPelaDescricao,
             NomeExcedeLimite = nomeLido.Length > TamanhoMaximoNome,
             ProdutoCestaId = produto.Id,
             CategoriaId = semCategoria ? null : produto.CategoriaId,
@@ -265,7 +266,8 @@ public static class NormalizadorComprovante
         string descricao,
         string nomeLido,
         decimal preco,
-        bool precoInvalido)
+        bool precoInvalido,
+        IReadOnlyList<ProdutoCesta> candidatos)
     {
         var avisos = new List<string> { MotivoAmbiguo };
         if (precoInvalido)
@@ -285,6 +287,7 @@ public static class NormalizadorComprovante
             NomeExcedeLimite = nomeLido.Length > TamanhoMaximoNome,
             Nome = Cortar(nomeLido),
             NomeLido = nomeLido,
+            CandidatosIds = candidatos.Select(produto => produto.Id).ToArray(),
             Avisos = avisos
         };
     }
@@ -317,7 +320,43 @@ public static class NormalizadorComprovante
         return texto.Trim();
     }
 
-    private static string Cortar(string nome)
+    /// <summary>
+    /// Comparação de catálogo: sem acento, sem diferença de maiúsculas e com
+    /// espaços repetidos ou nas pontas tratados como um só. O nome gravado não passa por aqui.
+    /// </summary>
+    public static string TextoComparacao(string? texto)
+    {
+        if (string.IsNullOrWhiteSpace(texto))
+            return string.Empty;
+
+        var normalizado = texto.Trim().Normalize(NormalizationForm.FormD);
+        var sb = new StringBuilder(normalizado.Length);
+        var espacoPendente = false;
+        foreach (var caractere in normalizado)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(caractere) == UnicodeCategory.NonSpacingMark)
+                continue;
+
+            if (char.IsWhiteSpace(caractere))
+            {
+                if (sb.Length > 0)
+                    espacoPendente = true;
+                continue;
+            }
+
+            if (espacoPendente)
+            {
+                sb.Append(' ');
+                espacoPendente = false;
+            }
+
+            sb.Append(char.ToLowerInvariant(caractere));
+        }
+
+        return sb.ToString().Normalize(NormalizationForm.FormC);
+    }
+
+    public static string Cortar(string nome)
     {
         if (nome.Length <= TamanhoMaximoNome)
             return nome;
@@ -333,13 +372,14 @@ public static class NormalizadorComprovante
             corte = fim;
         }
 
-        return nome[..corte];
+        return corte == 0 ? string.Empty : nome[..corte];
     }
 
     private readonly struct BuscaCatalogo
     {
         public ProdutoCesta? Unico { get; init; }
-        public bool Ambiguo { get; init; }
+        public bool Ambiguo => Candidatos is { Count: > 1 };
+        public IReadOnlyList<ProdutoCesta> Candidatos { get; init; }
     }
 
     private sealed class CatalogoNomes
@@ -350,13 +390,16 @@ public static class NormalizadorComprovante
 
         public static CatalogoNomes Criar(IReadOnlyList<ProdutoCesta> catalogo)
         {
-            var porNome = new Dictionary<string, List<ProdutoCesta>>(StringComparer.OrdinalIgnoreCase);
+            var porNome = new Dictionary<string, List<ProdutoCesta>>(StringComparer.Ordinal);
             foreach (var produto in catalogo)
             {
-                if (produto is null || string.IsNullOrWhiteSpace(produto.Nome))
+                if (produto is null)
                     continue;
 
-                var nome = produto.Nome.Trim();
+                var nome = TextoComparacao(produto.Nome);
+                if (nome.Length == 0)
+                    continue;
+
                 if (!porNome.TryGetValue(nome, out var lista))
                 {
                     lista = [];
@@ -371,13 +414,14 @@ public static class NormalizadorComprovante
 
         public BuscaCatalogo Buscar(string nome)
         {
-            if (nome.Length == 0 || !_porNome.TryGetValue(nome, out var lista) || lista.Count == 0)
+            var chave = TextoComparacao(nome);
+            if (chave.Length == 0 || !_porNome.TryGetValue(chave, out var lista) || lista.Count == 0)
                 return default;
 
             if (lista.Count == 1)
-                return new BuscaCatalogo { Unico = lista[0] };
+                return new BuscaCatalogo { Unico = lista[0], Candidatos = lista };
 
-            return new BuscaCatalogo { Ambiguo = true };
+            return new BuscaCatalogo { Candidatos = lista };
         }
     }
 
@@ -398,6 +442,8 @@ public static class NormalizadorComprovante
         public bool Ambiguo { get; init; }
         public bool ProdutoInativo { get; init; }
         public bool ItemAusente { get; init; }
+        public bool CasadoPelaDescricao { get; set; }
+        public IReadOnlyList<int> CandidatosIds { get; init; } = [];
         public bool CategoriaFaltando { get; init; }
         public bool NomeExcedeLimite { get; set; }
         public int? ProdutoCestaId { get; init; }
@@ -421,6 +467,8 @@ public static class NormalizadorComprovante
             Ambiguo = Ambiguo,
             ProdutoInativo = ProdutoInativo,
             ItemAusente = ItemAusente,
+            CasadoPelaDescricao = CasadoPelaDescricao,
+            CandidatosIds = CandidatosIds,
             CategoriaFaltando = CategoriaFaltando,
             NomeExcedeLimite = NomeExcedeLimite,
             ProdutoCestaId = ProdutoCestaId,
@@ -507,6 +555,15 @@ public sealed record LinhaComprovanteNormalizada
     public bool ProdutoInativo { get; init; }
 
     public bool ItemAusente { get; init; }
+
+    /// <summary>
+    /// A descrição lida achou um único produto. Vale em qualquer tentativa.
+    /// O nome gravado continua sendo o do catálogo (<see cref="Nome"/>), nunca o <see cref="Rotulo"/>.
+    /// </summary>
+    public bool CasadoPelaDescricao { get; init; }
+
+    /// <summary>Produtos do catálogo entre os quais a pessoa escolhe quando a linha é ambígua.</summary>
+    public IReadOnlyList<int> CandidatosIds { get; init; } = [];
 
     public bool CategoriaFaltando { get; init; }
 

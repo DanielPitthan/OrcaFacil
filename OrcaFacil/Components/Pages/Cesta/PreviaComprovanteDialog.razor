@@ -1,0 +1,345 @@
+@using OrcaFacil.Core.Llm
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudDialog Gutters="false" TitleClass="of-cesta-titulo" ContentClass="of-cesta-conteudo" ActionsClass="of-cesta-acoes of-previa-acoes">
+    <TitleContent>
+        <div class="of-previa-cabeca">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Inherit" Edge="Edge.Start"
+                           aria-label="Voltar" OnClick="Cancelar" />
+            <div class="of-appbar-titulos">
+                <span class="of-appbar-titulo">Prévia do comprovante</span>
+                <span class="of-appbar-sub">@Previa.TextoLocal</span>
+            </div>
+        </div>
+    </TitleContent>
+    <DialogContent>
+        <div class="of-previa">
+            <div class="of-previa-miolo">
+                <div class="of-previa-bloco">
+                    <FormSection Titulo="Leitura">
+                        <p class="of-previa-contagem @(Previa.NaoIdentificados > 0 ? "of-previa-erro" : "of-previa-apoio")">
+                            @Previa.TextoNaoIdentificados
+                        </p>
+                        <p class="of-previa-apoio">@Previa.Data.ToString("dd/MM/yyyy") · @Previa.TextoLocal</p>
+                        @if (!Previa.Legivel)
+                        {
+                            <p class="of-previa-apoio">@NormalizadorComprovante.AvisoLeituraIncerta</p>
+                        }
+                        @if (Previa.TotalDivergente && Previa.TotalCupom is decimal cupom)
+                        {
+                            <div class="of-previa-totais">
+                                <span>Total do cupom @cupom.ToString("C")</span>
+                                <span>Soma das linhas @Previa.SomaLinhas.ToString("C")</span>
+                            </div>
+                        }
+                        <p class="of-previa-apoio">Pagamento, benefício e cartão ficam na compra.</p>
+                    </FormSection>
+                </div>
+
+                <div class="of-previa-bloco">
+                    <FormSection Titulo="Itens">
+                        <ItemList TItem="LinhaPreviaComprovante" Itens="@Previa.Linhas" Contagem="@Contagem"
+                                  SomaFormatada="@Previa.SomaLinhas.ToString("C")"
+                                  Titulo="Titulo" Subtitulo="Subtitulo" Valor="Valor" Icone="Icone"
+                                  ChaveItem="Chave" EmErro="EmErro" MostrarAdicionar="@Previa.PodeCadastrarTudo"
+                                  TextoAdicionar="Cadastrar tudo" OnAdicionar="CadastrarTudoAsync"
+                                  TextoVazio="Nenhum item na leitura."
+                                  OnEditar="Editar" OnRemover="Remover" />
+                    </FormSection>
+                </div>
+
+                @if (Previa.MensagemBloqueio is not null)
+                {
+                    <p class="of-previa-erro" role="alert">@Previa.MensagemBloqueio</p>
+                }
+            </div>
+        </div>
+    </DialogContent>
+    <DialogActions>
+        <StickyActionBar Contido="true" TextoCancelar="Cancelar" TextoPrimario="Confirmar"
+                         OnCancelar="Cancelar" OnPrimario="Confirmar" TipoPrimario="ButtonType.Button"
+                         PrimarioDesabilitado="@(!Previa.PodeConfirmar)" />
+    </DialogActions>
+</MudDialog>
+
+<ItemSheet TItem="LinhaPreviaComprovante" @bind-Aberto="_sheetAberto" Item="_editando" AcimaDeDialogo="true"
+           Titulo="@(_editando?.Titulo ?? "Item")" RotuloValor="Preço"
+           Valor="_preco" ValorChanged="AlterarPreco" Erro="@_erroItem"
+           MostrarOutro="false" MostrarCancelar="true" TextoConfirmar="Salvar" TextoCancelar="Cancelar"
+           OnConfirmar="ConfirmarSheet">
+    @if (_editando?.PodeCadastrar == true)
+    {
+        <MudButton Class="of-cadastrar" Variant="Variant.Outlined" Color="Color.Default" OnClick="CadastrarAsync">Cadastrar</MudButton>
+    }
+    @if (_editando?.PodeDesfazerNovo == true)
+    {
+        <MudButton Class="of-cadastrar" Variant="Variant.Outlined" Color="Color.Default" OnClick="DesfazerNovo">Desfazer</MudButton>
+    }
+    @if (!Opcoes().Any())
+    {
+        <p class="of-previa-apoio">Nenhum produto cadastrado.</p>
+    }
+    else
+    {
+        <div class="of-previa-opcoes">
+            @foreach (var produto in Opcoes())
+            {
+                <button type="button" class="of-previa-opcao @(_produtoId == produto.Id ? "of-previa-opcao-ativa" : null)"
+                        @onclick="() => Escolher(produto.Id)">
+                    @produto.Nome
+                </button>
+            }
+        </div>
+    }
+</ItemSheet>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public PreviaComprovante Previa { get; set; } = null!;
+    [Parameter] public IReadOnlyList<ProdutoCesta> Produtos { get; set; } = [];
+    [Parameter] public IReadOnlyList<Categoria> Categorias { get; set; } = [];
+
+    private readonly List<ProdutoCesta> _catalogo = [];
+    private LinhaPreviaComprovante? _editando;
+    private bool _sheetAberto;
+    private bool _confirmando;
+    private bool _cadastrando;
+    private bool _cadastrandoTudo;
+    private int _produtoId;
+    private decimal _preco;
+    private string? _erroItem;
+
+    private string Contagem => CompraCestaEditor.Contagem(Previa.Linhas.Count);
+
+    protected override void OnInitialized()
+    {
+        _catalogo.AddRange(Produtos.Where(p => p.Ativo).OrderBy(p => p.Nome, StringComparer.CurrentCultureIgnoreCase));
+    }
+
+    private void Cancelar()
+    {
+        Previa.CancelarCadastro();
+        MudDialog.Cancel();
+    }
+
+    private void Confirmar()
+    {
+        if (!Previa.PodeConfirmar || _confirmando)
+            return;
+
+        _confirmando = true;
+        MudDialog.Close(DialogResult.Ok(Previa.ParaCompra()));
+    }
+
+    private void Editar(LinhaPreviaComprovante linha)
+    {
+        _editando = linha;
+        _produtoId = linha.ProdutoCestaId ?? 0;
+        _preco = linha.Preco;
+        _erroItem = null;
+        if (_produtoId > 0 && _catalogo.All(p => p.Id != _produtoId))
+        {
+            var atual = Produtos.FirstOrDefault(p => p.Id == _produtoId);
+            if (atual is not null)
+                _catalogo.Add(atual);
+        }
+
+        _sheetAberto = true;
+    }
+
+    private void Remover(LinhaPreviaComprovante linha)
+    {
+        if (_editando == linha)
+        {
+            _editando = null;
+            _sheetAberto = false;
+        }
+
+        Previa.Remover(linha);
+    }
+
+    private Task AlterarPreco(decimal valor)
+    {
+        _preco = valor;
+        _erroItem = null;
+        return Task.CompletedTask;
+    }
+
+    private void Escolher(int produtoId)
+    {
+        _produtoId = produtoId;
+        _erroItem = null;
+    }
+
+    private void ConfirmarSheet(LinhaPreviaComprovante _)
+    {
+        if (_editando is null)
+            return;
+
+        if (_preco <= 0)
+        {
+            _erroItem = "Informe o preço do item.";
+            return;
+        }
+
+        if (_editando.NovoSeraCriado && (_produtoId <= 0 || _produtoId == _editando.ProdutoCestaId))
+        {
+            Previa.AlterarPreco(_editando, _preco);
+            _sheetAberto = false;
+            return;
+        }
+
+        if (_produtoId <= 0)
+        {
+            _erroItem = "Selecione o produto.";
+            return;
+        }
+
+        var produto = _catalogo.FirstOrDefault(p => p.Id == _produtoId);
+        if (produto is null)
+        {
+            _erroItem = "Selecione o produto.";
+            return;
+        }
+
+        if (_editando.ProdutoCestaId != produto.Id)
+            Previa.Classificar(_editando, produto);
+
+        Previa.AlterarPreco(_editando, _preco);
+        _sheetAberto = false;
+    }
+
+    private async Task CadastrarAsync()
+    {
+        if (_cadastrando || _cadastrandoTudo || _confirmando || _editando is null || !_editando.PodeCadastrar)
+            return;
+
+        _cadastrando = true;
+        try
+        {
+            var linha = _editando;
+            if (Categorias.Count == 0)
+            {
+                Snackbar.Add("Cadastre uma categoria de despesa antes do produto.", Severity.Info);
+                return;
+            }
+
+            var modelo = Previa.IniciarCadastro(linha);
+            if (modelo is null)
+                return;
+
+            _sheetAberto = false;
+            var parametros = new DialogParameters<ProdutoCestaDialog>
+            {
+                { x => x.Modelo, modelo },
+                { x => x.Categorias, Categorias }
+            };
+            var dialog = await DialogService.ShowAsync<ProdutoCestaDialog>("Novo produto", parametros, OpcoesProduto());
+            var resultado = await dialog.Result;
+            if (resultado is not { Canceled: false, Data: ProdutoCestaFormModel salvo })
+            {
+                Previa.CancelarCadastro();
+                _editando = linha;
+                _sheetAberto = true;
+                return;
+            }
+
+            var categoria = Categorias.FirstOrDefault(item => item.Id == salvo.CategoriaId)?.Nome;
+            try
+            {
+                Previa.ConfirmarCadastro(salvo, _preco, categoria);
+            }
+            catch (InvalidOperationException ex)
+            {
+                Previa.CancelarCadastro();
+                Snackbar.Add(ex.Message, Severity.Warning);
+                _editando = linha;
+                _sheetAberto = true;
+                return;
+            }
+
+            _sheetAberto = false;
+            _erroItem = null;
+        }
+        finally
+        {
+            _cadastrando = false;
+        }
+    }
+
+    private async Task CadastrarTudoAsync()
+    {
+        if (_cadastrandoTudo || _cadastrando || _confirmando || !Previa.PodeCadastrarTudo)
+            return;
+
+        _cadastrandoTudo = true;
+        try
+        {
+            if (Categorias.Count == 0)
+            {
+                Snackbar.Add("Cadastre uma categoria de despesa antes do produto.", Severity.Info);
+                return;
+            }
+
+            var categoria = Categorias[0];
+            if (Categorias.Count > 1)
+            {
+                var parametros = new DialogParameters<ProdutoCestaDialog>
+                {
+                    { x => x.Modelo, new ProdutoCestaFormModel { Ativo = true } },
+                    { x => x.Categorias, Categorias },
+                    { x => x.SomenteCategoria, true }
+                };
+                var dialog = await DialogService.ShowAsync<ProdutoCestaDialog>("Categoria dos novos", parametros, OpcoesProduto());
+                var resultado = await dialog.Result;
+                if (resultado is not { Canceled: false, Data: ProdutoCestaFormModel salvo })
+                    return;
+
+                var escolhida = Categorias.FirstOrDefault(item => item.Id == salvo.CategoriaId);
+                if (escolhida is null)
+                    return;
+
+                categoria = escolhida;
+            }
+
+            Previa.CadastrarTudo(categoria.Id, categoria.Nome);
+        }
+        finally
+        {
+            _cadastrandoTudo = false;
+        }
+    }
+
+    private void DesfazerNovo()
+    {
+        if (_editando is null)
+            return;
+
+        Previa.DesfazerNovo(_editando);
+        _sheetAberto = false;
+        _erroItem = null;
+    }
+
+    private IEnumerable<ProdutoCesta> Opcoes()
+    {
+        if (_editando?.Ambiguo == true && _editando.CandidatosIds.Count > 0)
+            return _catalogo.Where(produto => _editando.CandidatosIds.Contains(produto.Id));
+
+        return _catalogo;
+    }
+
+    private static string Titulo(LinhaPreviaComprovante linha) => linha.Titulo;
+
+    private static string Subtitulo(LinhaPreviaComprovante linha) => linha.Subtitulo;
+
+    private static string Valor(LinhaPreviaComprovante linha) => linha.Preco.ToString("C");
+
+    private static string Icone(LinhaPreviaComprovante linha) => linha.NaoIdentificado ? "❓" : "🛒";
+
+    private static bool EmErro(LinhaPreviaComprovante linha) => linha.NaoIdentificado;
+
+    private static object Chave(LinhaPreviaComprovante linha) => linha.Id;
+
+    private static DialogOptions OpcoesProduto() => new() { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true };
+}

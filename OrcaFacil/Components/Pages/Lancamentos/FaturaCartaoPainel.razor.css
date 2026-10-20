@@ -35,6 +35,20 @@
     width: 100%;
 }
 
+.of-seletor-toque {
+    display: block;
+    width: 100%;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
 .of-cats {
     display: flex;
     flex-wrap: wrap;

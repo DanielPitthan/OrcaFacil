@@ -1,9 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.Cesta;
 using OrcaFacil.Core.Data;
+using OrcaFacil.Core.Dtos;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
 using OrcaFacil.Core.Lancamentos;
+using OrcaFacil.Core.Llm;
 
 namespace OrcaFacil.Core.Repositories;
 
@@ -149,9 +151,88 @@ public class CestaRepository : ICestaRepository
             .FirstOrDefaultAsync(c => c.Id == id);
     }
 
-    public async Task<CompraCesta> SalvarCompraAsync(CompraCesta compra, Transacao? despesa, FaturaCreditoCesta? faturaCredito = null)
+    public async Task<CompraCesta> SalvarCompraAsync(
+        CompraCesta compra,
+        Transacao? despesa,
+        FaturaCreditoCesta? faturaCredito = null,
+        IReadOnlyList<ProdutoNovoCompra>? produtosNovos = null)
     {
         await using var context = await _contextFactory.CreateDbContextAsync();
+        await using var transacao = await context.Database.BeginTransactionAsync();
+        await GarantirPeriodoAbertoNoContextoAsync(context, compra.Data);
+        if (produtosNovos is { Count: > 0 })
+            await MaterializarProdutosNovosAsync(context, compra, produtosNovos);
+
+        var salva = await GravarCompraNoContextoAsync(context, compra, despesa, faturaCredito);
+        await transacao.CommitAsync();
+        return salva;
+    }
+
+    private static async Task GarantirPeriodoAbertoNoContextoAsync(AppDbContext context, DateTime data)
+    {
+        var fechado = await context.FechamentosPeriodo.AnyAsync(f => f.Mes == data.Month && f.Ano == data.Year && f.Fechado);
+        if (fechado)
+            throw new InvalidOperationException(ItensFaturaRegras.MensagemMesFechado(data));
+    }
+
+    private static async Task MaterializarProdutosNovosAsync(
+        AppDbContext context,
+        CompraCesta compra,
+        IReadOnlyList<ProdutoNovoCompra> novos)
+    {
+        if (compra.Itens is not IList<CompraCestaItem> itens)
+            throw new InvalidOperationException("A compra não aceita os produtos novos.");
+
+        var porChave = new Dictionary<string, ProdutoCesta>(StringComparer.Ordinal);
+        foreach (var produto in await context.ProdutosCesta.OrderBy(p => p.Id).ToListAsync())
+        {
+            var chaveExistente = NormalizadorComprovante.TextoComparacao(produto.Nome);
+            if (chaveExistente.Length > 0)
+                porChave.TryAdd(chaveExistente, produto);
+        }
+
+        var houveNovo = false;
+        foreach (var novo in novos)
+        {
+            var chave = NormalizadorComprovante.TextoComparacao(novo.Nome);
+            if (chave.Length == 0)
+                throw new InvalidOperationException("Informe o nome do produto.");
+
+            if (novo.CategoriaId <= 0)
+                throw new InvalidOperationException("Selecione a categoria do produto.");
+
+            if (porChave.ContainsKey(chave))
+                continue;
+
+            porChave[chave] = new ProdutoCesta
+            {
+                Nome = novo.Nome.Trim(),
+                CategoriaId = novo.CategoriaId,
+                Ativo = true
+            };
+            context.ProdutosCesta.Add(porChave[chave]);
+            houveNovo = true;
+        }
+
+        if (houveNovo)
+            await context.SaveChangesAsync();
+
+        foreach (var novo in novos)
+        {
+            var chave = NormalizadorComprovante.TextoComparacao(novo.Nome);
+            var produto = porChave[chave];
+            var item = itens[novo.IndiceItem];
+            item.Produto = null;
+            item.ProdutoCestaId = produto.Id;
+        }
+    }
+
+    private static async Task<CompraCesta> GravarCompraNoContextoAsync(
+        AppDbContext context,
+        CompraCesta compra,
+        Transacao? despesa,
+        FaturaCreditoCesta? faturaCredito)
+    {
         if (compra.Id == 0)
         {
             if (faturaCredito is not null)
