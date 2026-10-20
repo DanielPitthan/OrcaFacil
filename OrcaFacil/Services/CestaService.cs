@@ -1,6 +1,7 @@
 using OrcaFacil.Core.Cesta;
 using OrcaFacil.Core.Dtos;
 using OrcaFacil.Core.Entities;
+using OrcaFacil.Core.Llm;
 using OrcaFacil.Core.Repositories;
 using OrcaFacil.Core.Services;
 using OrcaFacil.Services.Interfaces;
@@ -45,6 +46,10 @@ public class CestaService : ICestaService
 
     public async Task<CompraCesta> SalvarCompraAsync(CompraCestaFormModel modelo)
     {
+        var comProduto = modelo.ItensSaida.Where(item => item is { ExigeConfirmacao: true }).ToList();
+        if (comProduto.Count > 0)
+            CasamentoComprovante.GarantirConfirmacao(comProduto);
+
         var membroId = _perfil.Atual?.Id ?? throw new InvalidOperationException("Nenhum perfil ativo.");
         await _fechamento.GarantirPeriodoAbertoAsync(modelo.Data);
         if (modelo.Id is int id)
@@ -88,6 +93,9 @@ public class CestaService : ICestaService
 
     public Task<string> TextoCatalogoLeituraAsync(CancellationToken cancellationToken = default) =>
         _cestas.TextoCatalogoLeituraAsync(cancellationToken);
+
+    public Task<IReadOnlyList<ProdutoCesta>> ProdutosCatalogoLeituraAsync(CancellationToken cancellationToken = default) =>
+        _cestas.ProdutosCatalogoLeituraAsync(cancellationToken);
 
     public async Task<ComparativoCesta> CompararAsync(int mes, int ano)
     {

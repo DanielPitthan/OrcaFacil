@@ -1,8 +1,12 @@
+using System.Globalization;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.Data;
+using OrcaFacil.Core.Dtos;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Llm;
+using OrcaFacil.Core.Repositories;
+using OrcaFacil.Core.Services;
 
 namespace OrcaFacil.Tests.Llm;
 
@@ -190,13 +194,19 @@ public class CasamentoComprovanteTests
     }
 
     [Theory]
-    [InlineData("https://api.anthropic.com", false, PedidoMensagem.ModeloAnthropic)]
-    [InlineData("https://token-plan.maas.qwencloudapi.com/apps/anthropic", true, PedidoMensagem.ModeloAlibaba)]
-    public void Pedido_AnthropicEQwen_LevamCatalogoSemEsquemaDeSaida(string url, bool qwen, string modelo)
+    [InlineData("https://api.anthropic.com", ProvedorDetectado.Anthropic, false, PedidoMensagem.ModeloAnthropic)]
+    [InlineData("https://api.deepseek.com", ProvedorDetectado.DeepSeek, true, PedidoMensagem.ModeloDeepSeek)]
+    [InlineData("https://token-plan.maas.qwencloudapi.com/apps/anthropic", ProvedorDetectado.QwenCloud, true, PedidoMensagem.ModeloAlibaba)]
+    public void Pedido_AnthropicDeepSeekEQwen_LevamCatalogoSemEsquemaDeSaida(
+        string url,
+        ProvedorDetectado provedor,
+        bool thinkingDesligado,
+        string modelo)
     {
         var perfil = PerfilProvedor.DaUrl(url);
-        Assert.Equal(qwen, PerfilProvedor.EhQwenCloud(new Uri(url).Host));
-        Assert.Equal(qwen ? ProvedorDetectado.QwenCloud : ProvedorDetectado.Anthropic, perfil.Provedor);
+        Assert.Equal(provedor == ProvedorDetectado.QwenCloud, PerfilProvedor.EhQwenCloud(new Uri(url).Host));
+        Assert.Equal(provedor, perfil.Provedor);
+        Assert.Equal(thinkingDesligado, perfil.Thinking == ModoThinking.Desligar);
 
         var json = PedidoMensagem.Montar(modelo, "image/jpeg", "dGVzdGU=", thinking: perfil.Thinking, catalogo: "4|Arroz\n8|Feijao");
 
@@ -207,8 +217,8 @@ public class CasamentoComprovanteTests
         Assert.Contains("\"confianca\"", json, StringComparison.Ordinal);
         Assert.DoesNotContain("output_config", json, StringComparison.Ordinal);
         Assert.DoesNotContain("\"enum\"", json, StringComparison.Ordinal);
-        Assert.Equal(qwen, json.Contains("\"thinking\"", StringComparison.Ordinal));
-        if (qwen)
+        Assert.Equal(thinkingDesligado, json.Contains("\"thinking\"", StringComparison.Ordinal));
+        if (thinkingDesligado)
             Assert.Contains("\"disabled\"", json, StringComparison.Ordinal);
     }
 
@@ -249,6 +259,308 @@ public class CasamentoComprovanteTests
         Assert.False(saida.PodeSalvar);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-3)]
+    public void IdNaoPositivo_PresenteNoCatalogo_ERejeitado(int id)
+    {
+        var catalogo = new List<ProdutoCesta>
+        {
+            new() { Id = id, Nome = "Arroz", CategoriaId = 2, Ativo = true },
+            new() { Id = 4, Nome = "Feijão", CategoriaId = 2, Ativo = true }
+        };
+        var item = Lido("ARROZ TIPO 1", produtoId: id, informado: true, confianca: 0.99m);
+
+        var saida = CasamentoComprovante.Casar(item, catalogo);
+        var linha = Assert.Single(NormalizadorComprovante.Normalizar(Cupom(item), catalogo).Linhas);
+
+        Assert.Null(saida.ProdutoId);
+        Assert.True(linha.NaoIdentificado);
+        Assert.Null(linha.ProdutoCestaId);
+        Assert.NotEqual("Arroz", linha.Nome);
+    }
+
+    [Theory]
+    [InlineData("0.81", "0.81")]
+    [InlineData("1.01", "0")]
+    [InlineData("-0.01", "0")]
+    public void Confianca_ForaDeZeroAUm_CaiParaZero(string entrada, string esperada)
+    {
+        var confianca = decimal.Parse(entrada, CultureInfo.InvariantCulture);
+        var saida = CasamentoComprovante.Casar(
+            Lido("ARROZ", produtoId: 4, informado: true, confianca: confianca),
+            Catalogo());
+
+        Assert.Equal(decimal.Parse(esperada, CultureInfo.InvariantCulture), saida.Confianca);
+    }
+
+    [Fact]
+    public void Sanitizar_TiraPipeEQuebra_ELimitaONome()
+    {
+        Assert.Equal(
+            "4|A 99 B C",
+            CatalogoPedidoComprovante.Texto([new ProdutoCesta { Id = 4, Nome = "A\n99|B | C" }]));
+
+        Assert.Equal(80, CatalogoPedidoComprovante.TamanhoMaximoNome);
+        var longo = new string('N', CatalogoPedidoComprovante.TamanhoMaximoNome + 5);
+        var texto = CatalogoPedidoComprovante.Texto([new ProdutoCesta { Id = 1, Nome = longo }]);
+        var nome = texto[(texto.IndexOf('|') + 1)..];
+        Assert.Equal(CatalogoPedidoComprovante.TamanhoMaximoNome, nome.Length);
+        Assert.Equal(new string('N', CatalogoPedidoComprovante.TamanhoMaximoNome), nome);
+    }
+
+    [Fact]
+    public void Selecionar_IgnoraIdNaoPositivoENomeEmBranco()
+    {
+        var escolhidos = CatalogoPedidoComprovante.Selecionar(
+            [
+                new ProdutoCesta { Id = 0, Nome = "Zero" },
+                new ProdutoCesta { Id = 9, Nome = "   " },
+                new ProdutoCesta { Id = 6, Nome = "Arroz" }
+            ],
+            new Dictionary<int, int>(),
+            CatalogoPedidoComprovante.LimitePadrao);
+
+        Assert.Equal([6], escolhidos.Select(produto => produto.Id).ToArray());
+    }
+
+    [Theory]
+    [InlineData("0.79", true)]
+    [InlineData("0.8", false)]
+    [InlineData(null, true)]
+    public void ConfiancaBaixaNoId_MarcaRevisarEPendenteNaPrevia(string? texto, bool revisar)
+    {
+        decimal? confianca = texto is null
+            ? null
+            : decimal.Parse(texto, CultureInfo.InvariantCulture);
+        var catalogo = new List<ProdutoCesta>
+        {
+            new()
+            {
+                Id = 4,
+                Nome = "Arroz",
+                CategoriaId = 2,
+                Ativo = true,
+                Categoria = new Categoria { Id = 2, Nome = "Alimentos" }
+            }
+        };
+        var item = new ItemComprovanteLido(
+            "ARROZ", "Arroz", true, 10m, null, null, null, null, 4, true, confianca);
+
+        var normalizada = Assert.Single(NormalizadorComprovante.Normalizar(Cupom(item), catalogo).Linhas);
+        Assert.Equal(revisar, normalizada.Revisar);
+        Assert.Equal(4, normalizada.ProdutoCestaId);
+
+        var previa = PreviaComprovante.Criar(
+            NormalizadorComprovante.Normalizar(Cupom(item), catalogo),
+            [],
+            catalogo,
+            new DateTime(2026, 10, 1));
+        var linha = Assert.Single(previa.Linhas);
+        Assert.Equal(revisar, linha.Pendente);
+        Assert.Contains("confiança", linha.MarcadorCasamento, StringComparison.Ordinal);
+        if (revisar)
+            Assert.Contains("pendente", linha.MarcadorCasamento, StringComparison.Ordinal);
+        else
+            Assert.DoesNotContain("pendente", linha.MarcadorCasamento, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ParaCompra_NomeExato_ExigeCasamentoConfirmado()
+    {
+        var catalogo = new List<ProdutoCesta>
+        {
+            new()
+            {
+                Id = 4,
+                Nome = "Arroz",
+                CategoriaId = 2,
+                Ativo = true,
+                Categoria = new Categoria { Id = 2, Nome = "Alimentos" }
+            }
+        };
+        var item = new ItemComprovanteLido("pacote", "Arroz", true, 8m, null, null, null, null);
+        var previa = PreviaComprovante.Criar(
+            NormalizadorComprovante.Normalizar(new ComprovanteLido(null, null, null, true, [item]), catalogo),
+            [],
+            catalogo,
+            new DateTime(2026, 10, 1));
+        var linha = Assert.Single(previa.Linhas);
+
+        Assert.Equal(4, linha.ProdutoCestaId);
+        Assert.False(linha.CasadoPelaDescricao);
+        Assert.False(linha.CasamentoConfirmado);
+        Assert.True(previa.PodeConfirmar);
+
+        var excecao = Assert.Throws<InvalidOperationException>(() => previa.ParaCompra());
+        Assert.Equal(CasamentoComprovante.MensagemConfirmacaoObrigatoria, excecao.Message);
+
+        previa.ConfirmarCasamentos();
+        Assert.True(linha.CasamentoConfirmado);
+        var compra = previa.ParaCompra();
+        Assert.Equal(4, Assert.Single(compra.Itens).ProdutoCestaId);
+        var saida = Assert.Single(compra.ItensSaida);
+        Assert.Equal(4, saida.ProdutoId);
+        Assert.True(saida.Confirmado);
+    }
+
+    [Fact]
+    public async Task SalvarCompra_ProdutoIdSemConfirmacao_NaoGrava()
+    {
+        using var factory = new TestDbContextFactory();
+        var cestas = new CestaRepository(factory);
+        var service = new CestaCadastroService(cestas);
+        var membros = new MembroFamiliaRepository(factory);
+        var membro = new MembroFamilia { Nome = "Usuário" };
+        await membros.AddAsync(membro);
+
+        int categoriaId;
+        await using (var ctx = factory.CreateDbContext())
+        {
+            var categoria = new Categoria { Nome = "Alimentos", Icone = "A", CorHex = "#112233" };
+            ctx.Categorias.Add(categoria);
+            await ctx.SaveChangesAsync();
+            categoriaId = categoria.Id;
+        }
+
+        var arroz = await service.SalvarProdutoAsync(new ProdutoCestaFormModel { Nome = "Arroz", CategoriaId = categoriaId });
+        var local = await service.SalvarLocalAsync(new LocalCompraFormModel { Nome = "Mercado" });
+        var saida = new ItemSaidaComprovante
+        {
+            DescricaoLida = "ARROZ",
+            ProdutoId = arroz.Id,
+            Confianca = 0.95m,
+            Pendente = false
+        };
+        var modelo = new CompraCestaFormModel
+        {
+            LocalCompraId = local.Id,
+            Data = new DateTime(2026, 10, 5),
+            Itens = [new ItemCompraCestaFormModel { ProdutoCestaId = arroz.Id, Preco = 10m }],
+            ItensSaida = [saida]
+        };
+
+        await using (var antes = factory.CreateDbContext())
+        {
+            Assert.Equal(0, await antes.ComprasCesta.CountAsync());
+            Assert.Equal(0, await antes.ItensCompraCesta.CountAsync());
+        }
+
+        var excecao = await Assert.ThrowsAsync<InvalidOperationException>(() => service.SalvarCompraAsync(modelo, membro.Id));
+        Assert.Equal(CasamentoComprovante.MensagemConfirmacaoObrigatoria, excecao.Message);
+
+        await using (var depois = factory.CreateDbContext())
+        {
+            Assert.Equal(0, await depois.ComprasCesta.CountAsync());
+            Assert.Equal(0, await depois.ItensCompraCesta.CountAsync());
+        }
+
+        modelo.ItensSaida = [saida.Confirmar()];
+        var compra = await service.SalvarCompraAsync(modelo, membro.Id);
+        Assert.Equal(arroz.Id, Assert.Single(compra.Itens).ProdutoCestaId);
+
+        await using var gravado = factory.CreateDbContext();
+        Assert.Equal(1, await gravado.ComprasCesta.CountAsync());
+        Assert.Equal(1, await gravado.ItensCompraCesta.CountAsync());
+    }
+
+    [Fact]
+    public async Task IdForaDoRecorte_ExisteNoBanco_NaoCasa()
+    {
+        using var factory = new TestDbContextFactory();
+        await using var ctx = factory.CreateDbContext();
+        var categoria = new Categoria { Nome = "Alimentos", Icone = "A", CorHex = "#112233" };
+        var local = new LocalCompra { Nome = "Mercado" };
+        ctx.AddRange(categoria, local);
+        await ctx.SaveChangesAsync();
+
+        var fora = new ProdutoCesta { Nome = "Fora", CategoriaId = categoria.Id, Ativo = true };
+        var dentro = new ProdutoCesta { Nome = "Dentro", CategoriaId = categoria.Id, Ativo = true };
+        ctx.ProdutosCesta.AddRange(fora, dentro);
+        await ctx.SaveChangesAsync();
+
+        ctx.ComprasCesta.Add(new CompraCesta
+        {
+            LocalCompraId = local.Id,
+            Data = new DateTime(2026, 10, 1),
+            Mes = 10,
+            Ano = 2026,
+            Itens = [new CompraCestaItem { ProdutoCestaId = dentro.Id, Preco = 1m }]
+        });
+        var regra = await ctx.RegrasCatalogoComprovante.SingleAsync();
+        regra.LimiteProdutos = 1;
+        await ctx.SaveChangesAsync();
+
+        var escolhidos = await new CestaRepository(factory).ProdutosCatalogoLeituraAsync();
+        Assert.Equal([dentro.Id], escolhidos.Select(produto => produto.Id).ToArray());
+        Assert.Contains(fora.Id, await ctx.ProdutosCesta.Select(produto => produto.Id).ToListAsync());
+
+        var item = new ItemComprovanteLido(
+            "FORA", "Fora", true, 2m, null, null, null, null, fora.Id, true, 0.95m);
+        var linha = Assert.Single(
+            NormalizadorComprovante.Normalizar(new ComprovanteLido(null, null, null, true, [item]), escolhidos).Linhas);
+        Assert.Null(linha.ProdutoCestaId);
+        Assert.True(linha.NaoIdentificado);
+        Assert.NotEqual("Fora", linha.Nome);
+
+        var todos = await ctx.ProdutosCesta.AsNoTracking().ToListAsync();
+        var casada = Assert.Single(
+            NormalizadorComprovante.Normalizar(new ComprovanteLido(null, null, null, true, [item]), todos).Linhas);
+        Assert.Equal(fora.Id, casada.ProdutoCestaId);
+    }
+
+    [Fact]
+    public void Barreira_EstaNoConfirmarNaPreviaENoServico()
+    {
+        var raiz = EncontrarRaiz();
+        var confirmar = ExtrairBloco(
+            File.ReadAllText(Path.Combine(raiz, "OrcaFacil", "Components", "Pages", "Cesta", "PreviaComprovanteDialog.razor")),
+            "void Confirmar()");
+        var fechar = confirmar.IndexOf("MudDialog.Close", StringComparison.Ordinal);
+        var barreiraDialogo = confirmar.IndexOf("CasamentoComprovante.GarantirConfirmacao", StringComparison.Ordinal);
+        Assert.True(barreiraDialogo >= 0 && barreiraDialogo < fechar);
+        var subtitulo = ExtrairBloco(
+            File.ReadAllText(Path.Combine(raiz, "OrcaFacil", "Components", "Pages", "Cesta", "PreviaComprovanteDialog.razor")),
+            "string Subtitulo(LinhaPreviaComprovante linha)");
+        Assert.Contains("MarcadorCasamento", subtitulo, StringComparison.Ordinal);
+
+        var paraCompra = ExtrairBloco(
+            File.ReadAllText(Path.Combine(raiz, "OrcaFacil.Core", "Llm", "PreviaComprovante.cs")),
+            "CompraCestaFormModel ParaCompra()");
+        var gravarItens = paraCompra.IndexOf("ProdutoCestaId = linha.ProdutoCestaId", StringComparison.Ordinal);
+        var barreiraPrevia = paraCompra.IndexOf("CasamentoComprovante.GarantirConfirmacao", StringComparison.Ordinal);
+        Assert.True(barreiraPrevia >= 0 && barreiraPrevia < gravarItens);
+
+        var salvar = ExtrairBloco(
+            File.ReadAllText(Path.Combine(raiz, "OrcaFacil.Core", "Services", "CestaCadastroService.cs")),
+            "Task<CompraCesta> SalvarCompraAsync(CompraCestaFormModel modelo, int membroFamiliaId)");
+        var escrita = salvar.IndexOf("_cestas.SalvarCompraAsync", StringComparison.Ordinal);
+        var barreiraServico = salvar.IndexOf("CasamentoComprovante.GarantirConfirmacao", StringComparison.Ordinal);
+        Assert.True(barreiraServico >= 0 && barreiraServico < escrita);
+
+        var servicoPagina = ExtrairBloco(
+            File.ReadAllText(Path.Combine(raiz, "OrcaFacil", "Services", "CestaService.cs")),
+            "Task<CompraCesta> SalvarCompraAsync(CompraCestaFormModel modelo)");
+        var delega = servicoPagina.IndexOf("_cadastro.SalvarCompraAsync", StringComparison.Ordinal);
+        var barreiraPaginaServico = servicoPagina.IndexOf("CasamentoComprovante.GarantirConfirmacao", StringComparison.Ordinal);
+        Assert.True(barreiraPaginaServico >= 0 && barreiraPaginaServico < delega);
+
+        var abrir = ExtrairBloco(
+            File.ReadAllText(Path.Combine(raiz, "OrcaFacil", "Components", "Pages", "Cesta", "CestaPage.razor")),
+            "Task AbrirPreviaAsync()");
+        var salvarPagina = abrir.IndexOf("SalvarCompraAsync(\"Nova compra\"", StringComparison.Ordinal);
+        var barreiraPagina = abrir.IndexOf("CasamentoComprovante.GarantirConfirmacao", StringComparison.Ordinal);
+        Assert.True(barreiraPagina >= 0 && barreiraPagina < salvarPagina);
+
+        var leitura = ExtrairBloco(
+            File.ReadAllText(Path.Combine(raiz, "OrcaFacil", "Components", "Pages", "Cesta", "CestaPage.razor")),
+            "Task EnviarJpegAsync(");
+        Assert.Contains("ProdutosCatalogoLeituraAsync", leitura, StringComparison.Ordinal);
+        Assert.Contains("CatalogoPedidoComprovante.Texto(produtosCatalogo)", leitura, StringComparison.Ordinal);
+        Assert.Contains("Normalizar(resultado.Comprovante, produtosCatalogo)", leitura, StringComparison.Ordinal);
+        Assert.DoesNotContain("Normalizar(resultado.Comprovante, _produtos)", leitura, StringComparison.Ordinal);
+    }
+
     private static List<ProdutoCesta> Catalogo() =>
     [
         new() { Id = 4, Nome = "Arroz", CategoriaId = 2, Ativo = true },
@@ -260,4 +572,43 @@ public class CasamentoComprovanteTests
 
     private static ItemComprovanteLido Lido(string descricao, int? produtoId, bool informado, decimal confianca) =>
         new(descricao, "Arroz", true, 10m, null, null, null, null, produtoId, informado, confianca);
+
+    private static string EncontrarRaiz()
+    {
+        var diretorio = new DirectoryInfo(AppContext.BaseDirectory);
+        while (diretorio is not null)
+        {
+            if (File.Exists(Path.Combine(diretorio.FullName, "OrcaFacil.slnx")))
+                return diretorio.FullName;
+
+            diretorio = diretorio.Parent;
+        }
+
+        throw new InvalidOperationException("Raiz do repositório não encontrada.");
+    }
+
+    private static string ExtrairBloco(string fonte, string assinatura)
+    {
+        var indice = fonte.IndexOf(assinatura, StringComparison.Ordinal);
+        Assert.True(indice >= 0, assinatura);
+        return ExtrairChaves(fonte, fonte.IndexOf('{', indice));
+    }
+
+    private static string ExtrairChaves(string fonte, int abre)
+    {
+        var profundidade = 0;
+        for (var i = abre; i < fonte.Length; i++)
+        {
+            if (fonte[i] == '{')
+                profundidade++;
+            else if (fonte[i] == '}')
+            {
+                profundidade--;
+                if (profundidade == 0)
+                    return fonte[abre..(i + 1)];
+            }
+        }
+
+        throw new InvalidOperationException("Bloco sem fechamento.");
+    }
 }

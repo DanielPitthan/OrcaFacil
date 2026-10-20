@@ -342,6 +342,12 @@ public class CestaRepository : ICestaRepository
         return await CatalogoPedidoComprovante.MontarAsync(context, cancellationToken);
     }
 
+    public async Task<IReadOnlyList<ProdutoCesta>> ProdutosCatalogoLeituraAsync(CancellationToken cancellationToken = default)
+    {
+        await using var context = await _contextFactory.CreateDbContextAsync(cancellationToken);
+        return await CatalogoPedidoComprovante.EscolherAsync(context, cancellationToken);
+    }
+
     public async Task<int> ObterOuCriarCategoriaCartaoCreditoAsync()
         => await ObterOuCriarCategoriaPadraoAsync(CartaoRepository.NomeCategoriaCartaoCredito, "💳", "#B2CFE6");
 

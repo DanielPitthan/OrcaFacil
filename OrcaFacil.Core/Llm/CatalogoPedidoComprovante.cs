@@ -15,6 +15,8 @@ public static class CatalogoPedidoComprovante
 {
     public const int LimitePadrao = RegraCatalogoComprovante.LimitePadrao;
 
+    public const int TamanhoMaximoNome = 80;
+
     public static int NormalizarLimite(int? valor) =>
         valor is >= 1 ? valor.Value : LimitePadrao;
 
@@ -29,7 +31,9 @@ public static class CatalogoPedidoComprovante
         return NormalizarLimite(valor);
     }
 
-    public static async Task<string> MontarAsync(AppDbContext contexto, CancellationToken cancellationToken = default)
+    public static async Task<IReadOnlyList<ProdutoCesta>> EscolherAsync(
+        AppDbContext contexto,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(contexto);
         var limite = await LimiteAsync(contexto, cancellationToken);
@@ -40,7 +44,13 @@ public static class CatalogoPedidoComprovante
             .Select(grupo => new { grupo.Key, Usos = grupo.Count() })
             .ToListAsync(cancellationToken);
         var usos = usosLista.ToDictionary(item => item.Key, item => item.Usos);
-        return Texto(Selecionar(produtos, usos, limite));
+        return Selecionar(produtos, usos, limite);
+    }
+
+    public static async Task<string> MontarAsync(AppDbContext contexto, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(contexto);
+        return Texto(await EscolherAsync(contexto, cancellationToken));
     }
 
     public static IReadOnlyList<ProdutoCesta> Selecionar(
@@ -84,6 +94,14 @@ public static class CatalogoPedidoComprovante
     private static string Sanitizar(string nome)
     {
         var texto = nome.Replace('\r', ' ').Replace('\n', ' ').Replace('|', ' ').Trim();
-        return string.Join(' ', texto.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        texto = string.Join(' ', texto.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        if (texto.Length <= TamanhoMaximoNome)
+            return texto;
+
+        var corte = texto[..TamanhoMaximoNome];
+        if (char.IsHighSurrogate(corte[^1]))
+            corte = corte[..^1];
+
+        return corte.TrimEnd();
     }
 }

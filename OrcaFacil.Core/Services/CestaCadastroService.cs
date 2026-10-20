@@ -170,6 +170,10 @@ public class CestaCadastroService
 
     public async Task<CompraCesta> SalvarCompraAsync(CompraCestaFormModel modelo, int membroFamiliaId)
     {
+        var comProduto = modelo.ItensSaida.Where(item => item is { ExigeConfirmacao: true }).ToList();
+        if (comProduto.Count > 0)
+            CasamentoComprovante.GarantirConfirmacao(comProduto);
+
         if (modelo.Data == default)
             throw new InvalidOperationException("Informe a data da compra.");
 

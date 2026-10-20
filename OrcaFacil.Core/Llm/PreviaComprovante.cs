@@ -1,3 +1,4 @@
+using System.Globalization;
 using OrcaFacil.Core.Cesta;
 using OrcaFacil.Core.Dtos;
 using OrcaFacil.Core.Entities;
@@ -295,6 +296,7 @@ public sealed class PreviaComprovante
         linha.CasadoPelaDescricao = false;
         linha.NovoSeraCriado = false;
         linha.PodeDesfazerNovo = false;
+        linha.CasamentoConfirmado = false;
 
         if (chave is not null && _linhas.All(item => item.ProdutoNovoChave != chave))
             _pendentes.RemoveAll(produto => produto.Chave == chave);
@@ -302,10 +304,49 @@ public sealed class PreviaComprovante
         AtualizarSomas();
     }
 
+    public void ConfirmarCasamentos()
+    {
+        foreach (var linha in _linhas)
+        {
+            if (linha.ProdutoCestaId is > 0)
+                linha.CasamentoConfirmado = true;
+        }
+    }
+
+    public IReadOnlyList<ItemSaidaComprovante> ItensComProduto()
+    {
+        var itens = new List<ItemSaidaComprovante>();
+        foreach (var linha in _linhas)
+        {
+            if (linha.ProdutoCestaId is not int produtoId || produtoId <= 0)
+                continue;
+
+            var existente = linha.Saidas.FirstOrDefault(item => item.ProdutoId == produtoId);
+            var saida = (existente ?? new ItemSaidaComprovante
+            {
+                DescricaoLida = linha.DescricaoLida,
+                ProdutoId = produtoId,
+                Confianca = linha.Saidas.Count == 0 ? 0m : linha.Saidas.Min(item => item.Confianca),
+                Pendente = linha.Pendente
+            }) with
+            {
+                ProdutoId = produtoId,
+                Confirmado = false
+            };
+            itens.Add(linha.CasamentoConfirmado ? saida.Confirmar() : saida);
+        }
+
+        return itens;
+    }
+
     public CompraCestaFormModel ParaCompra()
     {
         if (!PodeConfirmar)
             throw new InvalidOperationException(MensagemBloqueio ?? MensagemSemProdutoOuCategoria);
+
+        var confirmacoes = ItensComProduto();
+        if (confirmacoes.Count > 0)
+            CasamentoComprovante.GarantirConfirmacao(confirmacoes);
 
         var novos = new List<ProdutoNovoCompra>();
         var itens = new List<ItemCompraCestaFormModel>();
@@ -347,7 +388,8 @@ public sealed class PreviaComprovante
             LocalCompraId = LocalCompraId ?? 0,
             Data = Data.Date,
             ProdutosNovos = novos,
-            Itens = itens
+            Itens = itens,
+            ItensSaida = confirmacoes.ToList()
         };
     }
 
@@ -385,6 +427,7 @@ public sealed class PreviaComprovante
         linha.NovoSeraCriado = false;
         linha.ProdutoNovoChave = null;
         linha.PodeDesfazerNovo = false;
+        linha.CasamentoConfirmado = false;
     }
 
     private static void AplicarPendente(LinhaPreviaComprovante linha, ProdutoPendente pendente)
@@ -403,6 +446,7 @@ public sealed class PreviaComprovante
         linha.CasadoPelaDescricao = false;
         linha.NovoSeraCriado = true;
         linha.PodeDesfazerNovo = false;
+        linha.CasamentoConfirmado = false;
     }
 
     private ResultadoNome AplicarNome(
@@ -569,6 +613,26 @@ public sealed class LinhaPreviaComprovante
 
     public int? ProdutoCestaId { get; set; }
 
+    public bool CasamentoConfirmado { get; set; }
+
+    public List<ItemSaidaComprovante> Saidas { get; init; } = [];
+
+    public bool Pendente => Saidas.Any(item => item.Pendente);
+
+    public string? MarcadorCasamento
+    {
+        get
+        {
+            if (Saidas.Count == 0)
+                return null;
+
+            var confianca = Saidas.Min(item => item.Confianca).ToString("0.00", CultureInfo.GetCultureInfo("pt-BR"));
+            return Saidas.Any(item => item.Pendente)
+                ? $"pendente · confiança {confianca}"
+                : $"confiança {confianca}";
+        }
+    }
+
     public int? CategoriaId { get; set; }
 
     public string? CategoriaNome { get; set; }
@@ -681,7 +745,8 @@ public sealed class LinhaPreviaComprovante
             Nome = linha.Nome,
             NomeLido = linha.NomeLido,
             CandidatosIds = linha.CandidatosIds,
-            Avisos = linha.Avisos
+            Avisos = linha.Avisos,
+            Saidas = linha.Saidas.ToList()
         };
     }
 

@@ -594,4 +594,85 @@ public class LeitorRespostaComprovanteTests
         Assert.Equal("JSON inválido", leitura.Motivo);
         Assert.Equal("InterpretacaoComprovante(falha)", leitura.ToString());
     }
+
+    [Theory]
+    [InlineData("4.5")]
+    [InlineData("true")]
+    [InlineData("\"abc\"")]
+    [InlineData("3000000000")]
+    public void ProdutoId_FormaInvalida_NaoViraId(string literal)
+    {
+        var json = """
+            {
+              "content": [
+                {
+                  "type": "tool_use",
+                  "name": "registrar_comprovante",
+                  "input": {
+                    "legivel": true,
+                    "itens": [
+                      {
+                        "descricao_lida": "ARROZ",
+                        "produto": "Arroz",
+                        "reconhecido": true,
+                        "preco": 10,
+                        "produto_id": VALOR
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+            """.Replace("VALOR", literal, StringComparison.Ordinal);
+
+        var comprovante = LeitorRespostaComprovante.Ler(json);
+
+        Assert.NotNull(comprovante);
+        var item = Assert.Single(comprovante!.Itens);
+        Assert.True(item.ProdutoIdInformado);
+        Assert.Null(item.ProdutoId);
+    }
+
+    [Theory]
+    [InlineData("0.81", true)]
+    [InlineData("1.01", false)]
+    [InlineData("-0.01", false)]
+    [InlineData("1.1", false)]
+    public void Confianca_ForaDeZeroAUm_RecusaOComprovante(string valor, bool aceita)
+    {
+        var json = """
+            {
+              "content": [
+                {
+                  "type": "tool_use",
+                  "name": "registrar_comprovante",
+                  "input": {
+                    "legivel": true,
+                    "itens": [
+                      {
+                        "descricao_lida": "ARROZ",
+                        "produto": "Arroz",
+                        "reconhecido": true,
+                        "preco": 10,
+                        "confianca": VALOR
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+            """.Replace("VALOR", valor, StringComparison.Ordinal);
+
+        var comprovante = LeitorRespostaComprovante.Ler(json);
+        if (!aceita)
+        {
+            Assert.Null(comprovante);
+            return;
+        }
+
+        Assert.NotNull(comprovante);
+        Assert.Equal(
+            decimal.Parse(valor, System.Globalization.CultureInfo.InvariantCulture),
+            Assert.Single(comprovante!.Itens).ConfiancaNumero);
+    }
 }

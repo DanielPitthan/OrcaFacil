@@ -315,6 +315,7 @@ public class ProdutoNovoNaCompraTests : IDisposable
         Assert.Equal("1", previa.Linhas[1].Quantidade);
 
         var soma = previa.Linhas.Sum(linha => linha.Preco);
+        previa.ConfirmarCasamentos();
         var compra = await _service.SalvarCompraAsync(Copiar(previa.ParaCompra()), _membroId);
 
         await using var contexto = _factory.CreateDbContext();
@@ -360,6 +361,7 @@ public class ProdutoNovoNaCompraTests : IDisposable
         });
 
         var soma = previa.Linhas.Sum(linha => linha.Preco);
+        previa.ConfirmarCasamentos();
         var compra = await _service.SalvarCompraAsync(Copiar(previa.ParaCompra()), _membroId);
 
         await using var contexto = _factory.CreateDbContext();

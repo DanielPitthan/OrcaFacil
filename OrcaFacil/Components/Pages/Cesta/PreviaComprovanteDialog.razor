@@ -128,6 +128,18 @@
         if (!Previa.PodeConfirmar || _confirmando)
             return;
 
+        try
+        {
+            var comProduto = Previa.ItensComProduto();
+            if (comProduto.Count > 0)
+                CasamentoComprovante.GarantirConfirmacao(comProduto);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+            return;
+        }
+
         _confirmando = true;
         MudDialog.Close(DialogResult.Ok(Previa.ParaCompra()));
     }
@@ -336,7 +348,16 @@
 
     private static string Titulo(LinhaPreviaComprovante linha) => linha.Titulo;
 
-    private static string Subtitulo(LinhaPreviaComprovante linha) => linha.Subtitulo;
+    private static string Subtitulo(LinhaPreviaComprovante linha)
+    {
+        var marcador = linha.MarcadorCasamento;
+        if (string.IsNullOrEmpty(marcador))
+            return linha.Subtitulo;
+
+        return string.IsNullOrEmpty(linha.Subtitulo)
+            ? marcador
+            : $"{linha.Subtitulo} · {marcador}";
+    }
 
     private static string Valor(LinhaPreviaComprovante linha) => linha.Preco.ToString("C");
 

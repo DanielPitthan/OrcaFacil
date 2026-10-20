@@ -604,9 +604,11 @@
                 return;
             }
 
-            var catalogo = await CestaService.TextoCatalogoLeituraAsync(_pagina.Token);
+            var produtosCatalogo = await CestaService.ProdutosCatalogoLeituraAsync(_pagina.Token);
             if (Cancelada(atual))
                 return;
+
+            var catalogo = CatalogoPedidoComprovante.Texto(produtosCatalogo);
 
             var resultado = await Cliente.LerComprovanteAsync(
                 efetiva.Url,
@@ -622,7 +624,7 @@
 
             var normalizado = resultado.Comprovante is null
                 ? null
-                : NormalizadorComprovante.Normalizar(resultado.Comprovante, _produtos);
+                : NormalizadorComprovante.Normalizar(resultado.Comprovante, produtosCatalogo);
             var exibicao = MensagensLeituraComprovante.De(resultado, normalizado);
             _exibicao = exibicao;
             _comprovante = exibicao.Situacao == SituacaoLeituraComprovante.Pronta ? normalizado : null;
@@ -681,6 +683,18 @@
             }
 
             await CarregarAsync();
+            try
+            {
+                var comProduto = modelo.ItensSaida.Where(item => item is { ExigeConfirmacao: true }).ToList();
+                if (comProduto.Count > 0)
+                    CasamentoComprovante.GarantirConfirmacao(comProduto);
+            }
+            catch (InvalidOperationException ex)
+            {
+                Snackbar.Add(ex.Message, Severity.Warning);
+                return;
+            }
+
             if (await SalvarCompraAsync("Nova compra", modelo))
             {
                 _previa = null;

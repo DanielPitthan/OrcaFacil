@@ -100,6 +100,8 @@ public static class NormalizadorComprovante
         if (nova.Revisar)
             existente.Revisar = true;
         existente.CasadoPelaDescricao = existente.CasadoPelaDescricao && nova.CasadoPelaDescricao;
+        if (nova.Saidas.Count > 0)
+            existente.Saidas.AddRange(nova.Saidas);
     }
 
     private static (decimal Soma, bool Excedida) Somar(List<LinhaComprovanteNormalizada> linhas)
@@ -147,14 +149,24 @@ public static class NormalizadorComprovante
 
         if (item.ProdutoIdInformado)
         {
-            var id = CasamentoComprovante.IdValido(item, produtos);
-            if (id is int produtoId)
+            var saida = CasamentoComprovante.Casar(item, produtos);
+            if (saida.ProdutoId is int produtoId)
             {
                 var casado = produtos.First(candidato => candidato.Id == produtoId);
-                return DoCatalogo(item, descricao, casado.Nome.Trim(), casado, preco, precoInvalido);
+                var revisar = item.ConfiancaNumero is null
+                    || item.ConfiancaNumero < CasamentoComprovante.CorteConfianca;
+                return DoCatalogo(
+                    item,
+                    descricao,
+                    casado.Nome.Trim(),
+                    casado,
+                    preco,
+                    precoInvalido,
+                    saida: saida,
+                    revisarPorConfianca: revisar);
             }
 
-            return NaoIdentificada(item, descricao, preco, precoInvalido);
+            return NaoIdentificada(item, descricao, preco, precoInvalido, saida);
         }
 
         if (produto.Length > 0)
@@ -187,7 +199,9 @@ public static class NormalizadorComprovante
         ProdutoCesta produto,
         decimal preco,
         bool precoInvalido,
-        bool casadoPelaDescricao = false)
+        bool casadoPelaDescricao = false,
+        ItemSaidaComprovante? saida = null,
+        bool revisarPorConfianca = false)
     {
         var avisos = new List<string>();
         if (precoInvalido)
@@ -206,7 +220,7 @@ public static class NormalizadorComprovante
             PrecoInvalido = precoInvalido,
             Separada = precoInvalido,
             Reconhecido = true,
-            Revisar = !item.Reconhecido,
+            Revisar = !item.Reconhecido || revisarPorConfianca,
             ProdutoInativo = !produto.Ativo,
             CasadoPelaDescricao = casadoPelaDescricao,
             NomeExcedeLimite = nomeLido.Length > TamanhoMaximoNome,
@@ -215,6 +229,7 @@ public static class NormalizadorComprovante
             CategoriaFaltando = semCategoria,
             Nome = produto.Nome.Trim(),
             NomeLido = nomeLido,
+            Saidas = saida is null ? [] : [saida],
             Avisos = avisos
         };
     }
@@ -253,7 +268,8 @@ public static class NormalizadorComprovante
         ItemComprovanteLido item,
         string descricao,
         decimal preco,
-        bool precoInvalido)
+        bool precoInvalido,
+        ItemSaidaComprovante? saida = null)
     {
         var avisos = new List<string>();
         if (precoInvalido)
@@ -273,6 +289,7 @@ public static class NormalizadorComprovante
             NomeExcedeLimite = descricao.Length > TamanhoMaximoNome,
             Nome = Cortar(descricao),
             NomeLido = descricao,
+            Saidas = saida is null ? [] : [saida],
             Avisos = avisos
         };
     }
@@ -468,6 +485,8 @@ public static class NormalizadorComprovante
         public required string NomeLido { get; init; }
         public List<string> Avisos { get; init; } = [];
 
+        public List<ItemSaidaComprovante> Saidas { get; init; } = [];
+
         public LinhaComprovanteNormalizada Concluir() => new()
         {
             DescricaoLida = DescricaoLida,
@@ -491,6 +510,7 @@ public static class NormalizadorComprovante
             CategoriaId = CategoriaId,
             Nome = Nome,
             NomeLido = NomeLido,
+            Saidas = Saidas.ToList(),
             Avisos = Avisos
         };
     }
@@ -596,6 +616,8 @@ public sealed record LinhaComprovanteNormalizada
     public string NomeLido { get; init; } = string.Empty;
 
     public IReadOnlyList<string> Avisos { get; init; } = [];
+
+    public IReadOnlyList<ItemSaidaComprovante> Saidas { get; init; } = [];
 
     public string? Motivo => Avisos.Count == 0 ? null : string.Join(" ", Avisos);
 

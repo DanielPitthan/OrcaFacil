@@ -27,7 +27,7 @@ public class PreviaComprovanteTests
         Assert.True(previa.PodeConfirmar);
         Assert.Null(previa.MensagemBloqueio);
 
-        var compra = previa.ParaCompra();
+        var compra = Compra(previa);
         var item = Assert.Single(compra.Itens);
         Assert.Equal(1, item.ProdutoCestaId);
         Assert.Equal(6m, item.Preco);
@@ -56,7 +56,7 @@ public class PreviaComprovanteTests
         Assert.Equal("açúcar", linha.DescricaoLida);
         Assert.False(previa.PodeConfirmar);
         Assert.Equal(PreviaComprovante.MensagemSemProdutoOuCategoria, previa.MensagemBloqueio);
-        Assert.Throws<InvalidOperationException>(() => previa.ParaCompra());
+        Assert.Throws<InvalidOperationException>(() => Compra(previa));
     }
 
     [Fact]
@@ -98,7 +98,7 @@ public class PreviaComprovanteTests
         Assert.Equal("0 não identificados", previa.TextoNaoIdentificados);
         Assert.True(previa.PodeConfirmar);
 
-        var compra = previa.ParaCompra();
+        var compra = Compra(previa);
         Assert.Equal([1, 4, 9], compra.Itens.Select(item => item.ProdutoCestaId).ToArray());
         Assert.Equal([8m, 4m, 3m], compra.Itens.Select(item => item.Preco).ToArray());
         Assert.All(previa.Linhas, linha =>
@@ -130,7 +130,7 @@ public class PreviaComprovanteTests
         Assert.Equal("Local: Boa Supermercado", previa.TextoLocal);
         Assert.Equal(new DateTime(2026, 10, 18), previa.Data);
 
-        var compra = previa.ParaCompra();
+        var compra = Compra(previa);
         Assert.Equal(7, compra.LocalCompraId);
         Assert.Equal(new DateTime(2026, 10, 18), compra.Data);
         Assert.Equal(0m, compra.ValorBeneficio);
@@ -150,7 +150,7 @@ public class PreviaComprovanteTests
             new DateTime(2026, 9, 3));
         Assert.Null(semLoja.LocalCompraId);
         Assert.Equal(new DateTime(2026, 9, 3), semLoja.Data);
-        Assert.Equal(0, semLoja.ParaCompra().LocalCompraId);
+        Assert.Equal(0, Compra(semLoja).LocalCompraId);
 
         var repetido = PreviaComprovante.CasarLocal("Mercado", [
             new LocalCompra { Id = 1, Nome = "Mercado", Ativo = true },
@@ -256,7 +256,7 @@ public class PreviaComprovanteTests
         previa.Remover(previa.Linhas[1]);
         Assert.Equal(0, previa.NaoIdentificados);
         Assert.True(previa.PodeConfirmar);
-        Assert.Equal(8m, Assert.Single(previa.ParaCompra().Itens).Preco);
+        Assert.Equal(8m, Assert.Single(Compra(previa).Itens).Preco);
 
         var outra = Previa(
             [arroz, Produto(2, "Feijão", 2, "Alimentos")],
@@ -268,7 +268,7 @@ public class PreviaComprovanteTests
         Assert.True(previa.PodeConfirmar);
         Assert.Equal(2, previa.Linhas.Count);
         Assert.All(previa.Linhas, linha => Assert.Contains(PreviaComprovante.EtiquetaSeraSomado, linha.Titulo, StringComparison.Ordinal));
-        Assert.Equal(13m, previa.ParaCompra().Itens.Sum(item => item.Preco));
+        Assert.Equal(13m, Compra(previa).Itens.Sum(item => item.Preco));
 
         previa.AlterarPreco(previa.Linhas[0], 0m);
         Assert.Equal(PreviaComprovante.MensagemPreco, previa.MensagemBloqueio);
@@ -407,7 +407,7 @@ public class PreviaComprovanteTests
         Assert.True(previa.PodeConfirmar);
         Assert.Null(previa.MensagemBloqueio);
 
-        var compra = previa.ParaCompra();
+        var compra = Compra(previa);
         Assert.Equal(2, compra.Itens.Count);
         Assert.Equal(5.5m, compra.Itens.Sum(item => item.Preco));
         var novo = Assert.Single(compra.ProdutosNovos);
@@ -433,7 +433,7 @@ public class PreviaComprovanteTests
         Assert.False(linha.NovoSeraCriado);
         Assert.Equal(4.2m, linha.Preco);
         Assert.Equal("Açúcar", linha.Titulo);
-        var compra = previa.ParaCompra();
+        var compra = Compra(previa);
         Assert.Empty(compra.ProdutosNovos);
         Assert.Equal(4, Assert.Single(compra.Itens).ProdutoCestaId);
     }
@@ -462,7 +462,7 @@ public class PreviaComprovanteTests
         Assert.Equal(2m, duas.Linhas[0].Preco);
 
         duas.CadastrarTudo(2, "Alimentos");
-        Assert.Equal(2, duas.ParaCompra().ProdutosNovos.Count);
+        Assert.Equal(2, Compra(duas).ProdutosNovos.Count);
     }
 
     [Fact]
@@ -538,7 +538,7 @@ public class PreviaComprovanteTests
 
         previa.Remover(repetido);
         Assert.DoesNotContain(PreviaComprovante.EtiquetaSeraSomado, acucar.Titulo, StringComparison.Ordinal);
-        var compra = previa.ParaCompra();
+        var compra = Compra(previa);
         Assert.Equal(4, compra.Itens[0].ProdutoCestaId);
         var novo = Assert.Single(compra.ProdutosNovos);
         Assert.Equal("sabão  líquido", novo.Nome);
@@ -553,7 +553,13 @@ public class PreviaComprovanteTests
         var ids = previa.Linhas.Select(linha => linha.ProdutoCestaId).ToArray();
         previa.CadastrarTudo(2, "Alimentos");
         Assert.Equal(ids, previa.Linhas.Select(linha => linha.ProdutoCestaId).ToArray());
-        Assert.Equal(2, previa.ParaCompra().ProdutosNovos.Count);
+        Assert.Equal(2, Compra(previa).ProdutosNovos.Count);
+    }
+
+    private static CompraCestaFormModel Compra(PreviaComprovante previa)
+    {
+        previa.ConfirmarCasamentos();
+        return previa.ParaCompra();
     }
 
     private static PreviaComprovante Previa(IReadOnlyList<ProdutoCesta> catalogo, params ItemComprovanteLido[] itens) =>

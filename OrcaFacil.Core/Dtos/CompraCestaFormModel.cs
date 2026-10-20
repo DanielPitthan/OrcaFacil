@@ -1,4 +1,5 @@
 using OrcaFacil.Core.Enums;
+using OrcaFacil.Core.Llm;
 
 namespace OrcaFacil.Core.Dtos;
 
@@ -29,6 +30,11 @@ public class CompraCestaFormModel
 
     /// <summary>Produtos confirmados na prévia e ainda não gravados. Entram na mesma transação da compra.</summary>
     public List<ProdutoNovoCompra> ProdutosNovos { get; set; } = new();
+
+    /// <summary>
+    /// Itens da prévia com produto. A gravação recusa enquanto algum não estiver confirmado.
+    /// </summary>
+    public List<ItemSaidaComprovante> ItensSaida { get; set; } = new();
 }
 
 public class ItemCompraCestaFormModel

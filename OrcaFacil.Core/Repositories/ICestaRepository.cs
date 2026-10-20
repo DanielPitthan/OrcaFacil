@@ -34,4 +34,6 @@ public interface ICestaRepository
     Task<int> ObterOuCriarCategoriaCartaoCreditoAsync();
 
     Task<string> TextoCatalogoLeituraAsync(CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ProdutoCesta>> ProdutosCatalogoLeituraAsync(CancellationToken cancellationToken = default);
 }
