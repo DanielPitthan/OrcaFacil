@@ -149,12 +149,16 @@ public sealed class ParserExtratoB3 : IParserExtratoB3
         if (!dataOk)
             motivos.Add($"Data inválida: '{dataTexto}'. Use dd/MM/aaaa.");
 
+        var descricao = produto.Trim();
+        var rotulo = ClassificadorAtivoB3.ExtrairTicker(descricao);
+        var classe = ClassificadorAtivoB3.Classificar(rotulo, descricao);
+
         var tipoOk = false;
         var tipo = default(TipoOperacaoB3);
         if (direcaoOk)
         {
             var chave = TextoB3.NormalizarChave(movimentacao);
-            if (!_mapeamento.TryGetValue(chave, out var regra) || !regra.TentarResolver(direcao, out tipo))
+            if (!_mapeamento.TryGetValue(chave, out var regra) || !regra.TentarResolver(direcao, classe, out tipo))
                 motivos.Add($"Movimentação não mapeada: '{movimentacao}'.");
             else
                 tipoOk = true;
@@ -167,13 +171,24 @@ public sealed class ParserExtratoB3 : IParserExtratoB3
         if (!NumeroPtBr.TentarOpcional(valorTexto, out var valor))
             motivos.Add($"Valor da operação inválido: '{valorTexto}'.");
 
-        var ticker = ClassificadorAtivoB3.ExtrairTicker(produto);
-        var descricao = produto.Trim();
-        var classe = ClassificadorAtivoB3.Classificar(ticker, descricao);
-        if (ticker.Length == 0)
+        var ticker = "";
+        if (classe == ClasseAtivoB3.RendaFixa)
+        {
+            if (!ClassificadorAtivoB3.TentarCodigoRendaFixa(descricao, out ticker))
+                motivos.Add($"Código de renda fixa inválido: '{descricao}'.");
+        }
+        else if (rotulo.Length == 0)
+        {
             motivos.Add("Informe o ticker do produto.");
-        else if (classe != ClasseAtivoB3.RendaFixa && !TickerB3.EhValido(ticker))
-            motivos.Add($"Ticker inválido: '{ticker}'.");
+        }
+        else if (!TickerB3.EhValido(rotulo))
+        {
+            motivos.Add($"Ticker inválido: '{rotulo}'.");
+        }
+        else
+        {
+            ticker = rotulo;
+        }
 
         if (motivos.Count > 0 || !direcaoOk || !dataOk || !tipoOk)
         {

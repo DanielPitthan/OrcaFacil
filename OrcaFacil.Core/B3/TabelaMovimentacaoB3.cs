@@ -8,17 +8,23 @@ namespace OrcaFacil.Core.B3;
 public static class TabelaMovimentacaoB3
 {
     /// <summary>
-    /// Textos da amostra e os dois aliases citados no contrato (COMPRA/VENDA sem espaços
-    /// e JCP). "Atualização" vai para <see cref="TipoOperacaoB3.Ignorada"/>: na amostra
-    /// o preço e o valor vêm vazios e a linha é só informativa. O valor
-    /// <see cref="TipoOperacaoB3.Atualizacao"/> permanece no enum para a tabela ser trocada.
+    /// Textos da amostra e os dois aliases citados no contrato (COMPRA/VENDA sem espaços e JCP).
+    /// Transferência - Liquidação em renda variável segue a direção (Crédito compra, Débito venda).
+    /// <see cref="TipoOperacaoB3.TransferenciaLiquidacao"/> fica para a mesma movimentação fora da renda variável.
+    /// Atualização vai para <see cref="TipoOperacaoB3.Atualizacao"/>.
     /// </summary>
     public static IReadOnlyDictionary<string, RegraMovimentacaoB3> Padrao { get; } = CriarPadrao();
 
     private static Dictionary<string, RegraMovimentacaoB3> CriarPadrao()
     {
         var tabela = new Dictionary<string, RegraMovimentacaoB3>(StringComparer.Ordinal);
-        Adicionar(tabela, "Transferência - Liquidação", RegraMovimentacaoB3.Fixa(TipoOperacaoB3.TransferenciaLiquidacao));
+        Adicionar(
+            tabela,
+            "Transferência - Liquidação",
+            RegraMovimentacaoB3.PorDirecaoNaRendaVariavel(
+                TipoOperacaoB3.Compra,
+                TipoOperacaoB3.Venda,
+                TipoOperacaoB3.TransferenciaLiquidacao));
         var compraVenda = RegraMovimentacaoB3.PorDirecao(TipoOperacaoB3.Compra, TipoOperacaoB3.Venda);
         Adicionar(tabela, "COMPRA / VENDA", compraVenda);
         Adicionar(tabela, "COMPRA/VENDA", compraVenda);
@@ -28,7 +34,7 @@ public static class TabelaMovimentacaoB3
         Adicionar(tabela, "Juros Sobre Capital Próprio", RegraMovimentacaoB3.Fixa(TipoOperacaoB3.Jcp));
         Adicionar(tabela, "JCP", RegraMovimentacaoB3.Fixa(TipoOperacaoB3.Jcp));
         Adicionar(tabela, "Resgate antecipado", RegraMovimentacaoB3.Fixa(TipoOperacaoB3.ResgateAntecipado));
-        Adicionar(tabela, "Atualização", RegraMovimentacaoB3.Fixa(TipoOperacaoB3.Ignorada));
+        Adicionar(tabela, "Atualização", RegraMovimentacaoB3.Fixa(TipoOperacaoB3.Atualizacao));
         Adicionar(tabela, "Aplicação", RegraMovimentacaoB3.Fixa(TipoOperacaoB3.Aplicacao));
         return tabela;
     }

@@ -25,41 +25,44 @@ public class ParserExtratoB3Tests
     }
 
     [Fact]
-    public void Amostra_TravaContagensDeRendaVariavelProventosRendaFixaEIgnorada()
+    public void Amostra_TravaContagensPorTipo()
     {
         var linhas = LerAmostra().Linhas;
 
+        Assert.Equal(52, linhas.Count(linha => linha.Tipo == TipoOperacaoB3.Compra));
+        Assert.Equal(37, linhas.Count(linha => linha.Tipo == TipoOperacaoB3.Venda));
+        Assert.Equal(0, linhas.Count(linha => linha.Tipo == TipoOperacaoB3.TransferenciaLiquidacao));
+        Assert.Equal(4, linhas.Count(linha => linha.Tipo == TipoOperacaoB3.Rendimento));
+        Assert.Equal(2, linhas.Count(linha => linha.Tipo == TipoOperacaoB3.Jcp));
+        Assert.Equal(1, linhas.Count(linha => linha.Tipo == TipoOperacaoB3.ResgateAntecipado));
+        Assert.Equal(1, linhas.Count(linha => linha.Tipo == TipoOperacaoB3.Atualizacao));
+        Assert.Equal(1, linhas.Count(linha => linha.Tipo == TipoOperacaoB3.Aplicacao));
+        Assert.Equal(0, linhas.Count(linha => linha.Tipo == TipoOperacaoB3.Ignorada));
+
         var comprasVariavel = linhas.Count(linha =>
             linha.Classe != ClasseAtivoB3.RendaFixa
-            && linha.Tipo == TipoOperacaoB3.TransferenciaLiquidacao
+            && linha.Tipo == TipoOperacaoB3.Compra
             && linha.Direcao == DirecaoB3.Credito);
         var vendasVariavel = linhas.Count(linha =>
             linha.Classe != ClasseAtivoB3.RendaFixa
-            && linha.Tipo == TipoOperacaoB3.TransferenciaLiquidacao
+            && linha.Tipo == TipoOperacaoB3.Venda
             && linha.Direcao == DirecaoB3.Debito);
-        var proventos = linhas.Count(linha => linha.Tipo is TipoOperacaoB3.Rendimento or TipoOperacaoB3.Jcp);
-        var rendaFixa = linhas.Where(linha => linha.Classe == ClasseAtivoB3.RendaFixa).ToList();
-        var ignoradas = linhas.Count(linha => linha.Tipo == TipoOperacaoB3.Ignorada);
-
         Assert.Equal(40, comprasVariavel);
         Assert.Equal(25, vendasVariavel);
-        Assert.Equal(6, proventos);
-        Assert.Equal(4, linhas.Count(linha => linha.Tipo == TipoOperacaoB3.Rendimento));
-        Assert.Equal(2, linhas.Count(linha => linha.Tipo == TipoOperacaoB3.Jcp));
-        Assert.Equal(26, rendaFixa.Count);
-        Assert.Equal(1, ignoradas);
-        Assert.Equal(98, comprasVariavel + vendasVariavel + proventos + rendaFixa.Count + ignoradas);
 
+        var rendaFixa = linhas.Where(linha => linha.Classe == ClasseAtivoB3.RendaFixa).ToList();
+        Assert.Equal(26, rendaFixa.Count);
         var nikos = rendaFixa.Where(linha => linha.Instituicao.Contains("NIKOS", StringComparison.Ordinal)).ToList();
         Assert.Equal(18, nikos.Count);
         Assert.Equal(9, nikos.Count(linha => linha.Direcao == DirecaoB3.Credito && linha.Tipo == TipoOperacaoB3.Compra));
         Assert.Equal(9, nikos.Count(linha => linha.Direcao == DirecaoB3.Debito && linha.Tipo == TipoOperacaoB3.Venda));
 
-        var tesouro = rendaFixa.Where(linha => linha.Ticker.Contains("TESOURO", StringComparison.Ordinal)).ToList();
+        var tesouro = rendaFixa.Where(linha => linha.Ticker.StartsWith("TESOURO ", StringComparison.Ordinal)).ToList();
         Assert.Equal(3, tesouro.Count(linha => linha.Tipo == TipoOperacaoB3.Compra && linha.Direcao == DirecaoB3.Credito));
         Assert.Equal(3, tesouro.Count(linha => linha.Tipo == TipoOperacaoB3.Venda && linha.Direcao == DirecaoB3.Debito));
         Assert.Equal(1, rendaFixa.Count(linha => linha.Tipo == TipoOperacaoB3.Aplicacao));
         Assert.Equal(1, rendaFixa.Count(linha => linha.Tipo == TipoOperacaoB3.ResgateAntecipado));
+        Assert.Equal(98, linhas.Count);
     }
 
     [Fact]
@@ -69,14 +72,14 @@ public class ParserExtratoB3Tests
             .GroupBy(linha => linha.MovimentacaoBruta)
             .ToDictionary(grupo => grupo.Key, grupo => grupo.Select(linha => linha.Tipo).Distinct().OrderBy(tipo => tipo).ToArray());
 
-        AssertTipos(grupos, "Transferência - Liquidação", TipoOperacaoB3.TransferenciaLiquidacao);
+        AssertTipos(grupos, "Transferência - Liquidação", TipoOperacaoB3.Compra, TipoOperacaoB3.Venda);
         AssertTipos(grupos, "COMPRA / VENDA", TipoOperacaoB3.Compra, TipoOperacaoB3.Venda);
         AssertTipos(grupos, "Compra", TipoOperacaoB3.Compra);
         AssertTipos(grupos, "Venda", TipoOperacaoB3.Venda);
         AssertTipos(grupos, "Rendimento", TipoOperacaoB3.Rendimento);
         AssertTipos(grupos, "Juros Sobre Capital Próprio", TipoOperacaoB3.Jcp);
         AssertTipos(grupos, "RESGATE ANTECIPADO", TipoOperacaoB3.ResgateAntecipado);
-        AssertTipos(grupos, "Atualização", TipoOperacaoB3.Ignorada);
+        AssertTipos(grupos, "Atualização", TipoOperacaoB3.Atualizacao);
         AssertTipos(grupos, "APLICAÇÃO", TipoOperacaoB3.Aplicacao);
         Assert.Equal(9, grupos.Count);
     }
@@ -107,7 +110,7 @@ public class ParserExtratoB3Tests
             Assert.Equal(ticker, linha.Ticker);
             Assert.Equal(ticker, linha.Ticker.Trim().ToUpperInvariant());
             Assert.Equal(campos[3].Trim(), linha.ProdutoDescricao);
-            Assert.Equal(ClasseEsperada(ticker, campos[3]), linha.Classe);
+            Assert.Equal(ClasseEsperada(campos[3]), linha.Classe);
             Assert.Equal(campos[4].Trim(), linha.Instituicao);
             Assert.Equal(quantidade, linha.Quantidade);
             Assert.Equal(preco, linha.PrecoUnitario);
@@ -133,7 +136,8 @@ public class ParserExtratoB3Tests
         Assert.Equal(DirecaoB3.Debito, linha.Direcao);
         Assert.Equal(new DateOnly(2026, 3, 11), linha.Data);
         Assert.Equal(TipoOperacaoB3.ResgateAntecipado, linha.Tipo);
-        Assert.Equal("CDB", linha.Ticker);
+        Assert.Equal("CDBC25AQGPU", linha.Ticker);
+        Assert.StartsWith("CDB - CDBC25AQGPU", linha.ProdutoDescricao);
         Assert.Equal(ClasseAtivoB3.RendaFixa, linha.Classe);
         Assert.Equal("ITAU UNIBANCO S.A.", linha.Instituicao);
         Assert.Equal(264024m, linha.Quantidade);
@@ -175,10 +179,11 @@ public class ParserExtratoB3Tests
     }
 
     [Fact]
-    public void Amostra_AtualizacaoFicaIgnoradaComPrecoEValorVazios()
+    public void Amostra_AtualizacaoMantemPrecoEValorVazios()
     {
-        var linha = Assert.Single(LerAmostra().Linhas, item => item.Tipo == TipoOperacaoB3.Ignorada);
+        var linha = Assert.Single(LerAmostra().Linhas, item => item.Tipo == TipoOperacaoB3.Atualizacao);
 
+        Assert.Equal(0, LerAmostra().Linhas.Count(item => item.Tipo == TipoOperacaoB3.Ignorada));
         Assert.Equal("Atualização", linha.MovimentacaoBruta);
         Assert.Equal(new DateOnly(2025, 9, 9), linha.Data);
         Assert.Equal("BOVA11", linha.Ticker);
@@ -233,7 +238,7 @@ public class ParserExtratoB3Tests
         var linha = Assert.Single(resultado.Linhas);
 
         Assert.Empty(resultado.Erros);
-        Assert.Equal(TipoOperacaoB3.Ignorada, linha.Tipo);
+        Assert.Equal(TipoOperacaoB3.Atualizacao, linha.Tipo);
         Assert.Null(linha.PrecoUnitario);
         Assert.Null(linha.ValorOperacao);
         Assert.Equal(1m, linha.Quantidade);
@@ -253,11 +258,76 @@ public class ParserExtratoB3Tests
         Assert.Equal(TipoOperacaoB3.Jcp, linhas[0].Tipo);
         Assert.Equal(ClasseAtivoB3.Acao, linhas[0].Classe);
         Assert.Equal(ClasseAtivoB3.RendaFixa, linhas[1].Classe);
-        Assert.Equal("LCI", linhas[1].Ticker);
+        Assert.Equal("LCI123", linhas[1].Ticker);
         Assert.Equal(ClasseAtivoB3.RendaFixa, linhas[2].Classe);
+        Assert.Equal("LCA999", linhas[2].Ticker);
         Assert.Equal(TipoOperacaoB3.Venda, linhas[2].Tipo);
         Assert.Equal(TipoOperacaoB3.Compra, linhas[3].Tipo);
-        Assert.Equal("CDB", linhas[3].Ticker);
+        Assert.Equal("CDBABC", linhas[3].Ticker);
+        Assert.NotEqual(linhas[1].Ticker, linhas[3].Ticker);
+    }
+
+    [Fact]
+    public void RendaFixa_DoisCdbsDiferentesGeramTickersDiferentes()
+    {
+        var linhas = LerAmostra().Linhas;
+        var aplicacao = linhas.Single(linha => linha.ProdutoDescricao.Contains("CDB9268YCA7", StringComparison.Ordinal));
+        var resgate = linhas.Single(linha => linha.ProdutoDescricao.Contains("CDBC25AQGPU", StringComparison.Ordinal));
+
+        Assert.Equal("CDB9268YCA7", aplicacao.Ticker);
+        Assert.Equal("CDB - CDB9268YCA7", aplicacao.ProdutoDescricao);
+        Assert.Equal("CDBC25AQGPU", resgate.Ticker);
+        Assert.NotEqual(aplicacao.Ticker, resgate.Ticker);
+
+        var nikos = linhas.Where(linha => linha.Instituicao.Contains("NIKOS", StringComparison.Ordinal)).Select(linha => linha.Ticker).Distinct().ToList();
+        Assert.Equal(9, nikos.Count);
+        Assert.All(nikos, ticker => Assert.StartsWith("CDB", ticker));
+        Assert.DoesNotContain(nikos, ticker => ticker == "CDB");
+    }
+
+    [Fact]
+    public void Tesouro_TickerEhONomeNormalizado_EDescricaoFicaCompleta()
+    {
+        var linha = Assert.Single(Ler(Cabecalho + "\nCredito;01/01/2024;Compra;  Tesouro   IPCA+   2029  ;CLEAR;0,01;R$1,00;R$1,00\n").Linhas);
+
+        Assert.Equal("TESOURO IPCA+ 2029", linha.Ticker);
+        Assert.Equal("Tesouro   IPCA+   2029", linha.ProdutoDescricao);
+        Assert.Equal(ClasseAtivoB3.RendaFixa, linha.Classe);
+        Assert.Equal(TipoOperacaoB3.Compra, linha.Tipo);
+    }
+
+    [Theory]
+    [InlineData("CDB")]
+    [InlineData("CDB - ")]
+    [InlineData("CDB - ITAU UNIBANCO")]
+    [InlineData("Tesouro")]
+    public void RendaFixaSemCodigoValido_VaiParaErros(string produto)
+    {
+        var resultado = Ler(Cabecalho + "\nCredito;01/01/2024;Aplicação;" + produto + ";ITAU;1;R$1,00;R$1,00\nCredito;02/01/2024;Compra;VALE3 - VALE;XP;1;R$10,00;R$10,00\n");
+
+        var erro = Assert.Single(resultado.Erros);
+        Assert.Equal(2, erro.Linha);
+        Assert.Contains("Código de renda fixa inválido", erro.Motivo);
+        Assert.Equal("VALE3", Assert.Single(resultado.Linhas).Ticker);
+    }
+
+    [Fact]
+    public void TransferenciaDeRendaFixa_PermaneceTransferencia_ERendaVariavelViraCompraOuVenda()
+    {
+        var csv = Cabecalho + "\n"
+            + "Credito;01/01/2024;Transferência - Liquidação;CDB - CDBAAA1;ITAU;1;R$1,00;R$10,00\n"
+            + "Credito;02/01/2024;Transferência - Liquidação;PETR4 - PETROBRAS;XP;2;R$10,00;R$20,00\n"
+            + "Debito;03/01/2024;Transferência - Liquidação;VALE3 - VALE;XP;1;R$10,00;R$10,00\n";
+        var linhas = Ler(csv).Linhas;
+
+        Assert.Equal(TipoOperacaoB3.TransferenciaLiquidacao, linhas[0].Tipo);
+        Assert.Equal(DirecaoB3.Credito, linhas[0].Direcao);
+        Assert.Equal("CDBAAA1", linhas[0].Ticker);
+        Assert.Equal(ClasseAtivoB3.RendaFixa, linhas[0].Classe);
+        Assert.Equal(TipoOperacaoB3.Compra, linhas[1].Tipo);
+        Assert.Equal(DirecaoB3.Credito, linhas[1].Direcao);
+        Assert.Equal(TipoOperacaoB3.Venda, linhas[2].Tipo);
+        Assert.Equal(DirecaoB3.Debito, linhas[2].Direcao);
     }
 
     [Fact]
@@ -284,7 +354,8 @@ public class ParserExtratoB3Tests
         var porBom = Ler(comBom);
         Assert.Empty(porBom.Erros);
         Assert.Equal(new DateOnly(2024, 2, 1), Assert.Single(porBom.Linhas).Data);
-        Assert.Equal(TipoOperacaoB3.TransferenciaLiquidacao, porBom.Linhas[0].Tipo);
+        Assert.Equal(TipoOperacaoB3.Compra, porBom.Linhas[0].Tipo);
+        Assert.Equal(DirecaoB3.Credito, porBom.Linhas[0].Direcao);
 
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
         var por1252 = Ler(Encoding.GetEncoding(1252).GetBytes(texto));
@@ -361,9 +432,15 @@ public class ParserExtratoB3Tests
     private static string TickerEsperado(string produto)
     {
         var texto = produto.Trim();
-        var indice = texto.IndexOf(" - ", StringComparison.Ordinal);
-        var bruto = indice < 0 ? texto : texto[..indice];
-        return bruto.Trim().ToUpperInvariant();
+        var partes = texto.Split(" - ");
+        var primeiro = partes[0].Trim().ToUpperInvariant();
+        if (primeiro is "CDB" or "LCI" or "LCA")
+            return partes.Length > 1 ? partes[1].Trim().ToUpperInvariant() : primeiro;
+
+        if (texto.Contains("Tesouro", StringComparison.OrdinalIgnoreCase))
+            return texto.Trim().ToUpperInvariant();
+
+        return primeiro;
     }
 
     private static decimal? NumeroEsperado(string bruto)
@@ -380,26 +457,27 @@ public class ParserExtratoB3Tests
     {
         return movimentacao.Trim() switch
         {
-            "Transferência - Liquidação" => TipoOperacaoB3.TransferenciaLiquidacao,
+            "Transferência - Liquidação" => direcao == DirecaoB3.Credito ? TipoOperacaoB3.Compra : TipoOperacaoB3.Venda,
             "COMPRA / VENDA" => direcao == DirecaoB3.Credito ? TipoOperacaoB3.Compra : TipoOperacaoB3.Venda,
             "Compra" => TipoOperacaoB3.Compra,
             "Venda" => TipoOperacaoB3.Venda,
             "Rendimento" => TipoOperacaoB3.Rendimento,
             "Juros Sobre Capital Próprio" => TipoOperacaoB3.Jcp,
             "RESGATE ANTECIPADO" => TipoOperacaoB3.ResgateAntecipado,
-            "Atualização" => TipoOperacaoB3.Ignorada,
+            "Atualização" => TipoOperacaoB3.Atualizacao,
             "APLICAÇÃO" => TipoOperacaoB3.Aplicacao,
             _ => throw new InvalidOperationException($"Movimentação inesperada na amostra: {movimentacao}")
         };
     }
 
-    private static ClasseAtivoB3 ClasseEsperada(string ticker, string produto)
+    private static ClasseAtivoB3 ClasseEsperada(string produto)
     {
         var nome = produto.ToUpperInvariant();
-        if (ticker is "CDB" or "LCI" or "LCA" || nome.Contains("TESOURO", StringComparison.Ordinal))
+        var primeiro = nome.Split(" - ", 2)[0].Trim();
+        if (primeiro is "CDB" or "LCI" or "LCA" || nome.Contains("TESOURO", StringComparison.Ordinal))
             return ClasseAtivoB3.RendaFixa;
 
-        if (ticker.EndsWith("11", StringComparison.Ordinal)
+        if (primeiro.EndsWith("11", StringComparison.Ordinal)
             && (nome.Contains("FII", StringComparison.Ordinal)
                 || nome.Contains("FIAGRO", StringComparison.Ordinal)
                 || nome.Contains("IMOB", StringComparison.Ordinal)))
