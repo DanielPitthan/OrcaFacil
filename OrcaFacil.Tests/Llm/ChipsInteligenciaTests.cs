@@ -72,7 +72,8 @@ public class ChipsInteligenciaTests
         Assert.Equal("AjusteChipIa", ajuste.ToString());
         Assert.DoesNotContain("qwencloudapi.com", ajuste.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain("deepseek-v4.1-flash-1017", ajuste.ToString(), StringComparison.Ordinal);
-        Assert.Contains("sk-sp-", ChipsInteligencia.TextoAjudaAlibaba, StringComparison.Ordinal);
+        Assert.Contains("Token Plan (sk-sp-)", ChipsInteligencia.TextoAjudaAlibaba, StringComparison.Ordinal);
+        Assert.DoesNotContain("Token Plan (sk-ws-)", ChipsInteligencia.TextoAjudaAlibaba, StringComparison.Ordinal);
         Assert.Contains(ChipsInteligencia.UrlAlibaba, ChipsInteligencia.TextoAjudaAlibaba, StringComparison.Ordinal);
         Assert.Contains("pay-as-you-go (sk-)", ChipsInteligencia.TextoAjudaAlibaba, StringComparison.Ordinal);
         Assert.Contains(ChipsInteligencia.UrlAlibabaAvulso, ChipsInteligencia.TextoAjudaAlibaba, StringComparison.Ordinal);
