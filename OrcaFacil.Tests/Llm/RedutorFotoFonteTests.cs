@@ -15,8 +15,15 @@ public class RedutorFotoFonteTests
 
         Assert.Contains("PreparoFotoComprovante.CalcularAmostra", fonte, StringComparison.Ordinal);
         Assert.Contains("InSampleSize = amostra", fonte, StringComparison.Ordinal);
+        var bounds = fonte.IndexOf("InJustDecodeBounds = true", StringComparison.Ordinal);
+        var amostra = fonte.IndexOf("InSampleSize = amostra", StringComparison.Ordinal);
+        Assert.True(bounds >= 0 && bounds < amostra);
         Assert.Contains("Recycle()", fonte, StringComparison.Ordinal);
         Assert.Contains("global::Android.", fonte, StringComparison.Ordinal);
+        Assert.Contains("global::Android.Graphics.BitmapFactory", fonte, StringComparison.Ordinal);
+        Assert.Contains("CompressFormat.Jpeg", fonte, StringComparison.Ordinal);
+        Assert.DoesNotContain("ImageSharp", fonte, StringComparison.Ordinal);
+        Assert.DoesNotContain("Magick", fonte, StringComparison.Ordinal);
         Assert.DoesNotContain("LogWarning", fonte, StringComparison.Ordinal);
         Assert.DoesNotContain("LogInformation", fonte, StringComparison.Ordinal);
         Assert.Contains("OrientacaoExif.Rotate90", fonte, StringComparison.Ordinal);
@@ -58,6 +65,22 @@ public class RedutorFotoFonteTests
         Assert.DoesNotContain("ApagarNovidades", fonte, StringComparison.Ordinal);
         Assert.DoesNotContain("<<<<<<<", fonte, StringComparison.Ordinal);
         Assert.Equal(1, fonte.Split('\n').Count(linha => linha.Contains("LogWarning", StringComparison.Ordinal)));
+        Assert.Contains("EscolherMediaType(bytes, arquivo.FileName)", fonte, StringComparison.Ordinal);
+        Assert.Contains("CodificarGraphicsAsync(", fonte, StringComparison.Ordinal);
+        Assert.Contains("ImageFormat.Jpeg", fonte, StringComparison.Ordinal);
+        Assert.Contains("TetoBytesAntesDoDecode", fonte, StringComparison.Ordinal);
+        Assert.Contains("CabeAntesDoDecode", fonte, StringComparison.Ordinal);
+        Assert.Contains("FotoComprovantePronta.AcimaDoTetoBruto()", fonte, StringComparison.Ordinal);
+
+        var copiar = ExtrairBloco(fonte, "Task<byte[]> CopiarAsync(");
+        Assert.DoesNotContain("EscolherMediaType(", copiar, StringComparison.Ordinal);
+        Assert.Contains("var buffer", copiar, StringComparison.Ordinal);
+        Assert.Contains("TetoBytesAntesDoDecode", copiar, StringComparison.Ordinal);
+        Assert.Contains("Escolha outra.", fonte, StringComparison.Ordinal);
+        Assert.DoesNotContain("TextoFotoAcimaDoTeto", fonte, StringComparison.Ordinal);
+        Assert.DoesNotContain("A leitura não foi enviada.", fonte, StringComparison.Ordinal);
+        Assert.Contains("FotoComprovantePronta.FormatoNaoConvertido()", fonte, StringComparison.Ordinal);
+        Assert.Contains("EscolherMediaType(jpeg) is null", fonte, StringComparison.Ordinal);
     }
 
     private static string TrechoAntesDoFinally(string metodo)

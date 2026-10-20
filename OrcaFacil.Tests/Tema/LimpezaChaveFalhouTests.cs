@@ -112,6 +112,7 @@ public class LimpezaChaveFalhouTests
         memoria.Definir(UriEscolhaPasta.ChavePreferencia, Uri);
         memoria.Definir(ChipsInteligencia.ChaveUrl, "https://api.anthropic.com");
         memoria.Definir(ChipsInteligencia.ChaveModelo, PedidoMensagem.ModeloAnthropic);
+        memoria.Definir(ChipsInteligencia.ChaveMaxTokens, "4096");
         memoria.Definir("Config.NotificacoesAtivas", "false");
     }
 
@@ -123,6 +124,7 @@ public class LimpezaChaveFalhouTests
         Assert.Equal(Uri, new MemoriaPastaEspelho(memoria).LerUri());
         Assert.False(memoria.Contem(ChipsInteligencia.ChaveUrl));
         Assert.False(memoria.Contem(ChipsInteligencia.ChaveModelo));
+        Assert.False(memoria.Contem(ChipsInteligencia.ChaveMaxTokens));
         Assert.False(memoria.Contem("Config.NotificacoesAtivas"));
     }
 

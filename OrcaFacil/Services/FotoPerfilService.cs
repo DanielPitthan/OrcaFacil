@@ -74,11 +74,37 @@ public class FotoPerfilService : IFotoPerfilService
                 return FotoComprovantePronta.SemFoto();
 
             await using var origem = await arquivo.OpenReadAsync();
-            var bytes = await CopiarAsync(origem, cancellationToken);
+            byte[] bytes;
+            try
+            {
+                bytes = await CopiarAsync(origem, cancellationToken);
+            }
+            catch (FotoAcimaDoTetoException)
+            {
+                return FotoComprovantePronta.AcimaDoTetoBruto();
+            }
+
             if (bytes.Length == 0)
                 return FotoComprovantePronta.Ilegivel();
 
-            return await MontarComprovanteAsync(bytes, cancellationToken);
+            var aceito = PreparoFotoComprovante.EscolherMediaType(bytes, arquivo.FileName) is not null;
+            try
+            {
+                var pronta = await MontarComprovanteAsync(bytes, cancellationToken);
+                if (pronta.Jpeg is { Length: > 0 } jpeg &&
+                    PreparoFotoComprovante.EscolherMediaType(jpeg) is null)
+                    return FotoComprovantePronta.FormatoNaoConvertido();
+
+                return pronta;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception) when (!aceito)
+            {
+                return FotoComprovantePronta.FormatoNaoConvertido();
+            }
         }
         finally
         {
@@ -208,7 +234,7 @@ public class FotoPerfilService : IFotoPerfilService
                     await using var saida = File.Create(destino);
                     await saida.WriteAsync(jpeg.Bytes);
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is not FotoAcimaDoTetoException)
                 {
                     _logger.LogWarning(ex, "Falha ao redimensionar a foto; salvando o original.");
                     await using var origemNovamente = await arquivo.OpenReadAsync();
@@ -276,6 +302,7 @@ public class FotoPerfilService : IFotoPerfilService
         if (nativo is not null)
             return (nativo.Value.Bytes, nativo.Value.LadoLongo);
 #endif
+        // Fora do Android, e quando o BitmapFactory não abre o HEIC, o Graphics grava JPEG.
         return await CodificarGraphicsAsync(origem, ladoMaximo, qualidade, avatar, cancellationToken);
     }
 
@@ -464,9 +491,31 @@ public class FotoPerfilService : IFotoPerfilService
 
     private static async Task<byte[]> CopiarAsync(Stream origem, CancellationToken cancellationToken)
     {
+        var teto = PreparoFotoComprovante.TetoBytesAntesDoDecode;
+        if (origem.CanSeek && !PreparoFotoComprovante.CabeAntesDoDecode(origem.Length))
+            throw new FotoAcimaDoTetoException();
+
         using var memoria = new MemoryStream();
-        await origem.CopyToAsync(memoria, cancellationToken);
-        return memoria.ToArray();
+        var buffer = new byte[81920];
+        while (true)
+        {
+            var lidos = await origem.ReadAsync(buffer, cancellationToken);
+            if (lidos == 0)
+                return memoria.ToArray();
+
+            if (memoria.Length + lidos > teto)
+                throw new FotoAcimaDoTetoException();
+
+            memoria.Write(buffer, 0, lidos);
+        }
+    }
+
+    private sealed class FotoAcimaDoTetoException : InvalidOperationException
+    {
+        public FotoAcimaDoTetoException()
+            : base($"A foto passa de {PreparoFotoComprovante.TetoBytesAntesDoDecode / (1024 * 1024)} MB. Escolha outra.")
+        {
+        }
     }
 
     private static string? TentarCaminho(FileResult? arquivo)

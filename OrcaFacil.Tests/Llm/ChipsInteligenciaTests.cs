@@ -6,13 +6,19 @@ namespace OrcaFacil.Tests.Llm;
 public class ChipsInteligenciaTests
 {
     [Fact]
-    public void ChavesDePreferencia_SaoUrlModeloEProvedor_SemAChaveDaApi()
+    public void ChavesDePreferencia_SaoUrlModeloProvedorEMaxTokens_SemAChaveDaApi()
     {
         Assert.Equal("Config.Ia.Url", ChipsInteligencia.ChaveUrl);
         Assert.Equal("Config.Ia.Modelo", ChipsInteligencia.ChaveModelo);
         Assert.Equal("Config.Ia.Provedor", ChipsInteligencia.ChaveProvedor);
+        Assert.Equal("Config.Ia.MaxTokens", ChipsInteligencia.ChaveMaxTokens);
         Assert.Equal(
-            [ChipsInteligencia.ChaveUrl, ChipsInteligencia.ChaveModelo, ChipsInteligencia.ChaveProvedor],
+            [
+                ChipsInteligencia.ChaveUrl,
+                ChipsInteligencia.ChaveModelo,
+                ChipsInteligencia.ChaveProvedor,
+                ChipsInteligencia.ChaveMaxTokens
+            ],
             ChipsInteligencia.ChavesPreferencia);
 
         foreach (var chave in ChipsInteligencia.ChavesPreferencia)

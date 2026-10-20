@@ -317,6 +317,168 @@ public class ClienteMensagensTests
     }
 
     [Fact]
+    public async Task TextoComCerca_NaoEFalsoNegativo()
+    {
+        const string corpo = """
+            {
+              "stop_reason": "end_turn",
+              "content": [
+                { "type": "thinking", "thinking": "rascunho" },
+                { "type": "text", "text": "Leitura:\n```json\n{\"loja\":\"Extra\",\"legivel\":true,\"total_cupom\":\"12,90\",\"itens\":[{\"descricao_lida\":\"ARROZ\",\"preco\":\"12,90\"}]}\n```" }
+              ]
+            }
+            """;
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, corpo));
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.LerComprovanteAsync(Base, Chave, "deepseek-v4-flash", Midia, Imagem);
+
+        Assert.True(resultado.Sucesso);
+        Assert.Null(resultado.Diagnostico);
+        Assert.Equal("Extra", resultado.Comprovante!.Loja);
+        Assert.Equal(12.90m, Assert.Single(resultado.Comprovante.Itens).Preco);
+    }
+
+    [Fact]
+    public async Task MaxTokens_Padrao8192_AceitaFaixa_ENaoChamaForaDela()
+    {
+        Assert.Equal(8192, PedidoMensagem.MaxTokens);
+        Assert.Equal(256, PedidoMensagem.MaxTokensMinimo);
+        Assert.Equal(32768, PedidoMensagem.MaxTokensMaximo);
+        Assert.Equal("O máximo de tokens fica entre 256 e 32768.", PedidoMensagem.TextoMaxTokensForaDaFaixa);
+        Assert.True(PedidoMensagem.MaxTokensNaFaixa(256));
+        Assert.True(PedidoMensagem.MaxTokensNaFaixa(8192));
+        Assert.True(PedidoMensagem.MaxTokensNaFaixa(32768));
+        Assert.False(PedidoMensagem.MaxTokensNaFaixa(255));
+        Assert.False(PedidoMensagem.MaxTokensNaFaixa(32769));
+        Assert.Equal(8192, PedidoMensagem.NormalizarMaxTokens(0));
+        Assert.Equal(8192, PedidoMensagem.NormalizarMaxTokens(255));
+        Assert.Equal(8192, PedidoMensagem.NormalizarMaxTokens(32769));
+        Assert.Equal(16384, PedidoMensagem.NormalizarMaxTokens(16384));
+
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, CorpoValido()));
+        using var cliente = new ClienteMensagens(captura);
+
+        await cliente.LerComprovanteAsync(
+            Base,
+            Chave,
+            PedidoMensagem.ModeloAnthropic,
+            Midia,
+            Imagem,
+            maxTokens: 16384);
+
+        using (var doc = JsonDocument.Parse(captura.Corpo))
+            Assert.Equal(16384, doc.RootElement.GetProperty("max_tokens").GetInt32());
+
+        var fora = await cliente.LerComprovanteAsync(
+            Base,
+            Chave,
+            PedidoMensagem.ModeloAnthropic,
+            Midia,
+            Imagem,
+            maxTokens: 10);
+
+        Assert.Equal(1, captura.Chamadas);
+        Assert.Equal(TipoResultadoMensagem.PedidoInvalido, fora.Tipo);
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            PedidoMensagem.Montar(PedidoMensagem.ModeloAnthropic, Midia, Imagem, 10));
+    }
+
+    [Fact]
+    public async Task StopReasonMaxTokens_ViraRespostaCortada()
+    {
+        const string corpo = """
+            {"stop_reason":"max_tokens","content":[{"type":"text","text":"{\"legivel\":true"}]}
+            """;
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, corpo));
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.LerComprovanteAsync(Base, Chave, "deepseek-v4-flash", Midia, Imagem);
+
+        Assert.Equal(TipoResultadoMensagem.RespostaInvalida, resultado.Tipo);
+        Assert.Equal(ResultadoMensagem.TextoRespostaCortada, resultado.Mensagem);
+        Assert.Null(resultado.Comprovante);
+        Assert.NotNull(resultado.Diagnostico);
+        Assert.Contains("resposta cortada", resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains("stop_reason: max_tokens", resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Equal("https://api.anthropic.com", resultado.Diagnostico.Origem);
+        Assert.DoesNotContain(Chave, resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("/v1/messages", resultado.Diagnostico.Texto, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Diagnostico_NaoLevaTokenImagemNemCabecalhoNoTextoNemNoLog()
+    {
+        const string token = "sk-ant-ficticio-alibaba-9f3c2a7b1e";
+        var base64 = new string('B', 240);
+        var corpo = "falha " + token + "\nAuthorization: Bearer " + token + "\nx-api-key: " + token
+            + "\ndata:image/jpeg;base64," + base64 + "\n" + Imagem;
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, corpo));
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.LerComprovanteAsync(
+            "https://dashscope.aliyuncs.com/apps/anthropic",
+            token,
+            "deepseek-v4-flash",
+            Midia,
+            Imagem);
+
+        Assert.Equal(1, captura.Chamadas);
+        Assert.Equal(TipoResultadoMensagem.RespostaInvalida, resultado.Tipo);
+        Assert.Equal(ResultadoMensagem.TextoRespostaInvalida, resultado.Mensagem);
+        Assert.NotNull(resultado.Diagnostico);
+        Assert.Equal("https://dashscope.aliyuncs.com", resultado.Diagnostico.Origem);
+        Assert.Equal("deepseek-v4-flash", resultado.Diagnostico.Modelo);
+        Assert.Contains("JSON inválido", resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(token, resultado.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain(token, resultado.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(token, resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(token, resultado.Diagnostico.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(Imagem, resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(base64, resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("/apps/", resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("x-api-key", resultado.Diagnostico.Texto, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Authorization", resultado.Diagnostico.Texto, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("data:image", resultado.Diagnostico.Texto, StringComparison.OrdinalIgnoreCase);
+
+        var log = new StringBuilder();
+        RegistroDiagnosticoLeitura.Registrar(resultado.Diagnostico, texto => log.Append(texto));
+        Assert.Equal(resultado.Diagnostico.Texto, log.ToString());
+        Assert.DoesNotContain(token, log.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(Imagem, log.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(base64, log.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ExcecaoDeRede_NaoEntraNoMotivoNemNaStack()
+    {
+        HttpRequestException falha;
+        try
+        {
+            throw new HttpRequestException("rastro-ex-tostring-9f3c-nao-pode-vazar");
+        }
+        catch (HttpRequestException ex)
+        {
+            falha = ex;
+        }
+
+        var captura = new CapturaHandler(_ => throw falha);
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloAnthropic, Midia, Imagem);
+
+        Assert.Equal(TipoResultadoMensagem.SemRede, resultado.Tipo);
+        Assert.Equal(ResultadoMensagem.TextoSemRede, resultado.Mensagem);
+        Assert.NotNull(resultado.Diagnostico);
+        Assert.DoesNotContain(falha.Message, resultado.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain(falha.Message, resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(falha.ToString(), resultado.Diagnostico.Motivo ?? "", StringComparison.Ordinal);
+        Assert.DoesNotContain(falha.ToString(), resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("HttpRequestException", resultado.Diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("rastro-ex-tostring", resultado.Diagnostico.Texto, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task FalhaDeRede_NaoIncluiEnderecoNemChave()
     {
         var captura = new CapturaHandler(_ =>

@@ -502,6 +502,20 @@
             if (foto.Cancelada || Cancelada(geracao))
                 return;
 
+            if (foto.FormatoRecusado)
+            {
+                _jpeg = null;
+                _exibicao = MensagensLeituraComprovante.FormatoNaoConvertido();
+                return;
+            }
+
+            if (foto.AcimaDoTeto)
+            {
+                _jpeg = null;
+                _exibicao = MensagensLeituraComprovante.FotoAcimaDoTeto();
+                return;
+            }
+
             var jpeg = foto.Jpeg;
             if (foto.PedirOutraFoto || jpeg is null || jpeg.Length == 0 || jpeg.Length > ClienteMensagens.TamanhoMaximoImagem)
             {
@@ -570,13 +584,21 @@
             }
 
             var media = PreparoFotoComprovante.EscolherMediaType(jpeg);
+            if (media is null)
+            {
+                _jpeg = null;
+                _exibicao = MensagensLeituraComprovante.FormatoNaoConvertido();
+                return;
+            }
+
             var resultado = await Cliente.LerComprovanteAsync(
                 Configuracao.UrlInteligencia,
                 chave,
                 Configuracao.ModeloInteligencia,
                 media,
                 Convert.ToBase64String(jpeg),
-                _pagina.Token);
+                _pagina.Token,
+                Configuracao.MaxTokensInteligencia);
             if (Cancelada(atual))
                 return;
 

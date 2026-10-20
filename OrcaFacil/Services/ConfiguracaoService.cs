@@ -63,6 +63,19 @@ public class ConfiguracaoService : IConfiguracaoService
         set => Preferences.Default.Set(ChipsInteligencia.ChaveModelo, value ?? "");
     }
 
+    public int MaxTokensInteligencia
+    {
+        get => PedidoMensagem.NormalizarMaxTokens(
+            Preferences.Default.Get(ChipsInteligencia.ChaveMaxTokens, PedidoMensagem.MaxTokens));
+        set
+        {
+            if (!PedidoMensagem.MaxTokensNaFaixa(value))
+                return;
+
+            Preferences.Default.Set(ChipsInteligencia.ChaveMaxTokens, value);
+        }
+    }
+
     public ProvedorIa? ProvedorInteligencia
     {
         get => ChipsInteligencia.Interpretar(Preferences.Default.Get(ChipsInteligencia.ChaveProvedor, ""));

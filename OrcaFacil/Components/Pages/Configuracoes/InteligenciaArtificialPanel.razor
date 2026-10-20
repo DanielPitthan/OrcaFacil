@@ -28,6 +28,13 @@
         <FormRow Icone="@Icons.Material.Outlined.Memory" Rotulo="Modelo">
             <MudTextField T="string" @bind-Value="_modelo" Immediate="true" Variant="Variant.Text" Margin="Margin.Dense" />
         </FormRow>
+        <FormRow Icone="@Icons.Material.Outlined.Notes" Rotulo="Máximo de tokens">
+            <MudNumericField T="int" @bind-Value="_maxTokens" Immediate="true" Variant="Variant.Text" Margin="Margin.Dense"
+                             Min="@PedidoMensagem.MaxTokensMinimo" Max="@PedidoMensagem.MaxTokensMaximo" />
+        </FormRow>
+        <div class="of-secao-bloco">
+            <p class="of-apoio">Entre @PedidoMensagem.MaxTokensMinimo e @PedidoMensagem.MaxTokensMaximo. O padrão é @PedidoMensagem.MaxTokens.</p>
+        </div>
         @if (RotuloModelo is not null)
         {
             <div class="of-secao-bloco">
@@ -78,6 +85,7 @@
     private ProvedorIa? _provedor;
     private string _url = "";
     private string _modelo = "";
+    private int _maxTokens = PedidoMensagem.MaxTokens;
     private string _chaveDigitada = "";
     private bool _temChave;
     private bool _ocupado;
@@ -102,6 +110,7 @@
     {
         _url = Configuracao.UrlInteligencia;
         _modelo = Configuracao.ModeloInteligencia;
+        _maxTokens = Configuracao.MaxTokensInteligencia;
         _provedor = Configuracao.ProvedorInteligencia;
         try
         {
@@ -138,11 +147,19 @@
         _testando = false;
         try
         {
+            if (!PedidoMensagem.MaxTokensNaFaixa(_maxTokens))
+            {
+                Snackbar.Add(PedidoMensagem.TextoMaxTokensForaDaFaixa, Severity.Error);
+                return;
+            }
+
             Configuracao.UrlInteligencia = _url.Trim();
             Configuracao.ModeloInteligencia = _modelo.Trim();
             Configuracao.ProvedorInteligencia = _provedor;
+            Configuracao.MaxTokensInteligencia = _maxTokens;
             _url = Configuracao.UrlInteligencia;
             _modelo = Configuracao.ModeloInteligencia;
+            _maxTokens = Configuracao.MaxTokensInteligencia;
 
             if (!string.IsNullOrWhiteSpace(_chaveDigitada))
             {

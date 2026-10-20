@@ -64,21 +64,92 @@ public class PreparoFotoComprovanteTests
     }
 
     [Fact]
-    public void EscolherMediaType_JpegPngGifWebp_EJpegQuandoNaoReconhece()
+    public void MediaType_JpegChamadoPng_Png_Webp_Gif_HeicEDesconhecido()
     {
-        Assert.Equal(PreparoFotoComprovante.MediaTypeJpeg, PreparoFotoComprovante.EscolherMediaType([0xFF, 0xD8, 0xFF, 0xD9]));
-        Assert.Equal(PreparoFotoComprovante.MediaTypeJpeg, PreparoFotoComprovante.EscolherMediaType([]));
-        Assert.Equal(PreparoFotoComprovante.MediaTypeJpeg, PreparoFotoComprovante.EscolherMediaType([1, 2, 3, 4]));
-        Assert.Equal(
-            PreparoFotoComprovante.MediaTypePng,
-            PreparoFotoComprovante.EscolherMediaType([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]));
-        Assert.Equal(
-            PreparoFotoComprovante.MediaTypeGif,
-            PreparoFotoComprovante.EscolherMediaType("GIF89a"u8.ToArray()));
+        var jpeg = new byte[] { 0xFF, 0xD8, 0xFF, 0xD9 };
+        var png = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
+        var gif = "GIF89a"u8.ToArray();
         var webp = new byte[12];
         "RIFF"u8.CopyTo(webp);
         "WEBP"u8.CopyTo(webp.AsSpan(8));
-        Assert.Equal(PreparoFotoComprovante.MediaTypeWebp, PreparoFotoComprovante.EscolherMediaType(webp));
+        var heic = CaixaHeic("heic");
+        var desconhecido = new byte[] { 0x42, 0x4D, 0x00, 0x00 };
+
+        Assert.Equal(PreparoFotoComprovante.MediaTypeJpeg, PreparoFotoComprovante.EscolherMediaType(jpeg, "cupom.png"));
+        Assert.Equal(PreparoFotoComprovante.MediaTypePng, PreparoFotoComprovante.EscolherMediaType(png, "cupom.jpeg"));
+        Assert.Equal(PreparoFotoComprovante.MediaTypeWebp, PreparoFotoComprovante.EscolherMediaType(webp, "cupom.png"));
+        Assert.Equal(PreparoFotoComprovante.MediaTypeGif, PreparoFotoComprovante.EscolherMediaType(gif, "cupom.jpg"));
+        Assert.True(PreparoFotoComprovante.EhHeic(heic));
+        Assert.Null(PreparoFotoComprovante.EscolherMediaType(heic, "cupom.jpg"));
+        Assert.False(PreparoFotoComprovante.EhHeic(desconhecido));
+        Assert.Null(PreparoFotoComprovante.EscolherMediaType(desconhecido, "cupom.png"));
+        Assert.Null(PreparoFotoComprovante.EscolherMediaType([]));
+
+        var jpegPronto = PreparoFotoComprovante.PrepararEnvio(jpeg, "cupom.png", _ => throw new InvalidOperationException("JPEG não se converte."));
+        Assert.Equal(PreparoFotoComprovante.MediaTypeJpeg, jpegPronto.MediaType);
+        Assert.Equal(jpeg, jpegPronto.Bytes);
+        Assert.True(jpegPronto.Enviar);
+        Assert.Equal("Enviar", jpegPronto.ToString());
+
+        Assert.Equal(PreparoFotoComprovante.MediaTypePng, PreparoFotoComprovante.PrepararEnvio(png, "nota.png", _ => null).MediaType);
+        Assert.Equal(PreparoFotoComprovante.MediaTypeWebp, PreparoFotoComprovante.PrepararEnvio(webp, "nota.webp", _ => null).MediaType);
+        Assert.Equal(PreparoFotoComprovante.MediaTypeGif, PreparoFotoComprovante.PrepararEnvio(gif, "nota.gif", _ => null).MediaType);
+
+        var convertido = PreparoFotoComprovante.PrepararEnvio(heic, "foto.heic", _ => jpeg);
+        Assert.Equal(PreparoFotoComprovante.MediaTypeJpeg, convertido.MediaType);
+        Assert.Equal(jpeg, convertido.Bytes);
+        Assert.True(convertido.Enviar);
+
+        var heicSemConversao = PreparoFotoComprovante.PrepararEnvio(heic, "foto.heic", _ => null);
+        Assert.False(heicSemConversao.Enviar);
+        Assert.Null(heicSemConversao.MediaType);
+        Assert.Equal("Recusar", heicSemConversao.ToString());
+
+        var heicQueNaoVirouJpeg = PreparoFotoComprovante.PrepararEnvio(heic, "foto.heic", _ => png);
+        Assert.False(heicQueNaoVirouJpeg.Enviar);
+
+        var estranho = PreparoFotoComprovante.PrepararEnvio(desconhecido, "cupom.png", _ => null);
+        Assert.False(estranho.Enviar);
+        Assert.Null(estranho.MediaType);
+        Assert.Null(estranho.Bytes);
+    }
+
+    [Fact]
+    public void TetoAntesDoDecode_EVinteMega_ECabeSoAteEle()
+    {
+        Assert.Equal(20 * 1024 * 1024, PreparoFotoComprovante.TetoBytesAntesDoDecode);
+        Assert.True(PreparoFotoComprovante.CabeAntesDoDecode(PreparoFotoComprovante.TetoBytesAntesDoDecode));
+        Assert.False(PreparoFotoComprovante.CabeAntesDoDecode(PreparoFotoComprovante.TetoBytesAntesDoDecode + 1));
+        Assert.False(PreparoFotoComprovante.CabeAntesDoDecode(-1));
+        Assert.Contains("20 MB", MensagensLeituraComprovante.TextoFotoAcimaDoTeto, StringComparison.Ordinal);
+        Assert.Contains("não foi enviada", MensagensLeituraComprovante.TextoFotoAcimaDoTeto, StringComparison.Ordinal);
+        Assert.Equal("AcimaDoTeto", FotoComprovantePronta.AcimaDoTetoBruto().ToString());
+    }
+
+    [Fact]
+    public void MediaType_Gif87aRiffAviEBufferCurto()
+    {
+        Assert.Equal(
+            PreparoFotoComprovante.MediaTypeGif,
+            PreparoFotoComprovante.EscolherMediaType("GIF87a"u8.ToArray(), "anim.png"));
+
+        var avi = new byte[12];
+        "RIFF"u8.CopyTo(avi);
+        "AVI "u8.CopyTo(avi.AsSpan(8));
+        Assert.Null(PreparoFotoComprovante.EscolherMediaType(avi, "filme.webp"));
+        Assert.False(PreparoFotoComprovante.EhHeic(avi));
+        Assert.Null(PreparoFotoComprovante.EscolherMediaType([0xFF, 0xD8], "curto.jpg"));
+        Assert.Null(PreparoFotoComprovante.EscolherMediaType([0x89, 0x50], "curto.png"));
+        Assert.Null(PreparoFotoComprovante.EscolherMediaType([], "vazio.png"));
+    }
+
+    private static byte[] CaixaHeic(string marca)
+    {
+        var bytes = new byte[12];
+        bytes[3] = 16;
+        "ftyp"u8.CopyTo(bytes.AsSpan(4));
+        System.Text.Encoding.ASCII.GetBytes(marca).CopyTo(bytes.AsSpan(8));
+        return bytes;
     }
 
     [Fact]

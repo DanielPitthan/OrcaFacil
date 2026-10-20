@@ -24,6 +24,7 @@ public static class ChipsInteligencia
     public const string ChaveUrl = "Config.Ia.Url";
     public const string ChaveModelo = "Config.Ia.Modelo";
     public const string ChaveProvedor = "Config.Ia.Provedor";
+    public const string ChaveMaxTokens = "Config.Ia.MaxTokens";
 
     public const string UrlAnthropic = "https://api.anthropic.com";
     public const string ModeloAnthropic = PedidoMensagem.ModeloAnthropic;
@@ -31,7 +32,8 @@ public static class ChipsInteligencia
 
     public static IReadOnlyList<ProvedorIa> Provedores { get; } = [ProvedorIa.Anthropic, ProvedorIa.Alibaba];
 
-    public static IReadOnlyList<string> ChavesPreferencia { get; } = [ChaveUrl, ChaveModelo, ChaveProvedor];
+    public static IReadOnlyList<string> ChavesPreferencia { get; } =
+        [ChaveUrl, ChaveModelo, ChaveProvedor, ChaveMaxTokens];
 
     public static string Texto(ProvedorIa provedor) => provedor switch
     {

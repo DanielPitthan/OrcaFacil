@@ -26,6 +26,12 @@ public interface IConfiguracaoService
     /// <summary>Modelo da API. Chave <c>Config.Ia.Modelo</c>.</summary>
     string ModeloInteligencia { get; set; }
 
+    /// <summary>
+    /// Máximo de tokens da leitura. Chave <c>Config.Ia.MaxTokens</c>. Padrão 8192.
+    /// Fora de 256–32768, a leitura volta ao padrão.
+    /// </summary>
+    int MaxTokensInteligencia { get; set; }
+
     /// <summary>Chip escolhido. Chave <c>Config.Ia.Provedor</c>. Nulo quando nenhum foi salvo.</summary>
     ProvedorIa? ProvedorInteligencia { get; set; }
 

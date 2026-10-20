@@ -8,6 +8,7 @@ namespace OrcaFacil.Core.Llm;
 /// Cliente de <c>POST {base}/v1/messages</c>. A produção nasce em <see cref="Criar"/>,
 /// com redirect desligado. A chave entra só no header de cada pedido HTTPS.
 /// Não grava chave, header, corpo, imagem nem caminho.
+/// O diagnóstico da falha fica no resultado, já sem token, cabeçalho e imagem.
 /// </summary>
 public sealed class ClienteMensagens : IDisposable
 {
@@ -118,7 +119,8 @@ public sealed class ClienteMensagens : IDisposable
         string? modelo,
         string? tipoMidia,
         string? imagemBase64,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        int maxTokens = PedidoMensagem.MaxTokens)
     {
         var preparo = PrepararChamada(urlBase, chave);
         if (preparo.Falha is not null)
@@ -127,14 +129,22 @@ public sealed class ClienteMensagens : IDisposable
         if (string.IsNullOrWhiteSpace(modelo) ||
             string.IsNullOrWhiteSpace(tipoMidia) ||
             string.IsNullOrWhiteSpace(imagemBase64) ||
-            !ImagemCabe(imagemBase64))
+            !ImagemCabe(imagemBase64) ||
+            !PedidoMensagem.MaxTokensNaFaixa(maxTokens))
         {
             return Task.FromResult(
                 ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoPedidoInvalido));
         }
 
-        var json = PedidoMensagem.Montar(modelo.Trim(), tipoMidia.Trim(), imagemBase64);
-        return EnviarAsync(preparo.Uri, preparo.Chave, json, interpretarComprovante: true, cancellationToken);
+        var json = PedidoMensagem.Montar(modelo.Trim(), tipoMidia.Trim(), imagemBase64, maxTokens);
+        return EnviarAsync(
+            preparo.Uri,
+            preparo.Chave,
+            json,
+            interpretarComprovante: true,
+            modelo.Trim(),
+            imagemBase64,
+            cancellationToken);
     }
 
     /// <summary>
@@ -154,7 +164,14 @@ public sealed class ClienteMensagens : IDisposable
             return Task.FromResult(preparo.Falha);
 
         var json = PedidoMensagem.MontarTesteConexao(modelo!);
-        return EnviarAsync(preparo.Uri, preparo.Chave, json, interpretarComprovante: false, cancellationToken);
+        return EnviarAsync(
+            preparo.Uri,
+            preparo.Chave,
+            json,
+            interpretarComprovante: false,
+            modelo!.Trim(),
+            imagemBase64: null,
+            cancellationToken);
     }
 
     /// <summary>
@@ -190,6 +207,7 @@ public sealed class ClienteMensagens : IDisposable
         ResultadoMensagem.TextoModeloNaoInformado or
         ResultadoMensagem.TextoUrlInvalida or
         ResultadoMensagem.TextoRespostaInvalida or
+        ResultadoMensagem.TextoRespostaCortada or
         ResultadoMensagem.TextoSemRede or
         ResultadoMensagem.TextoFalha or
         ResultadoMensagem.TextoModeloSemVisao;
@@ -245,6 +263,8 @@ public sealed class ClienteMensagens : IDisposable
         string chave,
         string json,
         bool interpretarComprovante,
+        string? modelo,
+        string? imagemBase64,
         CancellationToken cancellationToken)
     {
         using var limite = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -257,24 +277,39 @@ public sealed class ClienteMensagens : IDisposable
             if (!pedido.Headers.TryAddWithoutValidation(CabecalhoChave, chave) ||
                 !pedido.Headers.TryAddWithoutValidation(CabecalhoVersao, VersaoAnthropic))
             {
-                return ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoPedidoInvalido);
+                return Recusar(
+                    TipoResultadoMensagem.PedidoInvalido,
+                    ResultadoMensagem.TextoPedidoInvalido,
+                    uri,
+                    modelo,
+                    chave,
+                    imagemBase64);
             }
 
             pedido.Content = new StringContent(json, Encoding.UTF8, "application/json");
 
             using var resposta = await _http.SendAsync(pedido, HttpCompletionOption.ResponseHeadersRead, limite.Token);
             if (EhRedirecionamento(resposta.StatusCode))
-                return ResultadoMensagem.Falha(TipoResultadoMensagem.Falha, ResultadoMensagem.TextoFalha);
+            {
+                return Recusar(
+                    TipoResultadoMensagem.Falha,
+                    ResultadoMensagem.TextoFalha,
+                    uri,
+                    modelo,
+                    chave,
+                    imagemBase64,
+                    (int)resposta.StatusCode);
+            }
 
             if (resposta.StatusCode != HttpStatusCode.OK)
-                return await MapearStatusAsync(resposta, limite.Token);
+                return await MapearStatusAsync(resposta, uri, modelo, chave, imagemBase64, limite.Token);
 
             // 200 do teste de conexão é sucesso sem ler o corpo: não é um comprovante,
             // e o texto da resposta não entra na mensagem.
             if (!interpretarComprovante)
                 return ResultadoMensagem.ConexaoOk();
 
-            return await LerCorpoAsync(resposta, limite.Token);
+            return await LerCorpoAsync(resposta, uri, modelo, chave, imagemBase64, limite.Token);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -282,27 +317,33 @@ public sealed class ClienteMensagens : IDisposable
         }
         catch (OperationCanceledException)
         {
-            return ResultadoMensagem.Falha(TipoResultadoMensagem.Timeout, ResultadoMensagem.TextoTimeout);
+            return Recusar(TipoResultadoMensagem.Timeout, ResultadoMensagem.TextoTimeout, uri, modelo, chave, imagemBase64);
         }
         catch (TimeoutException)
         {
-            return ResultadoMensagem.Falha(TipoResultadoMensagem.Timeout, ResultadoMensagem.TextoTimeout);
+            return Recusar(TipoResultadoMensagem.Timeout, ResultadoMensagem.TextoTimeout, uri, modelo, chave, imagemBase64);
         }
         catch (HttpRequestException ex) when (ex.InnerException is TimeoutException or OperationCanceledException)
         {
-            return ResultadoMensagem.Falha(TipoResultadoMensagem.Timeout, ResultadoMensagem.TextoTimeout);
+            return Recusar(TipoResultadoMensagem.Timeout, ResultadoMensagem.TextoTimeout, uri, modelo, chave, imagemBase64);
         }
         catch (HttpRequestException)
         {
-            return ResultadoMensagem.Falha(TipoResultadoMensagem.SemRede, ResultadoMensagem.TextoSemRede);
+            return Recusar(TipoResultadoMensagem.SemRede, ResultadoMensagem.TextoSemRede, uri, modelo, chave, imagemBase64);
         }
         catch (IOException)
         {
-            return ResultadoMensagem.Falha(TipoResultadoMensagem.SemRede, ResultadoMensagem.TextoSemRede);
+            return Recusar(TipoResultadoMensagem.SemRede, ResultadoMensagem.TextoSemRede, uri, modelo, chave, imagemBase64);
         }
         catch (FormatException)
         {
-            return ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoPedidoInvalido);
+            return Recusar(
+                TipoResultadoMensagem.PedidoInvalido,
+                ResultadoMensagem.TextoPedidoInvalido,
+                uri,
+                modelo,
+                chave,
+                imagemBase64);
         }
     }
 
@@ -312,16 +353,51 @@ public sealed class ClienteMensagens : IDisposable
         return codigo is >= 300 and < 400;
     }
 
-    private static async Task<ResultadoMensagem> LerCorpoAsync(HttpResponseMessage resposta, CancellationToken cancellationToken)
+    private static async Task<ResultadoMensagem> LerCorpoAsync(
+        HttpResponseMessage resposta,
+        Uri uri,
+        string? modelo,
+        string chave,
+        string? imagemBase64,
+        CancellationToken cancellationToken)
     {
         var corpo = await LerTextoLimitadoAsync(resposta.Content, cancellationToken);
         if (corpo is null)
-            return ResultadoMensagem.Falha(TipoResultadoMensagem.RespostaInvalida, ResultadoMensagem.TextoRespostaInvalida);
+        {
+            return Recusar(
+                TipoResultadoMensagem.RespostaInvalida,
+                ResultadoMensagem.TextoRespostaInvalida,
+                uri,
+                modelo,
+                chave,
+                imagemBase64,
+                (int)resposta.StatusCode,
+                corpo: null,
+                corpoIncompleto: true,
+                motivo: LeitorRespostaComprovante.MotivoTruncada);
+        }
 
-        var comprovante = LeitorRespostaComprovante.Ler(corpo);
-        return comprovante is null
-            ? ResultadoMensagem.Falha(TipoResultadoMensagem.RespostaInvalida, ResultadoMensagem.TextoRespostaInvalida)
-            : ResultadoMensagem.Ok(comprovante);
+        var leitura = LeitorRespostaComprovante.Interpretar(corpo, cancellationToken);
+        if (leitura.Comprovante is not null)
+            return ResultadoMensagem.Ok(leitura.Comprovante);
+
+        var mensagem = leitura.Motivo == LeitorRespostaComprovante.MotivoCortada
+            ? ResultadoMensagem.TextoRespostaCortada
+            : ResultadoMensagem.TextoRespostaInvalida;
+
+        return Recusar(
+            TipoResultadoMensagem.RespostaInvalida,
+            mensagem,
+            uri,
+            modelo,
+            chave,
+            imagemBase64,
+            (int)resposta.StatusCode,
+            corpo,
+            corpoIncompleto: false,
+            leitura.Motivo,
+            leitura.StopReason,
+            leitura.FinishReason);
     }
 
     private static async Task<string?> LerTextoLimitadoAsync(HttpContent? content, CancellationToken cancellationToken)
@@ -352,54 +428,97 @@ public sealed class ClienteMensagens : IDisposable
         return Encoding.UTF8.GetString(memoria.GetBuffer(), 0, (int)memoria.Length);
     }
 
+    private const int AmostraMaximaBytes = 32 * 1024;
+
     private static async Task<ResultadoMensagem> MapearStatusAsync(
         HttpResponseMessage resposta,
+        Uri uri,
+        string? modelo,
+        string chave,
+        string? imagemBase64,
         CancellationToken cancellationToken)
     {
-        if ((int)resposta.StatusCode == 400 &&
-            await CorpoIndicaModeloSemVisaoAsync(resposta.Content, cancellationToken))
+        var (amostra, truncado) = await LerAmostraAsync(resposta.Content, cancellationToken);
+        var status = (int)resposta.StatusCode;
+        if (status == 400 && DiagnosticoErroProvedor.IndicaModeloSemVisao(amostra))
         {
-            return ResultadoMensagem.Falha(
+            return Recusar(
                 TipoResultadoMensagem.ModeloSemVisao,
-                ResultadoMensagem.TextoModeloSemVisao);
+                ResultadoMensagem.TextoModeloSemVisao,
+                uri,
+                modelo,
+                chave,
+                imagemBase64,
+                status,
+                amostra,
+                truncado);
         }
 
-        return (int)resposta.StatusCode switch
+        var (tipo, mensagem, retry) = status switch
         {
-            401 => ResultadoMensagem.Falha(TipoResultadoMensagem.NaoAutorizado, ResultadoMensagem.TextoNaoAutorizado),
-            403 => ResultadoMensagem.Falha(TipoResultadoMensagem.SemPermissao, ResultadoMensagem.TextoSemPermissao),
-            429 => ResultadoMensagem.Falha(
-                TipoResultadoMensagem.Limite,
-                ResultadoMensagem.TextoLimite,
-                LerRetryAfter(resposta)),
-            529 => ResultadoMensagem.Falha(TipoResultadoMensagem.Sobrecarga, ResultadoMensagem.TextoSobrecarga),
-            504 => ResultadoMensagem.Falha(TipoResultadoMensagem.Timeout, ResultadoMensagem.TextoTimeout),
-            400 => ResultadoMensagem.Falha(TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoPedidoInvalido),
-            _ => ResultadoMensagem.Falha(TipoResultadoMensagem.Falha, ResultadoMensagem.TextoFalha)
+            401 => (TipoResultadoMensagem.NaoAutorizado, ResultadoMensagem.TextoNaoAutorizado, (TimeSpan?)null),
+            403 => (TipoResultadoMensagem.SemPermissao, ResultadoMensagem.TextoSemPermissao, null),
+            429 => (TipoResultadoMensagem.Limite, ResultadoMensagem.TextoLimite, LerRetryAfter(resposta)),
+            529 => (TipoResultadoMensagem.Sobrecarga, ResultadoMensagem.TextoSobrecarga, null),
+            504 => (TipoResultadoMensagem.Timeout, ResultadoMensagem.TextoTimeout, null),
+            400 => (TipoResultadoMensagem.PedidoInvalido, ResultadoMensagem.TextoPedidoInvalido, null),
+            _ => (TipoResultadoMensagem.Falha, ResultadoMensagem.TextoFalha, null)
         };
+
+        return Recusar(
+            tipo,
+            mensagem,
+            uri,
+            modelo,
+            chave,
+            imagemBase64,
+            status,
+            amostra,
+            truncado,
+            retryAfter: retry);
     }
 
     /// <summary>
-    /// Lê só o começo do corpo do 400. O texto serve para classificar e é descartado.
-    /// Não entra na mensagem nem em log.
+    /// Lê só o começo do corpo de erro. A amostra entra no diagnóstico já sanitizada.
+    /// Cabeçalhos do pedido não são lidos.
     /// </summary>
-    private static async Task<bool> CorpoIndicaModeloSemVisaoAsync(
+    private static async Task<(string? Texto, bool Truncado)> LerAmostraAsync(
         HttpContent? content,
         CancellationToken cancellationToken)
     {
         if (content is null)
-            return false;
+            return (null, false);
 
         try
         {
-            await using var fluxo = await content.ReadAsStreamAsync(cancellationToken);
-            var buffer = new byte[8192];
-            var lidos = await fluxo.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken);
-            if (lidos <= 0)
-                return false;
+            if (content.Headers.ContentLength is long anunciado && anunciado == 0)
+                return (string.Empty, false);
 
-            var texto = Encoding.UTF8.GetString(buffer, 0, lidos);
-            return DiagnosticoErroProvedor.IndicaModeloSemVisao(texto);
+            var anunciadoGrande = content.Headers.ContentLength is long tamanho && tamanho > AmostraMaximaBytes;
+            await using var fluxo = await content.ReadAsStreamAsync(cancellationToken);
+            using var memoria = new MemoryStream();
+            var buffer = new byte[8192];
+            long total = 0;
+            while (total < AmostraMaximaBytes)
+            {
+                var quer = (int)Math.Min(buffer.Length, AmostraMaximaBytes - total);
+                var lidos = await fluxo.ReadAsync(buffer.AsMemory(0, quer), cancellationToken);
+                if (lidos == 0)
+                    break;
+
+                memoria.Write(buffer, 0, lidos);
+                total += lidos;
+            }
+
+            var sobrou = anunciadoGrande;
+            if (!sobrou && total >= AmostraMaximaBytes)
+            {
+                var extra = await fluxo.ReadAsync(buffer.AsMemory(0, 1), cancellationToken);
+                sobrou = extra > 0;
+            }
+
+            var texto = Encoding.UTF8.GetString(memoria.GetBuffer(), 0, (int)memoria.Length);
+            return (texto, sobrou);
         }
         catch (OperationCanceledException)
         {
@@ -407,8 +526,39 @@ public sealed class ClienteMensagens : IDisposable
         }
         catch (Exception)
         {
-            return false;
+            return (null, false);
         }
+    }
+
+    private static ResultadoMensagem Recusar(
+        TipoResultadoMensagem tipo,
+        string mensagem,
+        Uri uri,
+        string? modelo,
+        string? chave,
+        string? imagemBase64,
+        int? status = null,
+        string? corpo = null,
+        bool corpoIncompleto = false,
+        string? motivo = null,
+        string? stopReason = null,
+        string? finishReason = null,
+        TimeSpan? retryAfter = null)
+    {
+        var diagnostico = DiagnosticoResposta.Criar(
+            status,
+            uri.IsAbsoluteUri ? uri.AbsoluteUri : null,
+            modelo,
+            tipo.ToString(),
+            mensagem,
+            motivo,
+            stopReason,
+            finishReason,
+            corpo,
+            corpoIncompleto,
+            [chave, imagemBase64]);
+
+        return ResultadoMensagem.Falha(tipo, mensagem, retryAfter, diagnostico);
     }
 
     private static TimeSpan? LerRetryAfter(HttpResponseMessage resposta)

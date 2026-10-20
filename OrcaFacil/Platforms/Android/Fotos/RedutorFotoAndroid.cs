@@ -4,8 +4,8 @@ namespace OrcaFacil.Platforms.Android.Fotos;
 
 /// <summary>
 /// Reduz a foto no Android com amostra antes do teto, uma transformação EXIF e descarte dos bitmaps.
-/// O decoder não aplica EXIF (<see cref="OrientacaoExif.DecoderAplicaExif"/>). Falha devolve null
-/// para o caminho de reserva. Não grava log.
+/// O decoder não aplica EXIF (<see cref="OrientacaoExif.DecoderAplicaExif"/>). HEIC e o que o
+/// BitmapFactory abre saem em JPEG. Falha devolve null para o caminho de reserva. Não grava log.
 /// </summary>
 public static class RedutorFotoAndroid
 {

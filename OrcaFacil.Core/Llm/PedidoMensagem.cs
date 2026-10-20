@@ -10,7 +10,25 @@ public static class PedidoMensagem
 {
     public const string ModeloAnthropic = "claude-haiku-5-5";
     public const string NomeFerramenta = "registrar_comprovante";
-    public const int MaxTokens = 4096;
+
+    /// <summary>
+    /// Padrão do comprovante. O thinking do modelo consome esse orçamento;
+    /// 4096 cortava a resposta com <c>stop_reason max_tokens</c>.
+    /// </summary>
+    public const int MaxTokens = 8192;
+
+    public const int MaxTokensMinimo = 256;
+    public const int MaxTokensMaximo = 32768;
+
+    public static string TextoMaxTokensForaDaFaixa =>
+        $"O máximo de tokens fica entre {MaxTokensMinimo} e {MaxTokensMaximo}.";
+
+    public static bool MaxTokensNaFaixa(int valor) =>
+        valor >= MaxTokensMinimo && valor <= MaxTokensMaximo;
+
+    /// <summary>Valor fora da faixa volta ao padrão. Não grava número que a API recusaria.</summary>
+    public static int NormalizarMaxTokens(int valor) =>
+        MaxTokensNaFaixa(valor) ? valor : MaxTokens;
 
     public const string Sistema =
         "Você lê a foto de um comprovante de compra e registra apenas o que está visível, " +
@@ -112,11 +130,13 @@ public static class PedidoMensagem
         return new Uri(prefixo + "/v1/messages", UriKind.Absolute);
     }
 
-    public static string Montar(string modelo, string tipoMidia, string imagemBase64)
+    public static string Montar(string modelo, string tipoMidia, string imagemBase64, int maxTokens = MaxTokens)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(modelo);
         ArgumentException.ThrowIfNullOrWhiteSpace(tipoMidia);
         ArgumentException.ThrowIfNullOrWhiteSpace(imagemBase64);
+        if (!MaxTokensNaFaixa(maxTokens))
+            throw new ArgumentOutOfRangeException(nameof(maxTokens));
 
         var esquema = JsonNode.Parse(Esquema) as JsonObject
             ?? throw new InvalidOperationException("Esquema do comprovante inválido.");
@@ -125,7 +145,7 @@ public static class PedidoMensagem
         {
             ["system"] = Sistema,
             ["model"] = modelo,
-            ["max_tokens"] = MaxTokens,
+            ["max_tokens"] = maxTokens,
             ["messages"] = new JsonArray
             {
                 new JsonObject
