@@ -15,14 +15,20 @@ public sealed class DiagnosticoResposta
     public const string MarcaBase64 = "[base64 mascarado]";
     public const string MarcaCabecalho = "[cabeçalho removido]";
 
-    private const int TamanhoMinimoSegredo = 8;
+    /// <summary>Segredo longo demais para a busca com separador (a imagem). A troca exata basta.</summary>
+    private const int TamanhoMaximoSegredoFlexivel = 2048;
 
-    private static readonly Regex ValorCredencial = new(
-        """(?i)(?:"|')?(?:authorization|x-api-key)(?:"|')?[ \t]*[:=][ \t]*(?:"[^"]*"|'[^']*'|[^\r\n]*)""",
-        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    /// <summary>Marca privada das quebras do texto já montado. Não pode voltar como quebra nova.</summary>
+    private const char MarcaQuebra = '\uE000';
+
+    /// <summary>Espaço, quebra, tab ou invisível entre letras e entre os caracteres da chave.</summary>
+    private const string SeparadorOpcional =
+        @"[\s\u00AD\u180E\u200B-\u200F\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]*";
+
+    private static readonly Regex ValorCredencial = CriarValorCredencial();
 
     private static readonly Regex CabecalhoPedido = new(
-        """(?i)(?:"|')?(?:anthropic-version|anthropic-beta|proxy-authorization)(?:"|')?[ \t]*[:=][ \t]*(?:"[^"]*"|'[^']*'|\S+)""",
+        "(?i)(?:\"|')?(?:anthropic-version|anthropic-beta|proxy-authorization)(?:\"|')?[ \t]*[:=][ \t]*(?:\"[^\"]*\"|'[^']*'|[^\\s\uE000]+)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex Bearer = new(
@@ -30,11 +36,15 @@ public sealed class DiagnosticoResposta
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex DataImage = new(
-        """data:image/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+""",
+        """data:image/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=_-]+""",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
+    /// <summary>
+    /// Contínuo de 201 ou linhas de 76 (com \r\n, \n ou \r) cujo total também chega a 201.
+    /// O alfabeto inclui o url-safe (- e _).
+    /// </summary>
     private static readonly Regex Base64Longo = new(
-        """[A-Za-z0-9+/]{201,}={0,2}""",
+        """(?:[A-Za-z0-9+/_-]{76}(?:\r\n|\n|\r)){2,}[A-Za-z0-9+/_-]{49,76}={0,2}|[A-Za-z0-9+/_-]{201,}={0,2}""",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex EscapeUnicode = new(
@@ -117,7 +127,7 @@ public sealed class DiagnosticoResposta
             finishLimpo,
             corpoExibido,
             truncado);
-        texto = Sanitizar(texto, lista, juntarQuebras: false);
+        texto = SanitizarTextoMontado(texto, lista);
 
         return new DiagnosticoResposta(
             statusHttp,
@@ -214,9 +224,6 @@ public sealed class DiagnosticoResposta
                 continue;
 
             var limpo = segredo.Trim();
-            if (limpo.Length < TamanhoMinimoSegredo)
-                continue;
-
             if (!lista.Contains(limpo, StringComparer.Ordinal))
                 lista.Add(limpo);
         }
@@ -273,7 +280,7 @@ public sealed class DiagnosticoResposta
             var passo = EscapeUnicode.Replace(limpo, match =>
             {
                 var codigo = Convert.ToInt32(match.Groups[1].Value, 16);
-                if (codigo is >= 0xD800 and <= 0xDFFF)
+                if (codigo == MarcaQuebra || codigo is >= 0xD800 and <= 0xDFFF)
                     return " ";
 
                 return char.ConvertFromUtf32(codigo);
@@ -290,17 +297,28 @@ public sealed class DiagnosticoResposta
 
     private static string JuntarQuebras(string texto)
     {
-        if (texto.IndexOf('\r') < 0 &&
-            texto.IndexOf('\n') < 0 &&
-            texto.IndexOf('\u2028') < 0 &&
-            texto.IndexOf('\u2029') < 0)
+        if (texto.IndexOf('\r') < 0 && texto.IndexOf('\n') < 0)
             return texto;
 
         var saida = new StringBuilder(texto.Length);
         foreach (var caractere in texto)
-            saida.Append(caractere is '\r' or '\n' or '\u2028' or '\u2029' ? ' ' : caractere);
+            saida.Append(caractere is '\r' or '\n' ? ' ' : caractere);
 
         return saida.ToString();
+    }
+
+    /// <summary>
+    /// O texto montado já tem as quebras do diagnóstico. Elas viram U+E000,
+    /// o passe desescapa e neutraliza, e só então as quebras originais voltam.
+    /// </summary>
+    private static string SanitizarTextoMontado(string texto, List<string> segredos)
+    {
+        if (texto.IndexOf(MarcaQuebra) >= 0)
+            texto = texto.Replace(MarcaQuebra, ' ');
+
+        var protegido = texto.Replace('\n', MarcaQuebra);
+        var limpo = NeutralizarControles(Sanitizar(protegido, segredos, juntarQuebras: false));
+        return limpo.Replace(MarcaQuebra, '\n');
     }
 
     private static string Sanitizar(string? texto, List<string> segredos, bool juntarQuebras = true)
@@ -309,16 +327,140 @@ public sealed class DiagnosticoResposta
             return string.Empty;
 
         var limpo = DesescaparJson(texto);
+        limpo = DataImage.Replace(limpo, MarcaBase64);
+        limpo = Base64Longo.Replace(limpo, MarcaBase64);
         if (juntarQuebras)
             limpo = JuntarQuebras(limpo);
 
         limpo = ValorCredencial.Replace(limpo, MarcaCabecalho);
         limpo = CabecalhoPedido.Replace(limpo, MarcaCabecalho);
         limpo = Bearer.Replace(limpo, MarcaCabecalho);
-        limpo = DataImage.Replace(limpo, MarcaBase64);
-        foreach (var segredo in segredos)
-            limpo = limpo.Replace(segredo, "***", StringComparison.Ordinal);
-
-        return Base64Longo.Replace(limpo, MarcaBase64);
+        return RemoverSegredos(limpo, segredos);
     }
+
+    private static Regex CriarValorCredencial()
+    {
+        var nome = "(?:" + Espacado("authorization") + "|" + Espacado("x-api-key") + ")";
+        var aspas = "(?:\"|')?";
+        var valor = "(?:\"[^\"]*\"|'[^']*'|[^\\r\\n" + MarcaQuebra + "]*)";
+        var padrao = "(?i)" + aspas + nome + aspas + SeparadorOpcional + "[:=]" + SeparadorOpcional + valor;
+        return new Regex(padrao, RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    }
+
+    private static string Espacado(string palavra)
+    {
+        var partes = new string[palavra.Length];
+        for (var i = 0; i < palavra.Length; i++)
+            partes[i] = Regex.Escape(palavra[i].ToString());
+
+        return string.Join(SeparadorOpcional, partes);
+    }
+
+    private static string RemoverSegredos(string texto, List<string> segredos)
+    {
+        foreach (var segredo in segredos)
+        {
+            texto = SegredoFlexivel(segredo)
+                ? RemoverSegredoFlexivel(texto, segredo)
+                : texto.Replace(segredo, "***", StringComparison.Ordinal);
+        }
+
+        return texto;
+    }
+
+    private static bool SegredoFlexivel(string segredo)
+    {
+        if (segredo.Length > TamanhoMaximoSegredoFlexivel)
+            return false;
+
+        foreach (var caractere in segredo)
+        {
+            if (EhSeparador(caractere))
+                return false;
+        }
+
+        return true;
+    }
+
+    private static string RemoverSegredoFlexivel(string texto, string segredo)
+    {
+        var saida = new StringBuilder(texto.Length);
+        var indice = 0;
+        while (indice < texto.Length)
+        {
+            if (CasaSegredo(texto, indice, segredo, out var fim))
+            {
+                saida.Append("***");
+                indice = fim;
+                continue;
+            }
+
+            saida.Append(texto[indice]);
+            indice++;
+        }
+
+        return saida.ToString();
+    }
+
+    private static bool CasaSegredo(string texto, int inicio, string segredo, out int fim)
+    {
+        var posicao = inicio;
+        for (var i = 0; i < segredo.Length; i++)
+        {
+            if (i > 0)
+            {
+                while (posicao < texto.Length && EhSeparador(texto[posicao]))
+                    posicao++;
+            }
+
+            if (!CasaCaractere(texto, posicao, segredo[i], out var proximo))
+            {
+                fim = inicio;
+                return false;
+            }
+
+            posicao = proximo;
+        }
+
+        fim = posicao;
+        return true;
+    }
+
+    private static bool CasaCaractere(string texto, int posicao, char esperado, out int proximo)
+    {
+        if (posicao < texto.Length && texto[posicao] == esperado)
+        {
+            proximo = posicao + 1;
+            return true;
+        }
+
+        if (esperado <= '\u007f' &&
+            posicao + 2 < texto.Length &&
+            texto[posicao] == '%' &&
+            ValorHex(texto[posicao + 1]) is int alto &&
+            ValorHex(texto[posicao + 2]) is int baixo &&
+            (alto << 4 | baixo) == esperado)
+        {
+            proximo = posicao + 3;
+            return true;
+        }
+
+        proximo = posicao;
+        return false;
+    }
+
+    private static int? ValorHex(char caractere) => caractere switch
+    {
+        >= '0' and <= '9' => caractere - '0',
+        >= 'a' and <= 'f' => caractere - 'a' + 10,
+        >= 'A' and <= 'F' => caractere - 'A' + 10,
+        _ => null,
+    };
+
+    private static bool EhSeparador(char caractere) =>
+        char.IsWhiteSpace(caractere) || caractere is '\u00AD' or '\u180E' or '\u200B' or '\u200C' or '\u200D'
+            or '\u200E' or '\u200F' or '\u2028' or '\u2029' or '\uFEFF' or '\u2060'
+            or >= '\u202A' and <= '\u202E'
+            or >= '\u2061' and <= '\u2064'
+            or >= '\u2066' and <= '\u2069';
 }
