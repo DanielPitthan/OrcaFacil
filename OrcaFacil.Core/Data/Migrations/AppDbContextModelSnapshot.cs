@@ -625,6 +625,57 @@ namespace OrcaFacil.Core.Data.Migrations
                     b.ToTable("ProdutosCesta");
                 });
 
+            modelBuilder.Entity("OrcaFacil.Core.Entities.Provento", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("AtivoId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("AtualizadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CriadoEm")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("DataPagamento")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("HashImportacao")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("MembroFamiliaId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Origem")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("ValorLiquido")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AtivoId");
+
+                    b.HasIndex("HashImportacao")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Proventos_HashImportacao")
+                        .HasFilter("\"HashImportacao\" IS NOT NULL");
+
+                    b.HasIndex("MembroFamiliaId");
+
+                    b.ToTable("Proventos");
+                });
+
             modelBuilder.Entity("OrcaFacil.Core.Entities.RecargaCartao", b =>
                 {
                     b.Property<int>("Id")
@@ -844,6 +895,9 @@ namespace OrcaFacil.Core.Data.Migrations
                     b.Property<bool>("Pago")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("ProventoId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("Recorrencia")
                         .HasColumnType("INTEGER");
 
@@ -871,6 +925,10 @@ namespace OrcaFacil.Core.Data.Migrations
                     b.HasIndex("OperacaoRendaFixaId")
                         .IsUnique()
                         .HasDatabaseName("IX_Transacoes_OperacaoRendaFixaId");
+
+                    b.HasIndex("ProventoId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_Transacoes_ProventoId");
 
                     b.HasIndex("TransacaoOrigemId");
 
@@ -1017,6 +1075,25 @@ namespace OrcaFacil.Core.Data.Migrations
                     b.Navigation("Categoria");
                 });
 
+            modelBuilder.Entity("OrcaFacil.Core.Entities.Provento", b =>
+                {
+                    b.HasOne("OrcaFacil.Core.Entities.AtivoFinanceiro", "Ativo")
+                        .WithMany()
+                        .HasForeignKey("AtivoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("OrcaFacil.Core.Entities.MembroFamilia", "MembroFamilia")
+                        .WithMany()
+                        .HasForeignKey("MembroFamiliaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Ativo");
+
+                    b.Navigation("MembroFamilia");
+                });
+
             modelBuilder.Entity("OrcaFacil.Core.Entities.RecargaCartao", b =>
                 {
                     b.HasOne("OrcaFacil.Core.Entities.Cartao", "Cartao")
@@ -1057,6 +1134,11 @@ namespace OrcaFacil.Core.Data.Migrations
                         .HasForeignKey("OperacaoRendaFixaId")
                         .OnDelete(DeleteBehavior.Restrict);
 
+                    b.HasOne("OrcaFacil.Core.Entities.Provento", "Provento")
+                        .WithMany()
+                        .HasForeignKey("ProventoId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("OrcaFacil.Core.Entities.Transacao", "TransacaoOrigem")
                         .WithMany()
                         .HasForeignKey("TransacaoOrigemId")
@@ -1071,6 +1153,8 @@ namespace OrcaFacil.Core.Data.Migrations
                     b.Navigation("OperacaoAtivo");
 
                     b.Navigation("OperacaoRendaFixa");
+
+                    b.Navigation("Provento");
 
                     b.Navigation("TransacaoOrigem");
                 });

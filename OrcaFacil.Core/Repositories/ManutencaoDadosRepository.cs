@@ -26,6 +26,7 @@ public class ManutencaoDadosRepository : IManutencaoDadosRepository
             ["Logs"] = await context.LogsEvento.CountAsync(),
             ["Ativos"] = await context.AtivosFinanceiros.CountAsync(),
             ["Operações de ativos"] = await context.OperacoesAtivo.CountAsync(),
+            ["Proventos"] = await context.Proventos.CountAsync(),
             ["Produtos da cesta"] = await context.ProdutosCesta.CountAsync(),
             ["Locais de compra"] = await context.LocaisCompra.CountAsync(),
             ["Compras da cesta"] = await context.ComprasCesta.CountAsync()
@@ -62,6 +63,7 @@ public class ManutencaoDadosRepository : IManutencaoDadosRepository
                 await context.ComprasCesta.ExecuteDeleteAsync();
                 await context.ProdutosCesta.ExecuteDeleteAsync();
                 await context.LocaisCompra.ExecuteDeleteAsync();
+                await context.Proventos.ExecuteDeleteAsync();
                 await context.OperacoesAtivo.ExecuteDeleteAsync();
                 await context.AtivosFinanceiros.ExecuteDeleteAsync();
                 await context.LogsEvento.ExecuteDeleteAsync();

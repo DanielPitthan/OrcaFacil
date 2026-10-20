@@ -26,6 +26,7 @@ public class MigracaoUpgradeTests
     private const string RendaFixa = "20261020032353_AddRendaFixa";
     private const string RegraCatalogo = "20261020135920_AddRegraCatalogoComprovante";
     private const string ResultadoRealizado = "20261020172344_AddResultadoRealizadoVariavel";
+    private const string Provento = "20261020175956_AddProvento";
 
     [Fact]
     public async Task BancoAntigo_MigraAteOAtual_PreservaDadosEAplicaDefaults()
@@ -139,12 +140,14 @@ public class MigracaoUpgradeTests
             Assert.Null(item.HashImportacao);
             Assert.Null(transacao.OperacaoRendaFixaId);
             Assert.Null(transacao.OperacaoAtivoId);
+            Assert.Null(transacao.ProventoId);
+            Assert.Empty(ctx.Proventos);
             Assert.Empty(ctx.TitulosRendaFixa);
             Assert.Empty(ctx.OperacoesRendaFixa);
             Assert.Equal(6, await ctx.RegrasFiscais.CountAsync());
             Assert.Contains(await ctx.RegrasFiscais.ToListAsync(), regra => regra.Codigo == "RV.CustosReduzemResultado" && regra.EhSistema);
 
-            Assert.Equal(ResultadoRealizado, (await ctx.Database.GetAppliedMigrationsAsync()).Last());
+            Assert.Equal(Provento, (await ctx.Database.GetAppliedMigrationsAsync()).Last());
             Assert.True(File.Exists(banco.Caminho));
             Assert.True(new FileInfo(banco.Caminho).Length > 0);
         }
@@ -163,7 +166,7 @@ public class MigracaoUpgradeTests
         Assert.Contains(IndiceHashImportacao, ids);
         Assert.Contains(RendaFixa, ids);
         Assert.Contains(RegraCatalogo, ids);
-        Assert.Equal(ResultadoRealizado, ids[^1]);
+        Assert.Equal(Provento, ids[^1]);
 
         for (var i = 1; i < ids.Count; i++)
         {
