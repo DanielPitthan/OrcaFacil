@@ -1,47 +1,38 @@
-@if (Par.AguardandoConfirmacao)
-{
-    <div class="of-par@(Par.DestacarRevisao ? " of-par-revisar" : null)">
-        <p class="of-par-nome">@Par.NomeExibido</p>
-        @if (!string.IsNullOrEmpty(Par.DescricaoLida))
-        {
-            <p class="of-par-lido">@Par.DescricaoLida</p>
-        }
-        @if (Par.TextoConfianca is not null)
-        {
-            <p class="of-par-confianca">@Par.TextoConfianca</p>
-        }
-        @if (Par.DestacarRevisao)
-        {
-            <p class="of-par-revisao">Revisar</p>
-        }
-        <div class="of-par-acoes">
-            <button type="button" class="of-par-botao" @onclick="Confirmar">Confirmar</button>
-            <button type="button" class="of-par-botao" @onclick="AbrirTroca">Trocar</button>
-            <button type="button" class="of-par-botao" @onclick="Desfazer">Desfazer</button>
-        </div>
-        @if (_troca)
-        {
-            @if (!Catalogo.Any())
-            {
-                <p class="of-par-lido">Nenhum produto cadastrado.</p>
-            }
-            else
-            {
-                <div class="of-par-opcoes">
-                    @foreach (var produto in Catalogo)
-                    {
-                        <button type="button" class="of-previa-opcao" @onclick="() => Trocar(produto)">
-                            @produto.Nome
-                        </button>
-                    }
-                </div>
-            }
-        }
+@using OrcaFacil.Core.Llm
+
+<div class="of-par">
+    <p class="of-par-nome">@Linha.Nome</p>
+    @if (!string.IsNullOrEmpty(Linha.DescricaoLida))
+    {
+        <p class="of-par-lido">@Linha.DescricaoLida</p>
+    }
+    <div class="of-par-acoes">
+        <button type="button" class="of-par-botao" @onclick="Confirmar">Confirmar</button>
+        <button type="button" class="of-par-botao" @onclick="AbrirTroca">Trocar</button>
+        <button type="button" class="of-par-botao" @onclick="Desfazer">Desfazer</button>
     </div>
-}
+    @if (_troca)
+    {
+        @if (!Catalogo.Any())
+        {
+            <p class="of-par-lido">Nenhum produto cadastrado.</p>
+        }
+        else
+        {
+            <div class="of-par-opcoes">
+                @foreach (var produto in Catalogo)
+                {
+                    <button type="button" class="of-previa-opcao" @onclick="() => Trocar(produto)">
+                        @produto.Nome
+                    </button>
+                }
+            </div>
+        }
+    }
+</div>
 
 @code {
-    [Parameter] public ConfirmacaoParProduto.ItemPar Par { get; set; } = null!;
+    [Parameter] public LinhaPreviaComprovante Linha { get; set; } = null!;
     [Parameter] public IReadOnlyList<ProdutoCesta> Catalogo { get; set; } = [];
     [Parameter] public EventCallback OnConfirmar { get; set; }
     [Parameter] public EventCallback<ProdutoCesta> OnTrocar { get; set; }

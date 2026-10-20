@@ -10,7 +10,7 @@ using OrcaFacil.Core.Services;
 namespace OrcaFacil.Tests.Cesta;
 
 /// <summary>
-/// O par da prévia só grava depois da confirmação. Comentário no fonte não conta.
+/// O casamento da prévia só grava depois de CasamentoConfirmado. Comentário no fonte não conta.
 /// </summary>
 public class ConfirmacaoParProdutoTests : IDisposable
 {
@@ -68,99 +68,74 @@ public class ConfirmacaoParProdutoTests : IDisposable
         Assert.Equal("Arroz", linha.Nome);
         Assert.Equal(_arroz.Id, linha.ProdutoCestaId);
         Assert.False(linha.NaoIdentificado);
+        Assert.False(linha.CasamentoConfirmado);
         Assert.True(previa.PodeConfirmar);
+        Assert.True(ConfirmacaoParProduto.ExigeConfirmacao(linha));
+        Assert.False(ConfirmacaoParProduto.PodeGravar(previa.Linhas));
+        Assert.Equal(
+            CasamentoComprovante.MensagemConfirmacaoObrigatoria,
+            ConfirmacaoParProduto.MensagemBloqueio(previa.Linhas));
+        Assert.False(Assert.Single(previa.ItensComProduto()).Confirmado);
+        await AssertNaoGravaAsync(previa);
 
-        var pares = Pares(_arroz.Id, 0.95m, false, "ARROZ TIPO 1");
-        var par = Assert.Single(pares.Linhas);
-        Assert.Equal("Arroz", par.NomeExibido);
-        Assert.Equal(_arroz.Id, par.ProdutoId);
-        Assert.Equal("Confiança 95%", par.TextoConfianca);
-        Assert.False(par.NaoIdentificado);
-        Assert.False(par.DestacarRevisao);
-        Assert.True(par.AguardandoConfirmacao);
-        Assert.False(pares.PodeGravar);
-        Assert.Equal(CasamentoComprovante.MensagemConfirmacaoObrigatoria, pares.MensagemBloqueio);
-        var bloqueado = Assert.Single(pares.ParaBarreira());
-        Assert.Equal(_arroz.Id, bloqueado.ProdutoId);
-        Assert.False(bloqueado.Confirmado);
-        Assert.Equal(0.95m, bloqueado.Confianca);
-
-        foreach (var (confianca, pendente) in new[] { (0.8m, false), (1m, false), (0.99m, true) })
+        foreach (var confianca in new[] { 0.8m, 1m, 0.99m })
         {
-            var alto = Pares(_arroz.Id, confianca, pendente, "ARROZ TIPO 1");
-            Assert.False(alto.PodeGravar);
-            Assert.Equal(pendente, Assert.Single(alto.Linhas).DestacarRevisao);
-            Assert.Equal(ConfirmacaoParProduto.ItemPar.FormatarConfianca(confianca), alto.Linhas[0].TextoConfianca);
+            var alto = Previa(local, Lido("ARROZ TIPO 1", _arroz.Id, true, confianca), _arroz, _feijao);
+            var item = Assert.Single(alto.Linhas);
+            Assert.False(item.CasamentoConfirmado);
+            Assert.False(ConfirmacaoParProduto.PodeGravar(alto.Linhas));
             await AssertNaoGravaAsync(alto);
         }
 
-        var dois = ConfirmacaoParProduto.Criar(
-            [
-                new ConfirmacaoParProduto.Entrada(_arroz.Id, 0.8m, false, "ARROZ TIPO 1"),
-                new ConfirmacaoParProduto.Entrada(_feijao.Id, 1m, false, "FEIJAO")
-            ],
-            Catalogo());
-        Assert.False(dois.PodeGravar);
-        dois.Confirmar(0);
-        Assert.True(dois.ParaBarreira()[0].Confirmado);
-        Assert.False(dois.ParaBarreira()[1].Confirmado);
-        Assert.False(dois.PodeGravar);
+        var dois = Previa(
+            local,
+            [Lido("ARROZ TIPO 1", _arroz.Id, true, 0.8m), Lido("FEIJAO", _feijao.Id, true, 1m)],
+            _arroz,
+            _feijao);
+        Assert.Equal(2, dois.Linhas.Count);
+        Assert.False(ConfirmacaoParProduto.PodeGravar(dois.Linhas));
+        ConfirmacaoParProduto.Confirmar(dois.Linhas[0]);
+        Assert.True(dois.Linhas[0].CasamentoConfirmado);
+        Assert.False(dois.Linhas[1].CasamentoConfirmado);
+        Assert.False(ConfirmacaoParProduto.PodeGravar(dois.Linhas));
         await AssertNaoGravaAsync(dois);
-        dois.Confirmar(1);
-        Assert.True(dois.PodeGravar);
-        CasamentoComprovante.GarantirConfirmacao(dois.ParaBarreira());
+        ConfirmacaoParProduto.Confirmar(dois.Linhas[1]);
+        Assert.True(ConfirmacaoParProduto.PodeGravar(dois.Linhas));
+        CasamentoComprovante.GarantirConfirmacao(dois.ItensComProduto());
 
-        await AssertNaoGravaAsync(pares);
-        pares.Confirmar(0);
-        Assert.False(par.AguardandoConfirmacao);
-        Assert.Equal("Arroz", par.NomeExibido);
-        Assert.Equal(_arroz.Id, par.ProdutoId);
-        Assert.True(pares.PodeGravar);
-        Assert.Null(pares.MensagemBloqueio);
-        Assert.True(Assert.Single(pares.ParaBarreira()).Confirmado);
-        CasamentoComprovante.GarantirConfirmacao(pares.ParaBarreira());
+        ConfirmacaoParProduto.Confirmar(linha);
+        Assert.True(linha.CasamentoConfirmado);
+        Assert.False(ConfirmacaoParProduto.ExigeConfirmacao(linha));
+        Assert.True(ConfirmacaoParProduto.PodeGravar(previa.Linhas));
+        Assert.Null(ConfirmacaoParProduto.MensagemBloqueio(previa.Linhas));
+        Assert.True(Assert.Single(previa.ItensComProduto()).Confirmado);
+        CasamentoComprovante.GarantirConfirmacao(previa.ItensComProduto());
 
         var compra = await _service.SalvarCompraAsync(Copiar(previa.ParaCompra()), _membroId);
-        var item = Assert.Single(compra.Itens);
-        Assert.Equal(_arroz.Id, item.ProdutoCestaId);
-        Assert.Equal(10m, item.Preco);
+        var gravado = Assert.Single(compra.Itens);
+        Assert.Equal(_arroz.Id, gravado.ProdutoCestaId);
+        Assert.Equal(10m, gravado.Preco);
         Assert.Equal(1, await ContarComprasAsync());
+        Assert.True(ConfirmacaoParProduto.PodeGravar([]));
     }
 
     [Fact]
     public async Task SemPar_ContinuaNaoIdentificado()
     {
-        var catalogo = Catalogo();
-        var saida = CasamentoComprovante.Casar(Lido("SABONETE", null, true, 0.99m), catalogo);
-        Assert.Null(saida.ProdutoId);
-        Assert.True(saida.Pendente);
-
-        var pares = ConfirmacaoParProduto.Criar(
-            [new ConfirmacaoParProduto.Entrada(saida.ProdutoId, saida.Confianca, saida.Pendente, saida.DescricaoLida)],
-            catalogo);
-        var par = Assert.Single(pares.Linhas);
-        Assert.True(par.NaoIdentificado);
-        Assert.True(par.PodeCadastrar);
-        Assert.False(par.AguardandoConfirmacao);
-        Assert.False(par.DestacarRevisao);
-        Assert.Null(par.ProdutoId);
-        Assert.Equal(NormalizadorComprovante.PrefixoNaoIdentificado + "SABONETE", par.NomeExibido);
-        Assert.DoesNotContain("Arroz", par.NomeExibido, StringComparison.Ordinal);
-        Assert.True(pares.PodeGravar);
-        Assert.Null(pares.MensagemBloqueio);
-        pares.Confirmar(0);
-        Assert.True(par.NaoIdentificado);
-        Assert.Null(par.ProdutoId);
-
         var local = await _service.SalvarLocalAsync(new LocalCompraFormModel { Nome = "Mercado" });
         var previa = Previa(local, Lido("SABONETE", null, true, 0.99m), _arroz);
         var linha = Assert.Single(previa.Linhas);
         Assert.True(linha.NaoIdentificado);
         Assert.True(linha.PodeCadastrar);
         Assert.Null(linha.ProdutoCestaId);
+        Assert.False(linha.CasamentoConfirmado);
+        Assert.False(ConfirmacaoParProduto.ExigeConfirmacao(linha));
+        Assert.True(ConfirmacaoParProduto.PodeGravar(previa.Linhas));
         Assert.StartsWith(NormalizadorComprovante.PrefixoNaoIdentificado, linha.Rotulo, StringComparison.Ordinal);
         Assert.False(previa.PodeConfirmar);
         Assert.Throws<InvalidOperationException>(() => previa.ParaCompra());
+        ConfirmacaoParProduto.Confirmar(linha);
+        Assert.False(linha.CasamentoConfirmado);
         Assert.NotNull(previa.IniciarCadastro(linha));
         Assert.Equal(0, await ContarComprasAsync());
         Assert.Equal(0, await ContarItensAsync());
@@ -173,27 +148,14 @@ public class ConfirmacaoParProdutoTests : IDisposable
     [InlineData(null)]
     public async Task IdInvalidoOuNull_ViraNaoIdentificado(int? id)
     {
-        var catalogo = Catalogo();
-        var saida = CasamentoComprovante.Casar(Lido("ARROZ TIPO 1", id, true, 0.99m), catalogo);
-        Assert.Null(saida.ProdutoId);
-
-        var direto = ConfirmacaoParProduto.Criar(
-            [new ConfirmacaoParProduto.Entrada(id, 0.99m, true, "ARROZ TIPO 1")],
-            catalogo);
-        var peloContrato = ConfirmacaoParProduto.Criar(
-            [new ConfirmacaoParProduto.Entrada(saida.ProdutoId, saida.Confianca, saida.Pendente, saida.DescricaoLida)],
-            catalogo);
-
-        AssertNaoIdentificado(Assert.Single(direto.Linhas));
-        AssertNaoIdentificado(Assert.Single(peloContrato.Linhas));
-        Assert.True(direto.PodeGravar);
-        Assert.True(peloContrato.PodeGravar);
-
         var local = await _service.SalvarLocalAsync(new LocalCompraFormModel { Nome = "Mercado " + id });
         var previa = Previa(local, Lido("ARROZ TIPO 1", id, true, 0.99m), _arroz, _feijao);
         var linha = Assert.Single(previa.Linhas);
         Assert.True(linha.NaoIdentificado);
         Assert.Null(linha.ProdutoCestaId);
+        Assert.False(linha.CasamentoConfirmado);
+        Assert.False(ConfirmacaoParProduto.ExigeConfirmacao(linha));
+        Assert.True(ConfirmacaoParProduto.PodeGravar(previa.Linhas));
         Assert.DoesNotContain("Arroz", linha.Nome, StringComparison.Ordinal);
         Assert.StartsWith(NormalizadorComprovante.PrefixoNaoIdentificado, linha.Rotulo, StringComparison.Ordinal);
         Assert.False(previa.PodeConfirmar);
@@ -207,52 +169,32 @@ public class ConfirmacaoParProdutoTests : IDisposable
         var local = await _service.SalvarLocalAsync(new LocalCompraFormModel { Nome = "Mercado" });
         var previa = Previa(local, Lido("ARROZ TIPO 1", _arroz.Id, true, 0.91m), _arroz, _feijao, _inativo);
         var linha = Assert.Single(previa.Linhas);
-        var pares = Pares(_arroz.Id, 0.91m, false, "ARROZ TIPO 1");
-        Assert.False(pares.PodeGravar);
-        await AssertNaoGravaAsync(pares);
+        Assert.False(linha.CasamentoConfirmado);
+        await AssertNaoGravaAsync(previa);
 
-        Assert.False(pares.Trocar(0, 0));
-        Assert.False(pares.Trocar(0, -1));
-        Assert.False(pares.Trocar(0, 1_000_000));
-        Assert.False(pares.Trocar(0, _inativo.Id));
-        Assert.Equal(_arroz.Id, pares.Linhas[0].ProdutoId);
-        Assert.False(pares.PodeGravar);
+        Assert.False(ConfirmacaoParProduto.Trocar(previa, linha, new ProdutoCesta { Id = 0, Nome = "Zero", Ativo = true }, Catalogo()));
+        Assert.False(ConfirmacaoParProduto.Trocar(previa, linha, new ProdutoCesta { Id = -1, Nome = "Negativo", Ativo = true }, Catalogo()));
+        Assert.False(ConfirmacaoParProduto.Trocar(previa, linha, new ProdutoCesta { Id = 1_000_000, Nome = "Ausente", Ativo = true }, Catalogo()));
+        Assert.False(ConfirmacaoParProduto.Trocar(previa, linha, _inativo, Catalogo()));
+        Assert.Equal(_arroz.Id, linha.ProdutoCestaId);
+        Assert.False(linha.CasamentoConfirmado);
         Assert.Equal(0, await ContarComprasAsync());
 
-        Assert.True(pares.Trocar(0, _feijao.Id));
-        var par = pares.Linhas[0];
-        Assert.Equal(_feijao.Id, par.ProdutoId);
-        Assert.Equal("Feijão", par.NomeExibido);
-        Assert.False(par.NaoIdentificado);
-        Assert.False(par.AguardandoConfirmacao);
-        Assert.Equal(ConfirmacaoParProduto.SituacaoPar.Trocado, par.Situacao);
-        Assert.True(pares.PodeGravar);
-        var trocado = Assert.Single(pares.ParaBarreira());
+        Assert.True(ConfirmacaoParProduto.Trocar(previa, linha, _feijao, Catalogo()));
+        Assert.Equal(_feijao.Id, linha.ProdutoCestaId);
+        Assert.Equal("Feijão", linha.Nome);
+        Assert.False(linha.NaoIdentificado);
+        Assert.True(linha.CasamentoConfirmado);
+        Assert.True(ConfirmacaoParProduto.PodeGravar(previa.Linhas));
+        var trocado = Assert.Single(previa.ItensComProduto());
         Assert.Equal(_feijao.Id, trocado.ProdutoId);
         Assert.True(trocado.Confirmado);
-        CasamentoComprovante.GarantirConfirmacao(pares.ParaBarreira());
+        CasamentoComprovante.GarantirConfirmacao(previa.ItensComProduto());
 
-        previa.Classificar(linha, _feijao);
         var compra = await _service.SalvarCompraAsync(Copiar(previa.ParaCompra()), _membroId);
         var item = Assert.Single(compra.Itens);
         Assert.Equal(_feijao.Id, item.ProdutoCestaId);
         Assert.NotEqual(_arroz.Id, item.ProdutoCestaId);
-
-        var arrozId = Guid.NewGuid();
-        var feijaoId = Guid.NewGuid();
-        var ligacao = ConfirmacaoParProduto.Ligar(
-            ConfirmacaoParProduto.Criar(
-                [
-                    new ConfirmacaoParProduto.Entrada(_arroz.Id, 0.9m, false, "ARROZ"),
-                    new ConfirmacaoParProduto.Entrada(_feijao.Id, 0.9m, false, "ARROZ")
-                ],
-                Catalogo()).Linhas,
-            [
-                new ConfirmacaoParProduto.LinhaPreviaChave(arrozId, "ARROZ", _arroz.Id),
-                new ConfirmacaoParProduto.LinhaPreviaChave(feijaoId, "ARROZ", _feijao.Id)
-            ]);
-        Assert.Equal(arrozId, ligacao[0]);
-        Assert.Equal(feijaoId, ligacao[1]);
     }
 
     [Fact]
@@ -262,37 +204,18 @@ public class ConfirmacaoParProdutoTests : IDisposable
         var previa = Previa(local, Lido("ARROZ TIPO 1", _arroz.Id, true, 1m), _arroz, _feijao);
         var linha = Assert.Single(previa.Linhas);
         Assert.False(linha.PodeCadastrar);
+        Assert.True(ConfirmacaoParProduto.Trocar(previa, linha, _feijao, Catalogo()));
 
-        var pares = Pares(_arroz.Id, 1m, true, "ARROZ TIPO 1");
-        Assert.True(pares.Trocar(0, _feijao.Id));
-        pares.Desfazer(0);
-        var par = pares.Linhas[0];
-        Assert.True(par.NaoIdentificado);
-        Assert.True(par.PodeCadastrar);
-        Assert.Null(par.ProdutoId);
-        Assert.Equal(ConfirmacaoParProduto.SituacaoPar.Desfeito, par.Situacao);
-        Assert.Equal(NormalizadorComprovante.PrefixoNaoIdentificado + "ARROZ TIPO 1", par.NomeExibido);
-        Assert.False(par.AguardandoConfirmacao);
-        Assert.True(pares.PodeGravar);
-        var desfeito = Assert.Single(pares.ParaBarreira());
-        Assert.Null(desfeito.ProdutoId);
-        Assert.False(desfeito.Confirmado);
-        Assert.True(desfeito.PodeSalvar);
-        CasamentoComprovante.GarantirConfirmacao(pares.ParaBarreira());
-        pares.Desfazer(0);
-        Assert.True(par.NaoIdentificado);
-
-        var ligacao = ConfirmacaoParProduto.Ligar(
-            Pares(_arroz.Id, 1m, false, "ARROZ TIPO 1").Linhas,
-            [new ConfirmacaoParProduto.LinhaPreviaChave(linha.Id, linha.DescricaoLida, linha.ProdutoCestaId)]);
-        Assert.Equal(linha.Id, Assert.Single(ligacao));
-
-        ConfirmacaoParProduto.AplicarNaoIdentificado(linha);
+        ConfirmacaoParProduto.Desfazer(linha);
         Assert.True(linha.NaoIdentificado);
         Assert.True(linha.PodeCadastrar);
         Assert.Null(linha.ProdutoCestaId);
-        Assert.False(linha.NovoSeraCriado);
+        Assert.False(linha.CasamentoConfirmado);
+        Assert.False(ConfirmacaoParProduto.ExigeConfirmacao(linha));
+        Assert.True(ConfirmacaoParProduto.PodeGravar(previa.Linhas));
         Assert.StartsWith(NormalizadorComprovante.PrefixoNaoIdentificado, linha.Rotulo, StringComparison.Ordinal);
+        ConfirmacaoParProduto.Desfazer(linha);
+        Assert.True(linha.NaoIdentificado);
         Assert.False(previa.PodeConfirmar);
         Assert.Throws<InvalidOperationException>(() => previa.ParaCompra());
 
@@ -307,27 +230,27 @@ public class ConfirmacaoParProdutoTests : IDisposable
     [Fact]
     public async Task PendenteNaoLiberaGravacao()
     {
-        var pendente = Pares(_arroz.Id, 0.2m, true, "ARROZ TIPO 1");
-        Assert.True(Assert.Single(pendente.Linhas).DestacarRevisao);
-        Assert.True(Assert.Single(pendente.Linhas).Pendente);
-        Assert.False(pendente.PodeGravar);
-        await AssertNaoGravaAsync(pendente);
+        var local = await _service.SalvarLocalAsync(new LocalCompraFormModel { Nome = "Mercado" });
+        var previa = Previa(local, Lido("ARROZ TIPO 1", _arroz.Id, true, 0.2m), _arroz);
+        var linha = Assert.Single(previa.Linhas);
+        Assert.True(linha.Pendente);
+        Assert.Contains("pendente", linha.MarcadorCasamento, StringComparison.Ordinal);
+        Assert.False(linha.CasamentoConfirmado);
+        Assert.False(ConfirmacaoParProduto.PodeGravar(previa.Linhas));
+        await AssertNaoGravaAsync(previa);
 
-        var semDestaque = Pares(_arroz.Id, 0.95m, false, "ARROZ TIPO 1");
-        Assert.False(Assert.Single(semDestaque.Linhas).Pendente);
-        Assert.False(Assert.Single(semDestaque.Linhas).DestacarRevisao);
-        Assert.False(semDestaque.PodeGravar);
-        await AssertNaoGravaAsync(semDestaque);
+        var alta = Previa(local, Lido("ARROZ TIPO 1", _arroz.Id, true, 0.95m), _arroz);
+        Assert.False(Assert.Single(alta.Linhas).Pendente);
+        Assert.False(alta.Linhas[0].CasamentoConfirmado);
+        Assert.NotNull(alta.Linhas[0].MarcadorCasamento);
+        await AssertNaoGravaAsync(alta);
 
-        pendente.Confirmar(0);
-        Assert.False(pendente.Linhas[0].DestacarRevisao);
-        Assert.True(pendente.Linhas[0].Pendente);
-        Assert.True(pendente.PodeGravar);
-        Assert.True(pendente.Linhas[0].Pendente);
-        var confirmado = Assert.Single(pendente.ParaBarreira());
-        Assert.True(confirmado.Confirmado);
-        Assert.True(confirmado.Pendente);
-        CasamentoComprovante.GarantirConfirmacao(pendente.ParaBarreira());
+        ConfirmacaoParProduto.Confirmar(linha);
+        Assert.True(linha.CasamentoConfirmado);
+        Assert.True(linha.Pendente);
+        Assert.Contains("pendente", linha.MarcadorCasamento, StringComparison.Ordinal);
+        Assert.True(ConfirmacaoParProduto.PodeGravar(previa.Linhas));
+        CasamentoComprovante.GarantirConfirmacao(previa.ItensComProduto());
     }
 
     [Fact]
@@ -335,22 +258,30 @@ public class ConfirmacaoParProdutoTests : IDisposable
     {
         var fonte = Ler("OrcaFacil.Core", "Cesta", "ConfirmacaoParProduto.cs");
         Assert.True(PortaoIgnoraConfianca(fonte));
+        var confirmar = Metodo(SemComentarios(fonte), "void Confirmar(");
+        Assert.Contains("linha.CasamentoConfirmado = true", confirmar, StringComparison.Ordinal);
+        Assert.DoesNotContain("Confianca", confirmar, StringComparison.Ordinal);
+        Assert.DoesNotContain("Pendente", confirmar, StringComparison.Ordinal);
+        Assert.DoesNotContain("ConfirmarCasamentos", fonte, StringComparison.Ordinal);
 
         var mutado = fonte.Replace(
-            "public bool PodeGravar => _linhas.Count == 0 || CasamentoComprovante.PodeSalvar(ParaBarreira());",
-            "public bool PodeGravar => _linhas.Count == 0 || CasamentoComprovante.PodeSalvar(ParaBarreira()) || _linhas.All(linha => linha.Confianca >= 0.8m || !linha.Pendente);",
+            "linha.ProdutoCestaId is > 0 && !linha.CasamentoConfirmado",
+            "linha.ProdutoCestaId is > 0 && !linha.CasamentoConfirmado && linha.Saidas.Min(item => item.Confianca) < 0.8m",
             StringComparison.Ordinal);
         Assert.False(PortaoIgnoraConfianca(mutado));
 
         const string soComentario = """
-            // public bool PodeGravar => CasamentoComprovante.PodeSalvar(ParaBarreira());
-            /* PodeSalvar */
-            public bool PodeGravar => linha.Confianca >= 0.8m || !linha.Pendente;
-            public string? MensagemBloqueio
+            // linha.CasamentoConfirmado
+            /* CasamentoConfirmado */
+            public static bool PodeGravar(IReadOnlyList<LinhaPreviaComprovante> linhas)
+            {
+                return linha.Saidas.Any(item => item.Confianca >= 0.8m || !item.Pendente);
+            }
+            public static string? MensagemBloqueio
             """;
-        Assert.Contains("PodeSalvar", soComentario, StringComparison.Ordinal);
+        Assert.Contains("CasamentoConfirmado", soComentario, StringComparison.Ordinal);
         Assert.False(PortaoIgnoraConfianca(soComentario));
-        Assert.DoesNotContain("PodeSalvar", SemComentarios(soComentario), StringComparison.Ordinal);
+        Assert.DoesNotContain("CasamentoConfirmado", SemComentarios(soComentario), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -365,41 +296,39 @@ public class ConfirmacaoParProdutoTests : IDisposable
         Assert.True(DialogoUsaBarreira(previa));
         Assert.True(ComponenteLigaPares(par));
         Assert.True(ItemMostraAcoes(item));
-        Assert.True(PaginaEntregaSaidas(pagina));
+        Assert.True(PaginaEntregaCatalogo(pagina));
         Assert.True(CssDoPar(css));
 
-        var guarda = "if (!_pares.PodeGravar)\n            return;";
-        var mutado = previa.Replace(guarda, "/* if (!_pares.PodeGravar) return; */", StringComparison.Ordinal);
-        Assert.False(DialogoUsaBarreira(mutado));
-        Assert.Contains("PodeGravar", mutado, StringComparison.Ordinal);
-
-        var semGarantir = previa.Replace(
-            "CasamentoComprovante.GarantirConfirmacao(barreira);",
-            "// CasamentoComprovante.GarantirConfirmacao(barreira);",
+        var mutado = par.Replace(
+            "ConfirmacaoParProduto.Confirmar(linha);",
+            "// ConfirmacaoParProduto.Confirmar(linha);",
             StringComparison.Ordinal);
-        Assert.False(DialogoUsaBarreira(semGarantir));
+        Assert.False(ComponenteLigaPares(mutado));
 
         var semBotao = item.Replace(">Confirmar</button>", "<!-- >Confirmar</button> -->", StringComparison.Ordinal);
         Assert.Contains(">Confirmar</button>", semBotao, StringComparison.Ordinal);
         Assert.False(ItemMostraAcoes(semBotao));
 
         var semTrocar = par.Replace(
-            "Pares.Trocar(indice, produto.Id)",
-            "/* Pares.Trocar(indice, produto.Id) */",
+            "ConfirmacaoParProduto.Trocar(Previa, linha, produto, Catalogo);",
+            "/* ConfirmacaoParProduto.Trocar(Previa, linha, produto, Catalogo); */",
             StringComparison.Ordinal);
         Assert.False(ComponenteLigaPares(semTrocar));
 
         var semDesfazer = par.Replace(
-            "Pares.Desfazer(indice);",
-            "// Pares.Desfazer(indice);",
+            "ConfirmacaoParProduto.Desfazer(linha);",
+            "// ConfirmacaoParProduto.Desfazer(linha);",
             StringComparison.Ordinal);
         Assert.False(ComponenteLigaPares(semDesfazer));
 
         var semMensagem = par.Replace(
-            "<p class=\"of-par-alerta of-previa-erro\" role=\"alert\">@Pares.MensagemBloqueio</p>",
-            "<!-- <p class=\"of-par-alerta of-previa-erro\" role=\"alert\">@Pares.MensagemBloqueio</p> -->",
+            "<p class=\"of-par-alerta of-previa-erro\" role=\"alert\">@mensagem</p>",
+            "<!-- <p class=\"of-par-alerta of-previa-erro\" role=\"alert\">@mensagem</p> -->",
             StringComparison.Ordinal);
         Assert.False(ComponenteLigaPares(semMensagem));
+
+        var semMarcador = previa.Replace("linha.MarcadorCasamento", "// linha.MarcadorCasamento", StringComparison.Ordinal);
+        Assert.False(DialogoUsaBarreira(semMarcador));
 
         var cssMutado = css.Replace("color: #1E2A33;", "/* color: #1E2A33; */", StringComparison.Ordinal);
         Assert.Contains("color: #1E2A33;", cssMutado, StringComparison.Ordinal);
@@ -410,10 +339,10 @@ public class ConfirmacaoParProdutoTests : IDisposable
 
         const string soComentario = """
             @* >Confirmar</button> *@
-            // Pares.Confirmar(indice)
-            /* Pares.Trocar(indice, produto.Id) */
+            // ConfirmacaoParProduto.Confirmar(linha);
+            /* ConfirmacaoParProduto.Trocar(Previa, linha, produto, Catalogo); */
             <!-- >Desfazer</button> -->
-            <!-- <p class="of-par-alerta of-previa-erro" role="alert">@Pares.MensagemBloqueio</p> -->
+            <!-- <p class="of-par-alerta of-previa-erro" role="alert">@mensagem</p> -->
             """;
         Assert.Contains(">Confirmar</button>", soComentario, StringComparison.Ordinal);
         Assert.False(ItemMostraAcoes(soComentario));
@@ -422,19 +351,13 @@ public class ConfirmacaoParProdutoTests : IDisposable
 
     public void Dispose() => _factory.Dispose();
 
-    private ConfirmacaoParProduto Pares(int? produtoId, decimal confianca, bool pendente, string descricao) =>
-        ConfirmacaoParProduto.Criar(
-            [new ConfirmacaoParProduto.Entrada(produtoId, confianca, pendente, descricao)],
-            Catalogo());
-
     private List<ProdutoCesta> Catalogo() => [_arroz, _feijao, _inativo];
 
-    private async Task AssertNaoGravaAsync(ConfirmacaoParProduto pares)
+    private async Task AssertNaoGravaAsync(PreviaComprovante previa)
     {
         var compras = await ContarComprasAsync();
         var itens = await ContarItensAsync();
-        var excecao = Assert.Throws<InvalidOperationException>(
-            () => CasamentoComprovante.GarantirConfirmacao(pares.ParaBarreira()));
+        var excecao = Assert.Throws<InvalidOperationException>(() => previa.ParaCompra());
         Assert.Equal(CasamentoComprovante.MensagemConfirmacaoObrigatoria, excecao.Message);
         Assert.Equal(compras, await ContarComprasAsync());
         Assert.Equal(itens, await ContarItensAsync());
@@ -452,24 +375,16 @@ public class ConfirmacaoParProdutoTests : IDisposable
         return await contexto.ItensCompraCesta.CountAsync();
     }
 
-    private static void AssertNaoIdentificado(ConfirmacaoParProduto.ItemPar par)
-    {
-        Assert.True(par.NaoIdentificado);
-        Assert.True(par.PodeCadastrar);
-        Assert.Null(par.ProdutoId);
-        Assert.False(par.AguardandoConfirmacao);
-        Assert.StartsWith(NormalizadorComprovante.PrefixoNaoIdentificado, par.NomeExibido, StringComparison.Ordinal);
-        Assert.Contains("ARROZ TIPO 1", par.NomeExibido, StringComparison.Ordinal);
-        Assert.DoesNotContain("Arroz", par.NomeExibido, StringComparison.Ordinal);
-    }
+    private PreviaComprovante Previa(LocalCompra local, ItemComprovanteLido item, params ProdutoCesta[] produtos) =>
+        Previa(local, [item], produtos);
 
     private PreviaComprovante Previa(
         LocalCompra local,
-        ItemComprovanteLido item,
+        IReadOnlyList<ItemComprovanteLido> itens,
         params ProdutoCesta[] produtos) =>
         PreviaComprovante.Criar(
             NormalizadorComprovante.Normalizar(
-                new ComprovanteLido(local.Nome, new DateOnly(2026, 10, 18), null, true, [item]),
+                new ComprovanteLido(local.Nome, new DateOnly(2026, 10, 18), null, true, itens),
                 produtos),
             [local],
             produtos,
@@ -483,14 +398,14 @@ public class ConfirmacaoParProdutoTests : IDisposable
         LocalCompraId = modelo.LocalCompraId,
         Data = modelo.Data,
         ProdutosNovos = modelo.ProdutosNovos,
-        Itens = CompraCestaItens.CopiarItens(modelo)
+        Itens = CompraCestaItens.CopiarItens(modelo),
+        ItensSaida = modelo.ItensSaida.ToList()
     };
 
     private static bool PortaoIgnoraConfianca(string fonte)
     {
-        var portao = Membro(SemComentarios(fonte), "public bool PodeGravar =>", "public string? MensagemBloqueio");
-        return portao.Contains("PodeSalvar", StringComparison.Ordinal)
-            && portao.Contains("ParaBarreira", StringComparison.Ordinal)
+        var portao = Membro(SemComentarios(fonte), "public static bool PodeGravar(", "public static string? MensagemBloqueio");
+        return portao.Contains("CasamentoConfirmado", StringComparison.Ordinal)
             && !portao.Contains("Confianca", StringComparison.Ordinal)
             && !portao.Contains("Pendente", StringComparison.Ordinal);
     }
@@ -500,24 +415,30 @@ public class ConfirmacaoParProdutoTests : IDisposable
         var limpo = SemComentarios(fonte);
         if (!limpo.Contains("PrimarioDesabilitado=\"@(!PodeGravarCompra)\"", StringComparison.Ordinal))
             return false;
-        if (!limpo.Contains("Previa.PodeConfirmar && _pares.PodeGravar", StringComparison.Ordinal))
+        if (!limpo.Contains("Previa.PodeConfirmar && ConfirmacaoParProduto.PodeGravar(Previa.Linhas)", StringComparison.Ordinal))
             return false;
         if (!limpo.Contains("<ParProdutoPrevia ", StringComparison.Ordinal))
             return false;
-        if (!limpo.Contains("ConfirmacaoParProduto.Criar(", StringComparison.Ordinal))
-            return false;
         if (!limpo.Contains(">Cadastrar</MudButton>", StringComparison.Ordinal))
+            return false;
+        if (!limpo.Contains("linha.MarcadorCasamento", StringComparison.Ordinal))
             return false;
         if (limpo.Contains("GarantirAntesDeGravar", StringComparison.Ordinal))
             return false;
+        if (limpo.Contains("ParaBarreira", StringComparison.Ordinal))
+            return false;
+        if (limpo.Contains("TextoConfianca", StringComparison.Ordinal))
+            return false;
 
         var confirmar = Metodo(limpo, "void Confirmar()");
-        var bloqueio = confirmar.IndexOf("if (!_pares.PodeGravar)", StringComparison.Ordinal);
+        var bloqueio = confirmar.IndexOf("!Previa.PodeConfirmar || _confirmando", StringComparison.Ordinal);
         var retorno = bloqueio < 0 ? -1 : confirmar.IndexOf("return", bloqueio, StringComparison.Ordinal);
-        var garantir = confirmar.IndexOf("CasamentoComprovante.GarantirConfirmacao(", StringComparison.Ordinal);
-        var compra = confirmar.IndexOf("ParaCompra()", StringComparison.Ordinal);
+        var garantir = confirmar.IndexOf("CasamentoComprovante.GarantirConfirmacao(comProduto)", StringComparison.Ordinal);
+        var trava = confirmar.IndexOf("_confirmando = true", StringComparison.Ordinal);
         var fechar = confirmar.IndexOf("MudDialog.Close", StringComparison.Ordinal);
-        if (bloqueio < 0 || retorno <= bloqueio || garantir <= retorno || compra <= garantir || fechar <= garantir)
+        if (bloqueio < 0 || retorno <= bloqueio || garantir <= retorno || trava <= garantir || fechar <= trava)
+            return false;
+        if (confirmar.Split("GarantirConfirmacao(").Length != 2)
             return false;
 
         var gravar = Membro(limpo, "bool PodeGravarCompra", "private void Cancelar()");
@@ -528,28 +449,51 @@ public class ConfirmacaoParProdutoTests : IDisposable
     private static bool ComponenteLigaPares(string fonte)
     {
         var limpo = SemComentarios(fonte);
+        if (limpo.Contains("MarcadorCasamento", StringComparison.Ordinal))
+            return false;
+        if (limpo.Contains("Confianca", StringComparison.Ordinal))
+            return false;
+        if (limpo.Contains("confiança", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (limpo.Contains("Pendente", StringComparison.Ordinal))
+            return false;
+        if (limpo.Contains("Revisar", StringComparison.Ordinal))
+            return false;
+
         return limpo.Contains("<ItemParPrevia ", StringComparison.Ordinal)
-            && limpo.Contains("Pares.Confirmar(indice)", StringComparison.Ordinal)
-            && limpo.Contains("Pares.Trocar(indice, produto.Id)", StringComparison.Ordinal)
-            && limpo.Contains("Pares.Desfazer(indice)", StringComparison.Ordinal)
-            && limpo.Contains("<p class=\"of-par-alerta of-previa-erro\" role=\"alert\">@Pares.MensagemBloqueio</p>", StringComparison.Ordinal);
+            && limpo.Contains("ConfirmacaoParProduto.Confirmar(linha);", StringComparison.Ordinal)
+            && limpo.Contains("ConfirmacaoParProduto.Trocar(Previa, linha, produto, Catalogo);", StringComparison.Ordinal)
+            && limpo.Contains("ConfirmacaoParProduto.Desfazer(linha);", StringComparison.Ordinal)
+            && limpo.Contains("<p class=\"of-par-alerta of-previa-erro\" role=\"alert\">@mensagem</p>", StringComparison.Ordinal);
     }
 
     private static bool ItemMostraAcoes(string fonte)
     {
         var limpo = SemComentarios(fonte);
+        if (limpo.Contains("Confianca", StringComparison.Ordinal))
+            return false;
+        if (limpo.Contains("confiança", StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (limpo.Contains("Pendente", StringComparison.Ordinal))
+            return false;
+        if (limpo.Contains("Revisar", StringComparison.Ordinal))
+            return false;
+        if (limpo.Contains("MarcadorCasamento", StringComparison.Ordinal))
+            return false;
+
         return limpo.Contains(">Confirmar</button>", StringComparison.Ordinal)
             && limpo.Contains(">Trocar</button>", StringComparison.Ordinal)
             && limpo.Contains(">Desfazer</button>", StringComparison.Ordinal)
-            && limpo.Contains("Par.TextoConfianca", StringComparison.Ordinal)
-            && limpo.Contains("Par.DestacarRevisao", StringComparison.Ordinal);
+            && limpo.Contains("Linha.Nome", StringComparison.Ordinal)
+            && limpo.Contains("Linha.DescricaoLida", StringComparison.Ordinal);
     }
 
-    private static bool PaginaEntregaSaidas(string fonte)
+    private static bool PaginaEntregaCatalogo(string fonte)
     {
         var limpo = SemComentarios(fonte);
-        return limpo.Contains("CasamentoComprovante.Casar(resultado.Comprovante, _produtos)", StringComparison.Ordinal)
-            && limpo.Contains("{ x => x.Saidas, _saidas }", StringComparison.Ordinal);
+        return limpo.Contains("ProdutosCatalogoLeituraAsync", StringComparison.Ordinal)
+            && limpo.Contains("CasamentoComprovante.GarantirConfirmacao(comProduto)", StringComparison.Ordinal)
+            && !limpo.Contains("_saidas", StringComparison.Ordinal);
     }
 
     private static bool CssDoPar(string fonte)

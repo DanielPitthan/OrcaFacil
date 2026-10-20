@@ -1,8 +1,6 @@
 .of-par,
 .of-par-nome,
 .of-par-lido,
-.of-par-confianca,
-.of-par-revisao,
 .of-par-acoes,
 .of-par-opcoes,
 .of-par-botao {
@@ -17,14 +15,8 @@
     color: #1E2A33;
 }
 
-.of-par-revisar {
-    box-shadow: inset 4px 0 0 #1E4E79;
-}
-
 .of-par-nome,
-.of-par-lido,
-.of-par-confianca,
-.of-par-revisao {
+.of-par-lido {
     margin: 0;
     color: #1E2A33;
     font-size: 0.875rem;
@@ -37,9 +29,7 @@
     font-weight: 600;
 }
 
-.of-par-lido,
-.of-par-confianca,
-.of-par-revisao {
+.of-par-lido {
     margin-top: 2px;
 }
 
@@ -93,9 +83,7 @@
 }
 
 :global(html.of-tema-claro) .of-par-nome,
-:global(html.of-tema-claro) .of-par-lido,
-:global(html.of-tema-claro) .of-par-confianca,
-:global(html.of-tema-claro) .of-par-revisao {
+:global(html.of-tema-claro) .of-par-lido {
     color: #1E2A33;
 }
 
@@ -104,14 +92,8 @@
     color: #E8EAF0;
 }
 
-:global(html.of-tema-escuro) .of-par-revisar {
-    box-shadow: inset 4px 0 0 #9CC7F0;
-}
-
 :global(html.of-tema-escuro) .of-par-nome,
-:global(html.of-tema-escuro) .of-par-lido,
-:global(html.of-tema-escuro) .of-par-confianca,
-:global(html.of-tema-escuro) .of-par-revisao {
+:global(html.of-tema-escuro) .of-par-lido {
     color: #E8EAF0;
 }
 

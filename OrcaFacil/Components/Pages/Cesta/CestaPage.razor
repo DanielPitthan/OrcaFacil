@@ -329,7 +329,6 @@
     private byte[]? _jpeg;
     private ExibicaoLeituraComprovante? _exibicao;
     private ComprovanteNormalizado? _comprovante;
-    private IReadOnlyList<ItemSaidaComprovante> _saidas = [];
     private PreviaComprovante? _previa;
     private DateTime _referencia = new(DateTime.Today.Year, DateTime.Today.Month, 1);
     private List<CompraCesta> _compras = new();
@@ -345,7 +344,6 @@
         _descartada = true;
         _jpeg = null;
         _comprovante = null;
-        _saidas = [];
         _previa = null;
         _pagina.Cancel();
         _pagina.Dispose();
@@ -387,7 +385,6 @@
 
             _jpeg = null;
             _comprovante = null;
-            _saidas = [];
             _exibicao = impedimento;
             return;
         }
@@ -500,7 +497,6 @@
 
                     _jpeg = null;
                     _comprovante = null;
-                    _saidas = [];
                     _exibicao = MensagensLeituraComprovante.Carregando();
                     await InvokeAsync(StateHasChanged);
                 },
@@ -571,7 +567,6 @@
 
         _exibicao = MensagensLeituraComprovante.Carregando();
         _comprovante = null;
-        _saidas = [];
         _previa = null;
         StateHasChanged();
         string? chave = null;
@@ -627,16 +622,12 @@
             if (Cancelada(atual))
                 return;
 
-            IReadOnlyList<ItemSaidaComprovante> saidas = resultado.Comprovante is null
-                ? []
-                : CasamentoComprovante.Casar(resultado.Comprovante, _produtos);
             var normalizado = resultado.Comprovante is null
                 ? null
                 : NormalizadorComprovante.Normalizar(resultado.Comprovante, produtosCatalogo);
             var exibicao = MensagensLeituraComprovante.De(resultado, normalizado);
             _exibicao = exibicao;
             _comprovante = exibicao.Situacao == SituacaoLeituraComprovante.Pronta ? normalizado : null;
-            _saidas = _comprovante is null ? [] : saidas;
             _previa = null;
             if (_comprovante is not null)
                 _jpeg = null;
@@ -676,8 +667,7 @@
             {
                 { x => x.Previa, _previa },
                 { x => x.Produtos, _produtos },
-                { x => x.Categorias, _categorias },
-                { x => x.Saidas, _saidas }
+                { x => x.Categorias, _categorias }
             };
             var dialog = await DialogService.ShowAsync<PreviaComprovanteDialog>(
                 "Prévia do comprovante", parametros, OpcoesCompra());
@@ -709,7 +699,6 @@
             {
                 _previa = null;
                 _comprovante = null;
-                _saidas = [];
                 _exibicao = null;
             }
         }

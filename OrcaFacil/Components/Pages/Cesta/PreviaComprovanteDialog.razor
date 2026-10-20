@@ -51,8 +51,7 @@
                                   AriaMarcacao="AriaMarcacao" Marcador="Marcador" Destacado="Destacado"
                                   ConfirmadoVisual="ConfirmadoVisual" ComplementoAriaMenu="ComplementoAria"
                                   OnEditar="Editar" OnRemover="Remover" />
-                        <ParProdutoPrevia @ref="_parUi" Pares="_pares" Previa="Previa" Catalogo="_catalogo" Produtos="Produtos"
-                                          OnLinhaDesfeita="FecharSeEditando" />
+                        <ParProdutoPrevia Previa="Previa" Catalogo="_catalogo" OnLinhaDesfeita="FecharSeEditando" />
                     </FormSection>
                 </div>
 
@@ -107,13 +106,8 @@
     [Parameter] public PreviaComprovante Previa { get; set; } = null!;
     [Parameter] public IReadOnlyList<ProdutoCesta> Produtos { get; set; } = [];
     [Parameter] public IReadOnlyList<Categoria> Categorias { get; set; } = [];
-    [Parameter] public IReadOnlyList<ItemSaidaComprovante> Saidas { get; set; } = [];
 
     private readonly List<ProdutoCesta> _catalogo = [];
-    private ConfirmacaoParProduto _pares = ConfirmacaoParProduto.Criar(
-        Array.Empty<ConfirmacaoParProduto.Entrada>(),
-        Array.Empty<ProdutoCesta>());
-    private ParProdutoPrevia? _parUi;
     private LinhaPreviaComprovante? _editando;
     private bool _sheetAberto;
     private bool _confirmando;
@@ -128,16 +122,9 @@
     protected override void OnInitialized()
     {
         _catalogo.AddRange(Produtos.Where(p => p.Ativo).OrderBy(p => p.Nome, StringComparer.CurrentCultureIgnoreCase));
-        _pares = ConfirmacaoParProduto.Criar(
-            Saidas.Select(saida => new ConfirmacaoParProduto.Entrada(
-                saida.ProdutoId,
-                saida.Confianca,
-                saida.Pendente,
-                saida.DescricaoLida)).ToList(),
-            Produtos);
     }
 
-    private bool PodeGravarCompra => Previa.PodeConfirmar && _pares.PodeGravar;
+    private bool PodeGravarCompra => Previa.PodeConfirmar && ConfirmacaoParProduto.PodeGravar(Previa.Linhas);
 
     private void Cancelar()
     {
@@ -239,10 +226,7 @@
         }
 
         if (_editando.ProdutoCestaId != produto.Id)
-        {
             Previa.Classificar(_editando, produto);
-            _parUi?.TrocarProdutoDaLinha(_editando, produto.Id);
-        }
 
         Previa.AlterarPreco(_editando, _preco);
         Previa.Marcar(_editando);
