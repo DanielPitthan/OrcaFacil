@@ -100,6 +100,80 @@ public static class MascaraDireitaEsquerda
     public static string Apagar(string? digitos)
         => string.IsNullOrEmpty(digitos) ? "" : digitos[..^1];
 
+    public static string AplicarFracao(string? atual, string? entrada, int casasDecimais, decimal? maximo, bool substituir)
+    {
+        var casas = NormalizarCasas(casasDecimais);
+        if (substituir)
+        {
+            var recebido = CanonicoDeTexto(entrada, casas);
+            return AceitaFracao(recebido, casas, maximo) ? recebido : atual ?? "";
+        }
+
+        var resultado = atual ?? "";
+        if (string.IsNullOrEmpty(entrada))
+            return resultado;
+
+        foreach (var caractere in entrada)
+        {
+            var proximo = AcrescentarFracao(resultado, caractere, casas);
+            if (proximo is null)
+                continue;
+            if (!AceitaFracao(proximo, casas, maximo))
+                break;
+            resultado = proximo;
+        }
+
+        return resultado;
+    }
+
+    public static decimal ValorFracao(string? canonico)
+    {
+        if (string.IsNullOrEmpty(canonico))
+            return 0m;
+
+        var texto = canonico.EndsWith(',') ? canonico[..^1] : canonico;
+        if (texto.Length == 0 || texto == "0")
+            return 0m;
+
+        var virgula = texto.IndexOf(',');
+        var inteiro = virgula < 0 ? texto : texto[..virgula];
+        var fracao = virgula < 0 ? "" : texto[(virgula + 1)..];
+        var valor = inteiro.Length == 0 ? 0m : decimal.Parse(inteiro, NumberStyles.None, CultureInfo.InvariantCulture);
+        if (fracao.Length == 0)
+            return valor;
+
+        return valor + decimal.Parse(fracao, NumberStyles.None, CultureInfo.InvariantCulture) / Potencia10(fracao.Length);
+    }
+
+    public static string CanonicoFracao(decimal valor, int casasDecimais)
+    {
+        var casas = NormalizarCasas(casasDecimais);
+        var escalado = decimal.Round(Abs(valor) * Potencia10(casas), 0, MidpointRounding.AwayFromZero);
+        if (escalado == 0 || casas == 0)
+            return escalado == 0 ? "0" : decimal.Truncate(escalado).ToString("0", CultureInfo.InvariantCulture);
+
+        var texto = decimal.Truncate(escalado).ToString("0", CultureInfo.InvariantCulture).PadLeft(casas + 1, '0');
+        var inteiro = texto[..^casas].TrimStart('0');
+        if (inteiro.Length == 0)
+            inteiro = "0";
+        var fracao = texto[^casas..].TrimEnd('0');
+        return fracao.Length == 0 ? inteiro : inteiro + "," + fracao;
+    }
+
+    public static string ExibirFracao(string? canonico)
+    {
+        if (string.IsNullOrEmpty(canonico))
+            return "0";
+
+        var virgula = canonico.IndexOf(',');
+        var inteiro = virgula < 0 ? canonico : canonico[..virgula];
+        if (inteiro.Length == 0)
+            inteiro = "0";
+
+        var texto = SepararMilhar(inteiro);
+        return virgula < 0 ? texto : texto + "," + canonico[(virgula + 1)..];
+    }
+
     public static string Formatar(decimal valor, int casasDecimais)
     {
         var casas = NormalizarCasas(casasDecimais);
@@ -134,6 +208,129 @@ public static class MascaraDireitaEsquerda
         for (var i = 0; i < casas; i++)
             potencia *= 10m;
         return potencia;
+    }
+
+    private static string? AcrescentarFracao(string atual, char caractere, int casas)
+    {
+        var temVirgula = atual.Contains(',');
+        if (caractere is ',' or '.')
+        {
+            if (temVirgula || casas == 0)
+                return null;
+            return atual.Length == 0 ? "0," : atual + ",";
+        }
+
+        if (!char.IsDigit(caractere))
+            return null;
+
+        if (!temVirgula)
+        {
+            if (atual is "" or "0")
+                return caractere == '0' ? "0" : caractere.ToString();
+            return atual + caractere;
+        }
+
+        var fracao = atual[(atual.IndexOf(',') + 1)..];
+        if (fracao.Length >= casas)
+            return null;
+
+        return atual + caractere;
+    }
+
+    private static bool AceitaFracao(string canonico, int casas, decimal? maximo)
+    {
+        if (canonico.Length == 0)
+            return true;
+
+        var virgula = canonico.IndexOf(',');
+        var inteiro = virgula < 0 ? canonico : canonico[..virgula];
+        var fracao = virgula < 0 ? "" : canonico[(virgula + 1)..];
+        if (inteiro.Length > MaximoDigitos || fracao.Length > casas)
+            return false;
+
+        var valor = ValorFracao(canonico);
+        return maximo is null || valor <= maximo.Value;
+    }
+
+    private static string CanonicoDeTexto(string? texto, int casas)
+    {
+        if (string.IsNullOrWhiteSpace(texto))
+            return "";
+
+        var filtrado = new StringBuilder(texto.Length);
+        foreach (var caractere in texto)
+        {
+            if (char.IsDigit(caractere) || caractere is ',' or '.')
+                filtrado.Append(caractere);
+        }
+
+        var cru = filtrado.ToString();
+        if (cru.Length == 0)
+            return "";
+
+        if (cru.Contains(','))
+        {
+            var semMilhar = cru.Replace(".", "", StringComparison.Ordinal);
+            var partes = semMilhar.Split(',');
+            if (partes.Length > 2)
+                return "";
+
+            var inteiro = NormalizarInteiro(partes[0]);
+            var fracao = partes.Length > 1 ? partes[1] : "";
+            if (fracao.Length > casas)
+                fracao = fracao[..casas];
+            if (inteiro.Length == 0)
+                inteiro = "0";
+            return partes.Length > 1 ? inteiro + "," + fracao : inteiro;
+        }
+
+        if (cru.Contains('.'))
+        {
+            if (EhMilhar(cru))
+                return NormalizarInteiro(cru.Replace(".", "", StringComparison.Ordinal));
+
+            var ponto = cru.IndexOf('.');
+            if (ponto == cru.LastIndexOf('.'))
+            {
+                var inteiro = NormalizarInteiro(cru[..ponto]);
+                var fracao = cru[(ponto + 1)..];
+                if (fracao.Length > casas)
+                    fracao = fracao[..casas];
+                if (inteiro.Length == 0)
+                    inteiro = "0";
+                return fracao.Length == 0 ? inteiro : inteiro + "," + fracao;
+            }
+
+            return "";
+        }
+
+        return NormalizarInteiro(cru);
+    }
+
+    private static string NormalizarInteiro(string digitos)
+    {
+        var inicio = 0;
+        while (inicio < digitos.Length - 1 && digitos[inicio] == '0')
+            inicio++;
+
+        return inicio >= digitos.Length ? "" : digitos[inicio..];
+    }
+
+    private static bool EhMilhar(string texto)
+    {
+        var partes = texto.Split('.');
+        if (partes.Length < 2 || partes[0].Length is < 1 or > 3)
+            return false;
+
+        for (var i = 0; i < partes.Length; i++)
+        {
+            if (partes[i].Length == 0 || partes[i].Any(caractere => !char.IsDigit(caractere)))
+                return false;
+            if (i > 0 && partes[i].Length != 3)
+                return false;
+        }
+
+        return true;
     }
 
     private static string SepararMilhar(string inteiro)

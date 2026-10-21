@@ -17,7 +17,7 @@
 @code {
     private const decimal LimitePadrao = 1_000_000_000m;
 
-    private Dictionary<string, object?> _atributos = CriarAtributos(semCasas: false);
+    private Dictionary<string, object?> _atributos = CriarAtributos(tecladoDecimal: true);
 
     private ElementReference _raiz;
     private MudTextField<string> _campo = null!;
@@ -42,6 +42,7 @@
     [Parameter] public string? HelperText { get; set; }
     [Parameter] public string? Class { get; set; }
     [Parameter] public int CasasDecimais { get; set; } = 2;
+    [Parameter] public bool FracaoExplicita { get; set; }
     [Parameter] public decimal? ValorMaximo { get; set; } = LimitePadrao;
     [Parameter] public Adornment Adornment { get; set; } = Adornment.None;
     [Parameter] public string? AdornmentText { get; set; }
@@ -51,15 +52,15 @@
 
     private bool PermiteVazio => typeof(TNumber) == typeof(decimal?);
     private int Casas => Math.Clamp(CasasDecimais, 0, 8);
-    private bool SemCasasDecimais => Casas == 0;
-    private InputMode ModoTeclado => SemCasasDecimais ? InputMode.numeric : InputMode.@decimal;
+    private bool TecladoDecimal => FracaoExplicita || Casas > 0;
+    private InputMode ModoTeclado => TecladoDecimal ? InputMode.@decimal : InputMode.numeric;
     private bool _erroVisivel => !string.IsNullOrEmpty(_erro) && For is not null;
 
-    private static string TextoModo(bool semCasas) => semCasas ? "numeric" : "decimal";
+    private static string TextoModo(bool tecladoDecimal) => tecladoDecimal ? "decimal" : "numeric";
 
-    private static Dictionary<string, object?> CriarAtributos(bool semCasas) => new()
+    private static Dictionary<string, object?> CriarAtributos(bool tecladoDecimal) => new()
     {
-        ["inputmode"] = TextoModo(semCasas),
+        ["inputmode"] = TextoModo(tecladoDecimal),
         ["autocomplete"] = "off",
         ["autocorrect"] = "off",
         ["autocapitalize"] = "off",
@@ -68,11 +69,11 @@
 
     private void SincronizarAtributos()
     {
-        var modo = TextoModo(SemCasasDecimais);
+        var modo = TextoModo(TecladoDecimal);
         if (Equals(_atributos["inputmode"], modo))
             return;
 
-        _atributos = CriarAtributos(SemCasasDecimais);
+        _atributos = CriarAtributos(TecladoDecimal);
     }
 
     protected override void OnInitialized()
@@ -96,7 +97,7 @@
         _inicializado = true;
         _ultimoEmitido = atual;
         _nulo = atual is null;
-        _digitos = atual is null ? "" : MascaraDireitaEsquerda.DigitosDe(atual.Value, Casas);
+        _digitos = atual is null ? "" : DigitosDoValor(atual.Value);
         _texto = TextoDe(_digitos, _nulo);
     }
 
@@ -138,14 +139,18 @@
     [JSInvokable]
     public Task<string> IncluirTexto(string? texto)
     {
-        var digitos = MascaraDireitaEsquerda.AplicarEntrada(_digitos, texto, Casas, ValorMaximo, substituir: false);
+        var digitos = FracaoExplicita
+            ? MascaraDireitaEsquerda.AplicarFracao(_digitos, texto, Casas, ValorMaximo, substituir: false)
+            : MascaraDireitaEsquerda.AplicarEntrada(_digitos, texto, Casas, ValorMaximo, substituir: false);
         return AplicarAsync(digitos, nulo: false);
     }
 
     [JSInvokable]
     public Task<string> DefinirTexto(string? texto)
     {
-        var digitos = MascaraDireitaEsquerda.AplicarEntrada(_digitos, texto, Casas, ValorMaximo, substituir: true);
+        var digitos = FracaoExplicita
+            ? MascaraDireitaEsquerda.AplicarFracao(_digitos, texto, Casas, ValorMaximo, substituir: true)
+            : MascaraDireitaEsquerda.AplicarEntrada(_digitos, texto, Casas, ValorMaximo, substituir: true);
         var semDigitos = string.IsNullOrEmpty(MascaraDireitaEsquerda.SomenteDigitos(texto));
         return AplicarAsync(digitos, nulo: PermiteVazio && semDigitos);
     }
@@ -170,7 +175,7 @@
         _digitos = digitos;
         _nulo = nulo;
         _texto = TextoDe(digitos, nulo);
-        decimal? valor = nulo ? null : MascaraDireitaEsquerda.ValorDe(digitos, Casas);
+        decimal? valor = nulo ? null : ValorDosDigitos(digitos);
         _ultimoEmitido = valor;
         await ValueChanged.InvokeAsync(MascaraDireitaEsquerda.Para<TNumber>(valor));
 
@@ -188,7 +193,7 @@
     }
 
     private string? ValidarTexto(string _)
-        => Validation?.Invoke(_nulo ? 0m : MascaraDireitaEsquerda.ValorDe(_digitos, Casas));
+        => Validation?.Invoke(_nulo ? 0m : ValorDosDigitos(_digitos));
 
     private decimal? LerValor()
     {
@@ -198,8 +203,24 @@
         return Convert.ToDecimal(Value, CultureInfo.InvariantCulture);
     }
 
+    private string DigitosDoValor(decimal valor)
+        => FracaoExplicita
+            ? MascaraDireitaEsquerda.CanonicoFracao(valor, Casas)
+            : MascaraDireitaEsquerda.DigitosDe(valor, Casas);
+
+    private decimal ValorDosDigitos(string digitos)
+        => FracaoExplicita
+            ? MascaraDireitaEsquerda.ValorFracao(digitos)
+            : MascaraDireitaEsquerda.ValorDe(digitos, Casas);
+
     private string TextoDe(string digitos, bool nulo)
-        => nulo ? "" : MascaraDireitaEsquerda.Formatar(MascaraDireitaEsquerda.ValorDe(digitos, Casas), Casas);
+    {
+        if (nulo)
+            return "";
+        if (FracaoExplicita)
+            return MascaraDireitaEsquerda.ExibirFracao(digitos);
+        return MascaraDireitaEsquerda.Formatar(MascaraDireitaEsquerda.ValorDe(digitos, Casas), Casas);
+    }
 
     private void AoValidar(object? sender, ValidationStateChangedEventArgs e)
     {

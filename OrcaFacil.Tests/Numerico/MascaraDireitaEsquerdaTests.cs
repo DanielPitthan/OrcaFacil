@@ -106,6 +106,26 @@ public class MascaraDireitaEsquerdaTests
     }
 
     [Fact]
+    public void EscalaFixaComZeroCasas_DescartaAVirgulaEArredonda()
+    {
+        var digitos = "";
+        foreach (var tecla in "0,5")
+            digitos = MascaraDireitaEsquerda.AplicarEntrada(digitos, tecla.ToString(), 0, null, substituir: false);
+
+        Assert.Equal("5", digitos);
+        Assert.Equal(5m, MascaraDireitaEsquerda.ValorDe(digitos, 0));
+        Assert.Equal("1", MascaraDireitaEsquerda.DigitosDe(0.5m, 0));
+        Assert.Equal("1", MascaraDireitaEsquerda.Formatar(MascaraDireitaEsquerda.ValorDe(MascaraDireitaEsquerda.DigitosDe(0.5m, 0), 0), 0));
+        Assert.Equal("", MascaraDireitaEsquerda.DigitosDe(0.06m, 0));
+        Assert.Equal("0", MascaraDireitaEsquerda.Formatar(0m, 0));
+
+        digitos = "";
+        foreach (var tecla in "12,5")
+            digitos = MascaraDireitaEsquerda.AplicarEntrada(digitos, tecla.ToString(), 0, null, substituir: false);
+        Assert.Equal(125m, MascaraDireitaEsquerda.ValorDe(digitos, 0));
+    }
+
+    [Fact]
     public void ConverteParaDecimalEDecimalAnulavel()
     {
         Assert.Equal(0m, MascaraDireitaEsquerda.Para<decimal>(null));
