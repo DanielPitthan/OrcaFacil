@@ -81,6 +81,7 @@ public class RegraSenhaEspelhoTests
         var versao = VersaoSchemaAplicacao.DoApp;
 
         Assert.Equal(versao.Migrations.Count, versao.Atual);
+        Assert.Equal("20261021114611_AddIrrfInformado", versao.Migrations[^2]);
         Assert.Equal("20261021115053_AddDataPregaoOperacaoAtivo", versao.UltimaMigration);
         Assert.Equal(0, versao.Calcular([]));
         Assert.Equal(versao.Atual, versao.Calcular(versao.Migrations.ToList()));

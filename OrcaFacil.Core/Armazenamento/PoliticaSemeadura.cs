@@ -60,7 +60,8 @@ public static class PoliticaSemeadura
         nameof(AppDbContext.OperacoesRendaFixa),
         nameof(AppDbContext.RegrasCatalogoComprovante),
         nameof(AppDbContext.RegrasFiscais),
-        nameof(AppDbContext.CodigosDirpf)
+        nameof(AppDbContext.CodigosDirpf),
+        nameof(AppDbContext.IrrfInformados)
     ];
 
     /// <summary>Colunas de <see cref="Transacao"/> que o backup compara com a semente. Fora Id e CriadoEm.</summary>
@@ -221,6 +222,9 @@ public static class PoliticaSemeadura
         if (await contexto.RecargasCartao.AnyAsync(cancellationToken))
             return true;
 
+        if (await contexto.IrrfInformados.AnyAsync(cancellationToken))
+            return true;
+
         if (await contexto.RegrasCatalogoComprovante.AnyAsync(
                 regra => regra.LimiteProdutos != RegraCatalogoComprovante.LimitePadrao,
                 cancellationToken))
@@ -287,6 +291,9 @@ public static class PoliticaSemeadura
             return SituacaoConteudoBanco.DadoReal;
 
         if (await contexto.RecargasCartao.AnyAsync(cancellationToken))
+            return SituacaoConteudoBanco.DadoReal;
+
+        if (await contexto.IrrfInformados.AnyAsync(cancellationToken))
             return SituacaoConteudoBanco.DadoReal;
 
         if (await contexto.RegrasCatalogoComprovante.AnyAsync(

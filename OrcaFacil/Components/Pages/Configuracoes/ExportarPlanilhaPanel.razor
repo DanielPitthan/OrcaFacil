@@ -7,6 +7,7 @@
 @inject IDbContextFactory<AppDbContext> ContextoFactory
 @inject IConfiguracaoService Configuracao
 @inject ICompartilhadorArquivoLocal Compartilhador
+@inject IDialogService DialogService
 
 <MudPaper Class="pa-4 mt-4" Elevation="2">
     <MudText Typo="Typo.subtitle1" Class="mb-2">Planilha</MudText>
@@ -81,6 +82,8 @@
     };
 
     private int _anoBase;
+    private bool _pedindoIrrf;
+    private List<CampoIrrfDarf>? _irrfConfirmado;
 
     protected override void OnInitialized()
     {
@@ -233,7 +236,54 @@
 
     private async Task ExportarDarfAsync()
     {
+        if (_pedindoIrrf)
+            return;
+
         var ano = _anoBase;
+        _pedindoIrrf = true;
+        _irrfConfirmado = null;
+        try
+        {
+            var decisao = await PreparoGeracaoDarf.DecidirAsync(ano, () => ConfirmarIrrfAsync(ano));
+            if (!decisao.GerarArquivo)
+            {
+                if (decisao.Aviso is not null)
+                    await ExecutarGeracaoDarfAsync(ano);
+
+                return;
+            }
+
+            await ExecutarGeracaoDarfAsync(ano);
+        }
+        catch (Exception ex)
+        {
+            await AvisarFalhaDarfAsync(ex);
+        }
+        finally
+        {
+            _pedindoIrrf = false;
+        }
+    }
+
+    private async Task<bool> ConfirmarIrrfAsync(int ano)
+    {
+        List<CampoIrrfDarf> campos;
+        using (var contexto = ContextoFactory.CreateDbContext())
+            campos = CapturaIrrfDarf.Montar(contexto, ano);
+
+        var parametros = new DialogParameters<IrrfDarfDialog> { { x => x.Campos, campos } };
+        var opcoes = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true };
+        var dialog = await DialogService.ShowAsync<IrrfDarfDialog>($"IRRF de {ano}", parametros, opcoes);
+        var resultado = await dialog.Result;
+        if (resultado is not { Canceled: false, Data: List<CampoIrrfDarf> confirmados })
+            return false;
+
+        _irrfConfirmado = confirmados;
+        return true;
+    }
+
+    private async Task ExecutarGeracaoDarfAsync(int ano)
+    {
         try
         {
             var tarefa = OrquestradorDarf.ExportarAsync(
@@ -272,9 +322,13 @@
     {
         ExportadorDarf.ExigirAno(anoBase);
         using var contexto = ContextoFactory.CreateDbContext();
+        if (_irrfConfirmado is not null)
+            CapturaIrrfDarf.Salvar(contexto, anoBase, _irrfConfirmado);
+
+        var irrf = CapturaIrrfDarf.Listar(contexto, anoBase);
         using (var destino = new FileStream(caminho, FileMode.CreateNew, FileAccess.Write, FileShare.None))
         {
-            ExportadorDarf.Exportar(contexto, anoBase, destino);
+            ExportadorDarf.Exportar(contexto, anoBase, destino, irrf);
             destino.Flush();
         }
     }

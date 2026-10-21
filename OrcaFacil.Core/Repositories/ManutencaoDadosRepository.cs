@@ -59,6 +59,7 @@ public class ManutencaoDadosRepository : IManutencaoDadosRepository
 
             if (tudo)
             {
+                await context.IrrfInformados.ExecuteDeleteAsync();
                 await context.ItensCompraCesta.ExecuteDeleteAsync();
                 await context.ComprasCesta.ExecuteDeleteAsync();
                 await context.ProdutosCesta.ExecuteDeleteAsync();

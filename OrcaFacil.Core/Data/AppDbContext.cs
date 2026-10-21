@@ -34,6 +34,7 @@ public class AppDbContext : DbContext
     public DbSet<RegraCatalogoComprovante> RegrasCatalogoComprovante => Set<RegraCatalogoComprovante>();
     public DbSet<RegraFiscal> RegrasFiscais => Set<RegraFiscal>();
     public DbSet<CodigoDirpf> CodigosDirpf => Set<CodigoDirpf>();
+    public DbSet<IrrfInformado> IrrfInformados => Set<IrrfInformado>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -328,6 +329,19 @@ public class AppDbContext : DbContext
                   .IsUnique()
                   .HasDatabaseName("IX_CodigosDirpf_Ficha_TipoAtivo_Variante_VigenciaInicio");
             entity.HasData(CatalogoCodigosDirpf.Linhas());
+        });
+
+        modelBuilder.Entity<IrrfInformado>(entity =>
+        {
+            entity.ToTable("IrrfInformados");
+            entity.Property(i => i.Valor).HasPrecision(18, 2);
+            entity.HasIndex(i => new { i.MembroFamiliaId, i.Ano, i.Mes, i.Cesta })
+                  .IsUnique()
+                  .HasDatabaseName("IX_IrrfInformados_MembroFamiliaId_Ano_Mes_Cesta");
+            entity.HasOne(i => i.MembroFamilia)
+                  .WithMany()
+                  .HasForeignKey(i => i.MembroFamiliaId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

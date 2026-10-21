@@ -31,6 +31,7 @@ public class MigracaoUpgradeTests
     private const string Provento = "20261020175956_AddProvento";
     private const string CodigoDirpf = "20261020225810_AddCodigoDirpf";
     private const string ApuracaoIr = "20261021101911_AddApuracaoIrMensal";
+    private const string IrrfInformado = "20261021114611_AddIrrfInformado";
     private const string DataPregao = "20261021115053_AddDataPregaoOperacaoAtivo";
 
     [Fact]
@@ -177,6 +178,7 @@ public class MigracaoUpgradeTests
         Assert.Contains(IndiceHashImportacao, ids);
         Assert.Contains(RendaFixa, ids);
         Assert.Contains(RegraCatalogo, ids);
+        Assert.Equal(IrrfInformado, ids[^2]);
         Assert.Equal(DataPregao, ids[^1]);
 
         for (var i = 1; i < ids.Count; i++)

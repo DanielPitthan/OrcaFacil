@@ -399,6 +399,37 @@ namespace OrcaFacil.Core.Data.Migrations
                     b.ToTable("FechamentosPeriodo");
                 });
 
+            modelBuilder.Entity("OrcaFacil.Core.Entities.IrrfInformado", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Ano")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Cesta")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("MembroFamiliaId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Mes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("Valor")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MembroFamiliaId", "Ano", "Mes", "Cesta")
+                        .IsUnique()
+                        .HasDatabaseName("IX_IrrfInformados_MembroFamiliaId_Ano_Mes_Cesta");
+
+                    b.ToTable("IrrfInformados", (string)null);
+                });
+
             modelBuilder.Entity("OrcaFacil.Core.Entities.ItemLancamento", b =>
                 {
                     b.Property<int>("Id")
@@ -1238,6 +1269,17 @@ namespace OrcaFacil.Core.Data.Migrations
                     b.Navigation("CompraCesta");
 
                     b.Navigation("Produto");
+                });
+
+            modelBuilder.Entity("OrcaFacil.Core.Entities.IrrfInformado", b =>
+                {
+                    b.HasOne("OrcaFacil.Core.Entities.MembroFamilia", "MembroFamilia")
+                        .WithMany()
+                        .HasForeignKey("MembroFamiliaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("MembroFamilia");
                 });
 
             modelBuilder.Entity("OrcaFacil.Core.Entities.ItemLancamento", b =>
