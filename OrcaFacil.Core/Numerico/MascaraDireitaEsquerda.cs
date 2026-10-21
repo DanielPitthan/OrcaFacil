@@ -100,6 +100,11 @@ public static class MascaraDireitaEsquerda
     public static string Apagar(string? digitos)
         => string.IsNullOrEmpty(digitos) ? "" : digitos[..^1];
 
+    /// <summary>
+    /// Só a vírgula é decimal. O ponto é milhar na tecla e na cola: não abre fração.
+    /// A tecla que passaria do teto é recusada e o texto anterior permanece (digitar 101 com teto 100 fica 10).
+    /// Colar um número acima do teto é recusado por inteiro: não vira prefixo nem outro valor.
+    /// </summary>
     public static string AplicarFracao(string? atual, string? entrada, int casasDecimais, decimal? maximo, bool substituir)
     {
         var casas = NormalizarCasas(casasDecimais);
@@ -148,7 +153,7 @@ public static class MascaraDireitaEsquerda
     public static string CanonicoFracao(decimal valor, int casasDecimais)
     {
         var casas = NormalizarCasas(casasDecimais);
-        var escalado = decimal.Round(Abs(valor) * Potencia10(casas), 0, MidpointRounding.AwayFromZero);
+        var escalado = decimal.Truncate(Abs(valor) * Potencia10(casas));
         if (escalado == 0 || casas == 0)
             return escalado == 0 ? "0" : decimal.Truncate(escalado).ToString("0", CultureInfo.InvariantCulture);
 
@@ -213,7 +218,7 @@ public static class MascaraDireitaEsquerda
     private static string? AcrescentarFracao(string atual, char caractere, int casas)
     {
         var temVirgula = atual.Contains(',');
-        if (caractere is ',' or '.')
+        if (caractere == ',')
         {
             if (temVirgula || casas == 0)
                 return null;
@@ -284,27 +289,7 @@ public static class MascaraDireitaEsquerda
             return partes.Length > 1 ? inteiro + "," + fracao : inteiro;
         }
 
-        if (cru.Contains('.'))
-        {
-            if (EhMilhar(cru))
-                return NormalizarInteiro(cru.Replace(".", "", StringComparison.Ordinal));
-
-            var ponto = cru.IndexOf('.');
-            if (ponto == cru.LastIndexOf('.'))
-            {
-                var inteiro = NormalizarInteiro(cru[..ponto]);
-                var fracao = cru[(ponto + 1)..];
-                if (fracao.Length > casas)
-                    fracao = fracao[..casas];
-                if (inteiro.Length == 0)
-                    inteiro = "0";
-                return fracao.Length == 0 ? inteiro : inteiro + "," + fracao;
-            }
-
-            return "";
-        }
-
-        return NormalizarInteiro(cru);
+        return NormalizarInteiro(cru.Replace(".", "", StringComparison.Ordinal));
     }
 
     private static string NormalizarInteiro(string digitos)
@@ -314,23 +299,6 @@ public static class MascaraDireitaEsquerda
             inicio++;
 
         return inicio >= digitos.Length ? "" : digitos[inicio..];
-    }
-
-    private static bool EhMilhar(string texto)
-    {
-        var partes = texto.Split('.');
-        if (partes.Length < 2 || partes[0].Length is < 1 or > 3)
-            return false;
-
-        for (var i = 0; i < partes.Length; i++)
-        {
-            if (partes[i].Length == 0 || partes[i].Any(caractere => !char.IsDigit(caractere)))
-                return false;
-            if (i > 0 && partes[i].Length != 3)
-                return false;
-        }
-
-        return true;
     }
 
     private static string SepararMilhar(string inteiro)

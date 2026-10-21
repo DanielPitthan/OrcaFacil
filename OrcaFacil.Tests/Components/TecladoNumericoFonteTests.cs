@@ -193,6 +193,81 @@ public class TecladoNumericoFonteTests
     }
 
     [Fact]
+    public void MetaExibeAteUmaCasa_PontoEhMilhar_EComentarioNaoConta()
+    {
+        var form = SemComentarios(Ler("OrcaFacil", "Components", "Pages", "Orcamento", "OrcamentoForm.razor"));
+        var mensal = SemComentarios(Ler("OrcaFacil", "Components", "Pages", "Orcamento", "OrcamentoMensal.razor"));
+        var helper = SemComentarios(Ler("OrcaFacil.Core", "Numerico", "TextoMetaReducao.cs"));
+        var mascara = SemComentarios(Ler("OrcaFacil.Core", "Numerico", "MascaraDireitaEsquerda.cs"));
+
+        Assert.True(ExibeMetaComUmaCasa(form));
+        Assert.True(ExibeMetaComUmaCasa(mensal));
+        Assert.Contains("TextoMetaReducao.Percentual(Modelo.MetaReducaoPercentual.Value)", form, StringComparison.Ordinal);
+        Assert.Contains("TextoMetaReducao.Percentual(item.MetaReducaoPercentual.Value)", mensal, StringComparison.Ordinal);
+        Assert.True(FormatoUmaCasa(helper));
+        Assert.True(PontoEhMilhar(mascara));
+        Assert.True(ReabrirTrunca(mascara));
+
+        Assert.Equal("12,5", TextoMetaReducao.Percentual(12.5m));
+        Assert.Equal("0,5", TextoMetaReducao.Percentual(0.5m));
+        Assert.Equal("10", TextoMetaReducao.Percentual(10m));
+
+        var formComentado = SemComentarios(form.Replace(
+            "TextoMetaReducao.Percentual(Modelo.MetaReducaoPercentual.Value)",
+            "/* TextoMetaReducao.Percentual(Modelo.MetaReducaoPercentual.Value) */",
+            StringComparison.Ordinal));
+        Assert.False(ExibeMetaComUmaCasa(formComentado));
+
+        var mensalComentado = SemComentarios(mensal.Replace(
+            "TextoMetaReducao.Percentual(item.MetaReducaoPercentual.Value)",
+            "<!-- TextoMetaReducao.Percentual(item.MetaReducaoPercentual.Value) -->",
+            StringComparison.Ordinal));
+        Assert.False(ExibeMetaComUmaCasa(mensalComentado));
+
+        var helperComentado = SemComentarios(helper.Replace(
+            "valor.ToString(\"0.#\", PtBr)",
+            "/* valor.ToString(\"0.#\", PtBr) */ valor.ToString(\"0\", PtBr)",
+            StringComparison.Ordinal));
+        Assert.False(FormatoUmaCasa(helperComentado));
+
+        var pontoNaVirgula = SemComentarios(mascara.Replace(
+            "if (caractere == ',')",
+            "if (caractere is ',' or '.') /* if (caractere == ',') */",
+            StringComparison.Ordinal));
+        Assert.False(PontoEhMilhar(pontoNaVirgula));
+
+        var arredonda = SemComentarios(mascara.Replace(
+            "decimal.Truncate(Abs(valor) * Potencia10(casas))",
+            "/* decimal.Truncate(Abs(valor) * Potencia10(casas)) */ decimal.Round(Abs(valor) * Potencia10(casas), 0, MidpointRounding.AwayFromZero)",
+            StringComparison.Ordinal));
+        Assert.False(ReabrirTrunca(arredonda));
+
+        IgualDigitadoEColado("1.000", "1000");
+        IgualDigitadoEColado("12.500", "12500");
+        IgualDigitadoEColado("1.000.000", "1000000");
+        IgualDigitadoEColado("1.000,5", "1000,5");
+        IgualDigitadoEColado("0,5", "0,5");
+        IgualDigitadoEColado("12,5", "12,5");
+        IgualDigitadoEColado("12.5", "125");
+        IgualDigitadoEColado("0.5", "5");
+
+        Assert.Equal("12,5", MascaraDireitaEsquerda.CanonicoFracao(12.59m, 1));
+        Assert.Equal("12,5", MascaraDireitaEsquerda.AplicarFracao("", "12,59", 1, 100m, substituir: true));
+        Assert.Equal("12,5", DigitarFracao("12,59", casas: 1, maximo: 100m));
+        Assert.Equal(12.5m, MascaraDireitaEsquerda.ValorFracao(MascaraDireitaEsquerda.CanonicoFracao(12.59m, 1)));
+
+        Assert.Equal("10", DigitarFracao("101", casas: 1, maximo: 100m));
+        Assert.Equal(10m, MascaraDireitaEsquerda.ValorFracao(DigitarFracao("101", casas: 1, maximo: 100m)));
+        Assert.NotEqual(100m, MascaraDireitaEsquerda.ValorFracao(DigitarFracao("101", casas: 1, maximo: 100m)));
+        Assert.Equal("", MascaraDireitaEsquerda.AplicarFracao("", "101", 1, 100m, substituir: true));
+        Assert.Equal("12,5", MascaraDireitaEsquerda.AplicarFracao("12,5", "101", 1, 100m, substituir: true));
+        Assert.Equal("100", DigitarFracao("100", casas: 1, maximo: 100m));
+        Assert.Equal("100", DigitarFracao("1000", casas: 1, maximo: 100m));
+        Assert.Equal("100,", DigitarFracao("100,1", casas: 1, maximo: 100m));
+        Assert.Equal(100m, MascaraDireitaEsquerda.ValorFracao(DigitarFracao("100,1", casas: 1, maximo: 100m)));
+    }
+
+    [Fact]
     public void Varredura_TodoCampoNumericoTemModo_ENaoUsaTypeNumber()
     {
         var numericos = new List<string>();
@@ -409,6 +484,42 @@ public class TecladoNumericoFonteTests
 
     private static string ReabrirFracao(decimal valor, int casas)
         => MascaraDireitaEsquerda.ExibirFracao(MascaraDireitaEsquerda.CanonicoFracao(valor, casas));
+
+    private static bool ExibeMetaComUmaCasa(string fonte)
+        => fonte.Contains("TextoMetaReducao.Percentual(", StringComparison.Ordinal)
+            && !fonte.Contains("ToString(\"0\")", StringComparison.Ordinal);
+
+    private static bool FormatoUmaCasa(string fonte)
+        => fonte.Contains("valor.ToString(\"0.#\", PtBr)", StringComparison.Ordinal)
+            && !fonte.Contains("valor.ToString(\"0\", PtBr)", StringComparison.Ordinal);
+
+    private static bool PontoEhMilhar(string fonte)
+    {
+        var tecla = Metodo(fonte, "string? AcrescentarFracao(");
+        var cola = Metodo(fonte, "string CanonicoDeTexto(");
+        return tecla.Contains("if (caractere == ',')", StringComparison.Ordinal)
+            && !tecla.Contains("'.'", StringComparison.Ordinal)
+            && !fonte.Contains("EhMilhar", StringComparison.Ordinal)
+            && cola.Contains("Replace(\".\", \"\", StringComparison.Ordinal)", StringComparison.Ordinal)
+            && !cola.Contains("LastIndexOf('.')", StringComparison.Ordinal);
+    }
+
+    private static bool ReabrirTrunca(string fonte)
+    {
+        var metodo = Metodo(fonte, "string CanonicoFracao(");
+        return metodo.Contains("decimal.Truncate(Abs(valor) * Potencia10(casas))", StringComparison.Ordinal)
+            && !metodo.Contains("decimal.Round", StringComparison.Ordinal);
+    }
+
+    private static void IgualDigitadoEColado(string texto, string canonico)
+    {
+        var digitado = DigitarFracao(texto, casas: 8);
+        var colado = MascaraDireitaEsquerda.AplicarFracao("", texto, 8, null, substituir: true);
+        Assert.Equal(canonico, digitado);
+        Assert.Equal(canonico, colado);
+        Assert.Equal(MascaraDireitaEsquerda.ValorFracao(canonico), MascaraDireitaEsquerda.ValorFracao(digitado));
+        Assert.Equal(MascaraDireitaEsquerda.ValorFracao(canonico), MascaraDireitaEsquerda.ValorFracao(colado));
+    }
 
     private static bool SincronizaAntesDeSair(string fonte)
     {
