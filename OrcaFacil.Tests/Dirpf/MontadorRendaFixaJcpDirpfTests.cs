@@ -1,3 +1,4 @@
+using ClosedXML.Excel;
 using OrcaFacil.Core.Ativos;
 using OrcaFacil.Core.Dirpf;
 using OrcaFacil.Core.Dtos;
@@ -108,6 +109,8 @@ public class MontadorRendaFixaJcpDirpfTests : IDisposable
         Assert.Equal(0m, posicao.IrRetidoNoAno);
         Assert.Equal("", posicao.Cnpj);
         Assert.Equal("Ana (Nica)", posicao.Perfil);
+        Assert.DoesNotContain(MontadorDirpf.ObservacaoTituloOutro, exclusivo.Descricao);
+        Assert.DoesNotContain(MontadorDirpf.ObservacaoTituloOutro, posicao.Discriminacao);
 
         var seguinte = Montar(2025, [], [cdb, tesouro], operacoes, [ana], regras);
         var aberta = Assert.Single(seguinte.RendaFixa);
@@ -185,6 +188,118 @@ public class MontadorRendaFixaJcpDirpfTests : IDisposable
         Assert.Equal("04", posicao.Grupo);
         Assert.Equal("02", posicao.CodigoDirpf);
         Assert.Equal(100m, posicao.CustoAquisicao);
+        Assert.EndsWith(" " + MontadorDirpf.ObservacaoTituloOutro, exclusivo.Descricao);
+        Assert.EndsWith(" " + MontadorDirpf.ObservacaoTituloOutro, posicao.Discriminacao);
+    }
+
+    [Fact]
+    public void Outro_GravaAObservacaoDeLciLca_OndeALinhaApareceNaPlanilha()
+    {
+        const string observacao =
+            "Se for LCI/LCA, é isento: declarar em Rendimentos Isentos (código 12) e no grupo 04/03";
+        Assert.Equal(observacao, MontadorDirpf.ObservacaoTituloOutro);
+
+        var ana = Perfil(1, "Ana", null);
+        var aberto = Titulo(1, "LCIABERTO", "Letra aberta", TipoTituloRendaFixa.Outro, "XP");
+        var soRendimento = Titulo(2, "LCIFECHADA", "Letra resgatada", TipoTituloRendaFixa.Outro, "XP");
+        var soPosicao = Titulo(3, "CRIABERTO", "CRI sem rendimento", TipoTituloRendaFixa.Outro, "XP");
+        var cdb = Titulo(4, "CDB1", "CDB", TipoTituloRendaFixa.CDB, "XP");
+        var tesouro = Titulo(5, "TESOURO", "Tesouro", TipoTituloRendaFixa.TesouroSelic, "XP");
+        var operacoes = new[]
+        {
+            Operacao(1, aberto, new DateTime(2024, 1, 10), TipoOperacaoRendaFixa.Aplicacao, 2m, 200m, 0m),
+            Operacao(2, aberto, new DateTime(2024, 8, 1), TipoOperacaoRendaFixa.Resgate, 1m, 130m, 0m),
+            Operacao(3, soRendimento, new DateTime(2024, 1, 10), TipoOperacaoRendaFixa.Aplicacao, 1m, 100m, 0m),
+            Operacao(4, soRendimento, new DateTime(2024, 9, 1), TipoOperacaoRendaFixa.Resgate, 1m, 140m, 0m),
+            Operacao(5, soPosicao, new DateTime(2024, 3, 1), TipoOperacaoRendaFixa.Aplicacao, 1m, 80m, 0m),
+            Operacao(6, cdb, new DateTime(2024, 1, 10), TipoOperacaoRendaFixa.Aplicacao, 2m, 200m, 0m),
+            Operacao(7, cdb, new DateTime(2024, 8, 1), TipoOperacaoRendaFixa.Resgate, 1m, 130m, 0m),
+            Operacao(8, tesouro, new DateTime(2024, 2, 1), TipoOperacaoRendaFixa.Aplicacao, 1m, 50m, 0m)
+        };
+        var titulos = new[] { aberto, soRendimento, soPosicao, cdb, tesouro };
+
+        var dirpf = Montar(2024, [], titulos, operacoes, [ana]);
+        Assert.Empty(dirpf.RendimentosIsentos);
+
+        var exclusivoAberto = Assert.Single(dirpf.RendimentosExclusivos, linha => linha.CodigoAtivo == "LCIABERTO");
+        Assert.Equal("06", exclusivoAberto.Codigo);
+        Assert.Equal(
+            $"Rendimento líquido de renda fixa — LCIABERTO — Letra aberta. {observacao}",
+            exclusivoAberto.Descricao);
+        var exclusivoFechado = Assert.Single(dirpf.RendimentosExclusivos, linha => linha.CodigoAtivo == "LCIFECHADA");
+        Assert.Equal(
+            $"Rendimento líquido de renda fixa — LCIFECHADA — Letra resgatada. {observacao}",
+            exclusivoFechado.Descricao);
+        Assert.DoesNotContain(dirpf.RendimentosExclusivos, linha => linha.CodigoAtivo == "CRIABERTO");
+        Assert.Equal(
+            "Rendimento líquido de renda fixa — CDB1 — CDB.",
+            Assert.Single(dirpf.RendimentosExclusivos, linha => linha.CodigoAtivo == "CDB1").Descricao);
+
+        var posicaoAberta = Assert.Single(dirpf.RendaFixa, linha => linha.Codigo == "LCIABERTO");
+        Assert.Equal("Outro", posicaoAberta.Tipo);
+        Assert.Equal("04", posicaoAberta.Grupo);
+        Assert.Equal("02", posicaoAberta.CodigoDirpf);
+        Assert.Equal(
+            $"LCIABERTO — Letra aberta. Outro. Custo de aquisição em 31/12/2024. {observacao}",
+            posicaoAberta.Discriminacao);
+        Assert.Equal(
+            $"CRIABERTO — CRI sem rendimento. Outro. Custo de aquisição em 31/12/2024. {observacao}",
+            Assert.Single(dirpf.RendaFixa, linha => linha.Codigo == "CRIABERTO").Discriminacao);
+        Assert.DoesNotContain(dirpf.RendaFixa, linha => linha.Codigo == "LCIFECHADA");
+        Assert.Equal(
+            "CDB1 — CDB. CDB. Custo de aquisição em 31/12/2024.",
+            Assert.Single(dirpf.RendaFixa, linha => linha.Codigo == "CDB1").Discriminacao);
+        Assert.Equal(
+            "TESOURO — Tesouro. Tesouro Selic. Custo de aquisição em 31/12/2024.",
+            Assert.Single(dirpf.RendaFixa, linha => linha.Codigo == "TESOURO").Discriminacao);
+
+        using (var contexto = _fabrica.CreateDbContext())
+        {
+            contexto.Add(new MembroFamilia { Nome = "Ana", Avatar = "A" });
+            foreach (var titulo in titulos)
+            {
+                titulo.Id = 0;
+                contexto.Add(titulo);
+            }
+
+            contexto.SaveChanges();
+            foreach (var operacao in operacoes)
+            {
+                operacao.Id = 0;
+                operacao.TituloRendaFixaId = operacao.Titulo!.Id;
+                contexto.Add(operacao);
+            }
+
+            contexto.SaveChanges();
+        }
+
+        using var destino = new MemoryStream();
+        using (var contexto = _fabrica.CreateDbContext())
+            ExportadorDirpf.Exportar(contexto, 2024, destino);
+
+        using var pasta = new XLWorkbook(destino);
+        var exclusivos = pasta.Worksheet(ExportadorDirpf.AbaRendimentosExclusivos);
+        var rendaFixa = pasta.Worksheet(ExportadorDirpf.AbaRendaFixa);
+        Assert.Equal(exclusivoAberto.Descricao, TextoDaLinha(exclusivos, "LCIABERTO", 3, 11));
+        Assert.Equal(exclusivoFechado.Descricao, TextoDaLinha(exclusivos, "LCIFECHADA", 3, 11));
+        Assert.Equal(
+            "Rendimento líquido de renda fixa — CDB1 — CDB.",
+            TextoDaLinha(exclusivos, "CDB1", 3, 11));
+        Assert.Null(LinhaDoCodigo(exclusivos, "CRIABERTO", 3));
+        Assert.Null(LinhaDoCodigo(exclusivos, "TESOURO", 3));
+        Assert.Equal(posicaoAberta.Discriminacao, TextoDaLinha(rendaFixa, "LCIABERTO", 3, 16));
+        Assert.Equal(
+            $"CRIABERTO — CRI sem rendimento. Outro. Custo de aquisição em 31/12/2024. {observacao}",
+            TextoDaLinha(rendaFixa, "CRIABERTO", 3, 16));
+        Assert.Null(LinhaDoCodigo(rendaFixa, "LCIFECHADA", 3));
+        Assert.Equal(
+            "CDB1 — CDB. CDB. Custo de aquisição em 31/12/2024.",
+            TextoDaLinha(rendaFixa, "CDB1", 3, 16));
+        Assert.Equal(
+            "TESOURO — Tesouro. Tesouro Selic. Custo de aquisição em 31/12/2024.",
+            TextoDaLinha(rendaFixa, "TESOURO", 3, 16));
+        Assert.DoesNotContain(observacao, TextoDaLinha(exclusivos, "CDB1", 3, 11));
+        Assert.DoesNotContain(observacao, TextoDaLinha(rendaFixa, "TESOURO", 3, 16));
     }
 
     [Fact]
@@ -381,6 +496,25 @@ public class MontadorRendaFixaJcpDirpfTests : IDisposable
         DataPagamento = pagamento,
         ValorLiquido = valor
     };
+
+    private static string TextoDaLinha(IXLWorksheet aba, string codigo, int colunaCodigo, int colunaTexto)
+    {
+        var linha = LinhaDoCodigo(aba, codigo, colunaCodigo);
+        Assert.NotNull(linha);
+        return aba.Cell(linha.Value, colunaTexto).GetText();
+    }
+
+    private static int? LinhaDoCodigo(IXLWorksheet aba, string codigo, int colunaCodigo)
+    {
+        var ultima = aba.LastRowUsed()?.RowNumber() ?? 1;
+        for (var numero = 2; numero <= ultima; numero++)
+        {
+            if (aba.Cell(numero, colunaCodigo).GetText() == codigo)
+                return numero;
+        }
+
+        return null;
+    }
 
     private static OperacaoRendaFixaFormModel Formulario(
         int tituloId,

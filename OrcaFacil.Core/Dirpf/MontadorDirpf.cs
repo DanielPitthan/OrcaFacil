@@ -19,10 +19,14 @@ namespace OrcaFacil.Core.Dirpf;
 /// Lucro de resgate já virou receita e prejuízo já virou despesa; aqui só se declara o líquido positivo.
 /// O CNPJ sai vazio: o cadastro não guarda esse número.
 /// Posição com quantidade zero fica de fora. Não há piso de valor.
+/// Título do tipo Outro continua no grupo 04/02 e no código 06. A linha só ganha o aviso de LCI/LCA.
 /// </summary>
 public static class MontadorDirpf
 {
     public const string PerfilNaoIdentificado = "Não identificado";
+
+    public const string ObservacaoTituloOutro =
+        "Se for LCI/LCA, é isento: declarar em Rendimentos Isentos (código 12) e no grupo 04/03";
 
     private static readonly CultureInfo PtBr = CultureInfo.GetCultureInfo("pt-BR");
     private static readonly StringComparer OrdemTexto = StringComparer.Create(PtBr, ignoreCase: true);
@@ -403,7 +407,9 @@ public static class MontadorDirpf
                     medio,
                     irDeclarado,
                     liquidoDeclarado,
-                    $"{titulo.Codigo} — {titulo.Nome}. {tipo}. Custo de aquisição em 31/12/{anoBase}."));
+                    TextoOutro(
+                        $"{titulo.Codigo} — {titulo.Nome}. {tipo}. Custo de aquisição em 31/12/{anoBase}.",
+                        titulo.Tipo)));
             }
 
             if (liquidoDeclarado > 0m)
@@ -419,7 +425,9 @@ public static class MontadorDirpf
                     Cnpj: "",
                     liquidoDeclarado,
                     irDeclarado,
-                    $"Rendimento líquido de renda fixa — {titulo.Codigo} — {titulo.Nome}."));
+                    TextoOutro(
+                        $"Rendimento líquido de renda fixa — {titulo.Codigo} — {titulo.Nome}.",
+                        titulo.Tipo)));
             }
         }
 
@@ -480,6 +488,9 @@ public static class MontadorDirpf
         IrRetido = operacao.IrRetido,
         Codigo = codigo
     };
+
+    private static string TextoOutro(string texto, TipoTituloRendaFixa tipo) =>
+        tipo == TipoTituloRendaFixa.Outro ? $"{texto} {ObservacaoTituloOutro}" : texto;
 
     private static string RotuloTitulo(TipoTituloRendaFixa tipo) => tipo switch
     {
