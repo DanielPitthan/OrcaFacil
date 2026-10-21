@@ -574,7 +574,7 @@ public class ImportacaoExtratoB3ServiceTests
             var janeiro = apuracao.Meses.Single(linha => linha.Mes == 1 && linha.Cesta == CestaApuracaoIr.Comum);
             Assert.Equal(25_000m, janeiro.VendasAcoesComuns);
             Assert.Equal(15_000m, janeiro.Resultado);
-            Assert.Equal(new DateTime(2024, 3, 28), apuracao.Darfs.Single(linha => linha.Mes == 1).Vencimento);
+            Assert.Equal(new DateTime(2024, 2, 29), apuracao.Darfs.Single(linha => linha.Mes == 1).Vencimento);
             Assert.Equal(0m, apuracao.Meses.Single(linha => linha.Mes == 2 && linha.Cesta == CestaApuracaoIr.Comum).Resultado);
 
             await ambiente.Resultado.SalvarAsync(new OperacaoAtivoFormModel

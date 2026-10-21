@@ -734,7 +734,7 @@ public class ApuradorIrMensalTests
     }
 
     [Fact]
-    public void VendaNoUltimoPregao_TetoEGanhoNoMesDoPregao_DarfPelaLiquidacao()
+    public void VendaNoUltimoPregao_TetoEGanhoNoMesDoPregao_DarfPeloPregao()
     {
         var compra = Entidade(1, TipoOperacao.Compra, new DateTime(2024, 1, 10), new DateTime(2024, 1, 10), 100, 100m, 10_000m);
         var venda = Entidade(2, TipoOperacao.Venda, new DateTime(2024, 2, 2), new DateTime(2024, 1, 31), 100, 250m, 25_000m);
@@ -753,13 +753,13 @@ public class ApuradorIrMensalTests
 
         var darf = Darf(apuracao, 1);
         Assert.Equal(2_250m, darf.Valor);
-        Assert.Equal(new DateTime(2024, 3, 28), darf.Vencimento);
+        Assert.Equal(new DateTime(2024, 2, 29), darf.Vencimento);
         Assert.Equal(0m, Darf(apuracao, 2).Valor);
         Assert.Null(Darf(apuracao, 2).Vencimento);
     }
 
     [Fact]
-    public void DayTradeNoUltimoPregao_CaiNoMesDoPregao_DarfPelaLiquidacao()
+    public void DayTradeNoUltimoPregao_CaiNoMesDoPregao_DarfPeloPregao()
     {
         var compra = Entidade(1, TipoOperacao.Compra, new DateTime(2024, 2, 2), new DateTime(2024, 1, 31), 10, 10m, 100m);
         var venda = Entidade(2, TipoOperacao.Venda, new DateTime(2024, 2, 2), new DateTime(2024, 1, 31), 10, 20m, 200m);
@@ -772,11 +772,47 @@ public class ApuradorIrMensalTests
         Assert.Equal(0m, Linha(apuracao, 1, CestaApuracaoIr.Comum).Resultado);
         Assert.Equal(0m, Linha(apuracao, 2, CestaApuracaoIr.DayTrade).Resultado);
         Assert.Equal(20m, Darf(apuracao, 1).Valor);
-        Assert.Equal(new DateTime(2024, 3, 28), Darf(apuracao, 1).Vencimento);
+        Assert.Equal(new DateTime(2024, 2, 29), Darf(apuracao, 1).Vencimento);
     }
 
     [Fact]
-    public void VendasDoMesComLiquidacoesDiferentes_VencimentoUsaALiquidacaoMaisAntiga()
+    public void PregaoEmDezembro_LiquidacaoEmJaneiro_DarfVenceEm31DeJaneiro()
+    {
+        var compra = Entidade(1, TipoOperacao.Compra, new DateTime(2024, 12, 2), new DateTime(2024, 12, 2), 100, 100m, 10_000m);
+        var venda = Entidade(2, TipoOperacao.Venda, new DateTime(2025, 1, 2), new DateTime(2024, 12, 30), 100, 250m, 25_000m);
+        var apuracao = ApuradorIrMensal.Apurar(new[] { compra, venda }.Select(ApuradorIrMensal.De), Regras(), 2024);
+
+        var dezembro = Linha(apuracao, 12, CestaApuracaoIr.Comum);
+        Assert.Equal(25_000m, dezembro.VendasAcoesComuns);
+        Assert.Equal(15_000m, dezembro.Resultado);
+        Assert.Equal(2_250m, dezembro.Imposto);
+        var darf = Darf(apuracao, 12);
+        Assert.Equal(2_250m, darf.Valor);
+        Assert.Equal(new DateTime(2025, 1, 31), darf.Vencimento);
+
+        var seguinte = ApuradorIrMensal.Apurar(new[] { compra, venda }.Select(ApuradorIrMensal.De), Regras(), 2025);
+        Assert.DoesNotContain(seguinte.Meses, linha => linha.VendasAcoesComuns != 0m || linha.Resultado != 0m);
+        Assert.DoesNotContain(seguinte.Darfs, linha => linha.Valor > 0m);
+    }
+
+    [Fact]
+    public void DayTradeNoMesmoPregao_LiquidacoesDiferentes_FicaEmJaneiro()
+    {
+        var compra = Entidade(1, TipoOperacao.Compra, new DateTime(2024, 2, 2), new DateTime(2024, 1, 31), 10, 10m, 100m);
+        var venda = Entidade(2, TipoOperacao.Venda, new DateTime(2024, 2, 6), new DateTime(2024, 1, 31), 10, 20m, 200m);
+        var apuracao = ApuradorIrMensal.Apurar(new[] { compra, venda }.Select(ApuradorIrMensal.De), Regras(), 2024);
+
+        var day = Linha(apuracao, 1, CestaApuracaoIr.DayTrade);
+        Assert.Equal(100m, day.Resultado);
+        Assert.Equal(20m, day.Imposto);
+        Assert.Equal(0m, Linha(apuracao, 2, CestaApuracaoIr.DayTrade).Resultado);
+        Assert.Equal(0m, Linha(apuracao, 2, CestaApuracaoIr.Comum).Resultado);
+        Assert.Equal(20m, Darf(apuracao, 1).Valor);
+        Assert.Equal(new DateTime(2024, 2, 29), Darf(apuracao, 1).Vencimento);
+    }
+
+    [Fact]
+    public void VendasDoMesComLiquidacoesDiferentes_VencimentoUsaOMesDoPregao()
     {
         var compra = Entidade(1, TipoOperacao.Compra, new DateTime(2024, 1, 2), new DateTime(2024, 1, 2), 200, 100m, 20_000m);
         var noMeio = Entidade(2, TipoOperacao.Venda, new DateTime(2024, 1, 12), new DateTime(2024, 1, 10), 100, 250m, 25_000m);

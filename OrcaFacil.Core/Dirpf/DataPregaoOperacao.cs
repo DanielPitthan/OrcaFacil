@@ -6,7 +6,7 @@ namespace OrcaFacil.Core.Dirpf;
 /// Separa o pregão da liquidação. A #30 gravava só a liquidação em
 /// <c>OperacaoAtivo.Data</c>. A #104 altera essa regra: o pregão vai para
 /// <c>OperacaoAtivo.DataPregao</c> e a apuração do IR (mês, teto de R$ 20 mil
-/// e day trade) usa o pregão. O vencimento do DARF continua pela liquidação.
+/// e day trade) e o vencimento do DARF usam o pregão: último dia útil do mês seguinte.
 /// Perguntas e Respostas IRPF 2026, pergunta 745:
 /// https://www.gov.br/receitafederal/pt-br/centrais-de-conteudo/publicacoes/perguntas-e-respostas/dirpf/p-r-irpf-2026-v1-00-2026-04-23.pdf
 /// </summary>

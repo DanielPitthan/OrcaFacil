@@ -8,8 +8,7 @@ namespace OrcaFacil.Core.Dirpf;
 
 /// <summary>
 /// Operação pronta para a apuração. O custo da venda sai da calculadora de resultado.
-/// <see cref="Data"/> é o pregão. <see cref="DataLiquidacao"/>, quando informada,
-/// é a liquidação usada só no vencimento do DARF. Sem ela, a liquidação é o pregão.
+/// <see cref="Data"/> é o pregão: mês, teto, day trade e vencimento do DARF.
 /// </summary>
 public sealed record OperacaoApuracao(
     int Id,
@@ -23,8 +22,7 @@ public sealed record OperacaoApuracao(
     decimal Quantidade,
     decimal PrecoUnitario,
     decimal ValorOperacao,
-    decimal Custos,
-    DateTime? DataLiquidacao = null);
+    decimal Custos);
 
 /// <summary>
 /// IRRF informado para um mês e uma cesta. Quando existe, substitui a estimativa.
@@ -79,15 +77,13 @@ public sealed class ApuracaoIr
 
 /// <summary>
 /// Apura o IR da renda variável mês a mês e monta o DARF.
-/// O mês, o teto de vendas de ações e o day trade usam o pregão
+/// O mês, o teto de vendas de ações, o day trade e o vencimento do DARF usam o pregão
 /// (<see cref="OperacaoAtivo.DataPregao"/>).
-/// O vencimento do DARF continua pela liquidação (<see cref="OperacaoAtivo.Data"/>):
-/// último dia útil do mês seguinte no <see cref="CalendarioBancarioNacional"/>.
-/// Se as vendas do mês do pregão liquidarem em meses diferentes, o vencimento
-/// único usa a liquidação mais antiga, para nenhuma delas vencer antes do DARF.
+/// O DARF vence no último dia útil do mês seguinte ao do pregão,
+/// no <see cref="CalendarioBancarioNacional"/>.
 /// Na importação B3, a liquidação é a data do arquivo e o pregão recua D+2 dias úteis.
 /// No lançamento manual, a data digitada é o pregão e também a liquidação.
-/// A #30 gravava só a liquidação. A #104 altera essa regra.
+/// A #30 gravava só a liquidação e fazia o DARF vencer por ela. A #104 altera essa regra.
 /// Fonte: Perguntas e Respostas IRPF 2026, pergunta 745,
 /// https://www.gov.br/receitafederal/pt-br/centrais-de-conteudo/publicacoes/perguntas-e-respostas/dirpf/p-r-irpf-2026-v1-00-2026-04-23.pdf
 /// Fiagro entra como FII: o tipo do ativo não muda e o mesmo dia não vai para day trade.
@@ -178,13 +174,12 @@ public static class ApuradorIrMensal
             operacao.Quantidade,
             operacao.PrecoUnitario,
             operacao.ValorOperacao,
-            operacao.Custos,
-            liquidacao == pregao ? null : liquidacao);
+            operacao.Custos);
     }
 
     /// <summary>
-    /// Último dia útil do mês seguinte ao informado.
-    /// A apuração passa o mês da liquidação, não o do pregão.
+    /// Último dia útil do mês seguinte ao do pregão.
+    /// A apuração passa o mês do pregão, não o da liquidação.
     /// Sábado, domingo e feriado recuam.
     /// </summary>
     public static DateTime Vencimento(int anoGanho, int mesGanho)
@@ -351,8 +346,7 @@ public static class ApuradorIrMensal
             {
                 valorDarf = total;
                 acumuladoDarf = 0m;
-                var referencia = LiquidacaoDoDarf(doMes, cursor);
-                vencimento = Vencimento(referencia.Year, referencia.Month);
+                vencimento = Vencimento(cursor.Year, cursor.Month);
             }
             else
             {
@@ -544,7 +538,6 @@ public static class ApuradorIrMensal
                     amostra.AtivoId,
                     amostra.Tipo,
                     venda.Data.Date,
-                    venda.DataLiquidacao?.Date ?? venda.Data.Date,
                     resultadoDay,
                     resultadoComum,
                     valorComum,
@@ -637,14 +630,6 @@ public static class ApuradorIrMensal
     private static StringComparer Comparador()
         => StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("pt-BR"), ignoreCase: true);
 
-    private static DateTime LiquidacaoDoDarf(IReadOnlyList<VendaClassificada> doMes, DateTime cursor)
-    {
-        if (doMes.Count == 0)
-            return cursor;
-
-        return doMes.Min(venda => venda.Liquidacao);
-    }
-
     private static string Corretora(string? corretora)
         => string.IsNullOrWhiteSpace(corretora) ? "" : corretora.Trim().ToUpperInvariant();
 
@@ -662,7 +647,6 @@ public static class ApuradorIrMensal
         int AtivoId,
         TipoAtivo Tipo,
         DateTime Data,
-        DateTime Liquidacao,
         decimal ResultadoDayTrade,
         decimal ResultadoComum,
         decimal ValorComum,
