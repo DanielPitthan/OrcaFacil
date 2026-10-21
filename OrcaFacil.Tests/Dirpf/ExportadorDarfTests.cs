@@ -2,6 +2,7 @@ using ClosedXML.Excel;
 using OrcaFacil.Core.Dirpf;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
+using OrcaFacil.Core.Exportacao;
 using OrcaFacil.Core.Planilha;
 
 namespace OrcaFacil.Tests.Dirpf;
@@ -151,6 +152,19 @@ public class ExportadorDarfTests : IDisposable
         var darf = pasta.Worksheet(ExportadorDarf.AbaDarfs);
         var darfJunho = darf.RowsUsed().Single(linha => linha.RowNumber() > 1 && linha.Cell(2).GetValue<int>() == 6);
         Assert.Equal(2_247d, darfJunho.Cell(8).GetDouble());
+    }
+
+    [Fact]
+    public void Exportar_AnoAnteriorA2005_NaoGravaArquivo()
+    {
+        using var destino = new MemoryStream();
+        using var contexto = _fabrica.CreateDbContext();
+        var erro = Assert.Throws<InvalidOperationException>(() => ExportadorDarf.Exportar(contexto, 2004, destino));
+
+        Assert.Equal("A apuração mensal começa em janeiro de 2005.", erro.Message);
+        Assert.Equal(ExportadorDarf.MensagemAntesDe2005, erro.Message);
+        Assert.Equal(0, destino.Length);
+        Assert.Equal(erro.Message, MensagemExportacaoPlanilha.Para(erro));
     }
 
     private static string Fonte()

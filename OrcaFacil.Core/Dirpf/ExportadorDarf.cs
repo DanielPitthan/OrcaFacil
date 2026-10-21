@@ -1,4 +1,5 @@
 using ClosedXML.Excel;
+using OrcaFacil.Core.Ativos;
 using OrcaFacil.Core.Data;
 using OrcaFacil.Core.Planilha;
 
@@ -12,8 +13,15 @@ public static class ExportadorDarf
 {
     public const string AbaApuracao = "Apuração mensal";
     public const string AbaDarfs = "DARFs";
+    public const string MensagemAntesDe2005 = "A apuração mensal começa em janeiro de 2005.";
 
     public static IReadOnlyList<string> NomesDeAba { get; } = [AbaApuracao, AbaDarfs];
+
+    public static void ExigirAno(int anoBase)
+    {
+        if (anoBase < CatalogoRegrasFiscais.InicioLei11033.Year)
+            throw new InvalidOperationException(MensagemAntesDe2005);
+    }
 
     public static void Exportar(
         AppDbContext contexto,
@@ -23,6 +31,7 @@ public static class ExportadorDarf
     {
         ArgumentNullException.ThrowIfNull(contexto);
         ArgumentNullException.ThrowIfNull(destino);
+        ExigirAno(anoBase);
 
         var apuracao = ApuradorIrMensal.Apurar(contexto, anoBase, irrf);
         using var pasta = new XLWorkbook();

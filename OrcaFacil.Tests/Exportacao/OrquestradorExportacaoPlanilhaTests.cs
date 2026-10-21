@@ -1,3 +1,4 @@
+using OrcaFacil.Core.Dirpf;
 using OrcaFacil.Core.Exportacao;
 using OrcaFacil.Core.Llm;
 
@@ -413,6 +414,28 @@ public class OrquestradorExportacaoPlanilhaTests
         {
             painel.Dispose();
         }
+    }
+
+    [Fact]
+    public async Task AnoAnteriorA2005_NaoGeraArquivo_EMostraOAvisoDoPainel()
+    {
+        using var pasta = Pasta();
+        var orquestrador = Novo();
+        var resultado = await orquestrador.ExportarAsync(
+            () => new ConfiguracaoExportavel(),
+            () => pasta.Cache,
+            (caminho, _) =>
+            {
+                ExportadorDarf.ExigirAno(2004);
+                File.WriteAllText(caminho, "vazio");
+            },
+            _ => Task.FromResult(DesfechoCompartilhamentoPlanilha.FolhaAberta));
+
+        Assert.Equal("A apuração mensal começa em janeiro de 2005.", resultado.Aviso);
+        Assert.Equal(resultado.Aviso, orquestrador.Aviso);
+        Assert.False(resultado.FolhaAberta);
+        Assert.False(orquestrador.FolhaAberta);
+        Assert.Empty(Directory.EnumerateFiles(pasta.Cache, "*", SearchOption.AllDirectories));
     }
 
     private static async Task<ResultadoExportacao> Exportar(

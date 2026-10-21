@@ -209,6 +209,12 @@ public static class ApuradorIrMensal
                 prejuizo = Zerar();
             }
 
+            // O valor a levar para a declaração é do ano-calendário. Janeiro zera
+            // antes de somar o IRRF do mês, senão a sobra do ano anterior reaparece
+            // em dezembro.
+            if (cursor.Month == 1)
+                saldoDeclaracao = Zerar();
+
             var doMes = vendas.Where(venda => venda.Data.Year == cursor.Year && venda.Data.Month == cursor.Month).ToList();
             ExigirRegrasEstaveis(tabela, parametros, fim, doMes);
 

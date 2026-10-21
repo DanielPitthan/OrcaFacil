@@ -701,6 +701,38 @@ public class ApuradorIrMensalTests
         Assert.Equal(0m, Linha(apuracao, 1, CestaApuracaoIr.Comum).IrrfALevarParaDeclaracao);
     }
 
+    [Fact]
+    public void IrrfALevar_NaoRepeteOAnoAnterior()
+    {
+        var operacoes = new[]
+        {
+            Compra(1, new DateTime(2024, 1, 8), 1, 100m, TipoAtivo.Etf),
+            Venda(2, new DateTime(2024, 1, 22), 1, 200m, 200m, TipoAtivo.Etf),
+            Compra(3, new DateTime(2025, 2, 3), 1, 100m, TipoAtivo.Etf),
+            Venda(4, new DateTime(2025, 2, 18), 1, 180m, 180m, TipoAtivo.Etf)
+        };
+        IrrfManual[] irrf =
+        [
+            new(1, 2024, 1, CestaApuracaoIr.Comum, 40m),
+            new(1, 2024, 6, CestaApuracaoIr.Comum, 3m),
+            new(1, 2024, 9, CestaApuracaoIr.Fii, 4m)
+        ];
+
+        var ano2024 = ApuradorIrMensal.Apurar(operacoes, Regras(), 2024, irrf);
+        var janeiro = Linha(ano2024, 1, CestaApuracaoIr.Comum);
+        Assert.Equal(15m, janeiro.Imposto);
+        Assert.Equal(40m, janeiro.Irrf);
+        Assert.Equal(3m, Linha(ano2024, 6, CestaApuracaoIr.Comum).Irrf);
+        Assert.Equal(4m, Linha(ano2024, 9, CestaApuracaoIr.Fii).Irrf);
+        Assert.Equal(28m, Linha(ano2024, 12, CestaApuracaoIr.Comum).IrrfALevarParaDeclaracao);
+        Assert.Equal(4m, Linha(ano2024, 12, CestaApuracaoIr.Fii).IrrfALevarParaDeclaracao);
+
+        var ano2025 = ApuradorIrMensal.Apurar(operacoes, Regras(), 2025, irrf);
+        Assert.Equal(12m, Linha(ano2025, 2, CestaApuracaoIr.Comum).ImpostoLiquido);
+        Assert.Equal(0m, Linha(ano2025, 12, CestaApuracaoIr.Comum).IrrfALevarParaDeclaracao);
+        Assert.Equal(0m, Linha(ano2025, 12, CestaApuracaoIr.Fii).IrrfALevarParaDeclaracao);
+    }
+
     private static ApuracaoIr Apurar(params OperacaoApuracao[] operacoes) => Apurar(2024, operacoes);
 
     private static ApuracaoIr Apurar(int ano, params OperacaoApuracao[] operacoes)

@@ -264,6 +264,7 @@
 
     private void GravarDarf(string caminho, int anoBase)
     {
+        ExportadorDarf.ExigirAno(anoBase);
         using var contexto = ContextoFactory.CreateDbContext();
         using (var destino = new FileStream(caminho, FileMode.CreateNew, FileAccess.Write, FileShare.None))
         {

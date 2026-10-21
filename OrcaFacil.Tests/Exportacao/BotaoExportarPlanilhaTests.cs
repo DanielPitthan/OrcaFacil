@@ -103,6 +103,12 @@ public class BotaoExportarPlanilhaTests
         var gravarDirpf = Trecho(painel, "private void GravarDirpf", "private async Task<DesfechoCompartilhamentoPlanilha> AbrirDirpf");
         Assert.Contains("ExportadorDirpf.Exportar", gravarDirpf, StringComparison.Ordinal);
         Assert.DoesNotContain("ExportadorDarf", gravarDirpf, StringComparison.Ordinal);
+
+        var gravarDarf = Trecho(painel, "private void GravarDarf", "private async Task<DesfechoCompartilhamentoPlanilha> AbrirDarf");
+        var indiceAno = gravarDarf.IndexOf("ExportadorDarf.ExigirAno", StringComparison.Ordinal);
+        var indiceArquivo = gravarDarf.IndexOf("new FileStream", StringComparison.Ordinal);
+        Assert.True(indiceAno >= 0 && indiceArquivo > indiceAno);
+        Assert.Equal(6, Contar(painel, "MudAlert"));
     }
 
     [Fact]
