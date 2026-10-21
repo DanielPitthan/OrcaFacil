@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.Ativos;
+using OrcaFacil.Core.Dirpf;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
 
@@ -32,6 +33,7 @@ public class AppDbContext : DbContext
     public DbSet<OperacaoRendaFixa> OperacoesRendaFixa => Set<OperacaoRendaFixa>();
     public DbSet<RegraCatalogoComprovante> RegrasCatalogoComprovante => Set<RegraCatalogoComprovante>();
     public DbSet<RegraFiscal> RegrasFiscais => Set<RegraFiscal>();
+    public DbSet<CodigoDirpf> CodigosDirpf => Set<CodigoDirpf>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -314,6 +316,18 @@ public class AppDbContext : DbContext
                   .IsUnique()
                   .HasDatabaseName("IX_RegrasFiscais_Codigo_VigenciaInicio");
             entity.HasData(CatalogoRegrasFiscais.Linhas());
+        });
+
+        modelBuilder.Entity<CodigoDirpf>(entity =>
+        {
+            entity.Property(c => c.Variante).HasMaxLength(16);
+            entity.Property(c => c.Grupo).HasMaxLength(2);
+            entity.Property(c => c.Codigo).HasMaxLength(2);
+            entity.Property(c => c.Descricao).HasMaxLength(160);
+            entity.HasIndex(c => new { c.Ficha, c.TipoAtivo, c.Variante, c.VigenciaInicio })
+                  .IsUnique()
+                  .HasDatabaseName("IX_CodigosDirpf_Ficha_TipoAtivo_Variante_VigenciaInicio");
+            entity.HasData(CatalogoCodigosDirpf.Linhas());
         });
     }
 }

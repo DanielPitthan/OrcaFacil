@@ -1,5 +1,6 @@
 @using Microsoft.EntityFrameworkCore
 @using OrcaFacil.Core.Armazenamento.Espelho.Pasta
+@using OrcaFacil.Core.Dirpf
 @using OrcaFacil.Core.Exportacao
 @using OrcaFacil.Core.Llm
 @implements IDisposable
@@ -28,18 +29,46 @@
                OnClick="ExportarAsync">
         @(Orquestrador.Exportando ? "Exportando…" : "Exportar para Excel")
     </MudButton>
+
+    <MudNumericField T="int" @bind-Value="_anoBase" Label="Ano-base" Min="1900" Max="2200"
+                     Variant="Variant.Text" Margin="Margin.Dense" Class="mt-4" Style="max-width: 8rem;" />
+    @if (OrquestradorDirpf.Exportando)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-3" aria-label="Gerando a DIRPF" />
+    }
+    @if (!string.IsNullOrEmpty(OrquestradorDirpf.Aviso))
+    {
+        <MudAlert Severity="@(OrquestradorDirpf.FolhaAberta ? Severity.Info : Severity.Error)" Dense="true" Class="mb-3">@OrquestradorDirpf.Aviso</MudAlert>
+    }
+    <MudButton Variant="Variant.Filled"
+               Color="Color.Primary"
+               Class="mt-3"
+               Disabled="@OrquestradorDirpf.Exportando"
+               aria-describedby="aviso-planilha-clara"
+               OnClick="ExportarDirpfAsync">
+        @(OrquestradorDirpf.Exportando ? "Gerando…" : "Gerar DIRPF")
+    </MudButton>
 </MudPaper>
 
 @code {
     private static readonly OrquestradorExportacaoPlanilha Orquestrador = new(TimeProvider.System);
+    private static readonly OrquestradorExportacaoPlanilha OrquestradorDirpf = new(TimeProvider.System);
     private AcompanhamentoExportacaoPlanilha? _acompanhamento;
+    private AcompanhamentoExportacaoPlanilha? _acompanhamentoDirpf;
+    private int _anoBase;
 
     protected override void OnInitialized()
     {
+        _anoBase = AnoBaseDirpf.Anterior(TimeProvider.System.GetLocalNow().DateTime);
         _acompanhamento = new AcompanhamentoExportacaoPlanilha(Orquestrador, () => InvokeAsync(StateHasChanged));
+        _acompanhamentoDirpf = new AcompanhamentoExportacaoPlanilha(OrquestradorDirpf, () => InvokeAsync(StateHasChanged));
     }
 
-    public void Dispose() => _acompanhamento?.Dispose();
+    public void Dispose()
+    {
+        _acompanhamento?.Dispose();
+        _acompanhamentoDirpf?.Dispose();
+    }
 
     private async Task ExportarAsync()
     {
@@ -114,5 +143,64 @@
             Url = Configuracao.UrlInteligencia,
             Modelo = Configuracao.ModeloInteligencia
         };
+    }
+
+    private async Task ExportarDirpfAsync()
+    {
+        var ano = _anoBase;
+        try
+        {
+            var tarefa = OrquestradorDirpf.ExportarAsync(
+                MontarConfiguracao,
+                () => FileSystem.CacheDirectory,
+                (caminho, _) => GravarDirpf(caminho, ano),
+                AbrirDirpf);
+            if (tarefa.IsCompletedSuccessfully && !tarefa.Result.Executou)
+                return;
+
+            await tarefa;
+        }
+        catch (Exception ex)
+        {
+            await AvisarFalhaDirpfAsync(ex);
+        }
+    }
+
+    private async Task AvisarFalhaDirpfAsync(Exception ex)
+    {
+        _acompanhamentoDirpf?.RegistrarFalha(ex);
+        try
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        catch (Exception falha)
+        {
+            _acompanhamentoDirpf?.RegistrarFalha(falha);
+        }
+    }
+
+    private void GravarDirpf(string caminho, int anoBase)
+    {
+        using var contexto = ContextoFactory.CreateDbContext();
+        using (var destino = new FileStream(caminho, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+        {
+            ExportadorDirpf.Exportar(contexto, anoBase, destino);
+            destino.Flush();
+        }
+    }
+
+    private async Task<DesfechoCompartilhamentoPlanilha> AbrirDirpf(string caminho)
+    {
+        var resultado = await Compartilhador.CompartilharAsync(caminho, "Gerar DIRPF");
+        if (resultado.Sucesso)
+            return DesfechoCompartilhamentoPlanilha.FolhaAberta;
+
+        if (resultado.Codigo == CodigoFalhaPastaEspelho.Cancelado)
+            return DesfechoCompartilhamentoPlanilha.Cancelado;
+
+        return DesfechoCompartilhamentoPlanilha.Falhou;
     }
 }
