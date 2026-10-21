@@ -8,7 +8,9 @@ namespace OrcaFacil.Core.B3;
 /// <summary>
 /// Lê o CSV do extrato de movimentação da B3 (separador ';', UTF-8 com ou sem BOM,
 /// ou Windows-1252). Não calcula posição, não remove duplicata e não grava.
-/// A data de liquidação do arquivo é a data da operação. O valor de referência é
+/// A data do arquivo é a liquidação. Ela segue para OperacaoAtivo.Data e para o hash.
+/// A #104 altera a regra da #30: o pregão é calculado na gravação, não aqui.
+/// O valor de referência é
 /// Valor da Operação. Renda fixa permanece no resultado.
 /// Registro inválido vai para <see cref="ResultadoParseB3.Erros"/> com o motivo;
 /// não é descartado em silêncio. Linha em branco não é registro.

@@ -79,6 +79,10 @@ public sealed class LinhaPreviaExtratoB3
 
 public sealed class PreviaExtratoB3
 {
+    /// <summary>
+    /// Texto da tela. Continua na liquidação: a data mostrada é <c>OperacaoAtivo.Data</c>.
+    /// O pregão da #104 não entra neste aviso.
+    /// </summary>
     public const string Aviso =
         "A data do extrato é a da liquidação e vale como data da operação. O cálculo usa o Valor da Operação. Custos entram zerados.";
 

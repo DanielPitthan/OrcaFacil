@@ -116,6 +116,8 @@ public class ImportacaoExtratoB3Service
                         {
                             AtivoId = ativoId,
                             Tipo = comando.TipoOperacao,
+                            // Liquidação do arquivo. O hash (#94) e o lançamento usam esta data.
+                            // O pregão (D+2) sai da origem ExtratoB3 na gravação.
                             Data = comando.Data,
                             Quantidade = comando.Quantidade,
                             PrecoUnitario = comando.PrecoUnitario,

@@ -6,7 +6,11 @@ using OrcaFacil.Core.Enums;
 
 namespace OrcaFacil.Core.Dirpf;
 
-/// <summary>Operação pronta para a apuração. O custo da venda sai da calculadora de resultado.</summary>
+/// <summary>
+/// Operação pronta para a apuração. O custo da venda sai da calculadora de resultado.
+/// <see cref="Data"/> é o pregão. <see cref="DataLiquidacao"/>, quando informada,
+/// é a liquidação usada só no vencimento do DARF. Sem ela, a liquidação é o pregão.
+/// </summary>
 public sealed record OperacaoApuracao(
     int Id,
     int PerfilId,
@@ -19,7 +23,8 @@ public sealed record OperacaoApuracao(
     decimal Quantidade,
     decimal PrecoUnitario,
     decimal ValorOperacao,
-    decimal Custos);
+    decimal Custos,
+    DateTime? DataLiquidacao = null);
 
 /// <summary>
 /// IRRF informado para um mês e uma cesta. Quando existe, substitui a estimativa.
@@ -74,16 +79,23 @@ public sealed class ApuracaoIr
 
 /// <summary>
 /// Apura o IR da renda variável mês a mês e monta o DARF.
-/// O mês, o teto de vendas de ações e o day trade usam a data gravada na operação.
-/// Na importação do extrato B3, essa data é a de liquidação do arquivo.
-/// No lançamento manual, é a data informada no campo Data.
+/// O mês, o teto de vendas de ações e o day trade usam o pregão
+/// (<see cref="OperacaoAtivo.DataPregao"/>).
+/// O vencimento do DARF continua pela liquidação (<see cref="OperacaoAtivo.Data"/>):
+/// último dia útil do mês seguinte no <see cref="CalendarioBancarioNacional"/>.
+/// Se as vendas do mês do pregão liquidarem em meses diferentes, o vencimento
+/// único usa a liquidação mais antiga, para nenhuma delas vencer antes do DARF.
+/// Na importação B3, a liquidação é a data do arquivo e o pregão recua D+2 dias úteis.
+/// No lançamento manual, a data digitada é o pregão e também a liquidação.
+/// A #30 gravava só a liquidação. A #104 altera essa regra.
+/// Fonte: Perguntas e Respostas IRPF 2026, pergunta 745,
+/// https://www.gov.br/receitafederal/pt-br/centrais-de-conteudo/publicacoes/perguntas-e-respostas/dirpf/p-r-irpf-2026-v1-00-2026-04-23.pdf
 /// Fiagro entra como FII: o tipo do ativo não muda e o mesmo dia não vai para day trade.
 /// O resultado da venda é o da <see cref="CalculadoraResultadoRealizado"/>:
 /// quantidade × preço + custos na compra, e o valor da operação na venda.
 /// O arredondamento afasta do zero, com as casas da regra vigente.
 /// Alíquota, isenção, day trade, FII, código e mínimo do DARF vêm da tabela.
 /// Meses anteriores a 01/01/2005 ficam de fora: as regras desta apuração começam nessa data.
-/// O vencimento é o último dia útil do mês seguinte no <see cref="CalendarioBancarioNacional"/>.
 /// </summary>
 public static class ApuradorIrMensal
 {
@@ -149,6 +161,11 @@ public static class ApuradorIrMensal
         if (operacao.MembroFamilia is null)
             throw new InvalidOperationException($"A apuração precisa do perfil {operacao.MembroFamiliaId}.");
 
+        var liquidacao = operacao.Data.Date;
+        var pregao = operacao.DataPregao.Date;
+        if (pregao == default)
+            pregao = liquidacao;
+
         return new OperacaoApuracao(
             operacao.Id,
             operacao.MembroFamiliaId,
@@ -157,14 +174,19 @@ public static class ApuradorIrMensal
             operacao.Ativo.Tipo,
             operacao.Corretora,
             operacao.Tipo,
-            operacao.Data,
+            pregao,
             operacao.Quantidade,
             operacao.PrecoUnitario,
             operacao.ValorOperacao,
-            operacao.Custos);
+            operacao.Custos,
+            liquidacao == pregao ? null : liquidacao);
     }
 
-    /// <summary>Último dia útil do mês seguinte ao ganho. Sábado, domingo e feriado recuam.</summary>
+    /// <summary>
+    /// Último dia útil do mês seguinte ao informado.
+    /// A apuração passa o mês da liquidação, não o do pregão.
+    /// Sábado, domingo e feriado recuam.
+    /// </summary>
     public static DateTime Vencimento(int anoGanho, int mesGanho)
     {
         var mes = mesGanho == 12 ? 1 : mesGanho + 1;
@@ -329,7 +351,8 @@ public static class ApuradorIrMensal
             {
                 valorDarf = total;
                 acumuladoDarf = 0m;
-                vencimento = Vencimento(cursor.Year, cursor.Month);
+                var referencia = LiquidacaoDoDarf(doMes, cursor);
+                vencimento = Vencimento(referencia.Year, referencia.Month);
             }
             else
             {
@@ -521,6 +544,7 @@ public static class ApuradorIrMensal
                     amostra.AtivoId,
                     amostra.Tipo,
                     venda.Data.Date,
+                    venda.DataLiquidacao?.Date ?? venda.Data.Date,
                     resultadoDay,
                     resultadoComum,
                     valorComum,
@@ -613,6 +637,14 @@ public static class ApuradorIrMensal
     private static StringComparer Comparador()
         => StringComparer.Create(System.Globalization.CultureInfo.GetCultureInfo("pt-BR"), ignoreCase: true);
 
+    private static DateTime LiquidacaoDoDarf(IReadOnlyList<VendaClassificada> doMes, DateTime cursor)
+    {
+        if (doMes.Count == 0)
+            return cursor;
+
+        return doMes.Min(venda => venda.Liquidacao);
+    }
+
     private static string Corretora(string? corretora)
         => string.IsNullOrWhiteSpace(corretora) ? "" : corretora.Trim().ToUpperInvariant();
 
@@ -630,6 +662,7 @@ public static class ApuradorIrMensal
         int AtivoId,
         TipoAtivo Tipo,
         DateTime Data,
+        DateTime Liquidacao,
         decimal ResultadoDayTrade,
         decimal ResultadoComum,
         decimal ValorComum,

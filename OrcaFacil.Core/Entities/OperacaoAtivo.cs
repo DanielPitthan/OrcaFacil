@@ -16,7 +16,20 @@ public class OperacaoAtivo
 
     public TipoOperacao Tipo { get; set; }
 
+    /// <summary>
+    /// Na importação B3, a data de liquidação do extrato. A #30 gravava só esta data.
+    /// No lançamento manual, a data digitada, igual ao pregão.
+    /// O lançamento de receita ou despesa, o hash da importação e o vencimento do DARF usam este campo.
+    /// </summary>
     public DateTime Data { get; set; }
+
+    /// <summary>
+    /// Data do pregão. A apuração do IR (mês, teto de R$ 20 mil e day trade) usa este campo.
+    /// Na importação B3, é a liquidação recuada D+2 dias úteis pelo calendário bancário.
+    /// No lançamento manual, é a data digitada.
+    /// A #104 altera a regra da #30. Fonte: Perguntas e Respostas IRPF 2026, pergunta 745.
+    /// </summary>
+    public DateTime DataPregao { get; set; }
 
     public decimal Quantidade { get; set; }
 

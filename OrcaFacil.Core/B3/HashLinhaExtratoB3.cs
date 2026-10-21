@@ -8,6 +8,8 @@ namespace OrcaFacil.Core.B3;
 /// SHA-256 da linha, em hex minúsculo.
 /// A chave é Data(yyyy-MM-dd)|Tipo|Ticker|Quantidade|PrecoEfetivo|ValorOperacao|Instituicao,
 /// mais o índice de ocorrência dessa chave no arquivo (0, 1, …), na ordem em que aparece.
+/// Data é a liquidação do arquivo, a mesma de <c>OperacaoAtivo.Data</c>.
+/// O pregão derivado na #104 não entra: reimportar o extrato (#94) precisa achar o mesmo hash.
 /// O preço efetivo é ValorOperacao / Quantidade, arredondado a 4 casas para longe de zero.
 /// Sem quantidade ou valor, o preço fica vazio. O preço lido no arquivo não entra.
 /// Decimais saem sem zeros à direita, em <see cref="CultureInfo.InvariantCulture"/>. Nulo vira vazio.

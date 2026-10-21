@@ -1,8 +1,11 @@
 namespace OrcaFacil.Core.B3;
 
 /// <summary>
-/// Uma linha aceita do extrato. <see cref="Data"/> é a data de liquidação do arquivo
-/// e vale como data da operação. <see cref="ValorOperacao"/> é o valor de referência;
+/// Uma linha aceita do extrato. <see cref="Data"/> é a data de liquidação do arquivo.
+/// A #30 usava essa data como única data da operação. A #104 altera a regra:
+/// a liquidação continua aqui, em <c>OperacaoAtivo.Data</c> e no hash;
+/// o pregão é gravado à parte e a apuração do IR usa o pregão.
+/// <see cref="ValorOperacao"/> é o valor de referência;
 /// quantidade × preço não é recalculado. Em renda fixa, <see cref="Ticker"/> é o código
 /// do papel (ou o nome normalizado do Tesouro) e <see cref="ProdutoDescricao"/> guarda o texto completo.
 /// Os campos estáveis para quem for hashear a linha são Data, Tipo, Ticker, Quantidade, ValorOperacao e Instituicao.
