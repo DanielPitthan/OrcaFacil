@@ -31,8 +31,8 @@ public class MigracaoUpgradeTests
     private const string Provento = "20261020175956_AddProvento";
     private const string CodigoDirpf = "20261020225810_AddCodigoDirpf";
     private const string ApuracaoIr = "20261021101911_AddApuracaoIrMensal";
-    private const string IrrfInformado = "20261021114611_AddIrrfInformado";
     private const string DataPregao = "20261021115053_AddDataPregaoOperacaoAtivo";
+    private const string IrrfInformado = "20261021222000_AddIrrfInformado";
 
     [Fact]
     public async Task BancoAntigo_MigraAteOAtual_PreservaDadosEAplicaDefaults()
@@ -159,7 +159,7 @@ public class MigracaoUpgradeTests
             Assert.Contains(await ctx.CodigosDirpf.ToListAsync(), codigo => codigo.Codigo == "06" && codigo.Descricao == "ETF - Entidade de investimento" && codigo.EhSistema);
             Assert.Contains(await ctx.CodigosDirpf.ToListAsync(), codigo => codigo.Codigo == "20" && codigo.Variante == "GanhoIsento" && codigo.EhSistema);
 
-            Assert.Equal(DataPregao, (await ctx.Database.GetAppliedMigrationsAsync()).Last());
+            Assert.Equal(IrrfInformado, (await ctx.Database.GetAppliedMigrationsAsync()).Last());
             Assert.True(File.Exists(banco.Caminho));
             Assert.True(new FileInfo(banco.Caminho).Length > 0);
         }
@@ -178,8 +178,8 @@ public class MigracaoUpgradeTests
         Assert.Contains(IndiceHashImportacao, ids);
         Assert.Contains(RendaFixa, ids);
         Assert.Contains(RegraCatalogo, ids);
-        Assert.Equal(IrrfInformado, ids[^2]);
-        Assert.Equal(DataPregao, ids[^1]);
+        Assert.Equal(DataPregao, ids[^2]);
+        Assert.Equal(IrrfInformado, ids[^1]);
 
         for (var i = 1; i < ids.Count; i++)
         {

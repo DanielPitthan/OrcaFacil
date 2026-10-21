@@ -145,18 +145,21 @@ public class CapturaIrrfDarfTests : IDisposable
     public void Montar_VendaComPregaoEm31DeJaneiroELiquidacaoEmFevereiro_PedeJaneiro()
     {
         var ana = Perfil("Ana", null);
-        var petr = new AtivoFinanceiro { Ticker = "PETR4", Nome = "Petrobras", Tipo = TipoAtivo.Acao };
+        var bova = new AtivoFinanceiro { Ticker = "BOVA11", Nome = "Ibovespa", Tipo = TipoAtivo.Etf };
         using (var contexto = _fabrica.CreateDbContext())
         {
-            contexto.AddRange(ana, petr);
+            contexto.AddRange(ana, bova);
             contexto.SaveChanges();
-            contexto.OperacoesAtivo.Add(Operacao(
-                ana.Id,
-                petr.Id,
-                TipoOperacao.Venda,
-                new DateTime(2024, 2, 2),
-                10m,
-                pregao: new DateTime(2024, 1, 31)));
+            contexto.OperacoesAtivo.AddRange(
+                Operacao(ana.Id, bova.Id, TipoOperacao.Compra, new DateTime(2024, 1, 8), 100m, 100m),
+                Operacao(
+                    ana.Id,
+                    bova.Id,
+                    TipoOperacao.Venda,
+                    new DateTime(2024, 2, 2),
+                    200m,
+                    200m,
+                    pregao: new DateTime(2024, 1, 31)));
             contexto.SaveChanges();
         }
 
@@ -167,24 +170,34 @@ public class CapturaIrrfDarfTests : IDisposable
         Assert.Equal(CapturaIrrfDarf.Cestas.Count, campos.Count);
         Assert.All(campos, campo => Assert.Equal(2024, campo.Ano));
         Assert.Empty(CapturaIrrfDarf.Montar(leitura, 2025));
+
+        var apuracao = ApuradorIrMensal.Apurar(leitura, 2024);
+        var janeiro = apuracao.Darfs.Single(linha => linha.Mes == 1);
+        Assert.Equal(15m, janeiro.Valor);
+        Assert.Equal(new DateTime(2024, 2, 29), janeiro.Vencimento);
+        Assert.Equal(0m, apuracao.Darfs.Single(linha => linha.Mes == 2).Valor);
+        Assert.Null(apuracao.Darfs.Single(linha => linha.Mes == 2).Vencimento);
     }
 
     [Fact]
     public void Montar_LiquidacaoNoInicioDeJaneiroComPregaoEmDezembro_PedeDezembroDoAnoAnterior()
     {
         var ana = Perfil("Ana", null);
-        var petr = new AtivoFinanceiro { Ticker = "PETR4", Nome = "Petrobras", Tipo = TipoAtivo.Acao };
+        var bova = new AtivoFinanceiro { Ticker = "BOVA11", Nome = "Ibovespa", Tipo = TipoAtivo.Etf };
         using (var contexto = _fabrica.CreateDbContext())
         {
-            contexto.AddRange(ana, petr);
+            contexto.AddRange(ana, bova);
             contexto.SaveChanges();
-            contexto.OperacoesAtivo.Add(Operacao(
-                ana.Id,
-                petr.Id,
-                TipoOperacao.Venda,
-                new DateTime(2025, 1, 2),
-                10m,
-                pregao: new DateTime(2024, 12, 30)));
+            contexto.OperacoesAtivo.AddRange(
+                Operacao(ana.Id, bova.Id, TipoOperacao.Compra, new DateTime(2024, 12, 2), 100m, 100m),
+                Operacao(
+                    ana.Id,
+                    bova.Id,
+                    TipoOperacao.Venda,
+                    new DateTime(2025, 1, 2),
+                    200m,
+                    200m,
+                    pregao: new DateTime(2024, 12, 30)));
             contexto.SaveChanges();
         }
 
@@ -195,6 +208,15 @@ public class CapturaIrrfDarfTests : IDisposable
         Assert.Equal(CapturaIrrfDarf.Cestas.Count, dezembro.Count);
         Assert.All(dezembro, campo => Assert.Equal(2024, campo.Ano));
         Assert.Empty(CapturaIrrfDarf.Montar(leitura, 2025));
+
+        var apuracao = ApuradorIrMensal.Apurar(leitura, 2024);
+        var darf = apuracao.Darfs.Single(linha => linha.Mes == 12);
+        Assert.Equal(15m, darf.Valor);
+        Assert.Equal(new DateTime(2025, 1, 31), darf.Vencimento);
+
+        var seguinte = ApuradorIrMensal.Apurar(leitura, 2025);
+        Assert.DoesNotContain(seguinte.Darfs, linha => linha.Valor > 0m);
+        Assert.DoesNotContain(seguinte.Darfs, linha => linha.Vencimento is not null);
     }
 
     [Fact]
