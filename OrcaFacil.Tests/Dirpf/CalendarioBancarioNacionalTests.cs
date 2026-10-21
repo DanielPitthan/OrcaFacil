@@ -39,4 +39,27 @@ public class CalendarioBancarioNacionalTests
         Assert.True(CalendarioBancarioNacional.EhDiaUtil(new DateTime(2024, 11, 19)));
         Assert.True(CalendarioBancarioNacional.EhDiaUtil(new DateTime(2024, 11, 21)));
     }
+
+    [Fact]
+    public void RecuarD2_FeriadoNoMeio_NaoContaOFeriado()
+    {
+        // 22/11/2024 é sexta. 20/11/2024 é feriado (Lei nº 14.759/2023).
+        // D+1 = 21/11, D+2 = 22/11, pregão = 19/11. O feriado fica no meio.
+        var liquidacao = new DateTime(2024, 11, 22);
+        var pregao = CalendarioBancarioNacional.RecuarDiasUteis(liquidacao, 2);
+
+        Assert.Equal(new DateTime(2024, 11, 19), pregao);
+        Assert.False(CalendarioBancarioNacional.EhDiaUtil(new DateTime(2024, 11, 20)));
+        Assert.True(CalendarioBancarioNacional.EhDiaUtil(new DateTime(2024, 11, 21)));
+        Assert.NotEqual(liquidacao.AddDays(-2), pregao);
+        Assert.NotEqual(new DateTime(2024, 11, 20), pregao);
+    }
+
+    [Fact]
+    public void RecuarD2_UltimoPregaoDeJaneiro_LiquidaEmFevereiro()
+    {
+        Assert.Equal(
+            new DateTime(2024, 1, 31),
+            CalendarioBancarioNacional.RecuarDiasUteis(new DateTime(2024, 2, 2), 2));
+    }
 }

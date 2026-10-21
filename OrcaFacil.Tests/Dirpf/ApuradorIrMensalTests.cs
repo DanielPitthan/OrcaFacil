@@ -733,6 +733,130 @@ public class ApuradorIrMensalTests
         Assert.Equal(0m, Linha(ano2025, 12, CestaApuracaoIr.Fii).IrrfALevarParaDeclaracao);
     }
 
+    [Fact]
+    public void VendaNoUltimoPregao_TetoEGanhoNoMesDoPregao_DarfPeloPregao()
+    {
+        var compra = Entidade(1, TipoOperacao.Compra, new DateTime(2024, 1, 10), new DateTime(2024, 1, 10), 100, 100m, 10_000m);
+        var venda = Entidade(2, TipoOperacao.Venda, new DateTime(2024, 2, 2), new DateTime(2024, 1, 31), 100, 250m, 25_000m);
+        var apuracao = ApuradorIrMensal.Apurar(new[] { compra, venda }.Select(ApuradorIrMensal.De), Regras(), 2024);
+
+        var janeiro = Linha(apuracao, 1, CestaApuracaoIr.Comum);
+        Assert.Equal(25_000m, janeiro.VendasAcoesComuns);
+        Assert.Equal(15_000m, janeiro.Resultado);
+        Assert.Equal(15_000m, janeiro.BaseCalculo);
+        Assert.Equal(2_250m, janeiro.Imposto);
+        Assert.Equal(0m, janeiro.GanhoIsentoAcoes);
+
+        var fevereiro = Linha(apuracao, 2, CestaApuracaoIr.Comum);
+        Assert.Equal(0m, fevereiro.VendasAcoesComuns);
+        Assert.Equal(0m, fevereiro.Resultado);
+
+        var darf = Darf(apuracao, 1);
+        Assert.Equal(2_250m, darf.Valor);
+        Assert.Equal(new DateTime(2024, 2, 29), darf.Vencimento);
+        Assert.Equal(0m, Darf(apuracao, 2).Valor);
+        Assert.Null(Darf(apuracao, 2).Vencimento);
+    }
+
+    [Fact]
+    public void DayTradeNoUltimoPregao_CaiNoMesDoPregao_DarfPeloPregao()
+    {
+        var compra = Entidade(1, TipoOperacao.Compra, new DateTime(2024, 2, 2), new DateTime(2024, 1, 31), 10, 10m, 100m);
+        var venda = Entidade(2, TipoOperacao.Venda, new DateTime(2024, 2, 2), new DateTime(2024, 1, 31), 10, 20m, 200m);
+        var apuracao = ApuradorIrMensal.Apurar(new[] { compra, venda }.Select(ApuradorIrMensal.De), Regras(), 2024);
+
+        var day = Linha(apuracao, 1, CestaApuracaoIr.DayTrade);
+        Assert.Equal(100m, day.Resultado);
+        Assert.Equal(20m, day.Imposto);
+        Assert.Equal(0m, Linha(apuracao, 1, CestaApuracaoIr.Comum).VendasAcoesComuns);
+        Assert.Equal(0m, Linha(apuracao, 1, CestaApuracaoIr.Comum).Resultado);
+        Assert.Equal(0m, Linha(apuracao, 2, CestaApuracaoIr.DayTrade).Resultado);
+        Assert.Equal(20m, Darf(apuracao, 1).Valor);
+        Assert.Equal(new DateTime(2024, 2, 29), Darf(apuracao, 1).Vencimento);
+    }
+
+    [Fact]
+    public void PregaoEmDezembro_LiquidacaoEmJaneiro_DarfVenceEm31DeJaneiro()
+    {
+        var compra = Entidade(1, TipoOperacao.Compra, new DateTime(2024, 12, 2), new DateTime(2024, 12, 2), 100, 100m, 10_000m);
+        var venda = Entidade(2, TipoOperacao.Venda, new DateTime(2025, 1, 2), new DateTime(2024, 12, 30), 100, 250m, 25_000m);
+        var apuracao = ApuradorIrMensal.Apurar(new[] { compra, venda }.Select(ApuradorIrMensal.De), Regras(), 2024);
+
+        var dezembro = Linha(apuracao, 12, CestaApuracaoIr.Comum);
+        Assert.Equal(25_000m, dezembro.VendasAcoesComuns);
+        Assert.Equal(15_000m, dezembro.Resultado);
+        Assert.Equal(2_250m, dezembro.Imposto);
+        var darf = Darf(apuracao, 12);
+        Assert.Equal(2_250m, darf.Valor);
+        Assert.Equal(new DateTime(2025, 1, 31), darf.Vencimento);
+
+        var seguinte = ApuradorIrMensal.Apurar(new[] { compra, venda }.Select(ApuradorIrMensal.De), Regras(), 2025);
+        Assert.DoesNotContain(seguinte.Meses, linha => linha.VendasAcoesComuns != 0m || linha.Resultado != 0m);
+        Assert.DoesNotContain(seguinte.Darfs, linha => linha.Valor > 0m);
+    }
+
+    [Fact]
+    public void DayTradeNoMesmoPregao_LiquidacoesDiferentes_FicaEmJaneiro()
+    {
+        var compra = Entidade(1, TipoOperacao.Compra, new DateTime(2024, 2, 2), new DateTime(2024, 1, 31), 10, 10m, 100m);
+        var venda = Entidade(2, TipoOperacao.Venda, new DateTime(2024, 2, 6), new DateTime(2024, 1, 31), 10, 20m, 200m);
+        var apuracao = ApuradorIrMensal.Apurar(new[] { compra, venda }.Select(ApuradorIrMensal.De), Regras(), 2024);
+
+        var day = Linha(apuracao, 1, CestaApuracaoIr.DayTrade);
+        Assert.Equal(100m, day.Resultado);
+        Assert.Equal(20m, day.Imposto);
+        Assert.Equal(0m, Linha(apuracao, 2, CestaApuracaoIr.DayTrade).Resultado);
+        Assert.Equal(0m, Linha(apuracao, 2, CestaApuracaoIr.Comum).Resultado);
+        Assert.Equal(20m, Darf(apuracao, 1).Valor);
+        Assert.Equal(new DateTime(2024, 2, 29), Darf(apuracao, 1).Vencimento);
+    }
+
+    [Fact]
+    public void VendasDoMesComLiquidacoesDiferentes_VencimentoUsaOMesDoPregao()
+    {
+        var compra = Entidade(1, TipoOperacao.Compra, new DateTime(2024, 1, 2), new DateTime(2024, 1, 2), 200, 100m, 20_000m);
+        var noMeio = Entidade(2, TipoOperacao.Venda, new DateTime(2024, 1, 12), new DateTime(2024, 1, 10), 100, 250m, 25_000m);
+        var naVirada = Entidade(3, TipoOperacao.Venda, new DateTime(2024, 2, 2), new DateTime(2024, 1, 31), 100, 10m, 1_000m);
+        var apuracao = ApuradorIrMensal.Apurar(
+            new[] { compra, noMeio, naVirada }.Select(ApuradorIrMensal.De),
+            Regras(),
+            2024);
+
+        var janeiro = Linha(apuracao, 1, CestaApuracaoIr.Comum);
+        Assert.Equal(26_000m, janeiro.VendasAcoesComuns);
+        Assert.Equal(6_000m, janeiro.Resultado);
+        Assert.Equal(900m, janeiro.Imposto);
+        Assert.Equal(900m, Darf(apuracao, 1).Valor);
+        Assert.Equal(new DateTime(2024, 2, 29), Darf(apuracao, 1).Vencimento);
+    }
+
+    private static OperacaoAtivo Entidade(
+        int id,
+        TipoOperacao tipo,
+        DateTime liquidacao,
+        DateTime pregao,
+        decimal quantidade,
+        decimal preco,
+        decimal valor)
+    {
+        var ana = new MembroFamilia { Id = 1, Nome = "Ana", Apelido = "Nica", Avatar = "A" };
+        var petr = new AtivoFinanceiro { Id = 1, Ticker = "PETR4", Nome = "Petrobras", Tipo = TipoAtivo.Acao };
+        return new OperacaoAtivo
+        {
+            Id = id,
+            AtivoId = petr.Id,
+            Ativo = petr,
+            MembroFamiliaId = ana.Id,
+            MembroFamilia = ana,
+            Tipo = tipo,
+            Data = liquidacao,
+            DataPregao = pregao,
+            Quantidade = quantidade,
+            PrecoUnitario = preco,
+            ValorOperacao = valor
+        };
+    }
+
     private static ApuracaoIr Apurar(params OperacaoApuracao[] operacoes) => Apurar(2024, operacoes);
 
     private static ApuracaoIr Apurar(int ano, params OperacaoApuracao[] operacoes)

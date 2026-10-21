@@ -608,6 +608,9 @@ namespace OrcaFacil.Core.Data.Migrations
                     b.Property<DateTime>("Data")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime>("DataPregao")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("HashImportacao")
                         .HasMaxLength(64)
                         .HasColumnType("TEXT");

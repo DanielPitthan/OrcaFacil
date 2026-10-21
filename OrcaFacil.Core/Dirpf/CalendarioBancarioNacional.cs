@@ -50,6 +50,28 @@ public static class CalendarioBancarioNacional
         return dia;
     }
 
+    /// <summary>
+    /// Recua <paramref name="diasUteis"/> dias úteis, sem contar <paramref name="data"/>.
+    /// A liquidação à vista da B3 é D+2: o pregão é esta conta a partir da liquidação.
+    /// Feriado no meio do intervalo não entra na conta.
+    /// </summary>
+    public static DateTime RecuarDiasUteis(DateTime data, int diasUteis)
+    {
+        if (diasUteis < 1)
+            throw new ArgumentOutOfRangeException(nameof(diasUteis));
+
+        var dia = data.Date;
+        var restantes = diasUteis;
+        while (restantes > 0)
+        {
+            dia = dia.AddDays(-1);
+            if (EhDiaUtil(dia))
+                restantes--;
+        }
+
+        return dia;
+    }
+
     /// <summary>Computus gregoriano (Meeus). Domingo de Páscoa.</summary>
     private static DateTime Pascoa(int ano)
     {

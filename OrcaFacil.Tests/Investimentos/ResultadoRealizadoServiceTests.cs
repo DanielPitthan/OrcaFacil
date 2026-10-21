@@ -1,4 +1,6 @@
+using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.Ativos;
+using OrcaFacil.Core.Dirpf;
 using OrcaFacil.Core.Dtos;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
@@ -505,6 +507,41 @@ public class ResultadoRealizadoServiceTests : IDisposable
             Movimento(2, new DateTime(2026, 1, 10), TipoOperacao.Venda, 1, 12m, 0m)
         });
         Assert.Equal(0m, compraAntes.Quantidade);
+    }
+
+    [Fact]
+    public async Task LancamentoManual_DataDigitadaViraOPregao_ENaoRecuaD2()
+    {
+        var digitada = new DateTime(2024, 1, 31);
+        await _servico.SalvarAsync(Operacao(_petroId, TipoOperacao.Compra, new DateTime(2024, 1, 10), 100, 100m, 0m), _membroId);
+        var venda = await _servico.SalvarAsync(Operacao(_petroId, TipoOperacao.Venda, digitada, 100, 250m, 0m), _membroId);
+
+        using var contexto = _factory.CreateDbContext();
+        var gravadas = contexto.OperacoesAtivo.OrderBy(o => o.Id).ToList();
+        Assert.Equal(2, gravadas.Count);
+        Assert.All(gravadas, operacao =>
+        {
+            Assert.Equal(OrigemOperacaoAtivo.Manual, operacao.Origem);
+            Assert.Equal(operacao.Data, operacao.DataPregao);
+        });
+        Assert.Equal(digitada, gravadas[1].Data);
+        Assert.Equal(digitada, gravadas[1].DataPregao);
+        Assert.NotEqual(new DateTime(2024, 1, 29), gravadas[1].DataPregao);
+
+        var lancamento = Assert.Single(contexto.Transacoes);
+        Assert.Equal(TipoTransacao.Receita, lancamento.Tipo);
+        Assert.Equal(15_000m, lancamento.Valor);
+        Assert.Equal(digitada, lancamento.Data);
+        Assert.Equal(venda.Id, lancamento.OperacaoAtivoId);
+
+        var apuracao = ApuradorIrMensal.Apurar(contexto, 2024);
+        var janeiro = apuracao.Meses.Single(linha => linha.Mes == 1 && linha.Cesta == CestaApuracaoIr.Comum);
+        Assert.Equal(25_000m, janeiro.VendasAcoesComuns);
+        Assert.Equal(15_000m, janeiro.Resultado);
+        Assert.Equal(2_250m, janeiro.Imposto);
+        var darf = apuracao.Darfs.Single(linha => linha.Mes == 1);
+        Assert.Equal(2_250m, darf.Valor);
+        Assert.Equal(new DateTime(2024, 2, 29), darf.Vencimento);
     }
 
     public void Dispose() => _factory.Dispose();

@@ -6,7 +6,10 @@ using OrcaFacil.Core.Enums;
 
 namespace OrcaFacil.Core.Dirpf;
 
-/// <summary>Operação pronta para a apuração. O custo da venda sai da calculadora de resultado.</summary>
+/// <summary>
+/// Operação pronta para a apuração. O custo da venda sai da calculadora de resultado.
+/// <see cref="Data"/> é o pregão: mês, teto, day trade e vencimento do DARF.
+/// </summary>
 public sealed record OperacaoApuracao(
     int Id,
     int PerfilId,
@@ -74,16 +77,21 @@ public sealed class ApuracaoIr
 
 /// <summary>
 /// Apura o IR da renda variável mês a mês e monta o DARF.
-/// O mês, o teto de vendas de ações e o day trade usam a data gravada na operação.
-/// Na importação do extrato B3, essa data é a de liquidação do arquivo.
-/// No lançamento manual, é a data informada no campo Data.
+/// O mês, o teto de vendas de ações, o day trade e o vencimento do DARF usam o pregão
+/// (<see cref="OperacaoAtivo.DataPregao"/>).
+/// O DARF vence no último dia útil do mês seguinte ao do pregão,
+/// no <see cref="CalendarioBancarioNacional"/>.
+/// Na importação B3, a liquidação é a data do arquivo e o pregão recua D+2 dias úteis.
+/// No lançamento manual, a data digitada é o pregão e também a liquidação.
+/// A #30 gravava só a liquidação e fazia o DARF vencer por ela. A #104 altera essa regra.
+/// Fonte: Perguntas e Respostas IRPF 2026, pergunta 745,
+/// https://www.gov.br/receitafederal/pt-br/centrais-de-conteudo/publicacoes/perguntas-e-respostas/dirpf/p-r-irpf-2026-v1-00-2026-04-23.pdf
 /// Fiagro entra como FII: o tipo do ativo não muda e o mesmo dia não vai para day trade.
 /// O resultado da venda é o da <see cref="CalculadoraResultadoRealizado"/>:
 /// quantidade × preço + custos na compra, e o valor da operação na venda.
 /// O arredondamento afasta do zero, com as casas da regra vigente.
 /// Alíquota, isenção, day trade, FII, código e mínimo do DARF vêm da tabela.
 /// Meses anteriores a 01/01/2005 ficam de fora: as regras desta apuração começam nessa data.
-/// O vencimento é o último dia útil do mês seguinte no <see cref="CalendarioBancarioNacional"/>.
 /// </summary>
 public static class ApuradorIrMensal
 {
@@ -149,6 +157,11 @@ public static class ApuradorIrMensal
         if (operacao.MembroFamilia is null)
             throw new InvalidOperationException($"A apuração precisa do perfil {operacao.MembroFamiliaId}.");
 
+        var liquidacao = operacao.Data.Date;
+        var pregao = operacao.DataPregao.Date;
+        if (pregao == default)
+            pregao = liquidacao;
+
         return new OperacaoApuracao(
             operacao.Id,
             operacao.MembroFamiliaId,
@@ -157,14 +170,18 @@ public static class ApuradorIrMensal
             operacao.Ativo.Tipo,
             operacao.Corretora,
             operacao.Tipo,
-            operacao.Data,
+            pregao,
             operacao.Quantidade,
             operacao.PrecoUnitario,
             operacao.ValorOperacao,
             operacao.Custos);
     }
 
-    /// <summary>Último dia útil do mês seguinte ao ganho. Sábado, domingo e feriado recuam.</summary>
+    /// <summary>
+    /// Último dia útil do mês seguinte ao do pregão.
+    /// A apuração passa o mês do pregão, não o da liquidação.
+    /// Sábado, domingo e feriado recuam.
+    /// </summary>
     public static DateTime Vencimento(int anoGanho, int mesGanho)
     {
         var mes = mesGanho == 12 ? 1 : mesGanho + 1;

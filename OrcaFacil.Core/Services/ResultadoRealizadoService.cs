@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.Ativos;
 using OrcaFacil.Core.Data;
+using OrcaFacil.Core.Dirpf;
 using OrcaFacil.Core.Dtos;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
@@ -11,6 +12,10 @@ namespace OrcaFacil.Core.Services;
 /// Único caminho de gravação da renda variável: lança, edita e exclui a operação e,
 /// na mesma transação, recalcula a sequência do ativo e o lançamento do resultado.
 /// Lucro vira receita do mês e prejuízo vira despesa, com base no Valor da Operação.
+/// O lançamento cai em <see cref="OperacaoAtivo.Data"/>. Na importação B3 essa data é a
+/// liquidação, não o pregão. A #104 não muda este mês: o caixa continua na liquidação.
+/// Decisão pendente do Paulão. Recomendação: manter, porque o dinheiro entra em D+2
+/// e a pergunta 745 separa o fato gerador do IR do caixa da casa.
 /// Sem total informado, operação nova ou com quantidade ou preço alterados grava
 /// quantidade × preço. Edição que não mexe nesses dois campos preserva o total gravado.
 /// A regra fiscal vem da tabela vigente na data da venda. Alíquota não entra na conta.
@@ -365,6 +370,7 @@ public class ResultadoRealizadoService
         destino.AtivoId = modelo.AtivoId;
         destino.Tipo = modelo.Tipo;
         destino.Data = modelo.Data.Date;
+        destino.DataPregao = DataPregaoOperacao.Resolver(destino.Data, destino.Origem);
         destino.Quantidade = modelo.Quantidade;
         destino.PrecoUnitario = modelo.PrecoUnitario;
         destino.ValorOperacao = valor;

@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using OrcaFacil.Core.B3;
 using OrcaFacil.Core.Data;
+using OrcaFacil.Core.Dirpf;
 using OrcaFacil.Core.Dtos;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
@@ -519,6 +520,96 @@ public class ImportacaoExtratoB3ServiceTests
         Assert.Empty(await conferido.Transacoes.ToListAsync());
         Assert.Empty(await conferido.AtivosFinanceiros.ToListAsync());
         Assert.Empty(await conferido.TitulosRendaFixa.ToListAsync());
+    }
+
+    [Fact]
+    public async Task ViradaDeMes_PregaoNaApuracao_LancamentoEHashNaLiquidacao_ReimportacaoNaoDuplica()
+    {
+        const string csv =
+            """
+            Entrada/Saída;Data;Movimentação;Produto;Instituição;Quantidade;Preço unitário;Valor da Operação
+            Credito;10/01/2024;Transferência - Liquidação;PETR4 - PETROLEO BRASILEIRO;XP INVESTIMENTOS CCTVM S/A;100; R$100,00 ; R$10.000,00 
+            Debito;02/02/2024;Transferência - Liquidação;PETR4 - PETROLEO BRASILEIRO;XP INVESTIMENTOS CCTVM S/A;100; R$250,00 ; R$25.000,00 
+            """;
+
+        await using var ambiente = await Ambiente.CriarAsync();
+        await using var primeiraLeitura = new MemoryStream(Encoding.UTF8.GetBytes(csv));
+        var previa = await ambiente.Service.PreverAsync(primeiraLeitura, ambiente.MembroId);
+        Assert.Equal(2, previa.Contar(StatusLinhaImportacaoB3.Nova));
+        Assert.Empty(new ParserExtratoB3().Ler(new MemoryStream(Encoding.UTF8.GetBytes(csv))).Erros);
+
+        await ambiente.Service.GravarAsync(previa, ambiente.MembroId);
+
+        await using (var contexto = await ambiente.Factory.CreateDbContextAsync())
+        {
+            var operacoes = await contexto.OperacoesAtivo.OrderBy(o => o.Data).ToListAsync();
+            Assert.Equal(2, operacoes.Count);
+
+            var compra = operacoes[0];
+            Assert.Equal(TipoOperacao.Compra, compra.Tipo);
+            Assert.Equal(new DateTime(2024, 1, 10), compra.Data);
+            Assert.Equal(new DateTime(2024, 1, 8), compra.DataPregao);
+
+            var venda = operacoes[1];
+            Assert.Equal(TipoOperacao.Venda, venda.Tipo);
+            Assert.Equal(new DateTime(2024, 2, 2), venda.Data);
+            Assert.Equal(new DateTime(2024, 1, 31), venda.DataPregao);
+
+            var lido = new ParserExtratoB3().Ler(new MemoryStream(Encoding.UTF8.GetBytes(csv)));
+            var ocorrencias = HashLinhaExtratoB3.Ocorrencias(lido.Linhas);
+            var indiceVenda = lido.Linhas.ToList().FindIndex(linha => linha.Data == new DateOnly(2024, 2, 2));
+            var hashLiquidacao = HashLinhaExtratoB3.Calcular(lido.Linhas[indiceVenda], ocorrencias[indiceVenda]);
+            var noPregao = lido.Linhas[indiceVenda] with { Data = new DateOnly(2024, 1, 31) };
+            Assert.Equal(hashLiquidacao, venda.HashImportacao);
+            Assert.NotEqual(hashLiquidacao, HashLinhaExtratoB3.Calcular(noPregao, ocorrencias[indiceVenda]));
+            Assert.StartsWith("2024-02-02|", HashLinhaExtratoB3.Chave(lido.Linhas[indiceVenda]), StringComparison.Ordinal);
+
+            var lancamento = Assert.Single(await contexto.Transacoes.ToListAsync());
+            Assert.Equal(TipoTransacao.Receita, lancamento.Tipo);
+            Assert.Equal(15_000m, lancamento.Valor);
+            Assert.Equal(new DateTime(2024, 2, 2), lancamento.Data);
+            Assert.Equal(venda.Id, lancamento.OperacaoAtivoId);
+
+            var apuracao = ApuradorIrMensal.Apurar(contexto, 2024);
+            var janeiro = apuracao.Meses.Single(linha => linha.Mes == 1 && linha.Cesta == CestaApuracaoIr.Comum);
+            Assert.Equal(25_000m, janeiro.VendasAcoesComuns);
+            Assert.Equal(15_000m, janeiro.Resultado);
+            Assert.Equal(new DateTime(2024, 2, 29), apuracao.Darfs.Single(linha => linha.Mes == 1).Vencimento);
+            Assert.Equal(0m, apuracao.Meses.Single(linha => linha.Mes == 2 && linha.Cesta == CestaApuracaoIr.Comum).Resultado);
+
+            await ambiente.Resultado.SalvarAsync(new OperacaoAtivoFormModel
+            {
+                Id = venda.Id,
+                AtivoId = venda.AtivoId,
+                Tipo = venda.Tipo,
+                Data = venda.Data,
+                Quantidade = venda.Quantidade,
+                PrecoUnitario = venda.PrecoUnitario,
+                ValorOperacao = venda.ValorOperacao,
+                Custos = venda.Custos,
+                Corretora = venda.Corretora
+            }, ambiente.MembroId);
+        }
+
+        await using (var contexto = await ambiente.Factory.CreateDbContextAsync())
+        {
+            var venda = await contexto.OperacoesAtivo.SingleAsync(o => o.Tipo == TipoOperacao.Venda);
+            Assert.Equal(OrigemOperacaoAtivo.ExtratoB3, venda.Origem);
+            Assert.Equal(new DateTime(2024, 2, 2), venda.Data);
+            Assert.Equal(new DateTime(2024, 1, 31), venda.DataPregao);
+            Assert.Equal(new DateTime(2024, 2, 2), (await contexto.Transacoes.SingleAsync()).Data);
+        }
+
+        await using var releitura = new MemoryStream(Encoding.UTF8.GetBytes(csv));
+        var segunda = await ambiente.Service.PreverAsync(releitura, ambiente.MembroId);
+        Assert.Equal(2, segunda.Contar(StatusLinhaImportacaoB3.DuplicataImportada));
+        Assert.Equal(0, segunda.Contar(StatusLinhaImportacaoB3.Nova));
+        var repetida = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            ambiente.Service.GravarAsync(segunda, ambiente.MembroId));
+        Assert.Equal(ImportacaoExtratoB3Service.MensagemSemMarcacao, repetida.Message);
+
+        await using var conferido = await ambiente.Factory.CreateDbContextAsync();
+        Assert.Equal(2, await conferido.OperacoesAtivo.CountAsync());
     }
 
     private static async Task RepetirManualAsync(Ambiente ambiente, PreviaExtratoB3 previa)
