@@ -28,7 +28,7 @@ namespace OrcaFacil.Core.Data.Migrations
                     { 9, "RV.Darf.Codigo", true, 6015m, null, new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified) },
                     { 10, "RV.Darf.ValorMinimo", true, 10m, null, new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified) },
                     { 11, "RV.Darf.AcumularAbaixoDoMinimo", true, 1m, null, new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified) },
-                    { 12, "RV.Prejuizo.CompensaEntreAnos", true, 0m, null, new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified) },
+                    { 12, "RV.Prejuizo.CompensaEntreAnos", true, 1m, null, new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified) },
                     { 13, "RV.Prejuizo.CompensaNoMesIsento", true, 0m, null, new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified) },
                     { 14, "RV.Irrf.Estimar", true, 0m, null, new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified) },
                     { 15, "RV.Irrf.AliquotaComum", true, 0.00005m, null, new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified) },

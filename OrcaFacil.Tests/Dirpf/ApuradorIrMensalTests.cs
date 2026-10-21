@@ -145,7 +145,7 @@ public class ApuradorIrMensalTests
     }
 
     [Fact]
-    public void PrejuizoNaoCruzaOAno_ECruzaQuandoARegraLiga()
+    public void PrejuizoCruzaOAno_ENaoCruzaQuandoARegraDesliga()
     {
         var operacoes = new[]
         {
@@ -157,17 +157,61 @@ public class ApuradorIrMensalTests
 
         var padrao = Apurar(2025, operacoes);
         var janeiro = Linha(padrao, 1, CestaApuracaoIr.Comum);
-        Assert.Equal(400m, janeiro.BaseCalculo);
-        Assert.Equal(60m, janeiro.Imposto);
-        Assert.Equal(0m, janeiro.PrejuizoCompensado);
+        Assert.Equal(400m, janeiro.PrejuizoCompensado);
+        Assert.Equal(0m, janeiro.BaseCalculo);
+        Assert.Equal(0m, janeiro.Imposto);
 
         var regras = Regras();
-        regras.Single(regra => regra.Codigo == CodigosRegraFiscal.PrejuizoCompensaEntreAnos).Valor = 1m;
-        var cruzando = ApuradorIrMensal.Apurar(operacoes, regras, 2025);
-        var comSaldo = Linha(cruzando, 1, CestaApuracaoIr.Comum);
-        Assert.Equal(400m, comSaldo.PrejuizoCompensado);
-        Assert.Equal(0m, comSaldo.BaseCalculo);
-        Assert.Equal(0m, comSaldo.Imposto);
+        regras.Single(regra => regra.Codigo == CodigosRegraFiscal.PrejuizoCompensaEntreAnos).Valor = 0m;
+        var semCruzar = ApuradorIrMensal.Apurar(operacoes, regras, 2025);
+        var janeiroZerado = Linha(semCruzar, 1, CestaApuracaoIr.Comum);
+        Assert.Equal(400m, janeiroZerado.BaseCalculo);
+        Assert.Equal(60m, janeiroZerado.Imposto);
+        Assert.Equal(0m, janeiroZerado.PrejuizoCompensado);
+    }
+
+    [Fact]
+    public void PrejuizoNaoCruzaCestaNaViradaDoAno()
+    {
+        var operacoes = new[]
+        {
+            Compra(1, new DateTime(2024, 12, 2), 100, 254m),
+            Venda(2, new DateTime(2024, 12, 20), 100, 250m, 25_000m),
+            Compra(3, new DateTime(2024, 12, 2), 10, 20m, TipoAtivo.Fii, ativoId: 2),
+            Venda(4, new DateTime(2024, 12, 20), 10, 10m, 100m, TipoAtivo.Fii, ativoId: 2),
+            Compra(5, new DateTime(2024, 12, 10), 10, 30m, ativoId: 3, corretora: "XP"),
+            Venda(6, new DateTime(2024, 12, 10), 10, 10m, 100m, ativoId: 3, corretora: "XP"),
+            Compra(7, new DateTime(2025, 1, 6), 100, 240m),
+            Venda(8, new DateTime(2025, 1, 20), 100, 250m, 25_000m),
+            Compra(9, new DateTime(2025, 1, 6), 10, 10m, TipoAtivo.Fii, ativoId: 2),
+            Venda(10, new DateTime(2025, 1, 20), 10, 28m, 280m, TipoAtivo.Fii, ativoId: 2),
+            Compra(11, new DateTime(2025, 1, 8), 10, 10m, ativoId: 3, corretora: "XP"),
+            Venda(12, new DateTime(2025, 1, 8), 10, 60m, 600m, ativoId: 3, corretora: "XP")
+        };
+
+        var dezembro = Apurar(2024, operacoes);
+        Assert.Equal(400m, Linha(dezembro, 12, CestaApuracaoIr.Comum).PrejuizoACompensar);
+        Assert.Equal(100m, Linha(dezembro, 12, CestaApuracaoIr.Fii).PrejuizoACompensar);
+        Assert.Equal(200m, Linha(dezembro, 12, CestaApuracaoIr.DayTrade).PrejuizoACompensar);
+
+        var janeiro = Apurar(2025, operacoes);
+        var acoes = Linha(janeiro, 1, CestaApuracaoIr.Comum);
+        Assert.Equal(1_000m, acoes.Resultado);
+        Assert.Equal(400m, acoes.PrejuizoCompensado);
+        Assert.Equal(600m, acoes.BaseCalculo);
+        Assert.Equal(90m, acoes.Imposto);
+
+        var fii = Linha(janeiro, 1, CestaApuracaoIr.Fii);
+        Assert.Equal(180m, fii.Resultado);
+        Assert.Equal(100m, fii.PrejuizoCompensado);
+        Assert.Equal(80m, fii.BaseCalculo);
+        Assert.Equal(16m, fii.Imposto);
+
+        var day = Linha(janeiro, 1, CestaApuracaoIr.DayTrade);
+        Assert.Equal(500m, day.Resultado);
+        Assert.Equal(200m, day.PrejuizoCompensado);
+        Assert.Equal(300m, day.BaseCalculo);
+        Assert.Equal(60m, day.Imposto);
     }
 
     [Fact]

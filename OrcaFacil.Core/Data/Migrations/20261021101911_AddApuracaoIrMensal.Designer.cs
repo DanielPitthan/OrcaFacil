@@ -999,7 +999,7 @@ namespace OrcaFacil.Core.Data.Migrations
                             Id = 12,
                             Codigo = "RV.Prejuizo.CompensaEntreAnos",
                             EhSistema = true,
-                            Valor = 0m,
+                            Valor = 1m,
                             VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
                         },
                         new
