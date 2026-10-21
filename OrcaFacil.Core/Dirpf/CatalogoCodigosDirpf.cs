@@ -19,6 +19,16 @@ public static class CatalogoCodigosDirpf
 {
     public const string VarianteFiagro = "Fiagro";
 
+    /// <summary>
+    /// Ganho isento do art. 3º, I, da Lei nº 11.033/2004. O texto é o do manual
+    /// do Meu Imposto de Renda; o número 20 é o da ficha e continua configurável.
+    /// https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/preenchimento/manual-mir/rendimentos/rendimentos-do-capital
+    /// </summary>
+    public const string VarianteGanhoIsentoAcoes = "GanhoIsento";
+
+    public const string DescricaoGanhoIsentoAcoes =
+        "Ganhos líquidos em operações no mercado à vista de ações negociadas em bolsas de valores nas alienações realizadas até R$ 20.000,00 em cada mês, para o conjunto de ações";
+
     public static readonly DateTime Inicio = new(2021, 1, 1);
 
     public static IReadOnlyList<CodigoDirpf> Linhas() =>
@@ -29,7 +39,8 @@ public static class CatalogoCodigosDirpf
         Linha(4, TipoFichaDirpf.Bem, TipoAtivo.Bdr, "04", "04", "Ativos negociados em bolsa no Brasil (BDRs, opções e outros, exceto ações e fundos)"),
         Linha(5, TipoFichaDirpf.RendimentoIsento, TipoAtivo.Acao, "", "09", "Lucros e dividendos recebidos"),
         Linha(6, TipoFichaDirpf.RendimentoIsento, TipoAtivo.Fii, "", "99", "Outros"),
-        Linha(7, TipoFichaDirpf.Bem, TipoAtivo.Fii, "07", "02", "Fundos de Investimento nas Cadeias Produtivas Agroindustriais (Fiagro)", VarianteFiagro)
+        Linha(7, TipoFichaDirpf.Bem, TipoAtivo.Fii, "07", "02", "Fundos de Investimento nas Cadeias Produtivas Agroindustriais (Fiagro)", VarianteFiagro),
+        Linha(8, TipoFichaDirpf.RendimentoIsento, TipoAtivo.Acao, "", "20", DescricaoGanhoIsentoAcoes, VarianteGanhoIsentoAcoes)
     ];
 
     private static CodigoDirpf Linha(

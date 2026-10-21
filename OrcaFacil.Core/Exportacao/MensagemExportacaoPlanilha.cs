@@ -17,6 +17,7 @@ public static class MensagemExportacaoPlanilha
     private static readonly string[] Prefixos =
     [
         "A aba ",
+        "A apuração mensal começa",
         "A exportação parou:",
         "Prazo de aviso desconhecido:",
         "Tema desconhecido:",

@@ -30,7 +30,7 @@ public class CodigoDirpf
     [Required, MaxLength(2)]
     public string Codigo { get; set; } = string.Empty;
 
-    [Required, MaxLength(160)]
+    [Required, MaxLength(200)]
     public string Descricao { get; set; } = string.Empty;
 
     public DateTime VigenciaInicio { get; set; }

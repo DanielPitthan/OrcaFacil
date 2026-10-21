@@ -11,6 +11,7 @@ namespace OrcaFacil.Core.Dirpf;
 /// Monta Bens e Direitos e Rendimentos Isentos de um ano-base.
 /// A posição usa operações até 31/12, inclusive as de anos anteriores.
 /// O rendimento isento usa o ano da data de pagamento. JCP fica de fora.
+/// O ganho isento de ações no limite mensal entra na mesma ficha, pelo código vigente.
 /// BDR e ETF não têm código de rendimento isento na semente e não entram nessa ficha.
 /// O CNPJ sai vazio: o cadastro do ativo não guarda esse número.
 /// Posição com quantidade zero fica de fora. Não há piso de valor.
@@ -52,14 +53,21 @@ public static class MontadorDirpf
         ArgumentNullException.ThrowIfNull(regras);
         ExigirAno(anoBase);
 
+        var listaOperacoes = operacoes.ToList();
+        var listaProventos = proventos.ToList();
         var corte = new DateTime(anoBase, 12, 31);
         var inicio = new DateTime(anoBase, 1, 1);
         var fim = inicio.AddYears(1);
         var tabela = new TabelaCodigosDirpf(codigos);
         var fiscais = new TabelaRegrasFiscais(regras);
 
-        var bens = MontarBens(anoBase, corte, operacoes, tabela, fiscais);
-        var isentos = MontarIsentos(anoBase, corte, inicio, fim, proventos, tabela, fiscais);
+        var bens = MontarBens(anoBase, corte, listaOperacoes, tabela, fiscais);
+        var isentos = MontarIsentos(anoBase, corte, inicio, fim, listaProventos, tabela, fiscais);
+        isentos.AddRange(MontarGanhoIsento(anoBase, corte, listaOperacoes, regras, tabela, fiscais));
+        isentos = isentos
+            .OrderBy(linha => linha.Perfil, OrdemTexto)
+            .ThenBy(linha => linha.Ticker, StringComparer.Ordinal)
+            .ToList();
 
         return new DirpfAnoBase
         {
@@ -163,10 +171,48 @@ public static class MontadorDirpf
                 $"{natureza} — {ativo.Ticker} — {ativo.Nome}."));
         }
 
-        return linhas
-            .OrderBy(linha => linha.Perfil, OrdemTexto)
-            .ThenBy(linha => linha.Ticker, StringComparer.Ordinal)
-            .ToList();
+        return linhas;
+    }
+
+    private static List<LinhaRendimentoIsentoDirpf> MontarGanhoIsento(
+        int anoBase,
+        DateTime corte,
+        IEnumerable<OperacaoAtivo> operacoes,
+        IEnumerable<RegraFiscal> regras,
+        TabelaCodigosDirpf tabela,
+        TabelaRegrasFiscais fiscais)
+    {
+        var apuracao = ApuradorIrMensal.Apurar(operacoes.Select(ApuradorIrMensal.De), regras, anoBase);
+        if (apuracao.GanhosIsentos.Count == 0)
+            return [];
+
+        var codigo = tabela.Exigir(
+            TipoFichaDirpf.RendimentoIsento,
+            TipoAtivo.Acao,
+            corte,
+            CatalogoCodigosDirpf.VarianteGanhoIsentoAcoes);
+        var casas = fiscais.Para(corte, TipoAtivo.Acao).CasasDecimais;
+        var linhas = new List<LinhaRendimentoIsentoDirpf>();
+        foreach (var ganho in apuracao.GanhosIsentos)
+        {
+            var valor = CalculadoraResultadoRealizado.Arredondar(ganho.Valor, casas);
+            if (valor == 0m)
+                continue;
+
+            linhas.Add(new LinhaRendimentoIsentoDirpf(
+                anoBase,
+                ganho.Perfil,
+                "",
+                "Conjunto de ações",
+                "Ganho líquido isento",
+                codigo.Codigo,
+                codigo.Descricao,
+                Cnpj: "",
+                valor,
+                "Ganhos líquidos isentos no mercado à vista de ações, dentro do limite mensal de alienação."));
+        }
+
+        return linhas;
     }
 
     private static string Natureza(AtivoFinanceiro ativo)

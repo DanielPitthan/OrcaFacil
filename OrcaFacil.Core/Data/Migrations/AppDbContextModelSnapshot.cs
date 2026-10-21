@@ -148,7 +148,7 @@ namespace OrcaFacil.Core.Data.Migrations
 
                     b.Property<string>("Descricao")
                         .IsRequired()
-                        .HasMaxLength(160)
+                        .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("EhSistema")
@@ -267,6 +267,18 @@ namespace OrcaFacil.Core.Data.Migrations
                             Grupo = "07",
                             TipoAtivo = 1,
                             Variante = "Fiagro",
+                            VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 8,
+                            Codigo = "20",
+                            Descricao = "Ganhos líquidos em operações no mercado à vista de ações negociadas em bolsas de valores nas alienações realizadas até R$ 20.000,00 em cada mês, para o conjunto de ações",
+                            EhSistema = true,
+                            Ficha = 1,
+                            Grupo = "",
+                            TipoAtivo = 0,
+                            Variante = "GanhoIsento",
                             VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
                         });
                 });
@@ -938,6 +950,102 @@ namespace OrcaFacil.Core.Data.Migrations
                             EhSistema = true,
                             Valor = 0.15m,
                             VigenciaInicio = new DateTime(1995, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 7,
+                            Codigo = "RV.Aliquota.DayTrade",
+                            EhSistema = true,
+                            Valor = 0.20m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 8,
+                            Codigo = "RV.Isencao.VendasAcoes",
+                            EhSistema = true,
+                            Valor = 20000m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 9,
+                            Codigo = "RV.Darf.Codigo",
+                            EhSistema = true,
+                            Valor = 6015m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 10,
+                            Codigo = "RV.Darf.ValorMinimo",
+                            EhSistema = true,
+                            Valor = 10m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 11,
+                            Codigo = "RV.Darf.AcumularAbaixoDoMinimo",
+                            EhSistema = true,
+                            Valor = 1m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 12,
+                            Codigo = "RV.Prejuizo.CompensaEntreAnos",
+                            EhSistema = true,
+                            Valor = 1m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 13,
+                            Codigo = "RV.Prejuizo.CompensaNoMesIsento",
+                            EhSistema = true,
+                            Valor = 1m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 14,
+                            Codigo = "RV.Irrf.Estimar",
+                            EhSistema = true,
+                            Valor = 0m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 15,
+                            Codigo = "RV.Irrf.AliquotaComum",
+                            EhSistema = true,
+                            Valor = 0.00005m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 16,
+                            Codigo = "RV.Irrf.AliquotaDayTrade",
+                            EhSistema = true,
+                            Valor = 0.01m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 17,
+                            Codigo = "RV.Irrf.ValorMinimoRetencao",
+                            EhSistema = true,
+                            Valor = 1m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 18,
+                            Codigo = "RV.Irrf.CompensaMesesSeguintes",
+                            EhSistema = true,
+                            Valor = 0m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
                         });
                 });
 
