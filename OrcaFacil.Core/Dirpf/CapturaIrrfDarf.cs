@@ -26,7 +26,8 @@ public sealed class CampoIrrfDarf
 }
 
 /// <summary>
-/// Meses do ano-base com venda e o IRRF já gravado, por perfil e por cesta.
+/// Meses do ano-base com venda no pregão e o IRRF já gravado, por perfil e por cesta.
+/// O mês é o de <see cref="OperacaoAtivo.DataPregao"/>, o mesmo da apuração do IR.
 /// A gravação é um upsert. A planilha recebe só o que está gravado nesses meses.
 /// </summary>
 public static class CapturaIrrfDarf
@@ -64,10 +65,12 @@ public static class CapturaIrrfDarf
         var inicio = new DateTime(ano, 1, 1);
         var fim = inicio.AddYears(1);
         var vendas = contexto.OperacoesAtivo.AsNoTracking()
-            .Where(operacao => operacao.Tipo == TipoOperacao.Venda && operacao.Data >= inicio && operacao.Data < fim)
+            .Where(operacao => operacao.Tipo == TipoOperacao.Venda
+                && operacao.DataPregao >= inicio
+                && operacao.DataPregao < fim)
             .Select(operacao => new VendaDoMes(
                 operacao.MembroFamiliaId,
-                operacao.Data.Month,
+                operacao.DataPregao.Month,
                 operacao.MembroFamilia!.Nome,
                 operacao.MembroFamilia.Apelido))
             .ToList();
