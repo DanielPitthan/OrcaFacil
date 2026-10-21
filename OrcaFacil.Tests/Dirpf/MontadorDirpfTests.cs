@@ -59,7 +59,14 @@ public class MontadorDirpfTests : IDisposable
         Assert.DoesNotContain(dirpf.Bens, linha => linha.Ticker == "VALE3");
         Assert.DoesNotContain(dirpf.Bens, linha => linha.Ticker == "WEGE3");
 
-        Assert.Equal(["MXRF11", "PETR4"], dirpf.RendimentosIsentos.Select(linha => linha.Ticker).ToArray());
+        Assert.Equal(["", "MXRF11", "PETR4"], dirpf.RendimentosIsentos.Select(linha => linha.Ticker).ToArray());
+        var ganhoIsento = dirpf.RendimentosIsentos.Single(linha => linha.Codigo == "20");
+        Assert.Equal("Ana (Nica)", ganhoIsento.Perfil);
+        Assert.Equal("Ganho líquido isento", ganhoIsento.Natureza);
+        Assert.Equal(CatalogoCodigosDirpf.DescricaoGanhoIsentoAcoes, ganhoIsento.DescricaoCodigo);
+        Assert.Equal(1229.50m, ganhoIsento.Valor);
+        Assert.Equal("", ganhoIsento.Cnpj);
+
         var dividendo = dirpf.RendimentosIsentos.Single(linha => linha.Ticker == "PETR4");
         Assert.Equal("Dividendo", dividendo.Natureza);
         Assert.Equal("09", dividendo.Codigo);

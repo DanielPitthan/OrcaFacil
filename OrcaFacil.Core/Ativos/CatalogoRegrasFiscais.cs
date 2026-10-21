@@ -5,12 +5,27 @@ namespace OrcaFacil.Core.Ativos;
 /// <summary>
 /// Semente da tabela de vigência. A calculadora não lê estes números:
 /// ela recebe o que estiver gravado na data da venda.
-/// A alíquota não reduz o lançamento. O lançamento é o resultado econômico;
-/// a alíquota vigente só precisa existir, para o período não ficar sem regra.
+/// A alíquota não reduz o lançamento. O lançamento é o resultado econômico.
+/// A apuração mensal lê a linha vigente na data. Os números não ficam no cálculo.
+/// A Lei nº 11.033/2004, art. 2º e art. 3º, I, vale desde 01/01/2005:
+/// 15% nas operações comuns, 20% no day trade e isenção de R$ 20.000,00.
+/// https://www.planalto.gov.br/ccivil_03/_ato2004-2006/2004/lei/l11033.htm
+/// A Receita confirma 15% e 20%, o DARF 6015 e o IRRF de 0,005% e de 1%.
+/// https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/pagamento/renda-variavel/bolsa-de-valores-1
+/// https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/pagamento/renda-variavel/bolsa-de-valores-1/calculo-e-pagamento-do-imposto
+/// https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/pagamento/renda-variavel/bolsa-de-valores-1/retencoes
+/// FII e Fiagro: ganho na venda a 20%, na mesma cesta, sem separar day trade.
+/// https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/pagamento/renda-variavel/fundos-de-investimento-no-brasil
+/// https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/pagamento/renda-variavel/manual/manual-de-utilizacao-do-revar-renda-variavel
+/// DARF abaixo de R$ 10 acumula. O prejuízo entre anos e a estimativa de IRRF
+/// nascem desligados: são decisões ainda em aberto.
 /// </summary>
 public static class CatalogoRegrasFiscais
 {
     public static readonly DateTime Inicio = new(1995, 1, 1);
+
+    /// <summary>Produção de efeitos da Lei nº 11.033/2004 para a renda variável.</summary>
+    public static readonly DateTime InicioLei11033 = new(2005, 1, 1);
 
     public static IReadOnlyList<RegraFiscal> Linhas() =>
     [
@@ -19,15 +34,27 @@ public static class CatalogoRegrasFiscais
         Linha(3, CodigosRegraFiscal.AliquotaAcao, 0.15m),
         Linha(4, CodigosRegraFiscal.AliquotaFii, 0.20m),
         Linha(5, CodigosRegraFiscal.AliquotaEtf, 0.15m),
-        Linha(6, CodigosRegraFiscal.AliquotaBdr, 0.15m)
+        Linha(6, CodigosRegraFiscal.AliquotaBdr, 0.15m),
+        Linha(7, CodigosRegraFiscal.AliquotaDayTrade, 0.20m, InicioLei11033),
+        Linha(8, CodigosRegraFiscal.IsencaoVendasAcoes, 20_000m, InicioLei11033),
+        Linha(9, CodigosRegraFiscal.DarfCodigo, 6015m, InicioLei11033),
+        Linha(10, CodigosRegraFiscal.DarfValorMinimo, 10m, InicioLei11033),
+        Linha(11, CodigosRegraFiscal.DarfAcumularAbaixoDoMinimo, 1m, InicioLei11033),
+        Linha(12, CodigosRegraFiscal.PrejuizoCompensaEntreAnos, 0m, InicioLei11033),
+        Linha(13, CodigosRegraFiscal.PrejuizoCompensaNoMesIsento, 0m, InicioLei11033),
+        Linha(14, CodigosRegraFiscal.IrrfEstimar, 0m, InicioLei11033),
+        Linha(15, CodigosRegraFiscal.IrrfAliquotaComum, 0.00005m, InicioLei11033),
+        Linha(16, CodigosRegraFiscal.IrrfAliquotaDayTrade, 0.01m, InicioLei11033),
+        Linha(17, CodigosRegraFiscal.IrrfValorMinimoRetencao, 1m, InicioLei11033),
+        Linha(18, CodigosRegraFiscal.IrrfCompensaMesesSeguintes, 0m, InicioLei11033)
     ];
 
-    private static RegraFiscal Linha(int id, string codigo, decimal valor) => new()
+    private static RegraFiscal Linha(int id, string codigo, decimal valor, DateTime? inicio = null) => new()
     {
         Id = id,
         Codigo = codigo,
         Valor = valor,
-        VigenciaInicio = Inicio,
+        VigenciaInicio = inicio ?? Inicio,
         VigenciaFim = null,
         EhSistema = true
     };

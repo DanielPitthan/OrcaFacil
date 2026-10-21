@@ -323,7 +323,7 @@ public class AppDbContext : DbContext
             entity.Property(c => c.Variante).HasMaxLength(16);
             entity.Property(c => c.Grupo).HasMaxLength(2);
             entity.Property(c => c.Codigo).HasMaxLength(2);
-            entity.Property(c => c.Descricao).HasMaxLength(160);
+            entity.Property(c => c.Descricao).HasMaxLength(200);
             entity.HasIndex(c => new { c.Ficha, c.TipoAtivo, c.Variante, c.VigenciaInicio })
                   .IsUnique()
                   .HasDatabaseName("IX_CodigosDirpf_Ficha_TipoAtivo_Variante_VigenciaInicio");
