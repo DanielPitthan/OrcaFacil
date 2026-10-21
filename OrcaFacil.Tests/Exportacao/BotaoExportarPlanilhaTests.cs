@@ -55,6 +55,63 @@ public class BotaoExportarPlanilhaTests
     }
 
     [Fact]
+    public void SegundoBotaoGeraDirpfDoAnoAnterior_SemMexerNoExcel()
+    {
+        var painel = File.ReadAllText(CaminhoPainel());
+        var excel = Trecho(painel, "<MudButton", "<MudNumericField");
+
+        Assert.Contains("OnClick=\"ExportarAsync\"", excel, StringComparison.Ordinal);
+        Assert.Contains("Exportar para Excel", excel, StringComparison.Ordinal);
+        Assert.Contains("Exportando…", excel, StringComparison.Ordinal);
+        Assert.Contains("Disabled=\"@Orquestrador.Exportando\"", excel, StringComparison.Ordinal);
+        Assert.DoesNotContain("ExportadorDirpf", excel, StringComparison.Ordinal);
+        Assert.DoesNotContain("Gerar DIRPF", excel, StringComparison.Ordinal);
+        Assert.DoesNotContain("OrquestradorDirpf", excel, StringComparison.Ordinal);
+
+        Assert.Contains("Label=\"Ano-base\"", painel, StringComparison.Ordinal);
+        Assert.Contains("AnoBaseDirpf.Anterior", painel, StringComparison.Ordinal);
+        Assert.Contains("OnClick=\"ExportarDirpfAsync\"", painel, StringComparison.Ordinal);
+        Assert.Contains("Gerar DIRPF", painel, StringComparison.Ordinal);
+        Assert.Contains("ExportadorDirpf.Exportar", painel, StringComparison.Ordinal);
+        Assert.Contains("OrquestradorDirpf", painel, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"Gerando a DIRPF\"", painel, StringComparison.Ordinal);
+        Assert.Equal(1, Contar(painel, "exportado"));
+
+        var gravarExcel = Trecho(painel, "private void Gravar(", "private async Task<DesfechoCompartilhamentoPlanilha> AbrirFolha");
+        Assert.Contains("ExportadorPlanilha.Exportar", gravarExcel, StringComparison.Ordinal);
+        Assert.DoesNotContain("ExportadorDirpf", gravarExcel, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TerceiroBotaoGeraDarfs_SemMexerNoExcelNemNaDirpf()
+    {
+        var painel = File.ReadAllText(CaminhoPainel());
+        var excel = Trecho(painel, "<MudButton", "<MudNumericField");
+        var dirpf = Trecho(painel, "OnClick=\"ExportarDirpfAsync\"", "OnClick=\"ExportarDarfAsync\"");
+
+        Assert.Contains("OnClick=\"ExportarAsync\"", excel, StringComparison.Ordinal);
+        Assert.DoesNotContain("Gerar DARFs", excel, StringComparison.Ordinal);
+        Assert.Contains("Gerar DIRPF", dirpf, StringComparison.Ordinal);
+        Assert.DoesNotContain("ExportadorDarf", dirpf, StringComparison.Ordinal);
+        Assert.Contains("OnClick=\"ExportarDarfAsync\"", painel, StringComparison.Ordinal);
+        Assert.Contains("Gerar DARFs", painel, StringComparison.Ordinal);
+        Assert.Contains("ExportadorDarf.Exportar", painel, StringComparison.Ordinal);
+        Assert.Contains("aria-label=\"Gerando os DARFs\"", painel, StringComparison.Ordinal);
+        Assert.Contains("OrquestradorDarf", painel, StringComparison.Ordinal);
+        Assert.Equal(1, Contar(painel, "exportado"));
+
+        var gravarDirpf = Trecho(painel, "private void GravarDirpf", "private async Task<DesfechoCompartilhamentoPlanilha> AbrirDirpf");
+        Assert.Contains("ExportadorDirpf.Exportar", gravarDirpf, StringComparison.Ordinal);
+        Assert.DoesNotContain("ExportadorDarf", gravarDirpf, StringComparison.Ordinal);
+
+        var gravarDarf = Trecho(painel, "private void GravarDarf", "private async Task<DesfechoCompartilhamentoPlanilha> AbrirDarf");
+        var indiceAno = gravarDarf.IndexOf("ExportadorDarf.ExigirAno", StringComparison.Ordinal);
+        var indiceArquivo = gravarDarf.IndexOf("new FileStream", StringComparison.Ordinal);
+        Assert.True(indiceAno >= 0 && indiceArquivo > indiceAno);
+        Assert.Equal(6, Contar(painel, "MudAlert"));
+    }
+
+    [Fact]
     public void PainelFechaOArquivoAntesDeCompartilhar()
     {
         var painel = File.ReadAllText(CaminhoPainel());

@@ -17,6 +17,10 @@ public class VerificadorIntegridadeBancoTests
     private const string RegraCatalogo = "20261020135920_AddRegraCatalogoComprovante";
     private const string ResultadoRealizado = "20261020172344_AddResultadoRealizadoVariavel";
     private const string Provento = "20261020175956_AddProvento";
+    private const string CodigoDirpf = "20261020225810_AddCodigoDirpf";
+    private const string VarianteFiagro = "20261020231813_AddVarianteFiagroDirpf";
+    private const string CodigoEtf = "20261020233357_AtualizarCodigoEtfDirpf";
+    private const string ApuracaoIr = "20261021101911_AddApuracaoIrMensal";
     private const string IndiceHash = "IX_ItensLancamento_TransacaoId_HashImportacao";
 
     [Fact]
@@ -62,9 +66,10 @@ public class VerificadorIntegridadeBancoTests
         Assert.False(parcial.Integro);
         Assert.Contains("ItensLancamento", parcial.TabelasExistentes);
         Assert.Contains("Cartoes", parcial.TabelasExistentes);
-        Assert.Equal(["OperacoesRendaFixa", "Proventos", "RegrasCatalogoComprovante", "RegrasFiscais", "TitulosRendaFixa"], parcial.TabelasFaltando);
+        Assert.Equal(["CodigosDirpf", "OperacoesRendaFixa", "Proventos", "RegrasCatalogoComprovante", "RegrasFiscais", "TitulosRendaFixa"], parcial.TabelasFaltando);
         Assert.Equal(
             [
+                "IX_CodigosDirpf_Ficha_TipoAtivo_Variante_VigenciaInicio",
                 IndiceHash,
                 "IX_OperacoesAtivo_HashImportacao",
                 "IX_OperacoesRendaFixa_HashImportacao",
@@ -81,6 +86,16 @@ public class VerificadorIntegridadeBancoTests
             parcial.IndicesFaltando);
         Assert.Equal(
             [
+                "CodigosDirpf.Codigo",
+                "CodigosDirpf.Descricao",
+                "CodigosDirpf.EhSistema",
+                "CodigosDirpf.Ficha",
+                "CodigosDirpf.Grupo",
+                "CodigosDirpf.Id",
+                "CodigosDirpf.TipoAtivo",
+                "CodigosDirpf.Variante",
+                "CodigosDirpf.VigenciaFim",
+                "CodigosDirpf.VigenciaInicio",
                 "ItensLancamento.Descritivo",
                 "ItensLancamento.EhEstorno",
                 "ItensLancamento.HashImportacao",
@@ -132,7 +147,7 @@ public class VerificadorIntegridadeBancoTests
                 "Transacoes.ProventoId"
             ],
             parcial.ColunasFaltando);
-        Assert.Equal([Descritivo, Estorno, HashImportacao, IndiceHashImportacao, RendaFixa, RegraCatalogo, ResultadoRealizado, Provento], parcial.MigrationsAusentesNoHistorico);
+        Assert.Equal([Descritivo, Estorno, HashImportacao, IndiceHashImportacao, RendaFixa, RegraCatalogo, ResultadoRealizado, Provento, CodigoDirpf, VarianteFiagro, CodigoEtf, ApuracaoIr], parcial.MigrationsAusentesNoHistorico);
         Assert.Empty(parcial.MigrationsPelaMetade);
         Assert.DoesNotContain(Cartoes, parcial.MigrationsAusentesNoHistorico);
         Assert.Equal(antes, await FotografarAsync(ctx));
@@ -163,6 +178,16 @@ public class VerificadorIntegridadeBancoTests
         Assert.False(relatorio.Integro);
         Assert.Equal(
             [
+                "CodigosDirpf.Codigo",
+                "CodigosDirpf.Descricao",
+                "CodigosDirpf.EhSistema",
+                "CodigosDirpf.Ficha",
+                "CodigosDirpf.Grupo",
+                "CodigosDirpf.Id",
+                "CodigosDirpf.TipoAtivo",
+                "CodigosDirpf.Variante",
+                "CodigosDirpf.VigenciaFim",
+                "CodigosDirpf.VigenciaInicio",
                 "ItensLancamento.HashImportacao",
                 "OperacoesAtivo.HashImportacao",
                 "OperacoesAtivo.Origem",
@@ -215,6 +240,7 @@ public class VerificadorIntegridadeBancoTests
         Assert.DoesNotContain("ItensLancamento.EhEstorno", relatorio.ColunasFaltando);
         Assert.Equal(
             [
+                "IX_CodigosDirpf_Ficha_TipoAtivo_Variante_VigenciaInicio",
                 IndiceHash,
                 "IX_OperacoesAtivo_HashImportacao",
                 "IX_OperacoesRendaFixa_HashImportacao",
@@ -229,16 +255,16 @@ public class VerificadorIntegridadeBancoTests
                 "IX_Transacoes_ProventoId"
             ],
             relatorio.IndicesFaltando);
-        Assert.Equal([Estorno, HashImportacao, IndiceHashImportacao, RendaFixa, RegraCatalogo, ResultadoRealizado, Provento], relatorio.MigrationsAusentesNoHistorico);
+        Assert.Equal([Estorno, HashImportacao, IndiceHashImportacao, RendaFixa, RegraCatalogo, ResultadoRealizado, Provento, CodigoDirpf, VarianteFiagro, CodigoEtf, ApuracaoIr], relatorio.MigrationsAusentesNoHistorico);
         Assert.Empty(relatorio.MigrationsPelaMetade);
-        Assert.Equal(["OperacoesRendaFixa", "Proventos", "RegrasCatalogoComprovante", "RegrasFiscais", "TitulosRendaFixa"], relatorio.TabelasFaltando);
+        Assert.Equal(["CodigosDirpf", "OperacoesRendaFixa", "Proventos", "RegrasCatalogoComprovante", "RegrasFiscais", "TitulosRendaFixa"], relatorio.TabelasFaltando);
         Assert.Contains(Estorno, relatorio.Resumo);
 
         var excecao = await Assert.ThrowsAsync<IntegridadeBancoException>(() => PreparoBanco.ExigirIntegroAsync(ctx));
         Assert.True(excecao.Resultado.ExigeRecuperacao);
         Assert.NotNull(excecao.Resultado.FalhaMigrate);
         Assert.Equal(
-            [Estorno, HashImportacao, IndiceHashImportacao, RendaFixa, RegraCatalogo, ResultadoRealizado, Provento],
+            [Estorno, HashImportacao, IndiceHashImportacao, RendaFixa, RegraCatalogo, ResultadoRealizado, Provento, CodigoDirpf, VarianteFiagro, CodigoEtf, ApuracaoIr],
             excecao.Resultado.Relatorio.MigrationsAusentesNoHistorico);
         Assert.DoesNotContain("ItensLancamento.EhEstorno", excecao.Resultado.Relatorio.ColunasFaltando);
         Assert.Contains("ItensLancamento.HashImportacao", excecao.Resultado.Relatorio.ColunasFaltando);

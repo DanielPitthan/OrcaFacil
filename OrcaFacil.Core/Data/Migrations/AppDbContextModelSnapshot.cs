@@ -135,6 +135,154 @@ namespace OrcaFacil.Core.Data.Migrations
                     b.ToTable("Categorias");
                 });
 
+            modelBuilder.Entity("OrcaFacil.Core.Entities.CodigoDirpf", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Codigo")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Descricao")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("EhSistema")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Ficha")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Grupo")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("TipoAtivo")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Variante")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("VigenciaFim")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("VigenciaInicio")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Ficha", "TipoAtivo", "Variante", "VigenciaInicio")
+                        .IsUnique()
+                        .HasDatabaseName("IX_CodigosDirpf_Ficha_TipoAtivo_Variante_VigenciaInicio");
+
+                    b.ToTable("CodigosDirpf");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Codigo = "01",
+                            Descricao = "Ações (inclusive as listadas em bolsa)",
+                            EhSistema = true,
+                            Ficha = 0,
+                            Grupo = "03",
+                            TipoAtivo = 0,
+                            Variante = "",
+                            VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Codigo = "03",
+                            Descricao = "Fundos de Investimento Imobiliário (FII)",
+                            EhSistema = true,
+                            Ficha = 0,
+                            Grupo = "07",
+                            TipoAtivo = 1,
+                            Variante = "",
+                            VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Codigo = "06",
+                            Descricao = "ETF - Entidade de investimento",
+                            EhSistema = true,
+                            Ficha = 0,
+                            Grupo = "07",
+                            TipoAtivo = 2,
+                            Variante = "",
+                            VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 4,
+                            Codigo = "04",
+                            Descricao = "Ativos negociados em bolsa no Brasil (BDRs, opções e outros, exceto ações e fundos)",
+                            EhSistema = true,
+                            Ficha = 0,
+                            Grupo = "04",
+                            TipoAtivo = 3,
+                            Variante = "",
+                            VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 5,
+                            Codigo = "09",
+                            Descricao = "Lucros e dividendos recebidos",
+                            EhSistema = true,
+                            Ficha = 1,
+                            Grupo = "",
+                            TipoAtivo = 0,
+                            Variante = "",
+                            VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 6,
+                            Codigo = "99",
+                            Descricao = "Outros",
+                            EhSistema = true,
+                            Ficha = 1,
+                            Grupo = "",
+                            TipoAtivo = 1,
+                            Variante = "",
+                            VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 7,
+                            Codigo = "02",
+                            Descricao = "Fundos de Investimento nas Cadeias Produtivas Agroindustriais (Fiagro)",
+                            EhSistema = true,
+                            Ficha = 0,
+                            Grupo = "07",
+                            TipoAtivo = 1,
+                            Variante = "Fiagro",
+                            VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 8,
+                            Codigo = "20",
+                            Descricao = "Ganhos líquidos em operações no mercado à vista de ações negociadas em bolsas de valores nas alienações realizadas até R$ 20.000,00 em cada mês, para o conjunto de ações",
+                            EhSistema = true,
+                            Ficha = 1,
+                            Grupo = "",
+                            TipoAtivo = 0,
+                            Variante = "GanhoIsento",
+                            VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        });
+                });
+
             modelBuilder.Entity("OrcaFacil.Core.Entities.CompraCesta", b =>
                 {
                     b.Property<int>("Id")
@@ -802,6 +950,102 @@ namespace OrcaFacil.Core.Data.Migrations
                             EhSistema = true,
                             Valor = 0.15m,
                             VigenciaInicio = new DateTime(1995, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 7,
+                            Codigo = "RV.Aliquota.DayTrade",
+                            EhSistema = true,
+                            Valor = 0.20m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 8,
+                            Codigo = "RV.Isencao.VendasAcoes",
+                            EhSistema = true,
+                            Valor = 20000m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 9,
+                            Codigo = "RV.Darf.Codigo",
+                            EhSistema = true,
+                            Valor = 6015m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 10,
+                            Codigo = "RV.Darf.ValorMinimo",
+                            EhSistema = true,
+                            Valor = 10m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 11,
+                            Codigo = "RV.Darf.AcumularAbaixoDoMinimo",
+                            EhSistema = true,
+                            Valor = 1m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 12,
+                            Codigo = "RV.Prejuizo.CompensaEntreAnos",
+                            EhSistema = true,
+                            Valor = 1m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 13,
+                            Codigo = "RV.Prejuizo.CompensaNoMesIsento",
+                            EhSistema = true,
+                            Valor = 1m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 14,
+                            Codigo = "RV.Irrf.Estimar",
+                            EhSistema = true,
+                            Valor = 0m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 15,
+                            Codigo = "RV.Irrf.AliquotaComum",
+                            EhSistema = true,
+                            Valor = 0.00005m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 16,
+                            Codigo = "RV.Irrf.AliquotaDayTrade",
+                            EhSistema = true,
+                            Valor = 0.01m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 17,
+                            Codigo = "RV.Irrf.ValorMinimoRetencao",
+                            EhSistema = true,
+                            Valor = 1m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 18,
+                            Codigo = "RV.Irrf.CompensaMesesSeguintes",
+                            EhSistema = true,
+                            Valor = 0m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
                         });
                 });
 

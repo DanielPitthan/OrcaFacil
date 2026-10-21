@@ -151,9 +151,27 @@
         _erro = null;
         try
         {
-            var gravadas = await Importacao.GravarAsync(_previa, MembroId());
-            Snackbar.Add(gravadas == 1 ? "1 linha gravada" : $"{gravadas} linhas gravadas", Severity.Success);
-            Navegacao.NavigateTo("/ativos");
+            var gravacao = await Importacao.GravarAsync(_previa, MembroId());
+            if (gravacao.Lancamentos == 0)
+            {
+                Snackbar.Add(
+                    gravacao.Linhas == 1 ? "1 linha gravada" : $"{gravacao.Linhas} linhas gravadas",
+                    Severity.Success,
+                    options => options.SnackbarTypeClass = "of-snack-importacao");
+                Snackbar.Add(
+                    gravacao.Texto,
+                    Severity.Warning,
+                    options => options.SnackbarTypeClass = "of-snack-importacao");
+                Navegacao.NavigateTo("/ativos");
+            }
+            else
+            {
+                Snackbar.Add(
+                    gravacao.Texto,
+                    Severity.Success,
+                    options => options.SnackbarTypeClass = "of-snack-importacao");
+                Navegacao.NavigateTo(gravacao.Rota);
+            }
         }
         catch (InvalidOperationException ex)
         {

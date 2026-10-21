@@ -73,7 +73,7 @@ public class ImportacaoExtratoB3Service
         return await ClassificarListaAsync(previa.Linhas, desejos, membroFamiliaId, cancellationToken);
     }
 
-    public async Task<int> GravarAsync(
+    public async Task<ResultadoGravacaoB3> GravarAsync(
         PreviaExtratoB3 previa,
         int membroFamiliaId,
         CancellationToken cancellationToken = default)
@@ -102,6 +102,7 @@ public class ImportacaoExtratoB3Service
         await using var transacao = await context.Database.BeginTransactionAsync(cancellationToken);
         try
         {
+            var maiorId = await context.Transacoes.MaxAsync(t => (int?)t.Id, cancellationToken) ?? 0;
             var ativos = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             var titulos = new Dictionary<(string Codigo, string Corretora), int>();
             foreach (var linha in gravar)
@@ -157,7 +158,11 @@ public class ImportacaoExtratoB3Service
             }
 
             await transacao.CommitAsync(cancellationToken);
-            return gravar.Count;
+            var datas = await context.Transacoes
+                .Where(t => t.Id > maiorId)
+                .Select(t => t.Data)
+                .ToListAsync(cancellationToken);
+            return ResultadoGravacaoB3.Criar(gravar.Count, datas);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {

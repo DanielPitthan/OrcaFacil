@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using OrcaFacil.Core.Ativos;
 using OrcaFacil.Core.Data;
 using OrcaFacil.Core.Data.Migrations;
 using OrcaFacil.Core.Entities;
@@ -70,7 +71,7 @@ public class AddResultadoRealizadoMigrationTests
             var mercado = atual.Transacoes.Single(t => t.Descricao == "Mercado");
             Assert.Null(mercado.OperacaoAtivoId);
             Assert.Equal(42.50m, mercado.Valor);
-            Assert.Equal(6, atual.RegrasFiscais.Count());
+            Assert.Equal(CatalogoRegrasFiscais.Linhas().Count, atual.RegrasFiscais.Count());
             Assert.All(atual.RegrasFiscais, regra => Assert.True(regra.EhSistema));
             Assert.Equal(1L, Escalar(connection, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'IX_OperacoesAtivo_HashImportacao'"));
             Assert.Equal(1L, Escalar(connection, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'IX_Transacoes_OperacaoAtivoId'"));

@@ -5,7 +5,9 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
+using OrcaFacil.Core.Ativos;
 using OrcaFacil.Core.Data;
+using OrcaFacil.Core.Dirpf;
 using OrcaFacil.Core.Entities;
 
 namespace OrcaFacil.Tests.Data;
@@ -27,6 +29,8 @@ public class MigracaoUpgradeTests
     private const string RegraCatalogo = "20261020135920_AddRegraCatalogoComprovante";
     private const string ResultadoRealizado = "20261020172344_AddResultadoRealizadoVariavel";
     private const string Provento = "20261020175956_AddProvento";
+    private const string CodigoDirpf = "20261020225810_AddCodigoDirpf";
+    private const string ApuracaoIr = "20261021101911_AddApuracaoIrMensal";
 
     [Fact]
     public async Task BancoAntigo_MigraAteOAtual_PreservaDadosEAplicaDefaults()
@@ -144,10 +148,16 @@ public class MigracaoUpgradeTests
             Assert.Empty(ctx.Proventos);
             Assert.Empty(ctx.TitulosRendaFixa);
             Assert.Empty(ctx.OperacoesRendaFixa);
-            Assert.Equal(6, await ctx.RegrasFiscais.CountAsync());
+            Assert.Equal(CatalogoRegrasFiscais.Linhas().Count, await ctx.RegrasFiscais.CountAsync());
             Assert.Contains(await ctx.RegrasFiscais.ToListAsync(), regra => regra.Codigo == "RV.CustosReduzemResultado" && regra.EhSistema);
+            Assert.Contains(await ctx.RegrasFiscais.ToListAsync(), regra => regra.Codigo == "RV.Darf.Codigo" && regra.Valor == 6015m && regra.EhSistema);
+            Assert.Equal(CatalogoCodigosDirpf.Linhas().Count, await ctx.CodigosDirpf.CountAsync());
+            Assert.Contains(await ctx.CodigosDirpf.ToListAsync(), codigo => codigo.Codigo == "01" && codigo.EhSistema);
+            Assert.Contains(await ctx.CodigosDirpf.ToListAsync(), codigo => codigo.Codigo == "02" && codigo.Variante == "Fiagro" && codigo.EhSistema);
+            Assert.Contains(await ctx.CodigosDirpf.ToListAsync(), codigo => codigo.Codigo == "06" && codigo.Descricao == "ETF - Entidade de investimento" && codigo.EhSistema);
+            Assert.Contains(await ctx.CodigosDirpf.ToListAsync(), codigo => codigo.Codigo == "20" && codigo.Variante == "GanhoIsento" && codigo.EhSistema);
 
-            Assert.Equal(Provento, (await ctx.Database.GetAppliedMigrationsAsync()).Last());
+            Assert.Equal(ApuracaoIr, (await ctx.Database.GetAppliedMigrationsAsync()).Last());
             Assert.True(File.Exists(banco.Caminho));
             Assert.True(new FileInfo(banco.Caminho).Length > 0);
         }
@@ -166,7 +176,7 @@ public class MigracaoUpgradeTests
         Assert.Contains(IndiceHashImportacao, ids);
         Assert.Contains(RendaFixa, ids);
         Assert.Contains(RegraCatalogo, ids);
-        Assert.Equal(Provento, ids[^1]);
+        Assert.Equal(ApuracaoIr, ids[^1]);
 
         for (var i = 1; i < ids.Count; i++)
         {
