@@ -31,7 +31,8 @@
     </MudButton>
 
     <MudNumericField T="int" @bind-Value="_anoBase" Label="Ano-base" Min="1900" Max="2200"
-                     Variant="Variant.Text" Margin="Margin.Dense" Class="mt-4" Style="max-width: 8rem;" />
+                     Variant="Variant.Text" Margin="Margin.Dense" Class="mt-4" Style="max-width: 8rem;"
+                     InputMode="InputMode.numeric" UserAttributes="@AtributosAno" />
     @if (OrquestradorDirpf.Exportando)
     {
         <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-3" aria-label="Gerando a DIRPF" />
@@ -74,6 +75,11 @@
     private AcompanhamentoExportacaoPlanilha? _acompanhamento;
     private AcompanhamentoExportacaoPlanilha? _acompanhamentoDirpf;
     private AcompanhamentoExportacaoPlanilha? _acompanhamentoDarf;
+    private static readonly Dictionary<string, object?> AtributosAno = new()
+    {
+        ["inputmode"] = "numeric"
+    };
+
     private int _anoBase;
 
     protected override void OnInitialized()

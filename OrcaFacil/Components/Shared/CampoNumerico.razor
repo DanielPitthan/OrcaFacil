@@ -9,7 +9,7 @@
     <MudTextField @ref="_campo" T="string" Value="@_texto" Label="@Label" Placeholder="@Placeholder"
                   HelperText="@HelperText" Class="@Class" Immediate="true"
                   Adornment="@Adornment" AdornmentText="@AdornmentText" AdornmentIcon="@AdornmentIcon"
-                  AdornmentColor="@AdornmentColor" UserAttributes="@_atributos"
+                  AdornmentColor="@AdornmentColor" InputMode="@ModoTeclado" UserAttributes="@_atributos"
                   Error="@_erroVisivel" ErrorText="@_erro"
                   Validation="@(Validation is null ? null : new Func<string, string?>(ValidarTexto))" />
 </div>
@@ -17,14 +17,7 @@
 @code {
     private const decimal LimitePadrao = 1_000_000_000m;
 
-    private readonly Dictionary<string, object> _atributos = new()
-    {
-        ["inputmode"] = "decimal",
-        ["autocomplete"] = "off",
-        ["autocorrect"] = "off",
-        ["autocapitalize"] = "off",
-        ["spellcheck"] = "false"
-    };
+    private Dictionary<string, object?> _atributos = CriarAtributos(tecladoCompleto: false, tecladoDecimal: true);
 
     private ElementReference _raiz;
     private MudTextField<string> _campo = null!;
@@ -37,6 +30,7 @@
     private string _digitos = "";
     private string _texto = "";
     private string? _erro;
+    private bool _tetoEstourado;
     private decimal? _ultimoEmitido;
 
     [CascadingParameter] private EditContext? EditContext { get; set; }
@@ -49,6 +43,8 @@
     [Parameter] public string? HelperText { get; set; }
     [Parameter] public string? Class { get; set; }
     [Parameter] public int CasasDecimais { get; set; } = 2;
+    [Parameter] public bool FracaoExplicita { get; set; }
+    [Parameter] public bool TecladoCompleto { get; set; }
     [Parameter] public decimal? ValorMaximo { get; set; } = LimitePadrao;
     [Parameter] public Adornment Adornment { get; set; } = Adornment.None;
     [Parameter] public string? AdornmentText { get; set; }
@@ -58,7 +54,30 @@
 
     private bool PermiteVazio => typeof(TNumber) == typeof(decimal?);
     private int Casas => Math.Clamp(CasasDecimais, 0, 8);
+    private bool TecladoDecimal => !TecladoCompleto && (FracaoExplicita || Casas > 0);
+    private InputMode ModoTeclado => TecladoCompleto ? InputMode.text : TecladoDecimal ? InputMode.@decimal : InputMode.numeric;
     private bool _erroVisivel => !string.IsNullOrEmpty(_erro) && For is not null;
+
+    private static string TextoModo(bool tecladoCompleto, bool tecladoDecimal)
+        => tecladoCompleto ? "text" : tecladoDecimal ? "decimal" : "numeric";
+
+    private static Dictionary<string, object?> CriarAtributos(bool tecladoCompleto, bool tecladoDecimal) => new()
+    {
+        ["inputmode"] = TextoModo(tecladoCompleto, tecladoDecimal),
+        ["autocomplete"] = "off",
+        ["autocorrect"] = "off",
+        ["autocapitalize"] = "off",
+        ["spellcheck"] = "false"
+    };
+
+    private void SincronizarAtributos()
+    {
+        var modo = TextoModo(TecladoCompleto, TecladoDecimal);
+        if (Equals(_atributos["inputmode"], modo))
+            return;
+
+        _atributos = CriarAtributos(TecladoCompleto, TecladoDecimal);
+    }
 
     protected override void OnInitialized()
     {
@@ -72,6 +91,8 @@
 
     protected override void OnParametersSet()
     {
+        SincronizarAtributos();
+
         var atual = LerValor();
         if (_inicializado && Nullable.Equals(atual, _ultimoEmitido))
             return;
@@ -79,7 +100,7 @@
         _inicializado = true;
         _ultimoEmitido = atual;
         _nulo = atual is null;
-        _digitos = atual is null ? "" : MascaraDireitaEsquerda.DigitosDe(atual.Value, Casas);
+        _digitos = atual is null ? "" : DigitosDoValor(atual.Value);
         _texto = TextoDe(_digitos, _nulo);
     }
 
@@ -121,16 +142,16 @@
     [JSInvokable]
     public Task<string> IncluirTexto(string? texto)
     {
-        var digitos = MascaraDireitaEsquerda.AplicarEntrada(_digitos, texto, Casas, ValorMaximo, substituir: false);
-        return AplicarAsync(digitos, nulo: false);
+        var entrada = AvisoTeto.Aplicar(_digitos, texto, Casas, ValorMaximo, substituir: false, FracaoExplicita);
+        return AplicarAsync(entrada.Digitos, nulo: false, excedeuTeto: entrada.PassouDoTeto);
     }
 
     [JSInvokable]
     public Task<string> DefinirTexto(string? texto)
     {
-        var digitos = MascaraDireitaEsquerda.AplicarEntrada(_digitos, texto, Casas, ValorMaximo, substituir: true);
+        var entrada = AvisoTeto.Aplicar(_digitos, texto, Casas, ValorMaximo, substituir: true, FracaoExplicita);
         var semDigitos = string.IsNullOrEmpty(MascaraDireitaEsquerda.SomenteDigitos(texto));
-        return AplicarAsync(digitos, nulo: PermiteVazio && semDigitos);
+        return AplicarAsync(entrada.Digitos, nulo: PermiteVazio && semDigitos, excedeuTeto: entrada.PassouDoTeto);
     }
 
     [JSInvokable]
@@ -144,34 +165,46 @@
     public Task<string> Limpar()
         => AplicarAsync("", nulo: PermiteVazio);
 
-    private async Task<string> AplicarAsync(string digitos, bool nulo)
+    private async Task<string> AplicarAsync(string digitos, bool nulo, bool excedeuTeto = false)
     {
         _cursorPendente = true;
-        if (digitos == _digitos && nulo == _nulo)
+        var inalterado = digitos == _digitos && nulo == _nulo;
+        if (inalterado && !excedeuTeto)
             return _texto;
 
-        _digitos = digitos;
-        _nulo = nulo;
-        _texto = TextoDe(digitos, nulo);
-        decimal? valor = nulo ? null : MascaraDireitaEsquerda.ValorDe(digitos, Casas);
-        _ultimoEmitido = valor;
-        await ValueChanged.InvokeAsync(MascaraDireitaEsquerda.Para<TNumber>(valor));
-
-        if (_campoValidacao is not null && EditContext is not null)
+        if (!inalterado)
         {
-            EditContext.NotifyFieldChanged(_campoValidacao.Value);
-            AtualizarErro();
+            _digitos = digitos;
+            _nulo = nulo;
+            _texto = TextoDe(digitos, nulo);
+            decimal? valor = nulo ? null : ValorDosDigitos(digitos);
+            _ultimoEmitido = valor;
+            await ValueChanged.InvokeAsync(MascaraDireitaEsquerda.Para<TNumber>(valor));
+
+            if (_campoValidacao is not null && EditContext is not null)
+                EditContext.NotifyFieldChanged(_campoValidacao.Value);
+
+            if (Validation is not null && _campo is not null)
+                await _campo.ValidateAsync();
         }
 
-        if (Validation is not null && _campo is not null)
-            await _campo.ValidateAsync();
+        if (excedeuTeto && ValorMaximo is decimal teto)
+        {
+            _tetoEstourado = true;
+            _erro = AvisoTeto.Mensagem(teto);
+        }
+        else
+        {
+            _tetoEstourado = false;
+            AtualizarErro();
+        }
 
         await InvokeAsync(StateHasChanged);
         return _texto;
     }
 
     private string? ValidarTexto(string _)
-        => Validation?.Invoke(_nulo ? 0m : MascaraDireitaEsquerda.ValorDe(_digitos, Casas));
+        => Validation?.Invoke(_nulo ? 0m : ValorDosDigitos(_digitos));
 
     private decimal? LerValor()
     {
@@ -181,8 +214,24 @@
         return Convert.ToDecimal(Value, CultureInfo.InvariantCulture);
     }
 
+    private string DigitosDoValor(decimal valor)
+        => FracaoExplicita
+            ? MascaraDireitaEsquerda.CanonicoFracao(valor, Casas)
+            : MascaraDireitaEsquerda.DigitosDe(valor, Casas);
+
+    private decimal ValorDosDigitos(string digitos)
+        => FracaoExplicita
+            ? MascaraDireitaEsquerda.ValorFracao(digitos)
+            : MascaraDireitaEsquerda.ValorDe(digitos, Casas);
+
     private string TextoDe(string digitos, bool nulo)
-        => nulo ? "" : MascaraDireitaEsquerda.Formatar(MascaraDireitaEsquerda.ValorDe(digitos, Casas), Casas);
+    {
+        if (nulo)
+            return "";
+        if (FracaoExplicita)
+            return MascaraDireitaEsquerda.ExibirFracao(digitos);
+        return MascaraDireitaEsquerda.Formatar(MascaraDireitaEsquerda.ValorDe(digitos, Casas), Casas);
+    }
 
     private void AoValidar(object? sender, ValidationStateChangedEventArgs e)
     {
@@ -192,6 +241,9 @@
 
     private void AtualizarErro()
     {
+        if (_tetoEstourado)
+            return;
+
         if (EditContext is null || _campoValidacao is null)
         {
             _erro = null;

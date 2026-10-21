@@ -1,3 +1,4 @@
+@using OrcaFacil.Core.Numerico
 <MudDialog>
     <DialogContent>
         <MudSelect T="int" @bind-Value="Modelo.CategoriaId" @bind-Value:after="AtualizarGastoAnterior" Label="Categoria"
@@ -12,13 +13,14 @@
                         Adornment="Adornment.Start" AdornmentText="R$" Class="mb-3" />
 
         <CampoNumerico TNumber="decimal?" @bind-Value="Modelo.MetaReducaoPercentual" Label="Meta redução %"
-                        CasasDecimais="0" ValorMaximo="100" Adornment="Adornment.End" AdornmentText="%"
+                        CasasDecimais="1" FracaoExplicita="true" ValorMaximo="100" TecladoCompleto="true" For="@(() => Modelo.MetaReducaoPercentual)"
+                        Adornment="Adornment.End" AdornmentText="%"
                         HelperText="Opcional, em relação ao gasto do mês anterior" Class="mb-3" />
 
         @if (_gastoMesAnterior > 0 && Modelo.MetaReducaoPercentual is > 0)
         {
             <MudAlert Severity="Severity.Info" Dense="true">
-                Sugerido com @Modelo.MetaReducaoPercentual.Value.ToString("0")% de redução:
+                Sugerido com @TextoMetaReducao.Percentual(Modelo.MetaReducaoPercentual.Value)% de redução:
                 <b>@LimiteSugerido.ToString("C")</b> (gasto anterior @_gastoMesAnterior.ToString("C"))
                 <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Primary" Class="ml-1"
                            OnClick="@(() => Modelo.ValorLimite = LimiteSugerido)">

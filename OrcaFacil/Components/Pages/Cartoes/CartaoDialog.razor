@@ -11,7 +11,8 @@
 
             <MudTextField T="string" @bind-Value="Modelo.UltimosDigitos" Label="4 últimos números"
                           Required="true" RequiredError="Informe os 4 últimos números" MaxLength="4" Class="mb-3"
-                          Placeholder="Ex.: 1234" />
+                          Placeholder="Ex.: 1234"
+                          InputMode="InputMode.numeric" UserAttributes="@AtributosDigitos" />
 
             <MudSelect T="TipoCartao" @bind-Value="Modelo.Tipo" Label="Finalidade" Class="mb-3">
                 <MudSelectItem Value="TipoCartao.Credito">Cartão de Crédito</MudSelectItem>
@@ -48,6 +49,11 @@
 @code {
     [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
     [Parameter] public CartaoFormModel Modelo { get; set; } = new();
+
+    private static readonly Dictionary<string, object?> AtributosDigitos = new()
+    {
+        ["inputmode"] = "numeric"
+    };
 
     private MudForm _form = null!;
     private MudTextField<string> _nome = null!;

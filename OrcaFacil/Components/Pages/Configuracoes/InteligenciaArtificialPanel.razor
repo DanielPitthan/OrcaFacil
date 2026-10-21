@@ -33,7 +33,8 @@
         </FormRow>
         <FormRow Icone="@Icons.Material.Outlined.Notes" Rotulo="Máximo de tokens">
             <MudNumericField T="int" @bind-Value="_maxTokens" Immediate="true" Variant="Variant.Text" Margin="Margin.Dense"
-                             Min="@PedidoMensagem.MaxTokensMinimo" Max="@PedidoMensagem.MaxTokensMaximo" />
+                             Min="@PedidoMensagem.MaxTokensMinimo" Max="@PedidoMensagem.MaxTokensMaximo"
+                             InputMode="InputMode.numeric" UserAttributes="@AtributosTokens" />
         </FormRow>
         <div class="of-secao-bloco">
             <p class="of-apoio">Entre @PedidoMensagem.MaxTokensMinimo e @PedidoMensagem.MaxTokensMaximo. O padrão é @PedidoMensagem.MaxTokens.</p>
@@ -82,6 +83,11 @@
 
 @code {
     private readonly CancellationTokenSource _cancelamento = new();
+
+    private static readonly Dictionary<string, object?> AtributosTokens = new()
+    {
+        ["inputmode"] = "numeric"
+    };
 
     private static readonly Dictionary<string, object?> AtributosChave = new()
     {

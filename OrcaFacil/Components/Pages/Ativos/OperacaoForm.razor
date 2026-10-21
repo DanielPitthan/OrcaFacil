@@ -19,7 +19,7 @@
                            RequiredError="Informe a data" Class="mb-3" />
 
             <CampoNumerico @ref="_quantidade" TNumber="decimal" @bind-Value="Modelo.Quantidade" Label="Quantidade"
-                            CasasDecimais="0" Class="mb-3"
+                            CasasDecimais="8" FracaoExplicita="true" TecladoCompleto="true" Class="mb-3"
                             Validation="@(new Func<decimal, string?>(ValidarQuantidade))" />
 
             <CampoNumerico @ref="_preco" TNumber="decimal" @bind-Value="Modelo.PrecoUnitario" Label="Preço unitário"

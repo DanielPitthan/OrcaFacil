@@ -106,6 +106,75 @@ public class MascaraDireitaEsquerdaTests
     }
 
     [Fact]
+    public void EscalaFixaComZeroCasas_DescartaAVirgulaEArredonda()
+    {
+        var digitos = "";
+        foreach (var tecla in "0,5")
+            digitos = MascaraDireitaEsquerda.AplicarEntrada(digitos, tecla.ToString(), 0, null, substituir: false);
+
+        Assert.Equal("5", digitos);
+        Assert.Equal(5m, MascaraDireitaEsquerda.ValorDe(digitos, 0));
+        Assert.Equal("1", MascaraDireitaEsquerda.DigitosDe(0.5m, 0));
+        Assert.Equal("1", MascaraDireitaEsquerda.Formatar(MascaraDireitaEsquerda.ValorDe(MascaraDireitaEsquerda.DigitosDe(0.5m, 0), 0), 0));
+        Assert.Equal("", MascaraDireitaEsquerda.DigitosDe(0.06m, 0));
+        Assert.Equal("0", MascaraDireitaEsquerda.Formatar(0m, 0));
+
+        digitos = "";
+        foreach (var tecla in "12,5")
+            digitos = MascaraDireitaEsquerda.AplicarEntrada(digitos, tecla.ToString(), 0, null, substituir: false);
+        Assert.Equal(125m, MascaraDireitaEsquerda.ValorDe(digitos, 0));
+    }
+
+    [Theory]
+    [InlineData("1.000", "1000")]
+    [InlineData("12.500", "12500")]
+    [InlineData("1.000.000", "1000000")]
+    [InlineData("1.000,5", "1000,5")]
+    [InlineData("0,5", "0,5")]
+    [InlineData("12,5", "12,5")]
+    [InlineData("12.5", "125")]
+    [InlineData("0.5", "5")]
+    public void PontoEhMilharEVirgulaEhDecimal_IgualNaTeclaENaCola(string texto, string canonico)
+    {
+        var digitado = DigitarFracao(texto, 8);
+        var colado = MascaraDireitaEsquerda.AplicarFracao("", texto, 8, null, substituir: true);
+
+        Assert.Equal(canonico, digitado);
+        Assert.Equal(canonico, colado);
+        Assert.Equal(MascaraDireitaEsquerda.ValorFracao(canonico), MascaraDireitaEsquerda.ValorFracao(digitado));
+        Assert.Equal(MascaraDireitaEsquerda.ValorFracao(canonico), MascaraDireitaEsquerda.ValorFracao(colado));
+    }
+
+    [Fact]
+    public void DozeVirgulaCinquentaENove_TruncaNaColaENaReabertura()
+    {
+        Assert.Equal("12,5", MascaraDireitaEsquerda.AplicarFracao("", "12,59", 1, 100m, substituir: true));
+        Assert.Equal("12,5", DigitarFracao("12,59", 1));
+        Assert.Equal("12,5", MascaraDireitaEsquerda.CanonicoFracao(12.59m, 1));
+        Assert.Equal(12.5m, MascaraDireitaEsquerda.ValorFracao(MascaraDireitaEsquerda.CanonicoFracao(12.59m, 1)));
+    }
+
+    [Fact]
+    public void TetoRecusaATeclaQuePassa_EColaAcimaNaoViraOutroNumero()
+    {
+        Assert.Equal("10", DigitarFracao("101", 1, 100m));
+        Assert.Equal(10m, MascaraDireitaEsquerda.ValorFracao(DigitarFracao("101", 1, 100m)));
+        Assert.Equal("", MascaraDireitaEsquerda.AplicarFracao("", "101", 1, 100m, substituir: true));
+        Assert.Equal("12,5", MascaraDireitaEsquerda.AplicarFracao("12,5", "101", 1, 100m, substituir: true));
+        Assert.Equal("100", DigitarFracao("100", 1, 100m));
+        Assert.Equal("100", DigitarFracao("1000", 1, 100m));
+        Assert.Equal(100m, MascaraDireitaEsquerda.ValorFracao(DigitarFracao("100,1", 1, 100m)));
+    }
+
+    private static string DigitarFracao(string texto, int casas, decimal? maximo = null)
+    {
+        var digitos = "";
+        foreach (var caractere in texto)
+            digitos = MascaraDireitaEsquerda.AplicarFracao(digitos, caractere.ToString(), casas, maximo, substituir: false);
+        return digitos;
+    }
+
+    [Fact]
     public void ConverteParaDecimalEDecimalAnulavel()
     {
         Assert.Equal(0m, MascaraDireitaEsquerda.Para<decimal>(null));
