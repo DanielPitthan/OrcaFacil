@@ -280,6 +280,42 @@ namespace OrcaFacil.Core.Data.Migrations
                             TipoAtivo = 0,
                             Variante = "GanhoIsento",
                             VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 9,
+                            Codigo = "10",
+                            Descricao = "Juros sobre capital próprio",
+                            EhSistema = true,
+                            Ficha = 2,
+                            Grupo = "",
+                            TipoAtivo = 0,
+                            Variante = "Jcp",
+                            VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 10,
+                            Codigo = "06",
+                            Descricao = "Rendimentos de aplicações financeiras",
+                            EhSistema = true,
+                            Ficha = 2,
+                            Grupo = "",
+                            TipoAtivo = 0,
+                            Variante = "RendaFixa",
+                            VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 11,
+                            Codigo = "02",
+                            Descricao = "Títulos públicos e privados sujeitos à tributação",
+                            EhSistema = true,
+                            Ficha = 0,
+                            Grupo = "04",
+                            TipoAtivo = 0,
+                            Variante = "RendaFixa",
+                            VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
                         });
                 });
 
@@ -1080,6 +1116,22 @@ namespace OrcaFacil.Core.Data.Migrations
                             EhSistema = true,
                             Valor = 0m,
                             VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 19,
+                            Codigo = "RF.IrRegressivo.Automatico",
+                            EhSistema = true,
+                            Valor = 0m,
+                            VigenciaInicio = new DateTime(2005, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 20,
+                            Codigo = "RF.Jcp.GrossUp",
+                            EhSistema = true,
+                            Valor = 0m,
+                            VigenciaInicio = new DateTime(1996, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
                         });
                 });
 

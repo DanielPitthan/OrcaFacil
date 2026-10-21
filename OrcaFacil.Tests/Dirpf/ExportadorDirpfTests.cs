@@ -11,7 +11,7 @@ public class ExportadorDirpfTests : IDisposable
     public void Dispose() => _fabrica.Dispose();
 
     [Fact]
-    public void Exportar_GravaDuasAbas_ComCodigoTextoCnpjVazioELarguraFixa()
+    public void Exportar_GravaAsAbas_ComCodigoTextoCnpjVazioELarguraFixa()
     {
         using (var contexto = _fabrica.CreateDbContext())
         {
@@ -64,7 +64,7 @@ public class ExportadorDirpfTests : IDisposable
 
         using var pasta = new XLWorkbook(destino);
         Assert.Equal(ExportadorDirpf.NomesDeAba, pasta.Worksheets.Select(aba => aba.Name).ToArray());
-        Assert.Equal(2, pasta.Worksheets.Count);
+        Assert.Equal(4, pasta.Worksheets.Count);
         Assert.DoesNotContain("AdjustToContents", File.ReadAllText(Fonte()), StringComparison.Ordinal);
 
         var bens = pasta.Worksheet(ExportadorDirpf.AbaBens);
@@ -85,6 +85,22 @@ public class ExportadorDirpfTests : IDisposable
         Assert.Equal("09", isentos.Cell(3, 6).GetText());
         Assert.Equal(10m, (decimal)isentos.Cell(3, 9).GetDouble());
         Assert.Equal(3, isentos.LastRowUsed()!.RowNumber());
+        Assert.DoesNotContain(
+            Enumerable.Range(2, isentos.LastRowUsed()!.RowNumber() - 1).Select(linha => isentos.Cell(linha, 5).GetText()),
+            texto => texto == "JCP");
+
+        var exclusivos = pasta.Worksheet(ExportadorDirpf.AbaRendimentosExclusivos);
+        Assert.Equal(PlanilhaPtBr.LarguraColuna, exclusivos.Column(1).Width);
+        Assert.Equal("JCP", exclusivos.Cell(2, 5).GetText());
+        Assert.Equal("10", exclusivos.Cell(2, 6).GetText());
+        Assert.True(exclusivos.Cell(2, 8).IsEmpty());
+        Assert.Equal(80m, (decimal)exclusivos.Cell(2, 9).GetDouble());
+        Assert.True(exclusivos.Cell(2, 10).IsEmpty());
+        Assert.Equal(2, exclusivos.LastRowUsed()!.RowNumber());
+
+        var rendaFixa = pasta.Worksheet(ExportadorDirpf.AbaRendaFixa);
+        Assert.Equal(PlanilhaPtBr.LarguraColuna, rendaFixa.Column(1).Width);
+        Assert.Equal(1, rendaFixa.LastRowUsed()!.RowNumber());
     }
 
     private static string Fonte()

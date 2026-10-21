@@ -31,6 +31,19 @@ public static class CodigosRegraFiscal
     public const string IrrfValorMinimoRetencao = "RV.Irrf.ValorMinimoRetencao";
     public const string IrrfCompensaMesesSeguintes = "RV.Irrf.CompensaMesesSeguintes";
 
+    /// <summary>
+    /// 0: a DIRPF da renda fixa usa o IR retido gravado na operação.
+    /// 1 recusa a exportação: a tabela regressiva do art. 1º da Lei nº 11.033/2004 não é calculada aqui.
+    /// https://www.planalto.gov.br/ccivil_03/_ato2004-2006/2004/lei/l11033.htm
+    /// </summary>
+    public const string IrRegressivoAutomatico = "RF.IrRegressivo.Automatico";
+
+    /// <summary>
+    /// 0: o JCP da DIRPF é o valor líquido gravado no provento.
+    /// 1 recusa a exportação: não reconstitui o bruto pela alíquota de 15% do art. 9º, § 2º, da Lei nº 9.249/1995.
+    /// </summary>
+    public const string JcpGrossUp = "RF.Jcp.GrossUp";
+
     public static string Aliquota(TipoAtivo tipo) => tipo switch
     {
         TipoAtivo.Acao => AliquotaAcao,
