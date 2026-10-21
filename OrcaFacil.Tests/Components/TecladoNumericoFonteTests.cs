@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace OrcaFacil.Tests.Components;
 
@@ -59,6 +60,7 @@ public class TecladoNumericoFonteTests
             (["OrcaFacil", "Components", "Pages", "Lancamentos", "LancamentoForm.razor"], "_itemParcelaAtual", "AtributosInteiro"),
             (["OrcaFacil", "Components", "Pages", "Lancamentos", "LancamentoForm.razor"], "_itemTotalParcelas", "AtributosInteiro"),
             (["OrcaFacil", "Components", "Pages", "Configuracoes", "InteligenciaArtificialPanel.razor"], "_maxTokens", "AtributosTokens"),
+            (["OrcaFacil", "Components", "Pages", "Configuracoes", "ExportarPlanilhaPanel.razor"], "_anoBase", "AtributosAno"),
             (["OrcaFacil", "Components", "Pages", "Cartoes", "CartaoDialog.razor"], "Modelo.UltimosDigitos", "AtributosDigitos")
         };
 
@@ -137,35 +139,128 @@ public class TecladoNumericoFonteTests
     public void Varredura_TodoCampoNumericoTemModo_ENaoUsaTypeNumber()
     {
         var numericos = new List<string>();
+        var textos = new List<string>();
         foreach (var arquivo in Razors())
         {
             var fonte = SemComentarios(File.ReadAllText(arquivo));
-            Assert.False(TemTipoNumber(fonte), Relativo(arquivo));
+            var relativo = Relativo(arquivo);
+            Assert.False(TemTipoNumber(fonte), relativo);
             Assert.DoesNotContain("<input", fonte, StringComparison.OrdinalIgnoreCase);
 
+            foreach (var falta in CamposSemTeclado(fonte))
+                Assert.Fail(relativo + " sem inputmode: " + falta);
+
             foreach (var tag in Tags(fonte, "MudNumericField"))
+                numericos.Add(relativo + ":" + Ancora(tag));
+
+            foreach (var tag in Tags(fonte, "MudTextField"))
             {
-                var inteiro = TipoInteiro(tag);
-                Assert.True(inteiro, Relativo(arquivo) + " usa MudNumericField para valor decimal: " + tag);
-                var nome = NomeUserAttributes(tag);
-                Assert.False(string.IsNullOrEmpty(nome), tag);
-                Assert.True(CampoInteiro(fonte, Ancora(tag), nome!), Relativo(arquivo) + " " + tag);
-                numericos.Add(Relativo(arquivo) + ":" + Ancora(tag));
+                if (ModoExigido("MudTextField", tag, fonte) is null)
+                    continue;
+                textos.Add(relativo + ":" + Ancora(tag));
             }
         }
 
         Assert.Equal(
             [
+                "OrcaFacil/Components/Pages/Configuracoes/ExportarPlanilhaPanel.razor:_anoBase",
                 "OrcaFacil/Components/Pages/Configuracoes/InteligenciaArtificialPanel.razor:_maxTokens",
                 "OrcaFacil/Components/Pages/Lancamentos/LancamentoForm.razor:_itemParcelaAtual",
                 "OrcaFacil/Components/Pages/Lancamentos/LancamentoForm.razor:_itemTotalParcelas"
             ],
             numericos.OrderBy(item => item, StringComparer.Ordinal).ToArray());
 
+        Assert.Equal(
+            ["OrcaFacil/Components/Pages/Cartoes/CartaoDialog.razor:Modelo.UltimosDigitos"],
+            textos.OrderBy(item => item, StringComparer.Ordinal).ToArray());
+
         var b3 = SemComentarios(Ler("OrcaFacil", "Components", "Pages", "Ativos", "ImportarExtratoB3.razor"));
         Assert.Empty(Tags(b3, "MudNumericField"));
         Assert.Empty(Tags(b3, "CampoNumerico"));
         Assert.Empty(Tags(b3, "MudTextField"));
+    }
+
+    [Fact]
+    public void Varredura_RecusaCampoNovoSemInputMode_EComentarioNaoConta()
+    {
+        const string semModo = """
+            @* <MudNumericField T="int" @bind-Value="_comentario" InputMode="InputMode.numeric" UserAttributes="@AtributosComentario" /> *@
+            // <MudTextField T="long" @bind-Value="_linha" InputMode="InputMode.numeric" UserAttributes="@AtributosLinha" />
+            /* <MudTextField T="string" @bind-Value="_doc" Label="Dígitos" InputMode="InputMode.numeric" UserAttributes="@AtributosDoc" /> */
+            <!-- ["inputmode"] = "numeric" -->
+            <MudNumericField T="int" @bind-Value="_novo" Label="Novo" />
+            <MudTextField T="decimal" @bind-Value="_valorNovo" Label="Valor novo" />
+            <MudTextField T="string" @bind-Value="Modelo.CodigoDigitos" Label="Código" />
+            <MudTextField T="string" @bind-Value="_codigo" Label="Código" />
+            <MudTextField T="string" @bind-Value="_nome" Label="Nome" />
+            @code {
+                if (!_codigo.All(char.IsDigit))
+                    return;
+            }
+            """;
+
+        var limpo = SemComentarios(semModo);
+        var falhas = CamposSemTeclado(limpo);
+
+        Assert.DoesNotContain("_comentario", limpo, StringComparison.Ordinal);
+        Assert.DoesNotContain("InputMode", limpo, StringComparison.Ordinal);
+        Assert.Contains("_novo", falhas);
+        Assert.Contains("_valorNovo", falhas);
+        Assert.Contains("Modelo.CodigoDigitos", falhas);
+        Assert.Contains("_codigo", falhas);
+        Assert.DoesNotContain("_nome", falhas);
+
+        const string comModo = """
+            <MudNumericField T="int" @bind-Value="_novo" InputMode="InputMode.numeric" UserAttributes="@AtributosNovo" />
+            <MudTextField T="decimal" @bind-Value="_valorNovo" InputMode="InputMode.@decimal" UserAttributes="@AtributosValor" />
+            <MudTextField T="string" @bind-Value="Modelo.CodigoDigitos" Label="Código"
+                          InputMode="InputMode.numeric" UserAttributes="@AtributosCodigo" />
+            <MudTextField T="string" @bind-Value="_codigo" Label="Código"
+                          InputMode="InputMode.numeric" UserAttributes="@AtributosCodigoLivre" />
+            <MudTextField T="string" @bind-Value="_nome" Label="Nome" />
+            @code {
+                if (!_codigo.All(char.IsDigit))
+                    return;
+                private static readonly Dictionary<string, object?> AtributosNovo = new()
+                {
+                    ["inputmode"] = "numeric"
+                };
+                private static readonly Dictionary<string, object?> AtributosValor = new()
+                {
+                    ["inputmode"] = "decimal"
+                };
+                private static readonly Dictionary<string, object?> AtributosCodigo = new()
+                {
+                    ["inputmode"] = "numeric"
+                };
+                private static readonly Dictionary<string, object?> AtributosCodigoLivre = new()
+                {
+                    ["inputmode"] = "numeric"
+                };
+            }
+            """;
+
+        Assert.Empty(CamposSemTeclado(SemComentarios(comModo)));
+
+        const string digitoSoNoComentario = """
+            <MudTextField T="string" @bind-Value="_codigo" Label="Código" />
+            @* if (!_codigo.All(char.IsDigit)) return; *@
+            """;
+        Assert.Empty(CamposSemTeclado(SemComentarios(digitoSoNoComentario)));
+
+        var painel = Ler("OrcaFacil", "Components", "Pages", "Configuracoes", "ExportarPlanilhaPanel.razor");
+        var anoComentado = SemComentarios(painel.Replace(
+            "InputMode=\"InputMode.numeric\" UserAttributes=\"@AtributosAno\"",
+            "/* InputMode=\"InputMode.numeric\" UserAttributes=\"@AtributosAno\" */",
+            StringComparison.Ordinal));
+        Assert.Contains("_anoBase", CamposSemTeclado(anoComentado));
+
+        var cartao = Ler("OrcaFacil", "Components", "Pages", "Cartoes", "CartaoDialog.razor");
+        var digitosComentados = SemComentarios(cartao.Replace(
+            "InputMode=\"InputMode.numeric\" UserAttributes=\"@AtributosDigitos\"",
+            "<!-- InputMode=\"InputMode.numeric\" UserAttributes=\"@AtributosDigitos\" -->",
+            StringComparison.Ordinal));
+        Assert.Contains("Modelo.UltimosDigitos", CamposSemTeclado(digitosComentados));
     }
 
     private static bool CampoDeriva(string fonte)
@@ -199,6 +294,9 @@ public class TecladoNumericoFonteTests
     }
 
     private static bool DicionarioNumerico(string fonte, string nome)
+        => DicionarioModo(fonte, nome, "numeric");
+
+    private static bool DicionarioModo(string fonte, string nome, string modo)
     {
         var inicio = fonte.IndexOf(nome + " = new()", StringComparison.Ordinal);
         if (inicio < 0)
@@ -210,8 +308,86 @@ public class TecladoNumericoFonteTests
             return false;
 
         var corpo = fonte[abre..fecha];
-        return corpo.Contains("[\"inputmode\"] = \"numeric\"", StringComparison.Ordinal)
-            && !corpo.Contains("decimal", StringComparison.Ordinal);
+        var outro = modo == "numeric" ? "decimal" : "numeric";
+        return corpo.Contains($"[\"inputmode\"] = \"{modo}\"", StringComparison.Ordinal)
+            && !corpo.Contains($"[\"inputmode\"] = \"{outro}\"", StringComparison.Ordinal);
+    }
+
+    private static IReadOnlyList<string> CamposSemTeclado(string fonte)
+    {
+        var falhas = new List<string>();
+        foreach (var componente in new[] { "MudNumericField", "MudTextField" })
+        {
+            foreach (var tag in Tags(fonte, componente))
+            {
+                var modo = ModoExigido(componente, tag, fonte);
+                if (modo is null)
+                    continue;
+                if (!TagTemModo(fonte, tag, modo))
+                    falhas.Add(Ancora(tag));
+            }
+        }
+
+        return falhas;
+    }
+
+    private static string? ModoExigido(string componente, string tag, string fonte)
+    {
+        if (componente == "MudNumericField")
+            return TipoFracionario(tag) ? "decimal" : "numeric";
+
+        if (TipoFracionario(tag))
+            return "decimal";
+        if (TipoInteiro(tag))
+            return "numeric";
+        if (EhCampoDeDigitos(tag) || ValidadoComoDigito(fonte, tag))
+            return "numeric";
+        return null;
+    }
+
+    private static bool TagTemModo(string fonte, string tag, string modo)
+    {
+        var nome = NomeUserAttributes(tag);
+        if (string.IsNullOrEmpty(nome) || TemTipoNumber(tag))
+            return false;
+
+        var inputMode = modo == "decimal"
+            ? tag.Contains("InputMode=\"InputMode.@decimal\"", StringComparison.Ordinal)
+                || tag.Contains("InputMode=\"InputMode.decimal\"", StringComparison.Ordinal)
+            : tag.Contains("InputMode=\"InputMode.numeric\"", StringComparison.Ordinal);
+        return inputMode && DicionarioModo(fonte, nome, modo);
+    }
+
+    private static bool EhCampoDeDigitos(string tag)
+        => Regex.IsMatch(tag, "d[ií]gitos?|n[uú]meros?", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    private static bool ValidadoComoDigito(string fonte, string tag)
+    {
+        var nome = NomeDoValor(Ancora(tag));
+        if (nome.Length < 3)
+            return false;
+
+        var indice = 0;
+        while ((indice = fonte.IndexOf(nome, indice, StringComparison.Ordinal)) >= 0)
+        {
+            var fim = Math.Min(fonte.Length, indice + nome.Length + 160);
+            var janela = fonte[indice..fim];
+            var fechaTag = janela.IndexOf('>', StringComparison.Ordinal);
+            if (fechaTag >= 0)
+                janela = janela[..fechaTag];
+            if (janela.Contains("IsAsciiDigit", StringComparison.Ordinal)
+                || janela.Contains("IsDigit", StringComparison.Ordinal))
+                return true;
+            indice += nome.Length;
+        }
+
+        return false;
+    }
+
+    private static string NomeDoValor(string ancora)
+    {
+        var ponto = ancora.LastIndexOf('.');
+        return ponto < 0 ? ancora : ancora[(ponto + 1)..];
     }
 
     private static bool TemTipoNumber(string fonte)
@@ -220,14 +396,10 @@ public class TecladoNumericoFonteTests
             || fonte.Contains("type='number'", StringComparison.Ordinal);
 
     private static bool TipoInteiro(string tag)
-    {
-        return tag.Contains("T=\"int\"", StringComparison.Ordinal)
-            || tag.Contains("T=\"int?\"", StringComparison.Ordinal)
-            || tag.Contains("T=\"long\"", StringComparison.Ordinal)
-            || tag.Contains("T=\"long?\"", StringComparison.Ordinal)
-            || tag.Contains("T=\"short\"", StringComparison.Ordinal)
-            || tag.Contains("T=\"short?\"", StringComparison.Ordinal);
-    }
+        => Regex.IsMatch(tag, "T=\"(sbyte|byte|short|ushort|int|uint|long|ulong)\\??\"");
+
+    private static bool TipoFracionario(string tag)
+        => Regex.IsMatch(tag, "T=\"(float|double|decimal)\\??\"");
 
     private static string Ancora(string tag)
     {
