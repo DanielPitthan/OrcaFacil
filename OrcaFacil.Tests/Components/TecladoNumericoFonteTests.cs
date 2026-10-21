@@ -141,8 +141,8 @@ public class TecladoNumericoFonteTests
         Assert.False(Tag(quantidadeSemFracao, "Modelo.Quantidade").Contains("FracaoExplicita=\"true\"", StringComparison.Ordinal));
 
         var campoSemFracao = SemComentarios(campo.Replace(
-            "MascaraDireitaEsquerda.AplicarFracao",
-            "/* MascaraDireitaEsquerda.AplicarFracao */",
+            "AvisoTeto.Aplicar(_digitos, texto, Casas, ValorMaximo, substituir: false, FracaoExplicita)",
+            "/* AvisoTeto.Aplicar(_digitos, texto, Casas, ValorMaximo, substituir: false, FracaoExplicita) */",
             StringComparison.Ordinal));
         Assert.False(CampoUsaFracao(campoSemFracao));
 
@@ -209,8 +209,10 @@ public class TecladoNumericoFonteTests
         Assert.True(ReabrirTrunca(mascara));
 
         Assert.Equal("12,5", TextoMetaReducao.Percentual(12.5m));
+        Assert.Equal("12,5", TextoMetaReducao.Percentual(12.59m));
         Assert.Equal("0,5", TextoMetaReducao.Percentual(0.5m));
         Assert.Equal("10", TextoMetaReducao.Percentual(10m));
+        Assert.Equal(MascaraDireitaEsquerda.CanonicoFracao(12.59m, 1), TextoMetaReducao.Percentual(12.59m));
 
         var formComentado = SemComentarios(form.Replace(
             "TextoMetaReducao.Percentual(Modelo.MetaReducaoPercentual.Value)",
@@ -225,8 +227,8 @@ public class TecladoNumericoFonteTests
         Assert.False(ExibeMetaComUmaCasa(mensalComentado));
 
         var helperComentado = SemComentarios(helper.Replace(
-            "valor.ToString(\"0.#\", PtBr)",
-            "/* valor.ToString(\"0.#\", PtBr) */ valor.ToString(\"0\", PtBr)",
+            "MascaraDireitaEsquerda.CanonicoFracao(valor, 1)",
+            "/* MascaraDireitaEsquerda.CanonicoFracao(valor, 1) */ valor.ToString(\"0.#\", CultureInfo.GetCultureInfo(\"pt-BR\"))",
             StringComparison.Ordinal));
         Assert.False(FormatoUmaCasa(helperComentado));
 
@@ -265,6 +267,47 @@ public class TecladoNumericoFonteTests
         Assert.Equal("100", DigitarFracao("1000", casas: 1, maximo: 100m));
         Assert.Equal("100,", DigitarFracao("100,1", casas: 1, maximo: 100m));
         Assert.Equal(100m, MascaraDireitaEsquerda.ValorFracao(DigitarFracao("100,1", casas: 1, maximo: 100m)));
+    }
+
+    [Fact]
+    public void TetoMostraOMaximoReal_MetaLigaFor_EComentarioNaoConta()
+    {
+        var campo = SemComentarios(Ler("OrcaFacil", "Components", "Shared", "CampoNumerico.razor"));
+        var orcamento = SemComentarios(Ler("OrcaFacil", "Components", "Pages", "Orcamento", "OrcamentoForm.razor"));
+        var aviso = SemComentarios(Ler("OrcaFacil.Core", "Numerico", "AvisoTeto.cs"));
+        var css = SemComentarios(Ler("OrcaFacil", "wwwroot", "css", "orcafacil-theme.css"));
+
+        Assert.True(MostraErroDeTeto(campo));
+        Assert.True(MetaLigaOErro(orcamento));
+        Assert.True(AvisoUsaAMascara(aviso));
+        Assert.True(ContrasteDoErro(css));
+        Assert.Equal("O máximo é 100.", AvisoTeto.Mensagem(100m));
+        Assert.Equal("O máximo é 1000000000.", AvisoTeto.Mensagem(1_000_000_000m));
+        Assert.Equal("O máximo é 100,5.", AvisoTeto.Mensagem(100.5m));
+
+        var semMensagem = SemComentarios(campo.Replace(
+            "_erro = AvisoTeto.Mensagem(teto)",
+            "/* _erro = AvisoTeto.Mensagem(teto) */ _erro = null",
+            StringComparison.Ordinal));
+        Assert.False(MostraErroDeTeto(semMensagem));
+
+        var semFor = SemComentarios(orcamento.Replace(
+            "For=\"@(() => Modelo.MetaReducaoPercentual)\"",
+            "@* For=\"@(() => Modelo.MetaReducaoPercentual)\" *@",
+            StringComparison.Ordinal));
+        Assert.False(MetaLigaOErro(semFor));
+
+        var semMascara = SemComentarios(aviso.Replace(
+            "MascaraDireitaEsquerda.AplicarFracao",
+            "/* MascaraDireitaEsquerda.AplicarFracao */",
+            StringComparison.Ordinal));
+        Assert.False(AvisoUsaAMascara(semMascara));
+
+        var corClara = SemComentarios(css.Replace(
+            "html.of-tema-claro .of-mascara-numerica {\n    --mud-palette-error: #B4233A;",
+            "/* html.of-tema-claro .of-mascara-numerica { --mud-palette-error: #B4233A; } */\nhtml.of-tema-claro .of-mascara-numerica {\n    --mud-palette-error: #D64242;",
+            StringComparison.Ordinal));
+        Assert.False(ContrasteDoErro(corClara));
     }
 
     [Fact]
@@ -469,7 +512,8 @@ public class TecladoNumericoFonteTests
     }
 
     private static bool CampoUsaFracao(string fonte)
-        => fonte.Contains("MascaraDireitaEsquerda.AplicarFracao", StringComparison.Ordinal)
+        => fonte.Contains("AvisoTeto.Aplicar(_digitos, texto, Casas, ValorMaximo, substituir: false, FracaoExplicita)", StringComparison.Ordinal)
+            && fonte.Contains("AvisoTeto.Aplicar(_digitos, texto, Casas, ValorMaximo, substituir: true, FracaoExplicita)", StringComparison.Ordinal)
             && fonte.Contains("MascaraDireitaEsquerda.CanonicoFracao", StringComparison.Ordinal)
             && fonte.Contains("MascaraDireitaEsquerda.ValorFracao", StringComparison.Ordinal)
             && fonte.Contains("MascaraDireitaEsquerda.ExibirFracao", StringComparison.Ordinal);
@@ -490,8 +534,115 @@ public class TecladoNumericoFonteTests
             && !fonte.Contains("ToString(\"0\")", StringComparison.Ordinal);
 
     private static bool FormatoUmaCasa(string fonte)
-        => fonte.Contains("valor.ToString(\"0.#\", PtBr)", StringComparison.Ordinal)
-            && !fonte.Contains("valor.ToString(\"0\", PtBr)", StringComparison.Ordinal);
+    {
+        var metodo = Metodo(fonte, "string Percentual(");
+        return metodo.Contains("MascaraDireitaEsquerda.CanonicoFracao(valor, 1)", StringComparison.Ordinal)
+            && !metodo.Contains("ToString(\"0.#\"", StringComparison.Ordinal)
+            && !metodo.Contains("ToString(\"0\"", StringComparison.Ordinal)
+            && !metodo.Contains("decimal.Round", StringComparison.Ordinal);
+    }
+
+    private static bool MostraErroDeTeto(string fonte)
+    {
+        var aplicar = Metodo(fonte, "Task<string> AplicarAsync(");
+        var incluir = Metodo(fonte, "Task<string> IncluirTexto(");
+        var definir = Metodo(fonte, "Task<string> DefinirTexto(");
+        var atualizar = Metodo(fonte, "void AtualizarErro()");
+        return aplicar.Contains("if (inalterado && !excedeuTeto)", StringComparison.Ordinal)
+            && aplicar.Contains("_erro = AvisoTeto.Mensagem(teto)", StringComparison.Ordinal)
+            && aplicar.Contains("AtualizarErro();", StringComparison.Ordinal)
+            && incluir.Contains("excedeuTeto: entrada.PassouDoTeto", StringComparison.Ordinal)
+            && definir.Contains("excedeuTeto: entrada.PassouDoTeto", StringComparison.Ordinal)
+            && atualizar.Contains("if (_tetoEstourado)", StringComparison.Ordinal)
+            && atualizar.Contains("_erro = null", StringComparison.Ordinal)
+            && fonte.Contains("ErrorText=\"@_erro\"", StringComparison.Ordinal)
+            && fonte.Contains("For is not null", StringComparison.Ordinal);
+    }
+
+    private static bool MetaLigaOErro(string fonte)
+    {
+        var meta = Tag(fonte, "Modelo.MetaReducaoPercentual");
+        return meta.Contains("For=\"@(() => Modelo.MetaReducaoPercentual)\"", StringComparison.Ordinal)
+            && meta.Contains("Class=\"mb-3\"", StringComparison.Ordinal)
+            && meta.Contains("HelperText=\"Opcional, em relação ao gasto do mês anterior\"", StringComparison.Ordinal)
+            && meta.Contains("AdornmentText=\"%\"", StringComparison.Ordinal)
+            && meta.Contains("ValorMaximo=\"100\"", StringComparison.Ordinal);
+    }
+
+    private static bool AvisoUsaAMascara(string fonte)
+    {
+        var texto = Metodo(fonte, "string Texto(");
+        return texto.Contains("MascaraDireitaEsquerda.AplicarFracao", StringComparison.Ordinal)
+            && texto.Contains("MascaraDireitaEsquerda.AplicarEntrada", StringComparison.Ordinal)
+            && !fonte.Contains("EhMilhar", StringComparison.Ordinal);
+    }
+
+    private static bool ContrasteDoErro(string css)
+    {
+        var claro = CorDaRegra(css, "html.of-tema-claro .of-mascara-numerica");
+        var escuro = CorDaRegra(css, "html.of-tema-escuro .of-mascara-numerica");
+        var quebra = css.IndexOf(".of-mascara-numerica .mud-input-helper-text {", StringComparison.Ordinal);
+        if (claro.Length == 0 || escuro.Length == 0 || quebra < 0)
+            return false;
+
+        var bloco = css[quebra..css.IndexOf('}', quebra)];
+        return bloco.Contains("white-space: normal", StringComparison.Ordinal)
+            && bloco.Contains("overflow-wrap: anywhere", StringComparison.Ordinal)
+            && bloco.Contains("max-width: 100%", StringComparison.Ordinal)
+            && Contraste(claro, "#ffffff") >= 4.5
+            && Contraste(claro, "#EFF3F7") >= 4.5
+            && Contraste(escuro, "#1B1F27") >= 4.5
+            && Contraste(escuro, "#12151B") >= 4.5;
+    }
+
+    private static string CorDaRegra(string css, string seletor)
+    {
+        var inicio = css.IndexOf(seletor + " {", StringComparison.Ordinal);
+        if (inicio < 0)
+            return "";
+
+        var abre = css.IndexOf('{', inicio);
+        var fecha = abre < 0 ? -1 : css.IndexOf('}', abre);
+        if (abre < 0 || fecha < 0)
+            return "";
+
+        var bloco = css[abre..fecha];
+        var cor = bloco.IndexOf("--mud-palette-error:", StringComparison.Ordinal);
+        if (cor < 0)
+            return "";
+
+        var hex = bloco.IndexOf('#', cor);
+        if (hex < 0)
+            return "";
+
+        var fim = hex + 1;
+        while (fim < bloco.Length && Uri.IsHexDigit(bloco[fim]))
+            fim++;
+
+        return bloco[hex..fim];
+    }
+
+    private static double Contraste(string frente, string fundo)
+    {
+        var clara = Math.Max(Luminancia(frente), Luminancia(fundo));
+        var escura = Math.Min(Luminancia(frente), Luminancia(fundo));
+        return (clara + 0.05) / (escura + 0.05);
+    }
+
+    private static double Luminancia(string hex)
+    {
+        hex = hex.TrimStart('#');
+        var r = Canal(hex[..2]);
+        var g = Canal(hex.Substring(2, 2));
+        var b = Canal(hex.Substring(4, 2));
+        return (0.2126 * r) + (0.7152 * g) + (0.0722 * b);
+    }
+
+    private static double Canal(string hex)
+    {
+        var valor = Convert.ToInt32(hex, 16) / 255d;
+        return valor <= 0.04045 ? valor / 12.92 : Math.Pow((valor + 0.055) / 1.055, 2.4);
+    }
 
     private static bool PontoEhMilhar(string fonte)
     {

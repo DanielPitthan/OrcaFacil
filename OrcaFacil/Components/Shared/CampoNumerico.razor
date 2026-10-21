@@ -30,6 +30,7 @@
     private string _digitos = "";
     private string _texto = "";
     private string? _erro;
+    private bool _tetoEstourado;
     private decimal? _ultimoEmitido;
 
     [CascadingParameter] private EditContext? EditContext { get; set; }
@@ -139,20 +140,16 @@
     [JSInvokable]
     public Task<string> IncluirTexto(string? texto)
     {
-        var digitos = FracaoExplicita
-            ? MascaraDireitaEsquerda.AplicarFracao(_digitos, texto, Casas, ValorMaximo, substituir: false)
-            : MascaraDireitaEsquerda.AplicarEntrada(_digitos, texto, Casas, ValorMaximo, substituir: false);
-        return AplicarAsync(digitos, nulo: false);
+        var entrada = AvisoTeto.Aplicar(_digitos, texto, Casas, ValorMaximo, substituir: false, FracaoExplicita);
+        return AplicarAsync(entrada.Digitos, nulo: false, excedeuTeto: entrada.PassouDoTeto);
     }
 
     [JSInvokable]
     public Task<string> DefinirTexto(string? texto)
     {
-        var digitos = FracaoExplicita
-            ? MascaraDireitaEsquerda.AplicarFracao(_digitos, texto, Casas, ValorMaximo, substituir: true)
-            : MascaraDireitaEsquerda.AplicarEntrada(_digitos, texto, Casas, ValorMaximo, substituir: true);
+        var entrada = AvisoTeto.Aplicar(_digitos, texto, Casas, ValorMaximo, substituir: true, FracaoExplicita);
         var semDigitos = string.IsNullOrEmpty(MascaraDireitaEsquerda.SomenteDigitos(texto));
-        return AplicarAsync(digitos, nulo: PermiteVazio && semDigitos);
+        return AplicarAsync(entrada.Digitos, nulo: PermiteVazio && semDigitos, excedeuTeto: entrada.PassouDoTeto);
     }
 
     [JSInvokable]
@@ -166,27 +163,39 @@
     public Task<string> Limpar()
         => AplicarAsync("", nulo: PermiteVazio);
 
-    private async Task<string> AplicarAsync(string digitos, bool nulo)
+    private async Task<string> AplicarAsync(string digitos, bool nulo, bool excedeuTeto = false)
     {
         _cursorPendente = true;
-        if (digitos == _digitos && nulo == _nulo)
+        var inalterado = digitos == _digitos && nulo == _nulo;
+        if (inalterado && !excedeuTeto)
             return _texto;
 
-        _digitos = digitos;
-        _nulo = nulo;
-        _texto = TextoDe(digitos, nulo);
-        decimal? valor = nulo ? null : ValorDosDigitos(digitos);
-        _ultimoEmitido = valor;
-        await ValueChanged.InvokeAsync(MascaraDireitaEsquerda.Para<TNumber>(valor));
-
-        if (_campoValidacao is not null && EditContext is not null)
+        if (!inalterado)
         {
-            EditContext.NotifyFieldChanged(_campoValidacao.Value);
-            AtualizarErro();
+            _digitos = digitos;
+            _nulo = nulo;
+            _texto = TextoDe(digitos, nulo);
+            decimal? valor = nulo ? null : ValorDosDigitos(digitos);
+            _ultimoEmitido = valor;
+            await ValueChanged.InvokeAsync(MascaraDireitaEsquerda.Para<TNumber>(valor));
+
+            if (_campoValidacao is not null && EditContext is not null)
+                EditContext.NotifyFieldChanged(_campoValidacao.Value);
+
+            if (Validation is not null && _campo is not null)
+                await _campo.ValidateAsync();
         }
 
-        if (Validation is not null && _campo is not null)
-            await _campo.ValidateAsync();
+        if (excedeuTeto && ValorMaximo is decimal teto)
+        {
+            _tetoEstourado = true;
+            _erro = AvisoTeto.Mensagem(teto);
+        }
+        else
+        {
+            _tetoEstourado = false;
+            AtualizarErro();
+        }
 
         await InvokeAsync(StateHasChanged);
         return _texto;
@@ -230,6 +239,9 @@
 
     private void AtualizarErro()
     {
+        if (_tetoEstourado)
+            return;
+
         if (EditContext is null || _campoValidacao is null)
         {
             _erro = null;

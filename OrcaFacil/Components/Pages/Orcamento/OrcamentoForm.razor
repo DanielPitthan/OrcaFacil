@@ -13,7 +13,8 @@
                         Adornment="Adornment.Start" AdornmentText="R$" Class="mb-3" />
 
         <CampoNumerico TNumber="decimal?" @bind-Value="Modelo.MetaReducaoPercentual" Label="Meta redução %"
-                        CasasDecimais="1" FracaoExplicita="true" ValorMaximo="100" Adornment="Adornment.End" AdornmentText="%"
+                        CasasDecimais="1" FracaoExplicita="true" ValorMaximo="100" For="@(() => Modelo.MetaReducaoPercentual)"
+                        Adornment="Adornment.End" AdornmentText="%"
                         HelperText="Opcional, em relação ao gasto do mês anterior" Class="mb-3" />
 
         @if (_gastoMesAnterior > 0 && Modelo.MetaReducaoPercentual is > 0)

@@ -752,3 +752,22 @@ html.of-tema-escuro button.of-previa-opcao {
     border-color: #E8EAF0;
     background-color: #1B1F27;
 }
+
+/* Erro do campo numérico, no helper que já existe.
+   O Mud pinta esse texto com var(--mud-palette-error). #D64242 sobre #fff fica em 4,45:1.
+   #B4233A fica em 6,48:1 no branco e 5,81:1 no fundo #EFF3F7.
+   No escuro, #E07171 fica em 5,32:1 na superfície #1B1F27 e 5,89:1 no fundo #12151B.
+   O texto quebra dentro da largura do campo, também em 360px. */
+html.of-tema-claro .of-mascara-numerica {
+    --mud-palette-error: #B4233A;
+}
+
+html.of-tema-escuro .of-mascara-numerica {
+    --mud-palette-error: #E07171;
+}
+
+.of-mascara-numerica .mud-input-helper-text {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+}
