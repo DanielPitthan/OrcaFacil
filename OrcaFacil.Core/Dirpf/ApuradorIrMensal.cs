@@ -43,7 +43,8 @@ public sealed record LinhaApuracaoMensal(
     decimal Irrf,
     decimal ImpostoLiquido,
     decimal VendasAcoesComuns,
-    decimal GanhoIsentoAcoes);
+    decimal GanhoIsentoAcoes,
+    decimal IrrfALevarParaDeclaracao);
 
 /// <summary>DARF do mês, já com o saldo abaixo do mínimo. Vencimento só quando há valor a pagar.</summary>
 public sealed record LinhaDarf(
@@ -73,13 +74,16 @@ public sealed class ApuracaoIr
 
 /// <summary>
 /// Apura o IR da renda variável mês a mês e monta o DARF.
-/// A data da operação é a data de liquidação. Fiagro entra como FII:
-/// o tipo do ativo não muda e o mesmo dia não vai para day trade.
+/// O mês, o teto de vendas de ações e o day trade usam a data gravada na operação.
+/// Na importação do extrato B3, essa data é a de liquidação do arquivo.
+/// No lançamento manual, é a data informada no campo Data.
+/// Fiagro entra como FII: o tipo do ativo não muda e o mesmo dia não vai para day trade.
 /// O resultado da venda é o da <see cref="CalculadoraResultadoRealizado"/>:
 /// quantidade × preço + custos na compra, e o valor da operação na venda.
 /// O arredondamento afasta do zero, com as casas da regra vigente.
 /// Alíquota, isenção, day trade, FII, código e mínimo do DARF vêm da tabela.
-/// O vencimento é o último dia de semana do mês seguinte. Feriado nacional não entra.
+/// Meses anteriores a 01/01/2005 ficam de fora: as regras desta apuração começam nessa data.
+/// O vencimento é o último dia útil do mês seguinte no <see cref="CalendarioBancarioNacional"/>.
 /// </summary>
 public static class ApuradorIrMensal
 {
@@ -160,16 +164,12 @@ public static class ApuradorIrMensal
             operacao.Custos);
     }
 
-    /// <summary>Último dia de semana do mês seguinte ao ganho. Sábado e domingo recuam.</summary>
+    /// <summary>Último dia útil do mês seguinte ao ganho. Sábado, domingo e feriado recuam.</summary>
     public static DateTime Vencimento(int anoGanho, int mesGanho)
     {
         var mes = mesGanho == 12 ? 1 : mesGanho + 1;
         var ano = mesGanho == 12 ? anoGanho + 1 : anoGanho;
-        var dia = new DateTime(ano, mes, DateTime.DaysInMonth(ano, mes));
-        while (dia.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday)
-            dia = dia.AddDays(-1);
-
-        return dia;
+        return CalendarioBancarioNacional.UltimoDiaUtil(ano, mes);
     }
 
     private static void ApurarPerfil(
@@ -185,6 +185,7 @@ public static class ApuradorIrMensal
     {
         var prejuizo = Zerar();
         var creditoIrrf = Zerar();
+        var saldoDeclaracao = Zerar();
         decimal acumuladoDarf = 0m;
         var doAno = new List<LinhaApuracaoMensal>();
         var darfsDoAno = new List<LinhaDarf>();
@@ -193,6 +194,11 @@ public static class ApuradorIrMensal
         var janeiro = new DateTime(ano, 1, 1);
         if (inicio > janeiro)
             inicio = janeiro;
+
+        // Sem regra de apuração antes da Lei nº 11.033/2004. O janeiro do ano pedido
+        // já foi escolhido acima quando ele é anterior à primeira venda.
+        if (inicio < CatalogoRegrasFiscais.InicioLei11033)
+            inicio = CatalogoRegrasFiscais.InicioLei11033;
 
         for (var cursor = inicio; cursor <= new DateTime(ano, 12, 1); cursor = cursor.AddMonths(1))
         {
@@ -273,6 +279,22 @@ public static class ApuradorIrMensal
                 if (cesta == CestaApuracaoIr.DayTrade && cursor.Month == 12)
                     creditoIrrf[cesta] = 0m;
 
+                // Art. 2º, § 7º, da Lei nº 11.033/2004: o saldo do IRRF do § 1º
+                // (operações comuns e FII, não o day trade) que não foi deduzido
+                // no mês nem nos seguintes vai para a declaração. O day trade
+                // para em dezembro e não entra nesse saldo.
+                if (cesta != CestaApuracaoIr.DayTrade)
+                {
+                    if (parametros.CompensaIrrfMesesSeguintes)
+                        saldoDeclaracao[cesta] = creditoIrrf[cesta];
+                    else
+                        saldoDeclaracao[cesta] += disponivel - usado;
+                }
+
+                var aLevar = cursor.Month == 12 && cesta != CestaApuracaoIr.DayTrade
+                    ? saldoDeclaracao[cesta]
+                    : 0m;
+
                 linhas[cesta] = new LinhaApuracaoMensal(
                     perfilId,
                     perfil,
@@ -288,7 +310,8 @@ public static class ApuradorIrMensal
                     irrf[cesta],
                     imposto - usado,
                     cesta == CestaApuracaoIr.Comum ? vendasAcoes : 0m,
-                    cesta == CestaApuracaoIr.Comum ? ganhoIsento : 0m);
+                    cesta == CestaApuracaoIr.Comum ? ganhoIsento : 0m,
+                    aLevar);
             }
 
             var impostoMes = Cestas.Sum(cesta => linhas[cesta].ImpostoLiquido);

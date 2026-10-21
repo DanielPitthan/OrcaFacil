@@ -65,6 +65,92 @@ public class ExportadorDarfTests : IDisposable
         Assert.Equal(6015d, janeiro.Cell(4).GetDouble());
         Assert.Equal(2_250d, janeiro.Cell(8).GetDouble());
         Assert.Equal(new DateTime(2024, 2, 29), janeiro.Cell(9).GetDateTime().Date);
+        Assert.Equal("Valor a levar para a declaração", apuracao.Cell(1, 15).GetText());
+        Assert.Equal(0d, comum.Cell(11).GetDouble());
+        Assert.Equal(0d, comum.Cell(15).GetDouble());
+    }
+
+    [Fact]
+    public void Exportar_AbateIrrfManual_EListaOSaldoDeDezembroNaDeclaracao()
+    {
+        using (var contexto = _fabrica.CreateDbContext())
+        {
+            var ana = new MembroFamilia { Nome = "Ana", Apelido = "Nica", Avatar = "A" };
+            var petr = new AtivoFinanceiro { Ticker = "PETR4", Nome = "Petrobras", Tipo = TipoAtivo.Acao };
+            var bova = new AtivoFinanceiro { Ticker = "BOVA11", Nome = "Ibovespa", Tipo = TipoAtivo.Etf };
+            contexto.AddRange(ana, petr, bova);
+            contexto.SaveChanges();
+            contexto.OperacoesAtivo.AddRange(
+                new OperacaoAtivo
+                {
+                    MembroFamiliaId = ana.Id,
+                    AtivoId = petr.Id,
+                    Tipo = TipoOperacao.Compra,
+                    Data = new DateTime(2024, 6, 3),
+                    Quantidade = 100,
+                    PrecoUnitario = 100,
+                    ValorOperacao = 10_000m
+                },
+                new OperacaoAtivo
+                {
+                    MembroFamiliaId = ana.Id,
+                    AtivoId = petr.Id,
+                    Tipo = TipoOperacao.Venda,
+                    Data = new DateTime(2024, 6, 21),
+                    Quantidade = 100,
+                    PrecoUnitario = 250,
+                    ValorOperacao = 25_000m
+                },
+                new OperacaoAtivo
+                {
+                    MembroFamiliaId = ana.Id,
+                    AtivoId = bova.Id,
+                    Tipo = TipoOperacao.Compra,
+                    Data = new DateTime(2024, 1, 8),
+                    Quantidade = 1,
+                    PrecoUnitario = 100,
+                    ValorOperacao = 100m
+                },
+                new OperacaoAtivo
+                {
+                    MembroFamiliaId = ana.Id,
+                    AtivoId = bova.Id,
+                    Tipo = TipoOperacao.Venda,
+                    Data = new DateTime(2024, 1, 22),
+                    Quantidade = 1,
+                    PrecoUnitario = 200,
+                    ValorOperacao = 200m
+                });
+            contexto.SaveChanges();
+        }
+
+        using var destino = new MemoryStream();
+        using (var contexto = _fabrica.CreateDbContext())
+        {
+            ExportadorDarf.Exportar(
+                contexto,
+                2024,
+                destino,
+                [
+                    new IrrfManual(1, 2024, 6, CestaApuracaoIr.Comum, 3m),
+                    new IrrfManual(1, 2024, 1, CestaApuracaoIr.Comum, 40m)
+                ]);
+        }
+
+        using var pasta = new XLWorkbook(destino);
+        var apuracao = pasta.Worksheet(ExportadorDarf.AbaApuracao);
+        var junho = apuracao.RowsUsed().Single(linha =>
+            linha.RowNumber() > 1 && linha.Cell(2).GetValue<int>() == 6 && linha.Cell(4).GetText() == "Operações comuns");
+        Assert.Equal(3d, junho.Cell(11).GetDouble());
+        Assert.Equal(2_247d, junho.Cell(12).GetDouble());
+
+        var dezembro = apuracao.RowsUsed().Single(linha =>
+            linha.RowNumber() > 1 && linha.Cell(2).GetValue<int>() == 12 && linha.Cell(4).GetText() == "Operações comuns");
+        Assert.Equal(25d, dezembro.Cell(15).GetDouble());
+
+        var darf = pasta.Worksheet(ExportadorDarf.AbaDarfs);
+        var darfJunho = darf.RowsUsed().Single(linha => linha.RowNumber() > 1 && linha.Cell(2).GetValue<int>() == 6);
+        Assert.Equal(2_247d, darfJunho.Cell(8).GetDouble());
     }
 
     private static string Fonte()

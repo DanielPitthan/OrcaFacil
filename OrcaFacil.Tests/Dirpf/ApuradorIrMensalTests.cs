@@ -215,7 +215,7 @@ public class ApuradorIrMensalTests
     }
 
     [Fact]
-    public void PrejuizoDeMesIsentoNaoCompensa_ECompensaQuandoARegraLiga()
+    public void PrejuizoDeMesIsentoCompensaGanhoPosterior_EParaQuandoARegraDesliga()
     {
         var operacoes = new[]
         {
@@ -226,16 +226,16 @@ public class ApuradorIrMensalTests
         };
 
         var padrao = Apurar(operacoes);
-        Assert.Equal(0m, Linha(padrao, 1, CestaApuracaoIr.Comum).PrejuizoACompensar);
-        Assert.Equal(24_000m, Linha(padrao, 3, CestaApuracaoIr.Comum).BaseCalculo);
-        Assert.Equal(3_600m, Linha(padrao, 3, CestaApuracaoIr.Comum).Imposto);
+        Assert.Equal(100m, Linha(padrao, 1, CestaApuracaoIr.Comum).PrejuizoACompensar);
+        Assert.Equal(23_900m, Linha(padrao, 3, CestaApuracaoIr.Comum).BaseCalculo);
+        Assert.Equal(3_585m, Linha(padrao, 3, CestaApuracaoIr.Comum).Imposto);
 
         var regras = Regras();
-        regras.Single(regra => regra.Codigo == CodigosRegraFiscal.PrejuizoCompensaNoMesIsento).Valor = 1m;
-        var ligado = ApuradorIrMensal.Apurar(operacoes, regras, 2024);
-        Assert.Equal(100m, Linha(ligado, 1, CestaApuracaoIr.Comum).PrejuizoACompensar);
-        Assert.Equal(23_900m, Linha(ligado, 3, CestaApuracaoIr.Comum).BaseCalculo);
-        Assert.Equal(3_585m, Linha(ligado, 3, CestaApuracaoIr.Comum).Imposto);
+        regras.Single(regra => regra.Codigo == CodigosRegraFiscal.PrejuizoCompensaNoMesIsento).Valor = 0m;
+        var desligado = ApuradorIrMensal.Apurar(operacoes, regras, 2024);
+        Assert.Equal(0m, Linha(desligado, 1, CestaApuracaoIr.Comum).PrejuizoACompensar);
+        Assert.Equal(24_000m, Linha(desligado, 3, CestaApuracaoIr.Comum).BaseCalculo);
+        Assert.Equal(3_600m, Linha(desligado, 3, CestaApuracaoIr.Comum).Imposto);
     }
 
     [Fact]
@@ -299,7 +299,7 @@ public class ApuradorIrMensalTests
         Assert.Equal(3m, Linha(apuracao, 2, CestaApuracaoIr.Comum).Imposto);
         Assert.Equal(7.50m, Darf(apuracao, 2).AcumuladoAnterior);
         Assert.Equal(10.50m, Darf(apuracao, 2).Valor);
-        Assert.Equal(new DateTime(2024, 3, 29), Darf(apuracao, 2).Vencimento);
+        Assert.Equal(new DateTime(2024, 3, 28), Darf(apuracao, 2).Vencimento);
         Assert.Equal(0m, Darf(apuracao, 2).SaldoAcumulado);
 
         var regras = Regras();
@@ -573,9 +573,132 @@ public class ApuradorIrMensalTests
     public void Vencimento_RecuaSabadoEDomingo()
     {
         Assert.Equal(new DateTime(2024, 2, 29), ApuradorIrMensal.Vencimento(2024, 1));
-        Assert.Equal(new DateTime(2024, 3, 29), ApuradorIrMensal.Vencimento(2024, 2));
+        Assert.Equal(new DateTime(2024, 6, 28), ApuradorIrMensal.Vencimento(2024, 5));
         Assert.Equal(new DateTime(2025, 2, 28), ApuradorIrMensal.Vencimento(2025, 1));
         Assert.Equal(new DateTime(2025, 1, 31), ApuradorIrMensal.Vencimento(2024, 12));
+    }
+
+    [Fact]
+    public void GanhoDeFevereiroDe2024_VenceEm28DeMarco()
+    {
+        Assert.Equal(new DateTime(2024, 3, 28), ApuradorIrMensal.Vencimento(2024, 2));
+    }
+
+    [Fact]
+    public void DuasVendasNoMes_SomamOBruto()
+    {
+        var apuracao = Apurar(
+            Compra(1, new DateTime(2024, 3, 1), 1, 1m),
+            Venda(2, new DateTime(2024, 3, 11), 1, 12_000m, 12_000m),
+            Compra(3, new DateTime(2024, 3, 1), 1, 1m, ativoId: 2),
+            Venda(4, new DateTime(2024, 3, 18), 1, 8_000.01m, 8_000.01m, ativoId: 2));
+
+        var comum = Linha(apuracao, 3, CestaApuracaoIr.Comum);
+        Assert.Equal(20_000.01m, comum.VendasAcoesComuns);
+        Assert.Equal(0m, comum.GanhoIsentoAcoes);
+        Assert.Equal(19_998.01m, comum.BaseCalculo);
+        Assert.Equal(2_999.70m, comum.Imposto);
+    }
+
+    [Fact]
+    public void FiiNaoEntraNoLimiarDasAcoes()
+    {
+        var apuracao = Apurar(
+            Compra(1, new DateTime(2024, 4, 2), 10, 10m),
+            Venda(2, new DateTime(2024, 4, 16), 10, 300m, 3_000m),
+            Compra(3, new DateTime(2024, 4, 2), 10, 10m, TipoAtivo.Fii, ativoId: 2),
+            Venda(4, new DateTime(2024, 4, 16), 10, 1_800m, 18_000m, TipoAtivo.Fii, ativoId: 2));
+
+        var comum = Linha(apuracao, 4, CestaApuracaoIr.Comum);
+        Assert.Equal(3_000m, comum.VendasAcoesComuns);
+        Assert.Equal(2_900m, comum.GanhoIsentoAcoes);
+        Assert.Equal(0m, comum.BaseCalculo);
+        Assert.Equal(0m, comum.Imposto);
+
+        var fii = Linha(apuracao, 4, CestaApuracaoIr.Fii);
+        Assert.Equal(17_900m, fii.BaseCalculo);
+        Assert.Equal(3_580m, fii.Imposto);
+    }
+
+    [Fact]
+    public void DarfDeExatamenteDezReais_Emite()
+    {
+        var apuracao = Apurar(
+            Compra(1, new DateTime(2024, 4, 2), 1, 100m, TipoAtivo.Etf),
+            Venda(2, new DateTime(2024, 4, 18), 1, 166.67m, 166.67m, TipoAtivo.Etf));
+
+        var comum = Linha(apuracao, 4, CestaApuracaoIr.Comum);
+        Assert.Equal(66.67m, comum.BaseCalculo);
+        Assert.Equal(10.00m, comum.Imposto);
+        var darf = Darf(apuracao, 4);
+        Assert.Equal(10.00m, darf.Valor);
+        Assert.Equal(0m, darf.SaldoAcumulado);
+        Assert.Equal(6015, darf.CodigoReceita);
+        Assert.Equal(new DateTime(2024, 5, 31), darf.Vencimento);
+    }
+
+    [Fact]
+    public void VendaAnteriorA2005_NaoImpedeOAnoAtual()
+    {
+        var ana = new MembroFamilia { Id = 1, Nome = "Ana", Apelido = "Nica", Avatar = "A" };
+        var petr = new AtivoFinanceiro { Id = 1, Ticker = "PETR4", Nome = "Petrobras", Tipo = TipoAtivo.Acao };
+        OperacaoAtivo Operacao(int id, TipoOperacao tipo, DateTime data, decimal quantidade, decimal preco, decimal valor) => new()
+        {
+            Id = id,
+            AtivoId = petr.Id,
+            Ativo = petr,
+            MembroFamiliaId = ana.Id,
+            MembroFamilia = ana,
+            Tipo = tipo,
+            Data = data,
+            Quantidade = quantidade,
+            PrecoUnitario = preco,
+            ValorOperacao = valor
+        };
+
+        var entidades = new[]
+        {
+            Operacao(1, TipoOperacao.Compra, new DateTime(2004, 12, 1), 100, 200m, 20_000m),
+            Operacao(2, TipoOperacao.Venda, new DateTime(2004, 12, 20), 100, 100m, 10_000m),
+            Operacao(3, TipoOperacao.Compra, new DateTime(2024, 3, 1), 100, 100m, 10_000m),
+            Operacao(4, TipoOperacao.Venda, new DateTime(2024, 3, 20), 100, 250m, 25_000m)
+        };
+
+        var apuracao = ApuradorIrMensal.Apurar(entidades.Select(ApuradorIrMensal.De), Regras(), 2024);
+        var marco = Linha(apuracao, 3, CestaApuracaoIr.Comum);
+        Assert.Equal(15_000m, marco.BaseCalculo);
+        Assert.Equal(2_250m, marco.Imposto);
+        Assert.Equal(2_250m, Darf(apuracao, 3).Valor);
+
+        var dirpf = MontadorDirpf.Montar(2024, entidades, [], CatalogoCodigosDirpf.Linhas(), Regras());
+        Assert.Empty(dirpf.RendimentosIsentos);
+    }
+
+    [Fact]
+    public void IrrfQueSobraNoAno_VaiParaADeclaracaoEmDezembro_EDayTradeFicaDeFora()
+    {
+        var operacoes = new[]
+        {
+            Compra(1, new DateTime(2024, 1, 8), 1, 100m, TipoAtivo.Etf),
+            Venda(2, new DateTime(2024, 1, 22), 1, 200m, 200m, TipoAtivo.Etf),
+            Compra(3, new DateTime(2024, 3, 4), 10, 10m, corretora: "XP", ativoId: 2),
+            Venda(4, new DateTime(2024, 3, 4), 10, 20m, 200m, corretora: "XP", ativoId: 2)
+        };
+        var apuracao = ApuradorIrMensal.Apurar(
+            operacoes,
+            Regras(),
+            2024,
+            [
+                new IrrfManual(1, 2024, 1, CestaApuracaoIr.Comum, 40m),
+                new IrrfManual(1, 2024, 3, CestaApuracaoIr.DayTrade, 50m)
+            ]);
+
+        Assert.Equal(0m, Linha(apuracao, 1, CestaApuracaoIr.Comum).ImpostoLiquido);
+        Assert.Equal(0m, Linha(apuracao, 3, CestaApuracaoIr.DayTrade).ImpostoLiquido);
+        Assert.Equal(25m, Linha(apuracao, 12, CestaApuracaoIr.Comum).IrrfALevarParaDeclaracao);
+        Assert.Equal(0m, Linha(apuracao, 12, CestaApuracaoIr.Fii).IrrfALevarParaDeclaracao);
+        Assert.Equal(0m, Linha(apuracao, 12, CestaApuracaoIr.DayTrade).IrrfALevarParaDeclaracao);
+        Assert.Equal(0m, Linha(apuracao, 1, CestaApuracaoIr.Comum).IrrfALevarParaDeclaracao);
     }
 
     private static ApuracaoIr Apurar(params OperacaoApuracao[] operacoes) => Apurar(2024, operacoes);

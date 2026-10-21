@@ -15,12 +15,16 @@ public static class ExportadorDarf
 
     public static IReadOnlyList<string> NomesDeAba { get; } = [AbaApuracao, AbaDarfs];
 
-    public static void Exportar(AppDbContext contexto, int anoBase, Stream destino)
+    public static void Exportar(
+        AppDbContext contexto,
+        int anoBase,
+        Stream destino,
+        IEnumerable<IrrfManual>? irrf = null)
     {
         ArgumentNullException.ThrowIfNull(contexto);
         ArgumentNullException.ThrowIfNull(destino);
 
-        var apuracao = ApuradorIrMensal.Apurar(contexto, anoBase);
+        var apuracao = ApuradorIrMensal.Apurar(contexto, anoBase, irrf);
         using var pasta = new XLWorkbook();
         GravarApuracao(pasta, apuracao.Meses);
         GravarDarfs(pasta, apuracao.Darfs);
@@ -36,7 +40,8 @@ public static class ExportadorDarf
         [
             "Ano", "Mês", "Perfil", "Cesta", "Resultado", "Prejuízo compensado",
             "Prejuízo a compensar", "Base de cálculo", "Alíquota", "Imposto", "IRRF",
-            "Imposto líquido", "Vendas de ações", "Ganho isento de ações"
+            "Imposto líquido", "Vendas de ações", "Ganho isento de ações",
+            "Valor a levar para a declaração"
         ]);
         ExigirTeto(aba.Name, linhas.Count);
 
@@ -58,6 +63,7 @@ public static class ExportadorDarf
             PlanilhaPtBr.GravarMoeda(PlanilhaPtBr.Celula(aba, numero, 12), linha.ImpostoLiquido);
             PlanilhaPtBr.GravarMoeda(PlanilhaPtBr.Celula(aba, numero, 13), linha.VendasAcoesComuns);
             PlanilhaPtBr.GravarMoeda(PlanilhaPtBr.Celula(aba, numero, 14), linha.GanhoIsentoAcoes);
+            PlanilhaPtBr.GravarMoeda(PlanilhaPtBr.Celula(aba, numero, 15), linha.IrrfALevarParaDeclaracao);
         }
     }
 

@@ -18,7 +18,9 @@ namespace OrcaFacil.Core.Ativos;
 /// https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/pagamento/renda-variavel/fundos-de-investimento-no-brasil
 /// https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/pagamento/renda-variavel/manual/manual-de-utilizacao-do-revar-renda-variavel
 /// DARF abaixo de R$ 10 acumula. O prejuízo atravessa o ano dentro da mesma cesta
-/// (operações comuns, day trade e FII/Fiagro não se compensam). A estimativa de IRRF
+/// (operações comuns, day trade e FII/Fiagro não se compensam). Prejuízo de ações
+/// em mês com vendas até o limite também compensa: a isenção é só do ganho
+/// (Perguntas e Respostas IRPF 2026, perguntas 707 e 729). A estimativa de IRRF
 /// nasce desligada: o imposto retido entra só quando informado.
 /// </summary>
 public static class CatalogoRegrasFiscais
@@ -42,7 +44,7 @@ public static class CatalogoRegrasFiscais
         Linha(10, CodigosRegraFiscal.DarfValorMinimo, 10m, InicioLei11033),
         Linha(11, CodigosRegraFiscal.DarfAcumularAbaixoDoMinimo, 1m, InicioLei11033),
         Linha(12, CodigosRegraFiscal.PrejuizoCompensaEntreAnos, 1m, InicioLei11033),
-        Linha(13, CodigosRegraFiscal.PrejuizoCompensaNoMesIsento, 0m, InicioLei11033),
+        Linha(13, CodigosRegraFiscal.PrejuizoCompensaNoMesIsento, 1m, InicioLei11033),
         Linha(14, CodigosRegraFiscal.IrrfEstimar, 0m, InicioLei11033),
         Linha(15, CodigosRegraFiscal.IrrfAliquotaComum, 0.00005m, InicioLei11033),
         Linha(16, CodigosRegraFiscal.IrrfAliquotaDayTrade, 0.01m, InicioLei11033),
