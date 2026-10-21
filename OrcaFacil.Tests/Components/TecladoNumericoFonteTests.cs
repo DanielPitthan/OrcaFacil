@@ -5,10 +5,11 @@ using OrcaFacil.Core.Numerico;
 namespace OrcaFacil.Tests.Components;
 
 /// <summary>
-/// Teclado numérico no celular: inputmode via UserAttributes.
+/// Teclado no celular: inputmode via UserAttributes e InputMode.
 /// Fração explícita ou casas acima de zero usam "decimal"; o resto, "numeric".
+/// Quantidade e meta pedem TecladoCompleto e abrem "text" (teclado com vírgula).
 /// Comentário no fonte não conta. InputType.Number e type=number ficam de fora
-/// (WebView Chrome 83).
+/// (WebView Chrome 83; inputmode text existe desde o Chrome 66).
 /// </summary>
 public class TecladoNumericoFonteTests
 {
@@ -23,14 +24,14 @@ public class TecladoNumericoFonteTests
         Assert.False(TemTipoNumber(limpo));
 
         var semDerivacao = SemComentarios(fonte.Replace(
-            "tecladoDecimal ? \"decimal\" : \"numeric\"",
-            "\"decimal\" /* tecladoDecimal ? \"decimal\" : \"numeric\" */",
+            "tecladoCompleto ? \"text\" : tecladoDecimal ? \"decimal\" : \"numeric\"",
+            "\"decimal\" /* tecladoCompleto ? \"text\" : tecladoDecimal ? \"decimal\" : \"numeric\" */",
             StringComparison.Ordinal));
         Assert.False(CampoDeriva(semDerivacao));
 
         var modoFixo = SemComentarios(fonte.Replace(
-            "TecladoDecimal ? InputMode.@decimal : InputMode.numeric",
-            "InputMode.@decimal /* TecladoDecimal ? InputMode.@decimal : InputMode.numeric */",
+            "TecladoCompleto ? InputMode.text : TecladoDecimal ? InputMode.@decimal : InputMode.numeric",
+            "InputMode.@decimal /* TecladoCompleto ? InputMode.text : TecladoDecimal ? InputMode.@decimal : InputMode.numeric */",
             StringComparison.Ordinal));
         Assert.False(CampoDeriva(modoFixo));
 
@@ -41,10 +42,10 @@ public class TecladoNumericoFonteTests
         Assert.False(SincronizaAntesDeSair(semSincronia));
 
         const string soComentario = """
-            @* tecladoDecimal ? "decimal" : "numeric" *@
-            // TecladoDecimal ? InputMode.@decimal : InputMode.numeric
+            @* tecladoCompleto ? "text" : tecladoDecimal ? "decimal" : "numeric" *@
+            // TecladoCompleto ? InputMode.text : TecladoDecimal ? InputMode.@decimal : InputMode.numeric
             /* InputMode="@ModoTeclado" UserAttributes="@_atributos" */
-            <!-- ["inputmode"] = TextoModo(tecladoDecimal) -->
+            <!-- ["inputmode"] = TextoModo(tecladoCompleto, tecladoDecimal) -->
             ["inputmode"] = "decimal"
             """;
         var comentario = SemComentarios(soComentario);
@@ -112,20 +113,31 @@ public class TecladoNumericoFonteTests
 
         Assert.Contains("CasasDecimais=\"1\"", meta, StringComparison.Ordinal);
         Assert.Contains("FracaoExplicita=\"true\"", meta, StringComparison.Ordinal);
+        Assert.Contains("TecladoCompleto=\"true\"", meta, StringComparison.Ordinal);
         Assert.Contains("ValorMaximo=\"100\"", meta, StringComparison.Ordinal);
         Assert.Contains("AdornmentText=\"%\"", meta, StringComparison.Ordinal);
         Assert.DoesNotContain("CasasDecimais=\"0\"", meta, StringComparison.Ordinal);
 
         Assert.Contains("CasasDecimais=\"8\"", quantidade, StringComparison.Ordinal);
         Assert.Contains("FracaoExplicita=\"true\"", quantidade, StringComparison.Ordinal);
+        Assert.Contains("TecladoCompleto=\"true\"", quantidade, StringComparison.Ordinal);
         Assert.Contains("Class=\"mb-3\"", quantidade, StringComparison.Ordinal);
         Assert.DoesNotContain("CasasDecimais=\"0\"", quantidade, StringComparison.Ordinal);
 
         Assert.DoesNotContain("FracaoExplicita", Tag(orcamento, "Modelo.ValorLimite"), StringComparison.Ordinal);
+        Assert.DoesNotContain("TecladoCompleto", Tag(orcamento, "Modelo.ValorLimite"), StringComparison.Ordinal);
         Assert.Contains("AdornmentText=\"R$\"", Tag(orcamento, "Modelo.ValorLimite"), StringComparison.Ordinal);
         Assert.DoesNotContain("FracaoExplicita", Tag(operacao, "Modelo.PrecoUnitario"), StringComparison.Ordinal);
+        Assert.DoesNotContain("TecladoCompleto", Tag(operacao, "Modelo.PrecoUnitario"), StringComparison.Ordinal);
         Assert.Contains("AdornmentText=\"R$\"", Tag(operacao, "Modelo.PrecoUnitario"), StringComparison.Ordinal);
         Assert.DoesNotContain("FracaoExplicita", Tag(operacao, "Modelo.Custos"), StringComparison.Ordinal);
+        Assert.DoesNotContain("TecladoCompleto", Tag(operacao, "Modelo.Custos"), StringComparison.Ordinal);
+        Assert.Equal(
+            [
+                "OrcaFacil/Components/Pages/Ativos/OperacaoForm.razor:Modelo.Quantidade",
+                "OrcaFacil/Components/Pages/Orcamento/OrcamentoForm.razor:Modelo.MetaReducaoPercentual"
+            ],
+            CamposComTecladoCompleto().OrderBy(item => item, StringComparer.Ordinal).ToArray());
         Assert.True(CampoUsaFracao(campo));
 
         var metaSemFracao = SemComentarios(Ler("OrcaFacil", "Components", "Pages", "Orcamento", "OrcamentoForm.razor").Replace(
@@ -139,6 +151,18 @@ public class TecladoNumericoFonteTests
             "/* FracaoExplicita=\"true\" */",
             StringComparison.Ordinal));
         Assert.False(Tag(quantidadeSemFracao, "Modelo.Quantidade").Contains("FracaoExplicita=\"true\"", StringComparison.Ordinal));
+
+        var quantidadeSemTeclado = SemComentarios(Ler("OrcaFacil", "Components", "Pages", "Ativos", "OperacaoForm.razor").Replace(
+            "TecladoCompleto=\"true\"",
+            "<!-- TecladoCompleto=\"true\" -->",
+            StringComparison.Ordinal));
+        Assert.DoesNotContain("TecladoCompleto=\"true\"", Tag(quantidadeSemTeclado, "Modelo.Quantidade"), StringComparison.Ordinal);
+
+        var metaSemTeclado = SemComentarios(Ler("OrcaFacil", "Components", "Pages", "Orcamento", "OrcamentoForm.razor").Replace(
+            "TecladoCompleto=\"true\"",
+            "@* TecladoCompleto=\"true\" *@",
+            StringComparison.Ordinal));
+        Assert.DoesNotContain("TecladoCompleto=\"true\"", Tag(metaSemTeclado, "Modelo.MetaReducaoPercentual"), StringComparison.Ordinal);
 
         var campoSemFracao = SemComentarios(campo.Replace(
             "AvisoTeto.Aplicar(_digitos, texto, Casas, ValorMaximo, substituir: false, FracaoExplicita)",
@@ -304,10 +328,16 @@ public class TecladoNumericoFonteTests
         Assert.False(AvisoUsaAMascara(semMascara));
 
         var corClara = SemComentarios(css.Replace(
-            "html.of-tema-claro .of-mascara-numerica {\n    --mud-palette-error: #B4233A;",
-            "/* html.of-tema-claro .of-mascara-numerica { --mud-palette-error: #B4233A; } */\nhtml.of-tema-claro .of-mascara-numerica {\n    --mud-palette-error: #D64242;",
+            "--mud-palette-error: var(--of-resultado-erro);",
+            "/* --mud-palette-error: var(--of-resultado-erro); */ --mud-palette-error: #D64242;",
             StringComparison.Ordinal));
         Assert.False(ContrasteDoErro(corClara));
+
+        var tokenClaro = SemComentarios(css.Replace(
+            "--of-resultado-erro: #B4233A;",
+            "/* --of-resultado-erro: #B4233A; */ --of-resultado-erro: #D64242;",
+            StringComparison.Ordinal));
+        Assert.False(ContrasteDoErro(tokenClaro));
     }
 
     [Fact]
@@ -500,15 +530,38 @@ public class TecladoNumericoFonteTests
 
     private static bool CampoDeriva(string fonte)
     {
-        return fonte.Contains("TecladoDecimal => FracaoExplicita || Casas > 0", StringComparison.Ordinal)
-            && fonte.Contains("TecladoDecimal ? InputMode.@decimal : InputMode.numeric", StringComparison.Ordinal)
-            && fonte.Contains("tecladoDecimal ? \"decimal\" : \"numeric\"", StringComparison.Ordinal)
-            && fonte.Contains("[\"inputmode\"] = TextoModo(tecladoDecimal)", StringComparison.Ordinal)
+        return fonte.Contains("TecladoDecimal => !TecladoCompleto && (FracaoExplicita || Casas > 0)", StringComparison.Ordinal)
+            && fonte.Contains("TecladoCompleto ? InputMode.text : TecladoDecimal ? InputMode.@decimal : InputMode.numeric", StringComparison.Ordinal)
+            && fonte.Contains("tecladoCompleto ? \"text\" : tecladoDecimal ? \"decimal\" : \"numeric\"", StringComparison.Ordinal)
+            && fonte.Contains("[\"inputmode\"] = TextoModo(tecladoCompleto, tecladoDecimal)", StringComparison.Ordinal)
             && fonte.Contains("InputMode=\"@ModoTeclado\"", StringComparison.Ordinal)
             && fonte.Contains("UserAttributes=\"@_atributos\"", StringComparison.Ordinal)
             && fonte.Contains("SincronizarAtributos();", StringComparison.Ordinal)
             && !fonte.Contains("[\"inputmode\"] = \"decimal\"", StringComparison.Ordinal)
-            && !fonte.Contains("[\"inputmode\"] = \"numeric\"", StringComparison.Ordinal);
+            && !fonte.Contains("[\"inputmode\"] = \"numeric\"", StringComparison.Ordinal)
+            && !fonte.Contains("[\"inputmode\"] = \"text\"", StringComparison.Ordinal)
+            && !fonte.Contains("InputMode.none", StringComparison.Ordinal);
+    }
+
+    private static IReadOnlyList<string> CamposComTecladoCompleto()
+    {
+        var campos = new List<string>();
+        foreach (var arquivo in Razors())
+        {
+            var fonte = SemComentarios(File.ReadAllText(arquivo));
+            foreach (var tag in Tags(fonte, "CampoNumerico"))
+            {
+                if (!tag.Contains("TecladoCompleto", StringComparison.Ordinal))
+                    continue;
+
+                if (!tag.Contains("TecladoCompleto=\"true\"", StringComparison.Ordinal))
+                    campos.Add(Relativo(arquivo) + ":invalido");
+                else
+                    campos.Add(Relativo(arquivo) + ":" + Ancora(tag));
+            }
+        }
+
+        return campos;
     }
 
     private static bool CampoUsaFracao(string fonte)
@@ -579,14 +632,20 @@ public class TecladoNumericoFonteTests
 
     private static bool ContrasteDoErro(string css)
     {
-        var claro = CorDaRegra(css, "html.of-tema-claro .of-mascara-numerica");
-        var escuro = CorDaRegra(css, "html.of-tema-escuro .of-mascara-numerica");
+        var erro = BlocoCss(css, "html.of-tema-claro .of-mascara-numerica,\nhtml.of-tema-escuro .of-mascara-numerica");
         var quebra = css.IndexOf(".of-mascara-numerica .mud-input-helper-text {", StringComparison.Ordinal);
-        if (claro.Length == 0 || escuro.Length == 0 || quebra < 0)
+        if (erro.Length == 0 || quebra < 0)
+            return false;
+        if (!erro.Contains("--mud-palette-error: var(--of-resultado-erro)", StringComparison.Ordinal))
             return false;
 
+        var claro = Token(css, ".of-tema-claro", "--of-resultado-erro");
+        var escuroTema = Token(css, ".of-tema-escuro", "--of-resultado-erro");
+        var escuro = escuroTema.Length > 0 ? escuroTema : Token(css, ":root", "--of-resultado-erro");
         var bloco = css[quebra..css.IndexOf('}', quebra)];
-        return bloco.Contains("white-space: normal", StringComparison.Ordinal)
+        return claro.Length > 0
+            && escuro.Length > 0
+            && bloco.Contains("white-space: normal", StringComparison.Ordinal)
             && bloco.Contains("overflow-wrap: anywhere", StringComparison.Ordinal)
             && bloco.Contains("max-width: 100%", StringComparison.Ordinal)
             && Contraste(claro, "#ffffff") >= 4.5
@@ -595,7 +654,7 @@ public class TecladoNumericoFonteTests
             && Contraste(escuro, "#12151B") >= 4.5;
     }
 
-    private static string CorDaRegra(string css, string seletor)
+    private static string BlocoCss(string css, string seletor)
     {
         var inicio = css.IndexOf(seletor + " {", StringComparison.Ordinal);
         if (inicio < 0)
@@ -603,16 +662,19 @@ public class TecladoNumericoFonteTests
 
         var abre = css.IndexOf('{', inicio);
         var fecha = abre < 0 ? -1 : css.IndexOf('}', abre);
-        if (abre < 0 || fecha < 0)
-            return "";
+        return abre < 0 || fecha < 0 ? "" : css[abre..fecha];
+    }
 
-        var bloco = css[abre..fecha];
-        var cor = bloco.IndexOf("--mud-palette-error:", StringComparison.Ordinal);
+    private static string Token(string css, string seletor, string nome)
+    {
+        var bloco = BlocoCss(css, seletor);
+        var marca = nome + ":";
+        var cor = bloco.IndexOf(marca, StringComparison.Ordinal);
         if (cor < 0)
             return "";
 
         var hex = bloco.IndexOf('#', cor);
-        if (hex < 0)
+        if (hex < 0 || hex > cor + marca.Length + 8)
             return "";
 
         var fim = hex + 1;

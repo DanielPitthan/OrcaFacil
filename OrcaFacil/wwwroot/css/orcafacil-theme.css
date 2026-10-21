@@ -754,16 +754,13 @@ html.of-tema-escuro button.of-previa-opcao {
 }
 
 /* Erro do campo numérico, no helper que já existe.
-   O Mud pinta esse texto com var(--mud-palette-error). #D64242 sobre #fff fica em 4,45:1.
-   #B4233A fica em 6,48:1 no branco e 5,81:1 no fundo #EFF3F7.
-   No escuro, #E07171 fica em 5,32:1 na superfície #1B1F27 e 5,89:1 no fundo #12151B.
+   O Mud pinta esse texto com var(--mud-palette-error). O token --of-resultado-erro
+   já é #B4233A no claro (6,48:1 no branco e 5,81:1 no fundo) e #E07171 no escuro
+   (5,32:1 na superfície e 5,89:1 no fundo). Sem a classe de tema, a paleta fica.
    O texto quebra dentro da largura do campo, também em 360px. */
-html.of-tema-claro .of-mascara-numerica {
-    --mud-palette-error: #B4233A;
-}
-
+html.of-tema-claro .of-mascara-numerica,
 html.of-tema-escuro .of-mascara-numerica {
-    --mud-palette-error: #E07171;
+    --mud-palette-error: var(--of-resultado-erro);
 }
 
 .of-mascara-numerica .mud-input-helper-text {

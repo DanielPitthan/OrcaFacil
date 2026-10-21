@@ -17,7 +17,7 @@
 @code {
     private const decimal LimitePadrao = 1_000_000_000m;
 
-    private Dictionary<string, object?> _atributos = CriarAtributos(tecladoDecimal: true);
+    private Dictionary<string, object?> _atributos = CriarAtributos(tecladoCompleto: false, tecladoDecimal: true);
 
     private ElementReference _raiz;
     private MudTextField<string> _campo = null!;
@@ -44,6 +44,7 @@
     [Parameter] public string? Class { get; set; }
     [Parameter] public int CasasDecimais { get; set; } = 2;
     [Parameter] public bool FracaoExplicita { get; set; }
+    [Parameter] public bool TecladoCompleto { get; set; }
     [Parameter] public decimal? ValorMaximo { get; set; } = LimitePadrao;
     [Parameter] public Adornment Adornment { get; set; } = Adornment.None;
     [Parameter] public string? AdornmentText { get; set; }
@@ -53,15 +54,16 @@
 
     private bool PermiteVazio => typeof(TNumber) == typeof(decimal?);
     private int Casas => Math.Clamp(CasasDecimais, 0, 8);
-    private bool TecladoDecimal => FracaoExplicita || Casas > 0;
-    private InputMode ModoTeclado => TecladoDecimal ? InputMode.@decimal : InputMode.numeric;
+    private bool TecladoDecimal => !TecladoCompleto && (FracaoExplicita || Casas > 0);
+    private InputMode ModoTeclado => TecladoCompleto ? InputMode.text : TecladoDecimal ? InputMode.@decimal : InputMode.numeric;
     private bool _erroVisivel => !string.IsNullOrEmpty(_erro) && For is not null;
 
-    private static string TextoModo(bool tecladoDecimal) => tecladoDecimal ? "decimal" : "numeric";
+    private static string TextoModo(bool tecladoCompleto, bool tecladoDecimal)
+        => tecladoCompleto ? "text" : tecladoDecimal ? "decimal" : "numeric";
 
-    private static Dictionary<string, object?> CriarAtributos(bool tecladoDecimal) => new()
+    private static Dictionary<string, object?> CriarAtributos(bool tecladoCompleto, bool tecladoDecimal) => new()
     {
-        ["inputmode"] = TextoModo(tecladoDecimal),
+        ["inputmode"] = TextoModo(tecladoCompleto, tecladoDecimal),
         ["autocomplete"] = "off",
         ["autocorrect"] = "off",
         ["autocapitalize"] = "off",
@@ -70,11 +72,11 @@
 
     private void SincronizarAtributos()
     {
-        var modo = TextoModo(TecladoDecimal);
+        var modo = TextoModo(TecladoCompleto, TecladoDecimal);
         if (Equals(_atributos["inputmode"], modo))
             return;
 
-        _atributos = CriarAtributos(TecladoDecimal);
+        _atributos = CriarAtributos(TecladoCompleto, TecladoDecimal);
     }
 
     protected override void OnInitialized()
