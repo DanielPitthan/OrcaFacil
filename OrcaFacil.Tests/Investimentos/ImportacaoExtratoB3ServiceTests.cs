@@ -126,7 +126,7 @@ public class ImportacaoExtratoB3ServiceTests
             await using (var s1 = new MemoryStream(Encoding.UTF8.GetBytes(a)))
             {
                 var previa = await ambiente.Service.PreverAsync(s1, ambiente.MembroId);
-                Assert.Equal(1, await ambiente.Service.GravarAsync(previa, ambiente.MembroId));
+                Assert.Equal(1, (await ambiente.Service.GravarAsync(previa, ambiente.MembroId)).Linhas);
             }
 
             await using var s2 = new MemoryStream(Encoding.UTF8.GetBytes(b));
@@ -150,7 +150,7 @@ public class ImportacaoExtratoB3ServiceTests
         await using (var s1 = new MemoryStream(Encoding.UTF8.GetBytes(semPreco)))
         {
             var previa = await ambiente.Service.PreverAsync(s1, ambiente.MembroId);
-            Assert.Equal(1, await ambiente.Service.GravarAsync(previa, ambiente.MembroId));
+            Assert.Equal(1, (await ambiente.Service.GravarAsync(previa, ambiente.MembroId)).Linhas);
         }
 
         await using var s2 = new MemoryStream(Encoding.UTF8.GetBytes(comPreco));
@@ -195,7 +195,7 @@ public class ImportacaoExtratoB3ServiceTests
         var gravadas = await ambiente.Service.GravarAsync(primeira, ambiente.MembroId);
 
         var segunda = await ambiente.PreverModeloAsync();
-        Assert.Equal(gravadas, segunda.Contar(StatusLinhaImportacaoB3.DuplicataImportada));
+        Assert.Equal(gravadas.Linhas, segunda.Contar(StatusLinhaImportacaoB3.DuplicataImportada));
         Assert.Equal(0, segunda.Contar(StatusLinhaImportacaoB3.Nova));
         Assert.Equal(1, segunda.Contar(StatusLinhaImportacaoB3.Informativa));
         Assert.Equal(1, segunda.Contar(StatusLinhaImportacaoB3.SemPosicao));
@@ -216,7 +216,7 @@ public class ImportacaoExtratoB3ServiceTests
         await using var csv = new MemoryStream(Embaralhar(CaminhoCsv()));
         var segunda = await ambiente.Service.PreverAsync(csv, ambiente.MembroId);
 
-        Assert.Equal(gravadas, segunda.Contar(StatusLinhaImportacaoB3.DuplicataImportada));
+        Assert.Equal(gravadas.Linhas, segunda.Contar(StatusLinhaImportacaoB3.DuplicataImportada));
         Assert.Equal(0, segunda.Contar(StatusLinhaImportacaoB3.Nova));
         Assert.Equal(1, segunda.Contar(StatusLinhaImportacaoB3.Informativa));
         Assert.Equal(1, segunda.Contar(StatusLinhaImportacaoB3.SemPosicao));
@@ -235,7 +235,7 @@ public class ImportacaoExtratoB3ServiceTests
         await using var csv = new MemoryStream(Acrescentar(CaminhoCsv(), LinhaExtraAntes, LinhaExtraDepois));
         var segunda = await ambiente.Service.PreverAsync(csv, ambiente.MembroId);
 
-        Assert.Equal(gravadas, segunda.Contar(StatusLinhaImportacaoB3.DuplicataImportada));
+        Assert.Equal(gravadas.Linhas, segunda.Contar(StatusLinhaImportacaoB3.DuplicataImportada));
         Assert.Equal(2, segunda.Contar(StatusLinhaImportacaoB3.Nova));
         Assert.Equal(1, segunda.Contar(StatusLinhaImportacaoB3.Informativa));
         Assert.Equal(1, segunda.Contar(StatusLinhaImportacaoB3.SemPosicao));
@@ -263,7 +263,7 @@ public class ImportacaoExtratoB3ServiceTests
         Assert.Equal(2, previa.Linhas.Select(l => l.Comando!.Hash).Distinct().Count());
 
         var gravadas = await ambiente.Service.GravarAsync(previa, ambiente.MembroId);
-        Assert.Equal(2, gravadas);
+        Assert.Equal(2, gravadas.Linhas);
 
         await using var contexto = await ambiente.Factory.CreateDbContextAsync();
         var hashes = await contexto.OperacoesAtivo.Select(o => o.HashImportacao).ToListAsync();
@@ -290,7 +290,7 @@ public class ImportacaoExtratoB3ServiceTests
         await using (var duas = new MemoryStream(Encoding.UTF8.GetBytes(Arquivo(2))))
         {
             var previa = await ambiente.Service.PreverAsync(duas, ambiente.MembroId);
-            Assert.Equal(2, await ambiente.Service.GravarAsync(previa, ambiente.MembroId));
+            Assert.Equal(2, (await ambiente.Service.GravarAsync(previa, ambiente.MembroId)).Linhas);
         }
 
         await using var tres = new MemoryStream(Encoding.UTF8.GetBytes(Arquivo(3)));

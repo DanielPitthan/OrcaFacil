@@ -112,6 +112,11 @@
     private List<OpcaoCategoriaFiltro> _opcoesCategoria = [];
     private PainelLancamentosMes? _painel;
     private DateTime _mesReferencia = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private bool _consultaAplicada;
+    private string? _mesNaUrl;
+
+    [SupplyParameterFromQuery(Name = "mes")]
+    public string? MesConsulta { get; set; }
 
     private RenderFragment BarraLancamentos => @<text>
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"
@@ -130,6 +135,16 @@
         _opcoesCategoria = _categorias
             .Select(c => new OpcaoCategoriaFiltro(c.Id, c.Nome, c.Icone))
             .ToList();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_consultaAplicada && _mesNaUrl == MesConsulta)
+            return;
+
+        _consultaAplicada = true;
+        _mesNaUrl = MesConsulta;
+        _mesReferencia = ConsultaMesLancamentos.Resolver(MesConsulta, DateTime.Today);
         await CarregarAsync();
     }
 
@@ -167,10 +182,10 @@
             CultureInfo.CurrentCulture);
     }
 
-    private async Task MudarMes(int delta)
+    private void MudarMes(int delta)
     {
-        _mesReferencia = _mesReferencia.AddMonths(delta);
-        await CarregarAsync();
+        var mes = _mesReferencia.AddMonths(delta);
+        NavigationManager.NavigateTo($"/lancamentos?mes={mes:yyyy-MM}", replace: true);
     }
 
     private void AlterarFiltro(FiltroListaLancamento filtro)
