@@ -24,6 +24,11 @@ namespace OrcaFacil.Core.Dirpf;
 /// Título do tipo Outro continua no grupo 04/02 e no código 06. A linha só ganha o aviso de LCI/LCA.
 /// LCI e LCA vão para Rendimentos Isentos, código da variante RendaFixaIsenta, e para o bem 04/03.
 /// Não levam o aviso do tipo Outro.
+/// CRI, CRA, LIG e debênture de infraestrutura não têm tipo no enum. O primeiro segmento
+/// do código ou do nome, separado por " - ", ganha a observação de isenção da pessoa física.
+/// O código e o grupo dessa frase saem da variante RendaFixaIsenta vigente na data de corte.
+/// O perfil do título usa os lançamentos das operações do papel, inclusive as de anos anteriores,
+/// para um título comprado antes do ano-base continuar com o dono certo.
 /// </summary>
 public static class MontadorDirpf
 {
@@ -377,6 +382,7 @@ public static class MontadorDirpf
         CodigoDirpf? codigoRendimentoIsento = null;
         var casas = 2;
         var regraLida = false;
+        string? observacaoIsencao = null;
 
         foreach (var titulo in listaTitulos)
         {
@@ -419,7 +425,13 @@ public static class MontadorDirpf
             var codigoDoBem = isento ? codigoBemIsento! : codigoBem!;
             var liquidoDeclarado = CalculadoraResultadoRealizado.Arredondar(liquido, casas);
             var irDeclarado = CalculadoraResultadoRealizado.Arredondar(ir, casas);
+            // O lançamento de um resgate anterior ao ano-base também identifica o dono.
+            // doTitulo não corta em 1º de janeiro: o título comprado antes continua classificado.
             var perfil = PerfilDoTitulo(doTitulo, listaLancamentos, listaPerfis);
+            var isentoPessoaFisica = EhProdutoIsentoPessoaFisica(titulo);
+            if (isentoPessoaFisica)
+                observacaoIsencao ??= ObservacaoIsencaoPessoaFisica(tabela, corte);
+
             if (calculada.Quantidade > 0m)
             {
                 var custo = CalculadoraResultadoRealizado.Arredondar(calculada.CustoTotal, casas);
@@ -441,16 +453,20 @@ public static class MontadorDirpf
                     medio,
                     irDeclarado,
                     liquidoDeclarado,
-                    TextoOutro(
+                    TextoComObservacao(
                         $"{titulo.Codigo} — {titulo.Nome}. {tipo}. Custo de aquisição em 31/12/{anoBase}.",
-                        titulo.Tipo)));
+                        titulo.Tipo,
+                        isentoPessoaFisica,
+                        observacaoIsencao)));
             }
 
             if (liquidoDeclarado > 0m)
             {
-                var descricao = TextoOutro(
+                var descricao = TextoComObservacao(
                     $"Rendimento líquido de renda fixa — {titulo.Codigo} — {titulo.Nome}.",
-                    titulo.Tipo);
+                    titulo.Tipo,
+                    isentoPessoaFisica,
+                    observacaoIsencao);
                 if (isento)
                 {
                     isentos.Add(new LinhaRendimentoIsentoDirpf(
@@ -550,6 +566,72 @@ public static class MontadorDirpf
 
     private static bool EhTituloIsento(TipoTituloRendaFixa tipo)
         => tipo is TipoTituloRendaFixa.LCI or TipoTituloRendaFixa.LCA;
+
+    /// <summary>
+    /// Primeiro segmento do produto, no corte " - ", como o extrato classifica LCI e LCA.
+    /// CRI, CRA e LIG são isentos para a pessoa física
+    /// (Perguntas e Respostas IRPF 2026, pergunta 738, itens II, III e VI).
+    /// Debênture entra quando o segmento é o de infraestrutura da Lei nº 12.431/2011
+    /// (pergunta 738, item V). O número do código e o grupo saem da variante vigente.
+    /// </summary>
+    private static readonly string[] PrefixosIsentosPessoaFisica =
+    [
+        "CRI",
+        "CRA",
+        "LIG",
+        "DEBENTURE DE INFRAESTRUTURA",
+        "DEBÊNTURE DE INFRAESTRUTURA",
+        "DEBENTURES DE INFRAESTRUTURA",
+        "DEBÊNTURES DE INFRAESTRUTURA"
+    ];
+
+    private static bool EhProdutoIsentoPessoaFisica(TituloRendaFixa titulo)
+    {
+        if (EhTituloIsento(titulo.Tipo))
+            return false;
+
+        return EhPrefixoIsentoPessoaFisica(titulo.Codigo) || EhPrefixoIsentoPessoaFisica(titulo.Nome);
+    }
+
+    private static bool EhPrefixoIsentoPessoaFisica(string? produto)
+    {
+        if (string.IsNullOrWhiteSpace(produto))
+            return false;
+
+        var partes = produto.Split(" - ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (partes.Length < 1)
+            return false;
+
+        var primeiro = partes[0];
+        foreach (var prefixo in PrefixosIsentosPessoaFisica)
+        {
+            if (primeiro.Equals(prefixo, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string ObservacaoIsencaoPessoaFisica(TabelaCodigosDirpf tabela, DateTime corte)
+    {
+        var rendimento = tabela.ExigirVariante(
+            TipoFichaDirpf.RendimentoIsento, CatalogoCodigosDirpf.VarianteRendaFixaIsenta, corte);
+        var bem = tabela.ExigirVariante(
+            TipoFichaDirpf.Bem, CatalogoCodigosDirpf.VarianteRendaFixaIsenta, corte);
+        return $"Isento para pessoa física: declarar em Rendimentos Isentos (código {rendimento.Codigo}) e em Bens e Direitos no grupo {bem.Grupo}/{bem.Codigo}";
+    }
+
+    private static string TextoComObservacao(
+        string texto,
+        TipoTituloRendaFixa tipo,
+        bool isentoPessoaFisica,
+        string? observacaoIsencao)
+    {
+        if (isentoPessoaFisica)
+            return $"{texto} {observacaoIsencao}";
+
+        return TextoOutro(texto, tipo);
+    }
 
     private static string TextoOutro(string texto, TipoTituloRendaFixa tipo) =>
         tipo == TipoTituloRendaFixa.Outro ? $"{texto} {ObservacaoTituloOutro}" : texto;
