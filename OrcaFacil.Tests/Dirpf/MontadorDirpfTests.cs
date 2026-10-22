@@ -91,7 +91,7 @@ public class MontadorDirpfTests : IDisposable
         Assert.Equal(CatalogoCodigosDirpf.DescricaoJcp, jcp.DescricaoCodigo);
         Assert.Equal(100m, jcp.ValorLiquido);
         Assert.Null(jcp.IrRetido);
-        Assert.Equal("", jcp.Cnpj);
+        Assert.Equal(MontadorDirpf.AvisoCnpjFontePagadora, jcp.Cnpj);
         Assert.Empty(dirpf.RendaFixa);
     }
 

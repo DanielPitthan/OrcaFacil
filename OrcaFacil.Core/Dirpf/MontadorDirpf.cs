@@ -12,12 +12,14 @@ namespace OrcaFacil.Core.Dirpf;
 /// Monta Bens e Direitos, Rendimentos Isentos, a tributação exclusiva e a posição de renda fixa.
 /// A posição usa operações até 31/12, inclusive as de anos anteriores.
 /// O rendimento isento usa o ano da data de pagamento. JCP fica de fora dessa ficha
-/// e vai para a exclusiva, código da variante Jcp, pelo mesmo ano.
+/// e vai para a exclusiva, código da variante Jcp, também pelo ano do pagamento.
 /// O ganho isento de ações no limite mensal entra na ficha de isentos, pelo código vigente.
 /// BDR e ETF não têm código de rendimento isento na semente e não entram nessa ficha.
 /// Renda fixa usa o IR retido gravado. A tabela regressiva não entra na conta.
 /// Lucro de resgate já virou receita e prejuízo já virou despesa; aqui só se declara o líquido positivo.
-/// O CNPJ sai vazio: o cadastro não guarda esse número.
+/// O CNPJ de Bens e Direitos e de Rendimentos Isentos sai vazio: o campo no ativo é a #100.
+/// Nas abas Rendimentos exclusivos e Renda fixa, CNPJ vazio da fonte pagadora vira aviso.
+/// A exportação segue. A #100 não cobre essas duas abas nem o título de renda fixa.
 /// Posição com quantidade zero fica de fora. Não há piso de valor.
 /// Título do tipo Outro continua no grupo 04/02 e no código 06. A linha só ganha o aviso de LCI/LCA.
 /// LCI e LCA vão para Rendimentos Isentos, código da variante RendaFixaIsenta, e para o bem 04/03.
@@ -29,6 +31,12 @@ public static class MontadorDirpf
 
     public const string ObservacaoTituloOutro =
         "Se for LCI/LCA, é isento: declarar em Rendimentos Isentos (código 12) e no grupo 04/03";
+
+    /// <summary>
+    /// Texto da coluna CNPJ quando a fonte pagadora não tem número.
+    /// Não é um CNPJ: começa por "Aviso" para não ser copiado no campo da declaração.
+    /// </summary>
+    public const string AvisoCnpjFontePagadora = "Aviso: CNPJ da fonte pagadora não informado";
 
     private static readonly CultureInfo PtBr = CultureInfo.GetCultureInfo("pt-BR");
     private static readonly StringComparer OrdemTexto = StringComparer.Create(PtBr, ignoreCase: true);
@@ -301,6 +309,12 @@ public static class MontadorDirpf
         TabelaCodigosDirpf tabela,
         TabelaRegrasFiscais fiscais)
     {
+        // Ano-base = ano do pagamento (juros recebidos). A pergunta 320 das Perguntas e
+        // Respostas IRPF 2026 tributa "na data do pagamento ou crédito"; as instruções
+        // da DIRPF mandam informar os juros recebidos. O crédito ainda não pago é o bem
+        // "Juros Sobre Capital Próprio a receber", e o provento não guarda essa data.
+        // https://www.gov.br/receitafederal/pt-br/centrais-de-conteudo/publicacoes/perguntas-e-respostas/dirpf/p-r-irpf-2026-v1-00-2026-04-23.pdf
+        // https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/preenchimento/manual-mir/rendimentos/rendimentos-do-capital
         var doAno = proventos.Where(provento =>
             provento.Tipo == TipoProvento.Jcp
             && provento.DataPagamento >= inicio
@@ -329,7 +343,7 @@ public static class MontadorDirpf
                 "JCP",
                 codigo.Codigo,
                 codigo.Descricao,
-                Cnpj: "",
+                CnpjDaFontePagadora(""),
                 valor,
                 IrRetido: null,
                 $"JCP — {ativo.Ticker} — {ativo.Nome}."));
@@ -421,7 +435,7 @@ public static class MontadorDirpf
                     codigoDoBem.Grupo,
                     codigoDoBem.Codigo,
                     codigoDoBem.Descricao,
-                    Cnpj: "",
+                    CnpjDaFontePagadora(""),
                     calculada.Quantidade,
                     custo,
                     medio,
@@ -461,7 +475,7 @@ public static class MontadorDirpf
                         "Rendimento de renda fixa",
                         codigoRendimento!.Codigo,
                         codigoRendimento.Descricao,
-                        Cnpj: "",
+                        CnpjDaFontePagadora(""),
                         liquidoDeclarado,
                         irDeclarado,
                         descricao));
@@ -526,6 +540,13 @@ public static class MontadorDirpf
         IrRetido = operacao.IrRetido,
         Codigo = codigo
     };
+
+    /// <summary>
+    /// CNPJ da fonte pagadora nas abas Rendimentos exclusivos e Renda fixa.
+    /// Vazio vira aviso e a linha continua. Número informado segue como está.
+    /// </summary>
+    public static string CnpjDaFontePagadora(string? cnpj)
+        => string.IsNullOrWhiteSpace(cnpj) ? AvisoCnpjFontePagadora : cnpj.Trim();
 
     private static bool EhTituloIsento(TipoTituloRendaFixa tipo)
         => tipo is TipoTituloRendaFixa.LCI or TipoTituloRendaFixa.LCA;

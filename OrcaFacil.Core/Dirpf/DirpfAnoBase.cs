@@ -47,7 +47,8 @@ public sealed record LinhaRendimentoIsentoDirpf(
 
 /// <summary>
 /// Rendimento de tributação exclusiva no ano-base.
-/// JCP traz <see cref="IrRetido"/> nulo: o provento não guarda o imposto.
+/// JCP entra pelo ano da data de pagamento e traz <see cref="IrRetido"/> nulo:
+/// o provento não guarda o imposto.
 /// Renda fixa traz o IR retido já gravado na operação.
 /// </summary>
 public sealed record LinhaRendimentoExclusivoDirpf(
