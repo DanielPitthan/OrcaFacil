@@ -60,31 +60,7 @@ public sealed class EspelhoArquivo : IEspelhoDados
         if (!Existe())
             return LeituraEspelho.Ilegivel("Espelho ausente.");
 
-        var senha = _senha.Obter();
-        if (string.IsNullOrEmpty(senha))
-            return LeituraEspelho.Ilegivel("Senha do espelho ausente.");
-
-        try
-        {
-            using var snapshot = await LerEspelho.AbrirAsync(_caminho, senha, _versao, cancellationToken);
-            return LeituraEspelho.Ok(snapshot.Metadados.VersaoSchema);
-        }
-        catch (SchemaMaisNovoQueOAppException ex)
-        {
-            return LeituraEspelho.Ok(ex.VersaoEspelho);
-        }
-        catch (FalhaEspelhoException ex)
-        {
-            return LeituraEspelho.Ilegivel(ex.Message);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception)
-        {
-            return LeituraEspelho.Ilegivel("Espelho ilegível.");
-        }
+        return await LeituraComSenhaRetida.LerAsync(_caminho, _senha, _versao, cancellationToken);
     }
 
     public override string ToString() => "EspelhoArquivo";

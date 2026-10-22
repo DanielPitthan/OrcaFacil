@@ -22,7 +22,7 @@ namespace OrcaFacil.Platforms.Android.Espelho;
 /// outro nome, esse URI não é apagado: pode ser o espelho que já estava na pasta.
 /// Cancelamento também não apaga o que já foi criado. A URI da pasta não entra em mensagem nem em log.
 /// </remarks>
-public sealed class VolumePastaEspelhoAndroid : IVolumePastaEspelho
+public sealed class VolumePastaEspelhoAndroid : IVolumePastaEspelho, IVisibilidadeNomePasta
 {
     private const string MimeEspelho = "application/octet-stream";
 
@@ -384,16 +384,37 @@ public sealed class VolumePastaEspelhoAndroid : IVolumePastaEspelho
         if (origemDepois.Falha is not null || destinoDepois.Falha is not null)
             return null;
 
-        if (destinoDepois.Quantidade == 1 && origemDepois.Quantidade == 0)
-            return ResultadoRenomeacaoVolume.Ok();
+        return RegrasPastaEspelho.AvaliarDepoisDoRename(origemDepois.Quantidade, destinoDepois.Quantidade);
+    }
 
-        if (destinoDepois.Quantidade > 0 && origemDepois.Quantidade > 0)
-            return ResultadoRenomeacaoVolume.CopiaSemExcluirOrigem();
+    public bool? Visivel(string nome)
+    {
+        if (string.IsNullOrEmpty(nome))
+            return null;
 
-        if (destinoDepois.Quantidade > 0 && origemDepois.Quantidade == 0)
-            return ResultadoRenomeacaoVolume.FalhaAposEfetuar(CodigoFalhaPastaEspelho.TrocaNaoConfirmada);
+        if (!TentarAbrir(out var resolver, out var arvore, out _))
+            return null;
 
-        return null;
+        try
+        {
+            var treeId = DocumentsContract.GetTreeDocumentId(arvore);
+            if (string.IsNullOrEmpty(treeId))
+                return null;
+
+            var busca = Buscar(resolver, arvore, treeId, nome);
+            if (busca.Falha is not null)
+                return null;
+
+            return busca.Quantidade > 0;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     private static Varredura InspecionarFilhos(

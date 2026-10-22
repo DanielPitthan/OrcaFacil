@@ -934,6 +934,245 @@ public class BackupEspelhoAgoraTests
         Assert.Equal("Marina", await EscalarTextoAsync(vivo, "SELECT Nome FROM MembrosFamilia"));
     }
 
+    [Fact]
+    public async Task Cancela_DepoisDaPromocao_DefineSenhaNova_ERelancaOCE()
+    {
+        using var area = new AreaTemp();
+        await using var vivo = await CriarBancoAbertoAsync(area.Banco, "Marina");
+        var volume = new VolumeMemoria
+        {
+            ExcecaoNaPromocao = new OperationCanceledException(),
+            PromocaoRemoveTemporarioAntesDeFalhar = true
+        };
+        var anterior = new byte[] { 1, 1, 1 };
+        volume.Arquivos[volume.NomeArquivo] = anterior;
+        var provedor = new ProvedorSenhaEspelhoMemoria();
+        Assert.True(provedor.Definir(Senha, Senha).Aceita);
+        var backup = Criar(volume, provedor, new AreaTemporariaEspelhoEmDisco(Path.Combine(area.Raiz, "cache")));
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            backup.ExecutarAsync(area.Banco, SenhaNova, SenhaNova, substituirEspelhoExistente: true));
+
+        Assert.Equal(SenhaNova, provedor.Obter());
+        Assert.Null(provedor.ObterAnterior());
+        Assert.NotEqual(anterior, volume.Arquivos[volume.NomeArquivo]);
+        Assert.DoesNotContain(volume.NomeArquivo, volume.Apagados);
+        Assert.Equal(new byte[] { 9 }, volume.Arquivos["foto.jpg"]);
+        AssertMemoriaAbre(volume.Arquivos[volume.NomeArquivo], provedor, area.Raiz);
+        Assert.Equal("Marina", await EscalarTextoAsync(vivo, "SELECT Nome FROM MembrosFamilia"));
+    }
+
+    [Fact]
+    public async Task ExcecaoPosPromocao_ReleituraNula_AdotaSenhaNova_ERetemAAntiga()
+    {
+        using var area = new AreaTemp();
+        await using var vivo = await CriarBancoAbertoAsync(area.Banco, "Marina");
+        var volume = new VolumeMemoria
+        {
+            ExcecaoNoDescarteReserva = new InvalidOperationException("descarte"),
+            FalharCopiaDefinitivoAPartirDa = 2
+        };
+        var anterior = new byte[] { 1, 1, 1 };
+        volume.Arquivos[volume.NomeArquivo] = anterior;
+        var provedor = new ProvedorSenhaEspelhoMemoria();
+        Assert.True(provedor.Definir(Senha, Senha).Aceita);
+        var log = new LogEspiao();
+        var backup = Criar(
+            volume,
+            provedor,
+            new AreaTemporariaEspelhoEmDisco(Path.Combine(area.Raiz, "cache")),
+            log);
+
+        var resultado = await backup.ExecutarAsync(area.Banco, SenhaNova, SenhaNova, substituirEspelhoExistente: true);
+
+        Assert.True(resultado.Sucesso);
+        Assert.Equal(BackupEspelhoAgora.MensagemGravadoLeituraNaoConfirmada, resultado.Mensagem);
+        Assert.Equal(SenhaNova, provedor.Obter());
+        Assert.Equal(Senha, provedor.ObterAnterior());
+        Assert.NotEqual(anterior, volume.Arquivos[volume.NomeArquivo]);
+        Assert.DoesNotContain(volume.NomeArquivo, volume.Apagados);
+        var reserva = Assert.Single(volume.Arquivos.Keys, nome => NomeTemporarioEspelho.EhReservaDesteApp(nome, volume.NomeArquivo));
+        Assert.Equal(anterior, volume.Arquivos[reserva]);
+        Assert.Equal(new byte[] { 9 }, volume.Arquivos["foto.jpg"]);
+        AssertNaoVaza(resultado, Senha);
+        AssertNaoVaza(resultado, SenhaNova);
+        AssertNaoVaza(provedor, Senha);
+        AssertNaoVaza(provedor, SenhaNova);
+        foreach (var mensagem in log.Mensagens)
+        {
+            AssertNaoVazaTexto(mensagem, Senha);
+            AssertNaoVazaTexto(mensagem, SenhaNova);
+        }
+
+        AssertMemoriaAbre(volume.Arquivos[volume.NomeArquivo], provedor, area.Raiz);
+        Assert.False(Abre(volume.Arquivos[volume.NomeArquivo], Senha, area.Raiz));
+        Assert.Equal("Marina", await EscalarTextoAsync(vivo, "SELECT Nome FROM MembrosFamilia"));
+    }
+
+    [Fact]
+    public async Task Homonimos_SenhaNova_MensagemComReserva_LeituraSeguinteIndisponivel()
+    {
+        using var area = new AreaTemp();
+        await using var vivo = await CriarBancoAbertoAsync(area.Banco, "Marina");
+        var volume = new VolumeMemoria { HomonimosAposPromocao = true };
+        var anterior = new byte[] { 2, 2 };
+        volume.Arquivos[volume.NomeArquivo] = anterior;
+        var provedor = new ProvedorSenhaEspelhoMemoria();
+        Assert.True(provedor.Definir(Senha, Senha).Aceita);
+        var backup = Criar(volume, provedor, new AreaTemporariaEspelhoEmDisco(Path.Combine(area.Raiz, "cache")));
+
+        var resultado = await backup.ExecutarAsync(area.Banco, SenhaNova, SenhaNova, substituirEspelhoExistente: true);
+
+        Assert.True(resultado.Sucesso);
+        Assert.Equal(BackupEspelhoAgora.MensagemGravadoComReserva, resultado.Mensagem);
+        Assert.Equal(SenhaNova, provedor.Obter());
+        Assert.Null(provedor.ObterAnterior());
+        Assert.Empty(volume.Apagados);
+        Assert.Equal(new byte[] { 9 }, volume.Arquivos["foto.jpg"]);
+        var reserva = Assert.Single(volume.Arquivos.Keys, nome => NomeTemporarioEspelho.EhReservaDesteApp(nome, volume.NomeArquivo));
+        Assert.Equal(anterior, volume.Arquivos[reserva]);
+        AssertMemoriaAbre(volume.Arquivos[volume.NomeArquivo], provedor, area.Raiz);
+
+        var destino = Path.Combine(area.Raiz, "leitura-seguinte.bin");
+        var leitura = await volume.CopiarParaLocalAsync(volume.NomeArquivo, destino, CancellationToken.None);
+        Assert.Equal(CodigoFalhaPastaEspelho.Indisponivel, leitura.Codigo);
+        Assert.Equal(MensagensPastaEspelho.Para(CodigoFalhaPastaEspelho.Indisponivel), leitura.Mensagem);
+        Assert.False(File.Exists(destino));
+        Assert.Equal("Marina", await EscalarTextoAsync(vivo, "SELECT Nome FROM MembrosFamilia"));
+    }
+
+    [Fact]
+    public async Task Matriz_SenhaEmMemoria_DecifraODefinitivo()
+    {
+        using var area = new AreaTemp();
+        await using var vivo = await CriarBancoAbertoAsync(area.Banco, "Marina");
+        var cache = new AreaTemporariaEspelhoEmDisco(Path.Combine(area.Raiz, "cache"));
+
+        var publicado = await Rodar(area, cache, volume => { });
+        Assert.Equal(BackupEspelhoAgora.MensagemGravado, publicado.Resultado.Mensagem);
+        Assert.Null(publicado.Provedor.ObterAnterior());
+        AssertMemoriaAbre(publicado.Volume.Arquivos[publicado.Volume.NomeArquivo], publicado.Provedor, area.Raiz);
+        Assert.False(Abre(publicado.Volume.Arquivos[publicado.Volume.NomeArquivo], Senha, area.Raiz));
+
+        var semConfirmar = await Rodar(area, cache, volume =>
+        {
+            volume.ExcecaoNoDescarteReserva = new InvalidOperationException("descarte");
+            volume.FalharCopiaDefinitivoAPartirDa = 2;
+        });
+        Assert.Equal(BackupEspelhoAgora.MensagemGravadoLeituraNaoConfirmada, semConfirmar.Resultado.Mensagem);
+        Assert.Equal(Senha, semConfirmar.Provedor.ObterAnterior());
+        AssertMemoriaAbre(semConfirmar.Volume.Arquivos[semConfirmar.Volume.NomeArquivo], semConfirmar.Provedor, area.Raiz);
+
+        var antigo = Path.Combine(area.Raiz, "antigo.espelho");
+        CofreEspelho.Gravar(antigo, [9, 8, 7], Senha, 1, "matriz", DateTimeOffset.UnixEpoch, FormatoEspelho.IteracoesMinimas);
+        var bytesAntigos = File.ReadAllBytes(antigo);
+        Assert.False(Abre(bytesAntigos, semConfirmar.Provedor.Obter(), area.Raiz));
+        Assert.True(Abre(bytesAntigos, semConfirmar.Provedor.ObterAnterior(), area.Raiz));
+        Assert.Equal(SenhaNova, semConfirmar.Provedor.Obter());
+        Assert.Equal(Senha, semConfirmar.Provedor.ObterAnterior());
+
+        var homonimos = await Rodar(area, cache, volume => volume.HomonimosAposPromocao = true);
+        Assert.Equal(BackupEspelhoAgora.MensagemGravadoComReserva, homonimos.Resultado.Mensagem);
+        AssertMemoriaAbre(homonimos.Volume.Arquivos[homonimos.Volume.NomeArquivo], homonimos.Provedor, area.Raiz);
+        var bloqueio = await homonimos.Volume.CopiarParaLocalAsync(
+            homonimos.Volume.NomeArquivo,
+            Path.Combine(area.Raiz, "bloqueio.bin"),
+            CancellationToken.None);
+        Assert.Equal(CodigoFalhaPastaEspelho.Indisponivel, bloqueio.Codigo);
+
+        var mantido = await Rodar(area, cache, volume => volume.EfetuarParqueEFalhar = true);
+        Assert.Equal(BackupEspelhoAgora.MensagemMantido, mantido.Resultado.Mensagem);
+        Assert.Equal(Senha, mantido.Provedor.Obter());
+        Assert.Null(mantido.Provedor.ObterAnterior());
+        Assert.False(mantido.Volume.Arquivos.ContainsKey(mantido.Volume.NomeArquivo));
+        Assert.Contains("mantido", mantido.Resultado.Mensagem, StringComparison.OrdinalIgnoreCase);
+
+        var cts = new CancellationTokenSource();
+        var cancelado = new VolumeMemoria();
+        var espelhoAnterior = new byte[] { 4, 4, 4 };
+        cancelado.Arquivos[cancelado.NomeArquivo] = espelhoAnterior;
+        cancelado.DepoisDoParque = () => cts.Cancel();
+        var senhaCancelada = new ProvedorSenhaEspelhoMemoria();
+        Assert.True(senhaCancelada.Definir(Senha, Senha).Aceita);
+        var backupCancelado = Criar(cancelado, senhaCancelada, cache);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            backupCancelado.ExecutarAsync(area.Banco, SenhaNova, SenhaNova, cts.Token, substituirEspelhoExistente: true));
+        Assert.Equal(Senha, senhaCancelada.Obter());
+        Assert.Null(senhaCancelada.ObterAnterior());
+        Assert.False(cancelado.Arquivos.ContainsKey(cancelado.NomeArquivo));
+        var reservaCancelada = Assert.Single(
+            cancelado.Arquivos,
+            par => NomeTemporarioEspelho.EhReservaDesteApp(par.Key, cancelado.NomeArquivo));
+        Assert.Equal(espelhoAnterior, reservaCancelada.Value);
+        Assert.Equal("Marina", await EscalarTextoAsync(vivo, "SELECT Nome FROM MembrosFamilia"));
+    }
+
+    private async Task<CenarioSenha> Rodar(
+        AreaTemp area,
+        IAreaTemporariaEspelho cache,
+        Action<VolumeMemoria> preparar)
+    {
+        var volume = new VolumeMemoria();
+        volume.Arquivos[volume.NomeArquivo] = [1, 1, 1];
+        preparar(volume);
+        var provedor = new ProvedorSenhaEspelhoMemoria();
+        Assert.True(provedor.Definir(Senha, Senha).Aceita);
+        var backup = Criar(volume, provedor, cache);
+        ResultadoBackupEspelho resultado;
+        try
+        {
+            resultado = await backup.ExecutarAsync(area.Banco, SenhaNova, SenhaNova, substituirEspelhoExistente: true);
+        }
+        catch (Exception ex)
+        {
+            AssertNaoVaza(ex, Senha);
+            AssertNaoVaza(ex, SenhaNova);
+            throw;
+        }
+
+        AssertNaoVaza(resultado, Senha);
+        AssertNaoVaza(resultado, SenhaNova);
+        AssertNaoVaza(provedor, Senha);
+        AssertNaoVaza(provedor, SenhaNova);
+        return new CenarioSenha(volume, provedor, resultado);
+    }
+
+    private static void AssertMemoriaAbre(byte[] arquivo, ProvedorSenhaEspelhoMemoria provedor, string pasta)
+    {
+        var atual = provedor.Obter();
+        Assert.False(string.IsNullOrEmpty(atual));
+        if (Abre(arquivo, atual, pasta))
+            return;
+
+        var anterior = provedor.ObterAnterior();
+        Assert.False(string.IsNullOrEmpty(anterior));
+        Assert.True(Abre(arquivo, anterior, pasta));
+    }
+
+    private static bool Abre(byte[] arquivo, string? senha, string pasta)
+    {
+        if (string.IsNullOrEmpty(senha))
+            return false;
+
+        var caminho = Path.Combine(pasta, "abre-" + Guid.NewGuid().ToString("N"));
+        File.WriteAllBytes(caminho, arquivo);
+        try
+        {
+            var lido = CofreEspelho.Ler(caminho, senha);
+            System.Security.Cryptography.CryptographicOperations.ZeroMemory(lido.Sqlite);
+            return true;
+        }
+        catch (SenhaIncorretaException)
+        {
+            return false;
+        }
+    }
+
+    private readonly record struct CenarioSenha(
+        VolumeMemoria Volume,
+        ProvedorSenhaEspelhoMemoria Provedor,
+        ResultadoBackupEspelho Resultado);
+
     private static BackupEspelhoAgora Criar(
         VolumeMemoria volume,
         ProvedorSenhaEspelhoMemoria provedor,

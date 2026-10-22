@@ -135,6 +135,19 @@ public sealed class BackupEspelhoAgora
         }
         catch (OperationCanceledException)
         {
+            if (senhaNova is not null)
+            {
+                try
+                {
+                    var depoisDoCancelamento = await FotografarAsync(CancellationToken.None);
+                    if (DefinitivoMudou(antes, depoisDoCancelamento))
+                        _definicao.Definir(senhaNova, senhaNova);
+                }
+                catch (Exception)
+                {
+                }
+            }
+
             throw;
         }
         catch (IntegridadeSnapshotException ex)
@@ -173,7 +186,7 @@ public sealed class BackupEspelhoAgora
     private ResultadoBackupEspelho PublicadoSemConfirmarLeitura(string? senhaNova)
     {
         if (senhaNova is not null)
-            _definicao.Definir(senhaNova, senhaNova);
+            AdocaoSenhaLeituraNaoConfirmada.Aplicar(_definicao, senhaNova);
 
         return ResultadoBackupEspelho.Ok(MensagemGravadoLeituraNaoConfirmada);
     }
