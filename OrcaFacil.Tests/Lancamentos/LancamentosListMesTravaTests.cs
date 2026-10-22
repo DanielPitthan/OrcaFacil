@@ -9,11 +9,11 @@ namespace OrcaFacil.Tests.Lancamentos;
 public class LancamentosListMesTravaTests
 {
     private const string LeituraDoMes = "ConsultaMesLancamentos.Resolver(MesConsulta, DateTime.Today)";
-    private const string TrocaDeMes = "NavigateTo($\"/lancamentos?mes={mes:yyyy-MM}\", replace: true)";
+    private const string TrocaDeMes = "NavigateTo($\"/lancamentos?mes={mes.ToString(\"yyyy-MM\", CultureInfo.InvariantCulture)}\", replace: true)";
     private const string MenuLancamentos = "Href=\"/lancamentos\"";
     private const string VoltaDoFormulario = "NavigateTo(ConsultaMesLancamentos.Rota(MesConsulta))";
-    private const string NovoComMes = "NavigateTo($\"/lancamentos/novo?mes={_mesReferencia:yyyy-MM}\")";
-    private const string EditarComMes = "NavigateTo($\"/lancamentos/editar/{id}?mes={_mesReferencia:yyyy-MM}\")";
+    private const string NovoComMes = "NavigateTo($\"/lancamentos/novo?mes={_mesReferencia.ToString(\"yyyy-MM\", CultureInfo.InvariantCulture)}\")";
+    private const string EditarComMes = "NavigateTo($\"/lancamentos/editar/{id}?mes={_mesReferencia.ToString(\"yyyy-MM\", CultureInfo.InvariantCulture)}\")";
     private const string CopiaComMes = "ConsultaMesLancamentos.Rota(MesConsulta, \"/lancamentos/novo\")";
     private const string VoltaSemMes = "NavigateTo(\"/lancamentos\")";
 
@@ -41,7 +41,7 @@ public class LancamentosListMesTravaTests
 
         const string soComentario = """
             @* ConsultaMesLancamentos.Resolver(MesConsulta, DateTime.Today) *@
-            // NavigateTo($"/lancamentos?mes={mes:yyyy-MM}", replace: true)
+            // NavigateTo($"/lancamentos?mes={mes.ToString("yyyy-MM", CultureInfo.InvariantCulture)}", replace: true)
             <!-- Href="/lancamentos" -->
             """;
         var comentario = SemComentarios(soComentario);
@@ -89,8 +89,8 @@ public class LancamentosListMesTravaTests
         const string soComentario = """
             @* NavigateTo(ConsultaMesLancamentos.Rota(MesConsulta)) *@
             // Voltar();
-            // NavigateTo($"/lancamentos/novo?mes={_mesReferencia:yyyy-MM}")
-            /* NavigateTo($"/lancamentos/editar/{id}?mes={_mesReferencia:yyyy-MM}") */
+            // NavigateTo($"/lancamentos/novo?mes={_mesReferencia.ToString("yyyy-MM", CultureInfo.InvariantCulture)}")
+            /* NavigateTo($"/lancamentos/editar/{id}?mes={_mesReferencia.ToString("yyyy-MM", CultureInfo.InvariantCulture)}") */
             <!-- ConsultaMesLancamentos.Rota(MesConsulta, "/lancamentos/novo") -->
             // NavigateTo("/lancamentos")
             @* OnVoltar="Voltar" *@

@@ -20,7 +20,7 @@ public static class ConsultaMesLancamentos
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(caminho);
         return TryLer(mes, out var inicio)
-            ? $"{caminho}?mes={inicio:yyyy-MM}"
+            ? $"{caminho}?mes={inicio.ToString("yyyy-MM", CultureInfo.InvariantCulture)}"
             : caminho;
     }
 

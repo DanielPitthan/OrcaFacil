@@ -185,7 +185,7 @@
     private void MudarMes(int delta)
     {
         var mes = _mesReferencia.AddMonths(delta);
-        NavigationManager.NavigateTo($"/lancamentos?mes={mes:yyyy-MM}", replace: true);
+        NavigationManager.NavigateTo($"/lancamentos?mes={mes.ToString("yyyy-MM", CultureInfo.InvariantCulture)}", replace: true);
     }
 
     private void AlterarFiltro(FiltroListaLancamento filtro)
@@ -224,7 +224,7 @@
             return;
         }
 
-        NavigationManager.NavigateTo($"/lancamentos/novo?mes={_mesReferencia:yyyy-MM}");
+        NavigationManager.NavigateTo($"/lancamentos/novo?mes={_mesReferencia.ToString("yyyy-MM", CultureInfo.InvariantCulture)}");
     }
 
     private void AbrirEdicao(int id)
@@ -235,7 +235,7 @@
             return;
         }
 
-        NavigationManager.NavigateTo($"/lancamentos/editar/{id}?mes={_mesReferencia:yyyy-MM}");
+        NavigationManager.NavigateTo($"/lancamentos/editar/{id}?mes={_mesReferencia.ToString("yyyy-MM", CultureInfo.InvariantCulture)}");
     }
 
     private async Task TrazerDespesasAsync()
