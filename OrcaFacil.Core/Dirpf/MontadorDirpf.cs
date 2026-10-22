@@ -28,8 +28,8 @@ namespace OrcaFacil.Core.Dirpf;
 /// separado por " - ", ganha a observação de isenção da pessoa física.
 /// O código e o grupo dessa frase saem da variante RendaFixaIsenta vigente na data de corte.
 /// Debênture, qualquer que seja, fica na linha tributada. O primeiro segmento só reconhece
-/// que é debênture. A frase não escolhe o regime: manda conferir e deixa a linha
-/// na tributação exclusiva. A comum segue a tabela regressiva.
+/// que é debênture. O nome não separa a lei. A frase não afirma isenção e deixa a linha
+/// na tributação exclusiva. A comum e a de infraestrutura da Lei 14.801 seguem a tabela regressiva.
 /// O perfil do título usa os lançamentos das operações do papel, inclusive as de anos anteriores.
 /// Dois donos em anos diferentes ficam como não identificado.
 /// </summary>
@@ -47,11 +47,19 @@ public static class MontadorDirpf
     public const string AvisoCnpjFontePagadora = "Aviso: CNPJ da fonte pagadora não informado";
 
     /// <summary>
-    /// O nome do produto não separa incentivada, infraestrutura e comum.
-    /// A frase manda conferir o regime e não afirma isenção.
+    /// O nome do produto não separa a lei. A frase não afirma isenção.
+    /// A comum e a de infraestrutura da Lei nº 14.801/2024 seguem a tabela regressiva
+    /// das aplicações de renda fixa (art. 1º da Lei nº 11.033/2004).
+    /// Arts. 2º e 3º, § 2º, da Lei nº 14.801/2024: alíquotas vigentes da renda fixa,
+    /// e a alíquota zero do art. 1º da Lei nº 12.431/2011 não se aplica a esse papel.
+    /// https://www.planalto.gov.br/ccivil_03/_ato2023-2026/2024/lei/l14801.htm
+    /// https://www.planalto.gov.br/ccivil_03/_ato2004-2006/2004/lei/l11033.htm
+    /// A Receita aplica essa tabela e o art. 3º da Lei nº 14.801 à pessoa física
+    /// no Manual de Arrecadação (MAFON), fato gerador de renda fixa.
+    /// https://www.gov.br/receitafederal/pt-br/centrais-de-conteudo/publicacoes/manuais/irrf/mafon-2025.pdf
     /// </summary>
     public const string ObservacaoDebenture =
-        "O nome não separa debênture incentivada (Lei 12.431/2011, arts. 2º e 3º; P&R IRPF 738, item V) e debênture de infraestrutura (Lei 14.801/2024). Conferir o regime; a linha permanece na tributação exclusiva, e a debênture comum segue a tabela regressiva.";
+        "O nome não separa debênture incentivada (Lei 12.431/2011, arts. 2º e 3º; P&R IRPF 738, item V) e debênture de infraestrutura (Lei 14.801/2024). Conferir o regime; a linha permanece na tributação exclusiva, e a debênture comum e a de infraestrutura da Lei 14.801 seguem a tabela regressiva.";
 
     private static readonly CultureInfo PtBr = CultureInfo.GetCultureInfo("pt-BR");
     private static readonly StringComparer OrdemTexto = StringComparer.Create(PtBr, ignoreCase: true);
