@@ -734,6 +734,64 @@ public class ApuradorIrMensalTests
     }
 
     [Fact]
+    public void PregaoEm29DeFevereiroDe2024_CaiNoMesDoPregao_DarfNoUltimoDiaUtilDeMarco()
+    {
+        // 29/02/2024 é quinta. D+2 cai em 04/03/2024. O mês do IR é o do pregão.
+        // Março fecha em domingo e 29/03 é Sexta-feira Santa: o DARF vence em 28/03.
+        var compra = Entidade(1, TipoOperacao.Compra, new DateTime(2024, 2, 19), new DateTime(2024, 2, 15), 100, 100m, 10_000m);
+        var venda = Entidade(2, TipoOperacao.Venda, new DateTime(2024, 3, 4), new DateTime(2024, 2, 29), 100, 250m, 25_000m);
+        var apuracao = ApuradorIrMensal.Apurar(new[] { compra, venda }.Select(ApuradorIrMensal.De), Regras(), 2024);
+
+        var fevereiro = Linha(apuracao, 2, CestaApuracaoIr.Comum);
+        Assert.Equal(new DateTime(2024, 2, 29), venda.DataPregao);
+        Assert.Equal(25_000m, fevereiro.VendasAcoesComuns);
+        Assert.Equal(15_000m, fevereiro.Resultado);
+        Assert.Equal(15_000m, fevereiro.BaseCalculo);
+        Assert.Equal(2_250m, fevereiro.Imposto);
+        Assert.Equal(0m, fevereiro.GanhoIsentoAcoes);
+
+        var marco = Linha(apuracao, 3, CestaApuracaoIr.Comum);
+        Assert.Equal(0m, marco.VendasAcoesComuns);
+        Assert.Equal(0m, marco.Resultado);
+
+        var darf = Darf(apuracao, 2);
+        Assert.Equal(2_250m, darf.Valor);
+        Assert.Equal(new DateTime(2024, 3, 28), darf.Vencimento);
+        Assert.Equal(0m, Darf(apuracao, 3).Valor);
+        Assert.Null(Darf(apuracao, 3).Vencimento);
+    }
+
+    [Fact]
+    public void PregaoEm31DeJaneiroDe2025_CaiNoMesDoPregao_DarfNoUltimoDiaUtilDeFevereiro()
+    {
+        // 31/01/2025 é sexta. D+2 cai em 04/02/2025. Fevereiro não tem dia 31.
+        var compra = Entidade(1, TipoOperacao.Compra, new DateTime(2025, 1, 17), new DateTime(2025, 1, 15), 100, 100m, 10_000m);
+        var venda = Entidade(2, TipoOperacao.Venda, new DateTime(2025, 2, 4), new DateTime(2025, 1, 31), 100, 250m, 25_000m);
+        var apuracao = ApuradorIrMensal.Apurar(new[] { compra, venda }.Select(ApuradorIrMensal.De), Regras(), 2025);
+
+        Assert.Equal(new DateTime(2025, 1, 31), venda.DataPregao);
+        var janeiro = Linha(apuracao, 1, CestaApuracaoIr.Comum);
+        Assert.Equal(25_000m, janeiro.VendasAcoesComuns);
+        Assert.Equal(15_000m, janeiro.Resultado);
+        Assert.Equal(2_250m, janeiro.Imposto);
+        Assert.Equal(0m, janeiro.GanhoIsentoAcoes);
+
+        var fevereiro = Linha(apuracao, 2, CestaApuracaoIr.Comum);
+        Assert.Equal(0m, fevereiro.VendasAcoesComuns);
+        Assert.Equal(0m, fevereiro.Resultado);
+
+        var darf = Darf(apuracao, 1);
+        Assert.Equal(2_250m, darf.Valor);
+        Assert.Equal(new DateTime(2025, 2, 28), darf.Vencimento);
+        Assert.Equal(0m, Darf(apuracao, 2).Valor);
+        Assert.Null(Darf(apuracao, 2).Vencimento);
+
+        var anterior = ApuradorIrMensal.Apurar(new[] { compra, venda }.Select(ApuradorIrMensal.De), Regras(), 2024);
+        Assert.DoesNotContain(anterior.Meses, linha => linha.VendasAcoesComuns != 0m || linha.Resultado != 0m);
+        Assert.DoesNotContain(anterior.Darfs, linha => linha.Valor > 0m);
+    }
+
+    [Fact]
     public void VendaNoUltimoPregao_TetoEGanhoNoMesDoPregao_DarfPeloPregao()
     {
         var compra = Entidade(1, TipoOperacao.Compra, new DateTime(2024, 1, 10), new DateTime(2024, 1, 10), 100, 100m, 10_000m);

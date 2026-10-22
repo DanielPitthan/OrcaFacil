@@ -142,6 +142,69 @@ public class CapturaIrrfDarfTests : IDisposable
     }
 
     [Fact]
+    public void Montar_PregaoEm29DeFevereiroDe2024_PedeFevereiro_ENaoMarco()
+    {
+        var ana = Perfil("Ana", null);
+        var petr = new AtivoFinanceiro { Ticker = "PETR4", Nome = "Petrobras", Tipo = TipoAtivo.Acao };
+        using (var contexto = _fabrica.CreateDbContext())
+        {
+            contexto.AddRange(ana, petr);
+            contexto.SaveChanges();
+            contexto.OperacoesAtivo.AddRange(
+                Operacao(ana.Id, petr.Id, TipoOperacao.Compra, new DateTime(2024, 2, 19), 10_000m, 10_000m, pregao: new DateTime(2024, 2, 15)),
+                Operacao(ana.Id, petr.Id, TipoOperacao.Venda, new DateTime(2024, 3, 4), 25_000m, 25_000m, pregao: new DateTime(2024, 2, 29)));
+            contexto.SaveChanges();
+        }
+
+        using var leitura = _fabrica.CreateDbContext();
+        var campos = CapturaIrrfDarf.Montar(leitura, 2024);
+
+        Assert.Equal([2], campos.Select(campo => campo.Mes).Distinct().ToArray());
+        Assert.Equal(CapturaIrrfDarf.Cestas.Count, campos.Count);
+        Assert.All(campos, campo => Assert.Equal(2024, campo.Ano));
+        Assert.DoesNotContain(campos, campo => campo.Mes == 3);
+        Assert.Empty(CapturaIrrfDarf.Montar(leitura, 2025));
+
+        var apuracao = ApuradorIrMensal.Apurar(leitura, 2024);
+        var darf = apuracao.Darfs.Single(linha => linha.Mes == 2);
+        Assert.Equal(2_250m, darf.Valor);
+        Assert.Equal(new DateTime(2024, 3, 28), darf.Vencimento);
+        Assert.Equal(0m, apuracao.Darfs.Single(linha => linha.Mes == 3).Valor);
+    }
+
+    [Fact]
+    public void Montar_PregaoEm31DeJaneiroDe2025_PedeJaneiro_ENaoFevereiro()
+    {
+        var ana = Perfil("Ana", null);
+        var petr = new AtivoFinanceiro { Ticker = "PETR4", Nome = "Petrobras", Tipo = TipoAtivo.Acao };
+        using (var contexto = _fabrica.CreateDbContext())
+        {
+            contexto.AddRange(ana, petr);
+            contexto.SaveChanges();
+            contexto.OperacoesAtivo.AddRange(
+                Operacao(ana.Id, petr.Id, TipoOperacao.Compra, new DateTime(2025, 1, 17), 10_000m, 10_000m, pregao: new DateTime(2025, 1, 15)),
+                Operacao(ana.Id, petr.Id, TipoOperacao.Venda, new DateTime(2025, 2, 4), 25_000m, 25_000m, pregao: new DateTime(2025, 1, 31)));
+            contexto.SaveChanges();
+        }
+
+        using var leitura = _fabrica.CreateDbContext();
+        Assert.Empty(CapturaIrrfDarf.Montar(leitura, 2024));
+        var campos = CapturaIrrfDarf.Montar(leitura, 2025);
+
+        Assert.Equal([1], campos.Select(campo => campo.Mes).Distinct().ToArray());
+        Assert.Equal(CapturaIrrfDarf.Cestas.Count, campos.Count);
+        Assert.All(campos, campo => Assert.Equal(2025, campo.Ano));
+        Assert.DoesNotContain(campos, campo => campo.Mes == 2);
+
+        var apuracao = ApuradorIrMensal.Apurar(leitura, 2025);
+        var darf = apuracao.Darfs.Single(linha => linha.Mes == 1);
+        Assert.Equal(2_250m, darf.Valor);
+        Assert.Equal(new DateTime(2025, 2, 28), darf.Vencimento);
+        Assert.Equal(0m, apuracao.Darfs.Single(linha => linha.Mes == 2).Valor);
+        Assert.Null(apuracao.Darfs.Single(linha => linha.Mes == 2).Vencimento);
+    }
+
+    [Fact]
     public void Montar_VendaComPregaoEm31DeJaneiroELiquidacaoEmFevereiro_PedeJaneiro()
     {
         var ana = Perfil("Ana", null);
