@@ -9,7 +9,7 @@ namespace OrcaFacil.Tests.Dirpf;
 
 public class AddDirpfRendaFixaJcpMigrationTests
 {
-    private const string Anterior = "20261021101911_AddApuracaoIrMensal";
+    private const string Anterior = "20261021222000_AddIrrfInformado";
 
     [Fact]
     public void BancoComLancamento_GanhaJcpERendaFixa_EVoltaSemApagarOLancamento()
@@ -29,7 +29,17 @@ public class AddDirpfRendaFixaJcpMigrationTests
                 VALUES ('Alimentação', 'A', '#9fb4c7', 1, 1, 0, 1);
                 INSERT INTO Transacoes (Descricao, Valor, Data, Tipo, Recorrencia, Pago, CategoriaId, MembroFamiliaId, CriadoEm)
                 VALUES ('Mercado', '42.50', '2026-02-03 00:00:00', 1, 0, 1, 1, 1, '2026-02-03 00:00:00');
+                INSERT INTO AtivosFinanceiros (Ticker, Nome, Tipo, Ativo, CriadoEm)
+                VALUES ('PETR4', 'Petrobras', 0, 1, '2024-01-01 00:00:00');
+                INSERT INTO OperacoesAtivo
+                    (AtivoId, MembroFamiliaId, Tipo, Data, DataPregao, Quantidade, PrecoUnitario, ValorOperacao, Custos, CriadoEm, Origem)
+                VALUES
+                    (1, 1, 0, '2024-02-02 00:00:00', '2024-01-31 00:00:00', '1', '10', '10', '0', '2024-02-02 00:00:00', 0);
+                INSERT INTO IrrfInformados (MembroFamiliaId, Ano, Mes, Cesta, Valor)
+                VALUES (1, 2024, 1, 0, '3.50');
                 """);
+            Assert.Equal(3.50m, anterior.IrrfInformados.Single().Valor);
+            Assert.Equal(new DateTime(2024, 1, 31), anterior.OperacoesAtivo.Single().DataPregao);
             Assert.Equal(8, anterior.CodigosDirpf.Count());
             Assert.DoesNotContain(anterior.CodigosDirpf, codigo => codigo.Variante == CatalogoCodigosDirpf.VarianteJcp);
             Assert.DoesNotContain(anterior.RegrasFiscais, regra => regra.Codigo == CodigosRegraFiscal.IrRegressivoAutomatico);
@@ -51,6 +61,8 @@ public class AddDirpfRendaFixaJcpMigrationTests
             Assert.Equal("02", bem.Codigo);
             Assert.Equal(0m, atual.RegrasFiscais.Single(regra => regra.Codigo == CodigosRegraFiscal.JcpGrossUp).Valor);
             Assert.Equal("42.50", EscalarTexto(connection, "SELECT Valor FROM Transacoes WHERE Descricao = 'Mercado'"));
+            Assert.Equal(3.50m, atual.IrrfInformados.Single().Valor);
+            Assert.Equal(new DateTime(2024, 1, 31), atual.OperacoesAtivo.Single().DataPregao);
         }
 
         using (var voltar = new AppDbContext(options))
@@ -59,6 +71,8 @@ public class AddDirpfRendaFixaJcpMigrationTests
             Assert.Equal(8, voltar.CodigosDirpf.Count());
             Assert.DoesNotContain(voltar.RegrasFiscais, regra => regra.Codigo == CodigosRegraFiscal.JcpGrossUp);
             Assert.Equal("42.50", EscalarTexto(connection, "SELECT Valor FROM Transacoes WHERE Descricao = 'Mercado'"));
+            Assert.Equal(3.50m, voltar.IrrfInformados.Single().Valor);
+            Assert.Equal(new DateTime(2024, 1, 31), voltar.OperacoesAtivo.Single().DataPregao);
         }
     }
 
