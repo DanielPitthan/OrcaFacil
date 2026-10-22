@@ -1,0 +1,9 @@
+{
+  "id": "sint-002",
+  "data": "2026-01-02",
+  "total": 13.40,
+  "itens": [
+    { "descricao": "Açúcar", "preco": 3.40 },
+    { "descricao": "Arroz", "preco": 10.00 }
+  ]
+}

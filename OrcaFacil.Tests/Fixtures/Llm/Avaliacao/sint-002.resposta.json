@@ -1,0 +1,32 @@
+{
+  "content": [
+    {
+      "type": "thinking",
+      "thinking": "ignorar"
+    },
+    {
+      "type": "tool_use",
+      "name": "registrar_comprovante",
+      "input": {
+        "loja": "Loja Sintetica",
+        "data": "2026-01-02",
+        "total_cupom": 13.40,
+        "legivel": true,
+        "itens": [
+          {
+            "descricao_lida": "ARROZ",
+            "produto": "Arroz",
+            "reconhecido": true,
+            "preco": 10.00
+          },
+          {
+            "descricao_lida": "acucar",
+            "produto": "Açúcar",
+            "reconhecido": true,
+            "preco": 3.40
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "id": "sint-001",
+  "data": "2026-10-18",
+  "total": 12.90,
+  "itens": [
+    { "descricao": "Arroz", "preco": 10.00 },
+    { "descricao": "Feijão", "preco": 2.90 }
+  ]
+}
