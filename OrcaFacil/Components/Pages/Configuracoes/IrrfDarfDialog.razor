@@ -1,0 +1,41 @@
+@using OrcaFacil.Core.Dirpf
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-2">
+            Informe o IRRF retido em cada mês com venda, por cesta. O valor abate o imposto do mês.
+        </MudText>
+
+        @if (Campos.Count == 0)
+        {
+            <MudText Typo="Typo.body2">Nenhuma venda neste ano-base.</MudText>
+        }
+        else
+        {
+            @foreach (var perfil in Campos.GroupBy(campo => campo.PerfilId))
+            {
+                <MudText Typo="Typo.subtitle2" Class="mt-2">@perfil.First().Perfil</MudText>
+                @foreach (var mes in perfil.GroupBy(campo => campo.Mes))
+                {
+                    <MudText Typo="Typo.body2" Class="mt-3">@CapturaIrrfDarf.NomeDoMes(mes.Key)</MudText>
+                    @foreach (var campo in mes)
+                    {
+                        <CampoNumerico TNumber="decimal" @bind-Value="campo.Valor" Label="@campo.Cesta.Rotulo()"
+                                       Adornment="Adornment.Start" AdornmentText="R$" Class="mb-2" />
+                    }
+                }
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Cancelar</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Confirmar">Gerar DARFs</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter] public List<CampoIrrfDarf> Campos { get; set; } = [];
+
+    private void Confirmar() => MudDialog.Close(DialogResult.Ok(Campos));
+}

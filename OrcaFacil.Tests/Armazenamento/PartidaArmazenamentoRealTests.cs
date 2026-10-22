@@ -1224,6 +1224,16 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
                     EhSistema = false
                 });
                 break;
+            case nameof(AppDbContext.IrrfInformados):
+                ctx.IrrfInformados.Add(new IrrfInformado
+                {
+                    MembroFamiliaId = 1,
+                    Ano = 2024,
+                    Mes = 6,
+                    Cesta = CestaApuracaoIr.Comum,
+                    Valor = 3.50m
+                });
+                break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(conjunto), conjunto, "Conjunto sem inserção de teste.");
         }
@@ -1256,6 +1266,7 @@ public class PartidaArmazenamentoRealTests : IClassFixture<PartidaArmazenamentoR
             nameof(AppDbContext.RegrasCatalogoComprovante) => await ctx.RegrasCatalogoComprovante.AnyAsync(regra => regra.LimiteProdutos == 50),
             nameof(AppDbContext.RegrasFiscais) => await ctx.RegrasFiscais.AnyAsync(regra => regra.Codigo == "RV.TesteUsuario"),
             nameof(AppDbContext.CodigosDirpf) => await ctx.CodigosDirpf.AnyAsync(codigo => codigo.Descricao == "dado-real"),
+            nameof(AppDbContext.IrrfInformados) => await ctx.IrrfInformados.AnyAsync(irrf => irrf.Valor == 3.50m),
             _ => false
         };
 

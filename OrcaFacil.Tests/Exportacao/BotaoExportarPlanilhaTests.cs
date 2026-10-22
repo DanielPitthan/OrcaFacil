@@ -112,6 +112,60 @@ public class BotaoExportarPlanilhaTests
     }
 
     [Fact]
+    public void GerarDarfsPedeOIrrfSemMudarOPainel()
+    {
+        var painel = File.ReadAllText(CaminhoPainel());
+        var visual = painel[..painel.IndexOf("@code", StringComparison.Ordinal)];
+        Assert.DoesNotContain("IrrfDarfDialog", visual, StringComparison.Ordinal);
+        Assert.DoesNotContain("IRRF", visual, StringComparison.Ordinal);
+        Assert.Equal(3, Contar(visual, "<MudButton"));
+        Assert.Equal(6, Contar(painel, "MudAlert"));
+        Assert.Contains("Gerar DARFs", visual, StringComparison.Ordinal);
+
+        var exportar = Trecho(painel, "private async Task ExportarDarfAsync()", "private async Task<bool> ConfirmarIrrfAsync");
+        var confirmar = Trecho(painel, "private async Task<bool> ConfirmarIrrfAsync", "private async Task ExecutarGeracaoDarfAsync");
+        var gravar = Trecho(painel, "private void GravarDarf", "private async Task<DesfechoCompartilhamentoPlanilha> AbrirDarf");
+
+        Assert.Contains("PreparoGeracaoDarf.DecidirAsync(ano, () => ConfirmarIrrfAsync(ano))", exportar, StringComparison.Ordinal);
+        Assert.DoesNotContain("ShowAsync", exportar, StringComparison.Ordinal);
+        Assert.Contains("if (!decisao.GerarArquivo)", exportar, StringComparison.Ordinal);
+        Assert.Contains("if (decisao.Aviso is not null)", exportar, StringComparison.Ordinal);
+        Assert.Equal(2, Contar(exportar, "ExecutarGeracaoDarfAsync(ano)"));
+        var indiceAviso = exportar.IndexOf("if (decisao.Aviso is not null)", StringComparison.Ordinal);
+        var indiceReturn = exportar.IndexOf("return;", indiceAviso, StringComparison.Ordinal);
+        var indiceGerar = exportar.IndexOf("await ExecutarGeracaoDarfAsync(ano);", indiceReturn, StringComparison.Ordinal);
+        Assert.True(indiceAviso >= 0 && indiceReturn > indiceAviso && indiceGerar > indiceReturn);
+
+        Assert.Contains("ShowAsync<IrrfDarfDialog>", confirmar, StringComparison.Ordinal);
+        Assert.Contains("CapturaIrrfDarf.Montar", confirmar, StringComparison.Ordinal);
+        Assert.Contains("return false;", confirmar, StringComparison.Ordinal);
+        Assert.DoesNotContain("ExportadorDarf.Exportar", confirmar, StringComparison.Ordinal);
+        Assert.DoesNotContain("OrquestradorDarf.ExportarAsync", confirmar, StringComparison.Ordinal);
+        Assert.True(confirmar.IndexOf("ShowAsync<IrrfDarfDialog>", StringComparison.Ordinal)
+            < confirmar.IndexOf("return false;", StringComparison.Ordinal));
+
+        var indiceAno = gravar.IndexOf("ExportadorDarf.ExigirAno", StringComparison.Ordinal);
+        var indiceSalvar = gravar.IndexOf("CapturaIrrfDarf.Salvar", StringComparison.Ordinal);
+        var indiceListar = gravar.IndexOf("CapturaIrrfDarf.Listar", StringComparison.Ordinal);
+        var indiceArquivo = gravar.IndexOf("new FileStream", StringComparison.Ordinal);
+        var indiceExportar = gravar.IndexOf("ExportadorDarf.Exportar(contexto, anoBase, destino, irrf)", StringComparison.Ordinal);
+        Assert.True(indiceAno >= 0
+            && indiceSalvar > indiceAno
+            && indiceListar > indiceSalvar
+            && indiceArquivo > indiceListar
+            && indiceExportar > indiceArquivo);
+
+        var dialogo = File.ReadAllText(Path.Combine(
+            EncontrarRaiz(), "OrcaFacil", "Components", "Pages", "Configuracoes", "IrrfDarfDialog.razor"));
+        Assert.Contains("MudDialog.Cancel()", dialogo, StringComparison.Ordinal);
+        Assert.Contains("Nenhuma venda neste ano-base.", dialogo, StringComparison.Ordinal);
+        Assert.Contains("CapturaIrrfDarf.NomeDoMes", dialogo, StringComparison.Ordinal);
+        Assert.Contains("campo.Cesta.Rotulo()", dialogo, StringComparison.Ordinal);
+        Assert.DoesNotContain("ExportadorDarf", dialogo, StringComparison.Ordinal);
+        Assert.DoesNotContain("FileStream", dialogo, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void PainelFechaOArquivoAntesDeCompartilhar()
     {
         var painel = File.ReadAllText(CaminhoPainel());
