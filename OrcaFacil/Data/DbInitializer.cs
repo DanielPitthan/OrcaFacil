@@ -74,7 +74,7 @@ public static class DbInitializer
             var valores = new object?[argumentos.Length + 1];
             argumentos.CopyTo(valores, 0);
             valores[^1] = VarreduraPlanilhaExportada.TipoDaFalha(excecao);
-            Log.Error(mensagem + " Tipo: {Tipo}", valores);
+            Log.Error(mensagem + " Tipo: {Tipo}", (object[])valores);
         }
     }
 }

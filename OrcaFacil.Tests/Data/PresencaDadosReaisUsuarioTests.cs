@@ -314,6 +314,42 @@ public class PresencaDadosReaisUsuarioTests
     }
 
     [Fact]
+    public async Task LazerRenomeadaParaAlimentacao_DepoisQueAOriginalSaiu_PertenceAoUsuario()
+    {
+        await using var banco = await Banco.AbrirAsync();
+        banco.Contexto.Categorias.AddRange(CatalogoDemonstracao.CriarCategorias());
+        await banco.Contexto.SaveChangesAsync();
+
+        var alimentacao = banco.Contexto.Categorias.Single(categoria => categoria.Nome == "Alimentação");
+        var lazer = banco.Contexto.Categorias.Single(categoria => categoria.Nome == "Lazer");
+        Assert.Equal(IdDaSemente("Alimentação"), alimentacao.Id);
+        Assert.Equal(IdDaSemente("Lazer"), lazer.Id);
+
+        banco.Contexto.Categorias.Remove(alimentacao);
+        await banco.Contexto.SaveChangesAsync();
+        lazer.Nome = "Alimentação";
+        await banco.Contexto.SaveChangesAsync();
+
+        Assert.True(lazer.EhPadraoDoSistema);
+        Assert.Equal(IdDaSemente("Lazer"), lazer.Id);
+        Assert.True(await PoliticaSemeadura.HaDadoDoUsuarioAsync(banco.Contexto));
+        Assert.Equal(SituacaoConteudoBanco.DadoReal, await PoliticaSemeadura.ClassificarConteudoAsync(banco.Contexto));
+    }
+
+    private static int IdDaSemente(string nome)
+    {
+        var indice = 0;
+        foreach (var padrao in CatalogoDemonstracao.Categorias)
+        {
+            indice++;
+            if (padrao.Nome == nome)
+                return indice;
+        }
+
+        throw new InvalidOperationException("Categoria ausente da semente: " + nome);
+    }
+
+    [Fact]
     public async Task DemonstracaoDeUmDiaPassado_ContinuaSoDemonstracao_SemConsultarORelogio()
     {
         await using var banco = await Banco.AbrirAsync();

@@ -194,7 +194,9 @@ public sealed class InicializacaoApp
         {
             try
             {
-                Log.Warning(ex, "Falha ao avisar a tela sobre a inicialização.");
+                Log.Warning(
+                    "Falha ao avisar a tela sobre a inicialização. Tipo: {Tipo}",
+                    VarreduraPlanilhaExportada.TipoDaFalha(ex));
             }
             catch (Exception logEx)
             {

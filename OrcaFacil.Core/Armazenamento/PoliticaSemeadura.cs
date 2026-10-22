@@ -22,8 +22,8 @@ public enum SituacaoConteudoBanco
 
 /// <summary>
 /// A abertura usa <see cref="HaDadoDoUsuarioAsync"/>: semeia só no vazio e nunca por cima.
-/// Categoria com <c>EhPadraoDoSistema</c> e o nome da semente não conta. Renomeada, passa
-/// a pertencer ao usuário. O backup usa <see cref="ClassificarConteudoAsync"/>. Recusa no
+/// Categoria com <c>EhPadraoDoSistema</c> e o par original da semente (Id e nome) não conta.
+/// Fora desse par, passa a pertencer ao usuário. O backup usa <see cref="ClassificarConteudoAsync"/>. Recusa no
 /// vazio e na demonstração idêntica à semente; qualquer diferença pede confirmação. O lançamento guarda
 /// <c>mesRef.AddDays(dia)</c>. O dia de "hoje" só entra no prazo das metas.
 /// </summary>
@@ -158,9 +158,10 @@ public static class PoliticaSemeadura
     }
 
     /// <summary>
-    /// Critério da abertura. Categoria com <c>EhPadraoDoSistema</c> e o nome da semente não conta.
-    /// O mesmo registro, renomeado, pertence ao usuário e impede a semeadura. Ícone, cor, inativa
-    /// ou ausência continuam sem contar. Qualquer outra linha impede a semeadura.
+    /// Critério da abertura. Categoria com <c>EhPadraoDoSistema</c> só continua padrão
+    /// quando o Id e o nome ainda são o par original da semente. Renomeada, inclusive
+    /// para o nome de outra semente, pertence ao usuário e impede a semeadura.
+    /// Ícone, cor, inativa ou ausência continuam sem contar. Qualquer outra linha impede a semeadura.
     /// </summary>
     public static async Task<bool> HaDadoDoUsuarioAsync(AppDbContext contexto, CancellationToken cancellationToken = default)
     {
@@ -172,7 +173,7 @@ public static class PoliticaSemeadura
         if (await contexto.Categorias.AnyAsync(categoria => !categoria.EhPadraoDoSistema, cancellationToken))
             return true;
 
-        if (await CategoriaPadraoRenomeadaAsync(contexto, cancellationToken))
+        if (await CategoriaDeixouDeSerParDaSementeAsync(contexto, cancellationToken))
             return true;
 
         if (await contexto.Transacoes.AnyAsync(cancellationToken))
@@ -241,24 +242,27 @@ public static class PoliticaSemeadura
     }
 
     /// <summary>
-    /// O nome comparado é o do <see cref="CatalogoDemonstracao.Categorias"/>. Fora dessa tabela, a categoria deixou de ser padrão.
+    /// O par é o Id da linha em <see cref="CatalogoDemonstracao.Categorias"/> (1 na primeira)
+    /// com o nome dessa linha. A semente gravada em ordem recebe esses Ids.
     /// </summary>
-    private static async Task<bool> CategoriaPadraoRenomeadaAsync(
+    private static async Task<bool> CategoriaDeixouDeSerParDaSementeAsync(
         AppDbContext contexto,
         CancellationToken cancellationToken)
     {
-        var nomesDaSemente = new HashSet<string>(StringComparer.Ordinal);
+        var nomePorId = new Dictionary<int, string>(CatalogoDemonstracao.Categorias.Count);
+        var id = 1;
         foreach (var padrao in CatalogoDemonstracao.Categorias)
-            nomesDaSemente.Add(padrao.Nome);
+            nomePorId.Add(id++, padrao.Nome);
 
-        var gravados = await contexto.Categorias.AsNoTracking()
+        var gravadas = await contexto.Categorias.AsNoTracking()
             .Where(categoria => categoria.EhPadraoDoSistema)
-            .Select(categoria => categoria.Nome)
+            .Select(categoria => new { categoria.Id, categoria.Nome })
             .ToListAsync(cancellationToken);
 
-        foreach (var nome in gravados)
+        foreach (var gravada in gravadas)
         {
-            if (!nomesDaSemente.Contains(nome))
+            if (!nomePorId.TryGetValue(gravada.Id, out var nomeOriginal)
+                || !string.Equals(nomeOriginal, gravada.Nome, StringComparison.Ordinal))
                 return true;
         }
 
