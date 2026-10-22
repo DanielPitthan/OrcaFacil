@@ -617,11 +617,11 @@ public class ImportacaoExtratoB3Service
         string corretora)
     {
         var partes = linha.ProdutoDescricao.Split(" - ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-        if (EhPrefixo(partes, linha, "CDB"))
+        if (EhPrefixo(partes, "CDB"))
             return TituloBancario(TipoTituloRendaFixa.CDB, partes, linha, corretora);
-        if (EhPrefixo(partes, linha, "LCI"))
+        if (EhPrefixo(partes, "LCI"))
             return TituloBancario(TipoTituloRendaFixa.LCI, partes, linha, corretora);
-        if (EhPrefixo(partes, linha, "LCA"))
+        if (EhPrefixo(partes, "LCA"))
             return TituloBancario(TipoTituloRendaFixa.LCA, partes, linha, corretora);
 
         var titulo = Limitar(linha.Ticker, 80);
@@ -637,9 +637,8 @@ public class ImportacaoExtratoB3Service
         return (tipo, null, ano, titulo);
     }
 
-    private static bool EhPrefixo(string[] partes, LinhaExtratoB3 linha, string prefixo)
-        => (partes.Length >= 1 && partes[0].Equals(prefixo, StringComparison.OrdinalIgnoreCase))
-            || linha.Ticker.StartsWith(prefixo, StringComparison.Ordinal);
+    private static bool EhPrefixo(string[] partes, string prefixo)
+        => partes.Length >= 1 && partes[0].Equals(prefixo, StringComparison.OrdinalIgnoreCase);
 
     private static (TipoTituloRendaFixa Tipo, string? Emissor, int? Ano, string Nome) TituloBancario(
         TipoTituloRendaFixa tipo,
