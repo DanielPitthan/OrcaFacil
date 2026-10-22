@@ -479,16 +479,14 @@ public class MontadorRendaFixaJcpDirpfTests : IDisposable
     }
 
     [Fact]
-    public void CriCraLigEDebentureDeInfraestrutura_GanhamObservacaoDeIsencao_EPermanecemTributadosNaFicha()
+    public void CriCraELig_GanhamObservacaoDeIsencao_EPermanecemTributadosNaFicha()
     {
         var ana = Perfil(1, "Ana", null);
         var cri = Titulo(1, "21H0000001", "CRI - 21H0000001 - SPE", TipoTituloRendaFixa.Outro, "XP");
         var cra = Titulo(2, "CRA021", "cra - CRA021 - AGRO", TipoTituloRendaFixa.Outro, "XP");
         var lig = Titulo(3, "LIG9", "LIG", TipoTituloRendaFixa.Outro, "XP");
-        var debenture = Titulo(4, "SPE26", "Debênture de Infraestrutura - SPE26", TipoTituloRendaFixa.Outro, "XP");
-        var debenturePlural = Titulo(5, "SPE27", "DEBENTURES DE INFRAESTRUTURA - SPE27", TipoTituloRendaFixa.Outro, "XP");
-        var cdb = Titulo(6, "CDB1", "CDB do banco", TipoTituloRendaFixa.CDB, "XP");
-        var lci = Titulo(7, "LCI1", "CRI - disfarce", TipoTituloRendaFixa.LCI, "XP");
+        var cdb = Titulo(4, "CDB1", "CDB do banco", TipoTituloRendaFixa.CDB, "XP");
+        var lci = Titulo(5, "LCI1", "CRI - disfarce", TipoTituloRendaFixa.LCI, "XP");
         var operacoes = new[]
         {
             Operacao(1, cri, new DateTime(2024, 1, 10), TipoOperacaoRendaFixa.Aplicacao, 2m, 200m, 0m),
@@ -496,39 +494,37 @@ public class MontadorRendaFixaJcpDirpfTests : IDisposable
             Operacao(3, cra, new DateTime(2024, 2, 1), TipoOperacaoRendaFixa.Aplicacao, 1m, 100m, 0m),
             Operacao(4, cra, new DateTime(2024, 9, 1), TipoOperacaoRendaFixa.Resgate, 1m, 140m, 0m),
             Operacao(5, lig, new DateTime(2024, 3, 1), TipoOperacaoRendaFixa.Aplicacao, 1m, 80m, 0m),
-            Operacao(6, debenture, new DateTime(2024, 4, 1), TipoOperacaoRendaFixa.Aplicacao, 1m, 50m, 0m),
-            Operacao(7, debenture, new DateTime(2024, 10, 1), TipoOperacaoRendaFixa.Resgate, 0.5m, 40m, 0m),
-            Operacao(8, debenturePlural, new DateTime(2024, 5, 1), TipoOperacaoRendaFixa.Aplicacao, 1m, 70m, 0m),
-            Operacao(9, cdb, new DateTime(2024, 1, 10), TipoOperacaoRendaFixa.Aplicacao, 1m, 100m, 0m),
-            Operacao(10, cdb, new DateTime(2024, 8, 1), TipoOperacaoRendaFixa.Resgate, 1m, 110m, 0m),
-            Operacao(11, lci, new DateTime(2024, 1, 10), TipoOperacaoRendaFixa.Aplicacao, 1m, 90m, 0m),
-            Operacao(12, lci, new DateTime(2024, 8, 1), TipoOperacaoRendaFixa.Resgate, 1m, 100m, 0m)
+            Operacao(6, cdb, new DateTime(2024, 1, 10), TipoOperacaoRendaFixa.Aplicacao, 1m, 100m, 0m),
+            Operacao(7, cdb, new DateTime(2024, 8, 1), TipoOperacaoRendaFixa.Resgate, 1m, 110m, 0m),
+            Operacao(8, lci, new DateTime(2024, 1, 10), TipoOperacaoRendaFixa.Aplicacao, 1m, 90m, 0m),
+            Operacao(9, lci, new DateTime(2024, 8, 1), TipoOperacaoRendaFixa.Resgate, 1m, 100m, 0m)
         };
-        var titulos = new[] { cri, cra, lig, debenture, debenturePlural, cdb, lci };
+        var titulos = new[] { cri, cra, lig, cdb, lci };
         const string observacao =
             "Isento para pessoa física: declarar em Rendimentos Isentos (código 12) e em Bens e Direitos no grupo 04/03";
 
         var dirpf = Montar(2024, [], titulos, operacoes, [ana]);
 
         Assert.Equal(30.01m, Assert.Single(dirpf.RendimentosExclusivos, linha => linha.CodigoAtivo == "21H0000001").ValorLiquido);
-        foreach (var codigo in new[] { "21H0000001", "CRA021", "SPE26" })
+        foreach (var codigo in new[] { "21H0000001", "CRA021" })
         {
             var exclusivo = Assert.Single(dirpf.RendimentosExclusivos, linha => linha.CodigoAtivo == codigo);
             Assert.Equal("06", exclusivo.Codigo);
             Assert.Equal(CatalogoCodigosDirpf.DescricaoRendimentoRendaFixa, exclusivo.DescricaoCodigo);
             Assert.EndsWith(" " + observacao, exclusivo.Descricao);
             Assert.DoesNotContain(MontadorDirpf.ObservacaoTituloOutro, exclusivo.Descricao, StringComparison.Ordinal);
+            Assert.DoesNotContain(MontadorDirpf.ObservacaoDebenture, exclusivo.Descricao, StringComparison.Ordinal);
         }
 
-        Assert.DoesNotContain(dirpf.RendimentosExclusivos, linha => linha.CodigoAtivo is "LIG9" or "SPE27");
-        Assert.DoesNotContain(dirpf.RendimentosIsentos, linha => linha.Ticker is "21H0000001" or "CRA021" or "LIG9" or "SPE26" or "SPE27" or "CDB1");
+        Assert.DoesNotContain(dirpf.RendimentosExclusivos, linha => linha.CodigoAtivo == "LIG9");
+        Assert.DoesNotContain(dirpf.RendimentosIsentos, linha => linha.Ticker is "21H0000001" or "CRA021" or "LIG9" or "CDB1");
         var isentoLci = Assert.Single(dirpf.RendimentosIsentos);
         Assert.Equal("LCI1", isentoLci.Ticker);
         Assert.Equal("12", isentoLci.Codigo);
         Assert.DoesNotContain(observacao, isentoLci.Descricao, StringComparison.Ordinal);
         Assert.DoesNotContain("pessoa física", isentoLci.Descricao, StringComparison.Ordinal);
 
-        foreach (var codigo in new[] { "21H0000001", "LIG9", "SPE26", "SPE27" })
+        foreach (var codigo in new[] { "21H0000001", "LIG9" })
         {
             var posicao = Assert.Single(dirpf.RendaFixa, linha => linha.Codigo == codigo);
             Assert.Equal("Outro", posicao.Tipo);
@@ -536,6 +532,7 @@ public class MontadorRendaFixaJcpDirpfTests : IDisposable
             Assert.Equal("02", posicao.CodigoDirpf);
             Assert.EndsWith(" " + observacao, posicao.Discriminacao);
             Assert.DoesNotContain(MontadorDirpf.ObservacaoTituloOutro, posicao.Discriminacao, StringComparison.Ordinal);
+            Assert.DoesNotContain(MontadorDirpf.ObservacaoDebenture, posicao.Discriminacao, StringComparison.Ordinal);
         }
 
         Assert.DoesNotContain(dirpf.RendaFixa, linha => linha.Codigo is "CRA021" or "CDB1" or "LCI1");
@@ -575,16 +572,135 @@ public class MontadorRendaFixaJcpDirpfTests : IDisposable
         Assert.Equal("06", TextoDaLinha(exclusivos, "21H0000001", 3, 6));
         Assert.EndsWith(" " + observacao, TextoDaLinha(exclusivos, "21H0000001", 3, 11));
         Assert.EndsWith(" " + observacao, TextoDaLinha(exclusivos, "CRA021", 3, 11));
-        Assert.EndsWith(" " + observacao, TextoDaLinha(exclusivos, "SPE26", 3, 11));
         Assert.Null(LinhaDoCodigo(exclusivos, "LIG9", 3));
         Assert.Equal("02", TextoDaLinha(rendaFixa, "21H0000001", 3, 8));
         Assert.Equal("04", TextoDaLinha(rendaFixa, "LIG9", 3, 7));
         Assert.EndsWith(" " + observacao, TextoDaLinha(rendaFixa, "LIG9", 3, 16));
-        Assert.EndsWith(" " + observacao, TextoDaLinha(rendaFixa, "SPE27", 3, 16));
         Assert.Null(LinhaDoCodigo(rendaFixa, "CRA021", 3));
         Assert.DoesNotContain(observacao, TextoDaLinha(exclusivos, "CDB1", 3, 11), StringComparison.Ordinal);
         Assert.Equal("12", TextoDaLinha(isentos, "LCI1", 3, 6));
         Assert.DoesNotContain(observacao, TextoDaLinha(isentos, "LCI1", 3, 10), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Debenture_QualquerUma_FicaNaLinhaTributada_ComObservacaoNeutra_SemFraseDeIsencao()
+    {
+        Assert.Equal(
+            "Se for debênture incentivada (Lei 12.431/2011, arts. 2º e 3º; P&R IRPF 738), é isenta para pessoa física e deve ser declarada em Rendimentos Isentos; se for debênture de infraestrutura da Lei 14.801/2024, é tributada pela tabela regressiva.",
+            MontadorDirpf.ObservacaoDebenture);
+
+        var ana = Perfil(1, "Ana", null);
+        var incentivada = Titulo(1, "SPE25", "Debênture incentivada - SPE25", TipoTituloRendaFixa.Outro, "XP");
+        var infraestrutura = Titulo(2, "SPE26", "Debênture de Infraestrutura - SPE26", TipoTituloRendaFixa.Outro, "XP");
+        var plural = Titulo(3, "SPE27", "DEBENTURES DE INFRAESTRUTURA - SPE27", TipoTituloRendaFixa.Outro, "XP");
+        var comum = Titulo(4, "VALE48", "DEBENTURE - VALE48", TipoTituloRendaFixa.Outro, "XP");
+        var peloCodigo = Titulo(5, "DEBÊNTURES", "Papel da empresa", TipoTituloRendaFixa.Outro, "XP");
+        var lci = Titulo(6, "LCI1", "DEBENTURE - disfarce", TipoTituloRendaFixa.LCI, "XP");
+        var observacao = MontadorDirpf.ObservacaoDebenture;
+        const string fraseDeIsencao = "Isento para pessoa física: declarar";
+        var operacoes = new[]
+        {
+            Operacao(1, incentivada, new DateTime(2024, 4, 1), TipoOperacaoRendaFixa.Aplicacao, 1m, 100m, 0m),
+            Operacao(2, incentivada, new DateTime(2024, 10, 1), TipoOperacaoRendaFixa.Resgate, 0.5m, 80m, 0m),
+            Operacao(3, infraestrutura, new DateTime(2024, 4, 1), TipoOperacaoRendaFixa.Aplicacao, 1m, 50m, 0m),
+            Operacao(4, infraestrutura, new DateTime(2024, 10, 1), TipoOperacaoRendaFixa.Resgate, 0.5m, 40m, 0m),
+            Operacao(5, plural, new DateTime(2024, 5, 1), TipoOperacaoRendaFixa.Aplicacao, 1m, 70m, 0m),
+            Operacao(6, comum, new DateTime(2024, 1, 10), TipoOperacaoRendaFixa.Aplicacao, 1m, 70m, 0m),
+            Operacao(7, comum, new DateTime(2024, 8, 1), TipoOperacaoRendaFixa.Resgate, 1m, 90m, 0m),
+            Operacao(8, peloCodigo, new DateTime(2024, 3, 1), TipoOperacaoRendaFixa.Aplicacao, 1m, 40m, 0m),
+            Operacao(9, lci, new DateTime(2024, 1, 10), TipoOperacaoRendaFixa.Aplicacao, 1m, 90m, 0m),
+            Operacao(10, lci, new DateTime(2024, 8, 1), TipoOperacaoRendaFixa.Resgate, 1m, 100m, 0m)
+        };
+        var titulos = new[] { incentivada, infraestrutura, plural, comum, peloCodigo, lci };
+
+        var dirpf = Montar(2024, [], titulos, operacoes, [ana]);
+
+        foreach (var codigo in new[] { "SPE25", "SPE26", "VALE48" })
+        {
+            var exclusivo = Assert.Single(dirpf.RendimentosExclusivos, linha => linha.CodigoAtivo == codigo);
+            Assert.Equal("06", exclusivo.Codigo);
+            Assert.Equal(CatalogoCodigosDirpf.DescricaoRendimentoRendaFixa, exclusivo.DescricaoCodigo);
+            Assert.EndsWith(" " + observacao, exclusivo.Descricao);
+            Assert.DoesNotContain(fraseDeIsencao, exclusivo.Descricao, StringComparison.Ordinal);
+            Assert.DoesNotContain(MontadorDirpf.ObservacaoTituloOutro, exclusivo.Descricao, StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain(dirpf.RendimentosExclusivos, linha => linha.CodigoAtivo is "SPE27" or "DEBÊNTURES");
+        Assert.DoesNotContain(
+            dirpf.RendimentosIsentos,
+            linha => linha.Ticker is "SPE25" or "SPE26" or "SPE27" or "VALE48" or "DEBÊNTURES");
+        var isentoLci = Assert.Single(dirpf.RendimentosIsentos);
+        Assert.Equal("LCI1", isentoLci.Ticker);
+        Assert.Equal("12", isentoLci.Codigo);
+        Assert.Equal("Rendimento líquido de renda fixa — LCI1 — DEBENTURE - disfarce.", isentoLci.Descricao);
+        Assert.DoesNotContain(observacao, isentoLci.Descricao, StringComparison.Ordinal);
+        Assert.DoesNotContain(fraseDeIsencao, isentoLci.Descricao, StringComparison.Ordinal);
+
+        foreach (var codigo in new[] { "SPE25", "SPE26", "SPE27", "DEBÊNTURES" })
+        {
+            var posicao = Assert.Single(dirpf.RendaFixa, linha => linha.Codigo == codigo);
+            Assert.Equal("Outro", posicao.Tipo);
+            Assert.Equal("04", posicao.Grupo);
+            Assert.Equal("02", posicao.CodigoDirpf);
+            Assert.EndsWith(" " + observacao, posicao.Discriminacao);
+            Assert.DoesNotContain(fraseDeIsencao, posicao.Discriminacao, StringComparison.Ordinal);
+            Assert.DoesNotContain(MontadorDirpf.ObservacaoTituloOutro, posicao.Discriminacao, StringComparison.Ordinal);
+        }
+
+        Assert.DoesNotContain(dirpf.RendaFixa, linha => linha.Codigo is "VALE48" or "LCI1");
+
+        using (var contexto = _fabrica.CreateDbContext())
+        {
+            contexto.Add(new MembroFamilia { Nome = "Ana", Avatar = "A" });
+            foreach (var titulo in titulos)
+            {
+                titulo.Id = 0;
+                contexto.Add(titulo);
+            }
+
+            contexto.SaveChanges();
+            foreach (var operacao in operacoes)
+            {
+                operacao.Id = 0;
+                operacao.TituloRendaFixaId = operacao.Titulo!.Id;
+                contexto.Add(operacao);
+            }
+
+            contexto.SaveChanges();
+        }
+
+        using var destino = new MemoryStream();
+        using (var contexto = _fabrica.CreateDbContext())
+            ExportadorDirpf.Exportar(contexto, 2024, destino);
+
+        using var pasta = new XLWorkbook(destino);
+        var exclusivos = pasta.Worksheet(ExportadorDirpf.AbaRendimentosExclusivos);
+        var rendaFixa = pasta.Worksheet(ExportadorDirpf.AbaRendaFixa);
+        var isentos = pasta.Worksheet(ExportadorDirpf.AbaRendimentosIsentos);
+        foreach (var codigo in new[] { "SPE25", "SPE26", "VALE48" })
+        {
+            Assert.Equal("06", TextoDaLinha(exclusivos, codigo, 3, 6));
+            var texto = TextoDaLinha(exclusivos, codigo, 3, 11);
+            Assert.EndsWith(" " + observacao, texto);
+            Assert.DoesNotContain(fraseDeIsencao, texto, StringComparison.Ordinal);
+        }
+
+        Assert.Null(LinhaDoCodigo(exclusivos, "SPE27", 3));
+        Assert.Null(LinhaDoCodigo(exclusivos, "DEBÊNTURES", 3));
+        foreach (var codigo in new[] { "SPE25", "SPE27", "DEBÊNTURES" })
+        {
+            Assert.Equal("04", TextoDaLinha(rendaFixa, codigo, 3, 7));
+            Assert.Equal("02", TextoDaLinha(rendaFixa, codigo, 3, 8));
+            var texto = TextoDaLinha(rendaFixa, codigo, 3, 16);
+            Assert.EndsWith(" " + observacao, texto);
+            Assert.DoesNotContain(fraseDeIsencao, texto, StringComparison.Ordinal);
+        }
+
+        Assert.Null(LinhaDoCodigo(rendaFixa, "VALE48", 3));
+        Assert.Null(LinhaDoCodigo(rendaFixa, "LCI1", 3));
+        Assert.Equal("12", TextoDaLinha(isentos, "LCI1", 3, 6));
+        Assert.DoesNotContain(observacao, TextoDaLinha(isentos, "LCI1", 3, 10), StringComparison.Ordinal);
+        Assert.DoesNotContain(fraseDeIsencao, TextoDaLinha(isentos, "LCI1", 3, 10), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -593,7 +709,7 @@ public class MontadorRendaFixaJcpDirpfTests : IDisposable
         var ana = Perfil(1, "Ana", null);
         var segundo = Titulo(1, "PAPEL", "PAPEL - CRI", TipoTituloRendaFixa.Outro, "XP");
         var codigoColado = Titulo(2, "CRI123", "CRI123", TipoTituloRendaFixa.Outro, "XP");
-        var debentureComum = Titulo(3, "VALE48", "DEBENTURE - VALE48", TipoTituloRendaFixa.Outro, "XP");
+        var debentureNoSegundoSegmento = Titulo(3, "VALE48", "PAPEL - DEBENTURE", TipoTituloRendaFixa.Outro, "XP");
         var tracoLongo = Titulo(4, "LIGX", "LIG — LIGX", TipoTituloRendaFixa.Outro, "XP");
         var cdb = Titulo(5, "CDB1", "CDB", TipoTituloRendaFixa.CDB, "XP");
         var tesouro = Titulo(6, "TESOURO IPCA+ 2035", "Tesouro", TipoTituloRendaFixa.TesouroIPCA, "XP");
@@ -601,17 +717,19 @@ public class MontadorRendaFixaJcpDirpfTests : IDisposable
         {
             Operacao(1, segundo, new DateTime(2024, 1, 10), TipoOperacaoRendaFixa.Aplicacao, 1m, 100m, 0m),
             Operacao(2, codigoColado, new DateTime(2024, 1, 10), TipoOperacaoRendaFixa.Aplicacao, 1m, 80m, 0m),
-            Operacao(3, debentureComum, new DateTime(2024, 1, 10), TipoOperacaoRendaFixa.Aplicacao, 1m, 70m, 0m),
+            Operacao(3, debentureNoSegundoSegmento, new DateTime(2024, 1, 10), TipoOperacaoRendaFixa.Aplicacao, 1m, 70m, 0m),
             Operacao(4, tracoLongo, new DateTime(2024, 1, 10), TipoOperacaoRendaFixa.Aplicacao, 1m, 60m, 0m),
             Operacao(5, cdb, new DateTime(2024, 1, 10), TipoOperacaoRendaFixa.Aplicacao, 1m, 50m, 0m),
             Operacao(6, tesouro, new DateTime(2024, 1, 10), TipoOperacaoRendaFixa.Aplicacao, 1m, 40m, 0m)
         };
 
-        var dirpf = Montar(2024, [], [segundo, codigoColado, debentureComum, tracoLongo, cdb, tesouro], operacoes, [ana]);
+        var dirpf = Montar(2024, [], [segundo, codigoColado, debentureNoSegundoSegmento, tracoLongo, cdb, tesouro], operacoes, [ana]);
         Assert.Empty(dirpf.RendimentosIsentos);
         Assert.All(dirpf.RendaFixa, linha => Assert.DoesNotContain("pessoa física", linha.Discriminacao, StringComparison.Ordinal));
         Assert.All(dirpf.RendaFixa.Where(linha => linha.Tipo == "Outro"), linha =>
             Assert.EndsWith(" " + MontadorDirpf.ObservacaoTituloOutro, linha.Discriminacao));
+        var papel = Assert.Single(dirpf.RendaFixa, linha => linha.Codigo == "VALE48");
+        Assert.DoesNotContain(MontadorDirpf.ObservacaoDebenture, papel.Discriminacao, StringComparison.Ordinal);
         Assert.Contains(dirpf.RendaFixa, linha => linha.Codigo == "CDB1" && linha.Grupo == "04" && linha.CodigoDirpf == "02");
         Assert.Contains(dirpf.RendaFixa, linha => linha.Codigo == "TESOURO IPCA+ 2035" && !linha.Discriminacao.Contains("pessoa física", StringComparison.Ordinal));
     }
@@ -703,6 +821,34 @@ public class MontadorRendaFixaJcpDirpfTests : IDisposable
             [Operacao(6, semDono, new DateTime(2023, 1, 10), TipoOperacaoRendaFixa.Aplicacao, 1m, 40m, 0m)],
             [ana]);
         Assert.Equal("Ana (Nica)", Assert.Single(soAna.RendaFixa).Perfil);
+    }
+
+    [Fact]
+    public void Perfil_DoisDonosEmAnosDiferentes_FicaNaoIdentificado()
+    {
+        var ana = Perfil(1, "Ana", null);
+        var bob = Perfil(2, "Bob", null);
+        var titulo = Titulo(1, "CDBANTIGO", "CDB", TipoTituloRendaFixa.CDB, "XP");
+        var operacoes = new[]
+        {
+            Operacao(1, titulo, new DateTime(2023, 3, 1), TipoOperacaoRendaFixa.Aplicacao, 3m, 300m, 0m),
+            Operacao(2, titulo, new DateTime(2023, 11, 1), TipoOperacaoRendaFixa.Resgate, 1m, 120m, 0m),
+            Operacao(3, titulo, new DateTime(2024, 6, 1), TipoOperacaoRendaFixa.Resgate, 1m, 110m, 0m)
+        };
+        var lancamentos = new[]
+        {
+            new Transacao { OperacaoRendaFixaId = 2, MembroFamiliaId = ana.Id, MembroFamilia = ana },
+            new Transacao { OperacaoRendaFixaId = 3, MembroFamiliaId = bob.Id, MembroFamilia = bob }
+        };
+
+        var dirpf = Montar(2024, [], [titulo], operacoes, [ana, bob], lancamentos: lancamentos);
+        var exclusivo = Assert.Single(dirpf.RendimentosExclusivos);
+        Assert.Equal("CDBANTIGO", exclusivo.CodigoAtivo);
+        Assert.Equal(MontadorDirpf.PerfilNaoIdentificado, exclusivo.Perfil);
+        var posicao = Assert.Single(dirpf.RendaFixa);
+        Assert.Equal("CDBANTIGO", posicao.Codigo);
+        Assert.Equal(1m, posicao.Quantidade);
+        Assert.Equal(MontadorDirpf.PerfilNaoIdentificado, posicao.Perfil);
     }
 
     [Fact]

@@ -36,8 +36,8 @@ public static class CatalogoCodigosDirpf
     /// <summary>
     /// LCI e LCA. A mesma variante vale para o bem 04/03 e para o rendimento isento 12.
     /// Cabe em 16 caracteres, que é o teto da coluna.
-    /// A observação de CRI, CRA, LIG e debênture de infraestrutura também lê estes números
-    /// na vigência do corte. O texto da frase não fixa o 12 nem o 04/03.
+    /// A observação de CRI, CRA e LIG também lê estes números na vigência do corte.
+    /// O texto da frase não fixa o 12 nem o 04/03. Debênture não usa esta variante.
     /// </summary>
     public const string VarianteRendaFixaIsenta = "RendaFixaIsenta";
 
