@@ -23,7 +23,7 @@ public class VerificadorIntegridadeBancoTests
     private const string ApuracaoIr = "20261021101911_AddApuracaoIrMensal";
     private const string DataPregao = "20261021115053_AddDataPregaoOperacaoAtivo";
     private const string IrrfInformado = "20261021222000_AddIrrfInformado";
-    private const string DirpfRendaFixaJcp = "20261021195004_AddDirpfRendaFixaJcp";
+    private const string DirpfRendaFixaJcp = "20261022113200_AddDirpfRendaFixaJcp";
     private const string IndiceHash = "IX_ItensLancamento_TransacaoId_HashImportacao";
 
     [Fact]
