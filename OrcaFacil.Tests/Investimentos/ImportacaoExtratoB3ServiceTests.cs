@@ -612,6 +612,51 @@ public class ImportacaoExtratoB3ServiceTests
         Assert.Equal(2, await conferido.OperacoesAtivo.CountAsync());
     }
 
+    [Fact]
+    public async Task LciELcaNovos_GravamOTipo_EOutroJaSalvoPermanece()
+    {
+        const string cab =
+            "Entrada/Saída;Data;Movimentação;Produto;Instituição;Quantidade;Preço unitário;Valor da Operação\n";
+        var csv = cab
+            + "Credito;02/03/2024;Compra;LCI - LCI123 - ITAU;ITAU UNIBANCO S.A.;10;R$1,00;R$10,00\n"
+            + "Credito;03/03/2024;Compra;LCA - LCA999;ITAU UNIBANCO S.A.;3;R$2,50;R$7,50\n"
+            + "Credito;04/03/2024;Compra;CDB - CDBABC;NIKOS;4;R$1,00;R$4,00\n"
+            + "Credito;05/03/2024;Compra;LCI - LCINOVO - ITAU;ITAU UNIBANCO S.A.;2;R$1,00;R$2,00\n"
+            + "Credito;06/03/2024;Compra;LCI - CDB9999;NIKOS;1;R$1,00;R$1,00\n"
+            + "Credito;07/03/2024;Compra;LCA - CDB9999;XP INVESTIMENTOS CCTVM S/A;1;R$1,00;R$1,00\n"
+            + "Credito;08/03/2024;Compra;LCA - LCI999 - BANCO;CLEAR CORRETORA;1;R$1,00;R$1,00\n"
+            + "Credito;09/03/2024;Compra;CDB - CDB1111 - BANCO;XP INVESTIMENTOS CCTVM S/A;1;R$1,00;R$1,00\n";
+
+        await using var ambiente = await Ambiente.CriarAsync();
+        await using (var contexto = await ambiente.Factory.CreateDbContextAsync())
+        {
+            contexto.TitulosRendaFixa.Add(new TituloRendaFixa
+            {
+                Tipo = TipoTituloRendaFixa.Outro,
+                Codigo = "LCI123",
+                Nome = "Letra antiga",
+                Corretora = "Itaú",
+                Ativo = true
+            });
+            await contexto.SaveChangesAsync();
+        }
+
+        await using var fluxo = new MemoryStream(Encoding.UTF8.GetBytes(csv));
+        var previa = await ambiente.Service.PreverAsync(fluxo, ambiente.MembroId);
+        Assert.Equal(8, (await ambiente.Service.GravarAsync(previa, ambiente.MembroId)).Linhas);
+
+        await using var conferido = await ambiente.Factory.CreateDbContextAsync();
+        var titulos = await conferido.TitulosRendaFixa.ToListAsync();
+        Assert.Equal(TipoTituloRendaFixa.Outro, Assert.Single(titulos, titulo => titulo.Codigo == "LCI123").Tipo);
+        Assert.Equal(TipoTituloRendaFixa.LCI, Assert.Single(titulos, titulo => titulo.Codigo == "LCINOVO").Tipo);
+        Assert.Equal(TipoTituloRendaFixa.LCA, Assert.Single(titulos, titulo => titulo.Codigo == "LCA999").Tipo);
+        Assert.Equal(TipoTituloRendaFixa.LCI, Assert.Single(titulos, titulo => titulo.Codigo == "CDB9999" && titulo.Corretora == "Nikos").Tipo);
+        Assert.Equal(TipoTituloRendaFixa.LCA, Assert.Single(titulos, titulo => titulo.Codigo == "CDB9999" && titulo.Corretora == "XP").Tipo);
+        Assert.Equal(TipoTituloRendaFixa.LCA, Assert.Single(titulos, titulo => titulo.Codigo == "LCI999").Tipo);
+        Assert.Equal(TipoTituloRendaFixa.CDB, Assert.Single(titulos, titulo => titulo.Codigo == "CDBABC").Tipo);
+        Assert.Equal(TipoTituloRendaFixa.CDB, Assert.Single(titulos, titulo => titulo.Codigo == "CDB1111").Tipo);
+    }
+
     private static async Task RepetirManualAsync(Ambiente ambiente, PreviaExtratoB3 previa)
     {
         var linhas = previa.Linhas

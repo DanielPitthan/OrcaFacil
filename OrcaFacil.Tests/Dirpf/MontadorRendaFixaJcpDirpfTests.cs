@@ -193,6 +193,136 @@ public class MontadorRendaFixaJcpDirpfTests : IDisposable
     }
 
     [Fact]
+    public void LciELca_VaoParaCodigo12_EGrupo0403_SemAObservacao_ETributadosFicamIguais()
+    {
+        var ana = Perfil(1, "Ana", null);
+        var lci = Titulo(1, "LCI1", "Letra imobiliária", TipoTituloRendaFixa.LCI, "XP");
+        var lca = Titulo(2, "LCA1", "Letra do agro", TipoTituloRendaFixa.LCA, "XP");
+        var cdb = Titulo(3, "CDB1", "CDB", TipoTituloRendaFixa.CDB, "XP");
+        var tesouro = Titulo(4, "TESOURO", "Tesouro", TipoTituloRendaFixa.TesouroSelic, "XP");
+        var outro = Titulo(5, "CRI1", "CRI", TipoTituloRendaFixa.Outro, "XP");
+        var operacoes = new[]
+        {
+            Operacao(1, lci, new DateTime(2024, 1, 10), TipoOperacaoRendaFixa.Aplicacao, 2m, 200m, 0m),
+            Operacao(2, lci, new DateTime(2024, 8, 1), TipoOperacaoRendaFixa.Resgate, 1m, 130.005m, 0m),
+            Operacao(3, lca, new DateTime(2024, 2, 1), TipoOperacaoRendaFixa.Aplicacao, 1m, 100m, 0m),
+            Operacao(4, lca, new DateTime(2024, 9, 1), TipoOperacaoRendaFixa.Resgate, 1m, 140m, 0m),
+            Operacao(5, cdb, new DateTime(2024, 1, 10), TipoOperacaoRendaFixa.Aplicacao, 2m, 200m, 0m),
+            Operacao(6, cdb, new DateTime(2024, 8, 1), TipoOperacaoRendaFixa.Resgate, 1m, 130m, 0m),
+            Operacao(7, tesouro, new DateTime(2024, 3, 1), TipoOperacaoRendaFixa.Aplicacao, 1m, 50m, 0m),
+            Operacao(8, outro, new DateTime(2024, 4, 1), TipoOperacaoRendaFixa.Aplicacao, 1m, 80m, 0m),
+            Operacao(9, outro, new DateTime(2024, 10, 1), TipoOperacaoRendaFixa.Resgate, 0.5m, 50m, 0m)
+        };
+        var titulos = new[] { lci, lca, cdb, tesouro, outro };
+
+        var dirpf = Montar(2024, [], titulos, operacoes, [ana]);
+        var observacao = MontadorDirpf.ObservacaoTituloOutro;
+
+        var isentoLci = Assert.Single(dirpf.RendimentosIsentos, linha => linha.Ticker == "LCI1");
+        Assert.Equal("12", isentoLci.Codigo);
+        Assert.Equal(CatalogoCodigosDirpf.DescricaoRendimentoRendaFixaIsenta, isentoLci.DescricaoCodigo);
+        Assert.Equal(30.01m, isentoLci.Valor);
+        Assert.Equal("Rendimento líquido de renda fixa — LCI1 — Letra imobiliária.", isentoLci.Descricao);
+        Assert.DoesNotContain(observacao, isentoLci.Descricao);
+        var isentoLca = Assert.Single(dirpf.RendimentosIsentos, linha => linha.Ticker == "LCA1");
+        Assert.Equal("12", isentoLca.Codigo);
+        Assert.Equal(40m, isentoLca.Valor);
+        Assert.Equal("Rendimento líquido de renda fixa — LCA1 — Letra do agro.", isentoLca.Descricao);
+        Assert.DoesNotContain(observacao, isentoLca.Descricao);
+        Assert.DoesNotContain(dirpf.RendimentosIsentos, linha => linha.Ticker is "CDB1" or "TESOURO" or "CRI1");
+        Assert.DoesNotContain(dirpf.RendimentosExclusivos, linha => linha.CodigoAtivo is "LCI1" or "LCA1");
+
+        var posicaoLci = Assert.Single(dirpf.RendaFixa, linha => linha.Codigo == "LCI1");
+        Assert.Equal("LCI", posicaoLci.Tipo);
+        Assert.Equal("04", posicaoLci.Grupo);
+        Assert.Equal("03", posicaoLci.CodigoDirpf);
+        Assert.Equal(CatalogoCodigosDirpf.DescricaoBemRendaFixaIsenta, posicaoLci.DescricaoCodigo);
+        Assert.Equal(100m, posicaoLci.CustoAquisicao);
+        Assert.Equal("LCI1 — Letra imobiliária. LCI. Custo de aquisição em 31/12/2024.", posicaoLci.Discriminacao);
+        Assert.DoesNotContain(observacao, posicaoLci.Discriminacao);
+        Assert.DoesNotContain(dirpf.RendaFixa, linha => linha.Codigo == "LCA1");
+
+        var exclusivoCdb = Assert.Single(dirpf.RendimentosExclusivos, linha => linha.CodigoAtivo == "CDB1");
+        Assert.Equal("06", exclusivoCdb.Codigo);
+        Assert.Equal(CatalogoCodigosDirpf.DescricaoRendimentoRendaFixa, exclusivoCdb.DescricaoCodigo);
+        Assert.Equal(30m, exclusivoCdb.ValorLiquido);
+        Assert.Equal("Rendimento líquido de renda fixa — CDB1 — CDB.", exclusivoCdb.Descricao);
+        Assert.DoesNotContain(observacao, exclusivoCdb.Descricao);
+        var posicaoCdb = Assert.Single(dirpf.RendaFixa, linha => linha.Codigo == "CDB1");
+        Assert.Equal("04", posicaoCdb.Grupo);
+        Assert.Equal("02", posicaoCdb.CodigoDirpf);
+        Assert.Equal("CDB1 — CDB. CDB. Custo de aquisição em 31/12/2024.", posicaoCdb.Discriminacao);
+        var posicaoTesouro = Assert.Single(dirpf.RendaFixa, linha => linha.Codigo == "TESOURO");
+        Assert.Equal("04", posicaoTesouro.Grupo);
+        Assert.Equal("02", posicaoTesouro.CodigoDirpf);
+        Assert.Equal("TESOURO — Tesouro. Tesouro Selic. Custo de aquisição em 31/12/2024.", posicaoTesouro.Discriminacao);
+        Assert.DoesNotContain(observacao, posicaoTesouro.Discriminacao);
+
+        var exclusivoOutro = Assert.Single(dirpf.RendimentosExclusivos, linha => linha.CodigoAtivo == "CRI1");
+        Assert.Equal("06", exclusivoOutro.Codigo);
+        Assert.EndsWith(" " + observacao, exclusivoOutro.Descricao);
+        var posicaoOutro = Assert.Single(dirpf.RendaFixa, linha => linha.Codigo == "CRI1");
+        Assert.Equal("Outro", posicaoOutro.Tipo);
+        Assert.Equal("04", posicaoOutro.Grupo);
+        Assert.Equal("02", posicaoOutro.CodigoDirpf);
+        Assert.EndsWith(" " + observacao, posicaoOutro.Discriminacao);
+
+        using (var contexto = _fabrica.CreateDbContext())
+        {
+            contexto.Add(new MembroFamilia { Nome = "Ana", Avatar = "A" });
+            foreach (var titulo in titulos)
+            {
+                titulo.Id = 0;
+                contexto.Add(titulo);
+            }
+
+            contexto.SaveChanges();
+            foreach (var operacao in operacoes)
+            {
+                operacao.Id = 0;
+                operacao.TituloRendaFixaId = operacao.Titulo!.Id;
+                contexto.Add(operacao);
+            }
+
+            contexto.SaveChanges();
+        }
+
+        using var destino = new MemoryStream();
+        using (var contexto = _fabrica.CreateDbContext())
+            ExportadorDirpf.Exportar(contexto, 2024, destino);
+
+        using var pasta = new XLWorkbook(destino);
+        var isentos = pasta.Worksheet(ExportadorDirpf.AbaRendimentosIsentos);
+        var exclusivos = pasta.Worksheet(ExportadorDirpf.AbaRendimentosExclusivos);
+        var rendaFixa = pasta.Worksheet(ExportadorDirpf.AbaRendaFixa);
+        Assert.Equal("12", TextoDaLinha(isentos, "LCI1", 3, 6));
+        Assert.Equal(isentoLci.Descricao, TextoDaLinha(isentos, "LCI1", 3, 10));
+        Assert.Equal("12", TextoDaLinha(isentos, "LCA1", 3, 6));
+        Assert.Equal(isentoLca.Descricao, TextoDaLinha(isentos, "LCA1", 3, 10));
+        Assert.DoesNotContain(observacao, TextoDaLinha(isentos, "LCI1", 3, 10));
+        Assert.DoesNotContain(observacao, TextoDaLinha(isentos, "LCA1", 3, 10));
+        Assert.Null(LinhaDoCodigo(isentos, "CDB1", 3));
+        Assert.Null(LinhaDoCodigo(isentos, "CRI1", 3));
+        Assert.Null(LinhaDoCodigo(exclusivos, "LCI1", 3));
+        Assert.Null(LinhaDoCodigo(exclusivos, "LCA1", 3));
+        Assert.Equal("06", TextoDaLinha(exclusivos, "CDB1", 3, 6));
+        Assert.Equal(exclusivoCdb.Descricao, TextoDaLinha(exclusivos, "CDB1", 3, 11));
+        Assert.Equal(exclusivoOutro.Descricao, TextoDaLinha(exclusivos, "CRI1", 3, 11));
+        Assert.Contains(observacao, TextoDaLinha(exclusivos, "CRI1", 3, 11));
+        Assert.Equal("04", TextoDaLinha(rendaFixa, "LCI1", 3, 7));
+        Assert.Equal("03", TextoDaLinha(rendaFixa, "LCI1", 3, 8));
+        Assert.Equal(posicaoLci.Discriminacao, TextoDaLinha(rendaFixa, "LCI1", 3, 16));
+        Assert.Null(LinhaDoCodigo(rendaFixa, "LCA1", 3));
+        Assert.Equal("04", TextoDaLinha(rendaFixa, "CDB1", 3, 7));
+        Assert.Equal("02", TextoDaLinha(rendaFixa, "CDB1", 3, 8));
+        Assert.Equal(posicaoCdb.Discriminacao, TextoDaLinha(rendaFixa, "CDB1", 3, 16));
+        Assert.Equal("02", TextoDaLinha(rendaFixa, "TESOURO", 3, 8));
+        Assert.Equal(posicaoTesouro.Discriminacao, TextoDaLinha(rendaFixa, "TESOURO", 3, 16));
+        Assert.Equal("02", TextoDaLinha(rendaFixa, "CRI1", 3, 8));
+        Assert.Contains(observacao, TextoDaLinha(rendaFixa, "CRI1", 3, 16));
+    }
+
+    [Fact]
     public void Outro_GravaAObservacaoDeLciLca_OndeALinhaApareceNaPlanilha()
     {
         const string observacao =

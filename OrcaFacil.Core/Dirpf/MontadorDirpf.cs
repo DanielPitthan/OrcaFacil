@@ -20,6 +20,8 @@ namespace OrcaFacil.Core.Dirpf;
 /// O CNPJ sai vazio: o cadastro não guarda esse número.
 /// Posição com quantidade zero fica de fora. Não há piso de valor.
 /// Título do tipo Outro continua no grupo 04/02 e no código 06. A linha só ganha o aviso de LCI/LCA.
+/// LCI e LCA vão para Rendimentos Isentos, código da variante RendaFixaIsenta, e para o bem 04/03.
+/// Não levam o aviso do tipo Outro.
 /// </summary>
 public static class MontadorDirpf
 {
@@ -106,10 +108,6 @@ public static class MontadorDirpf
         var bens = MontarBens(anoBase, corte, listaOperacoes, tabela, fiscais);
         var isentos = MontarIsentos(anoBase, corte, inicio, fim, listaProventos, tabela, fiscais);
         isentos.AddRange(MontarGanhoIsento(anoBase, corte, listaOperacoes, regras, tabela, fiscais));
-        isentos = isentos
-            .OrderBy(linha => linha.Perfil, OrdemTexto)
-            .ThenBy(linha => linha.Ticker, StringComparer.Ordinal)
-            .ToList();
 
         var exclusivos = MontarJcp(anoBase, corte, inicio, fim, listaProventos, tabela, fiscais);
         var rendaFixa = MontarRendaFixa(
@@ -123,13 +121,17 @@ public static class MontadorDirpf
             perfis,
             tabela,
             fiscais,
-            exclusivos);
+            exclusivos,
+            isentos);
 
         return new DirpfAnoBase
         {
             Ano = anoBase,
             Bens = bens,
-            RendimentosIsentos = isentos,
+            RendimentosIsentos = isentos
+                .OrderBy(linha => linha.Perfil, OrdemTexto)
+                .ThenBy(linha => linha.Ticker, StringComparer.Ordinal)
+                .ToList(),
             RendimentosExclusivos = exclusivos
                 .OrderBy(linha => linha.Perfil, OrdemTexto)
                 .ThenBy(linha => linha.CodigoAtivo, StringComparer.Ordinal)
@@ -347,7 +349,8 @@ public static class MontadorDirpf
         IEnumerable<MembroFamilia> perfis,
         TabelaCodigosDirpf tabela,
         TabelaRegrasFiscais fiscais,
-        List<LinhaRendimentoExclusivoDirpf> exclusivos)
+        List<LinhaRendimentoExclusivoDirpf> exclusivos,
+        List<LinhaRendimentoIsentoDirpf> isentos)
     {
         var listaTitulos = titulos.ToList();
         var listaOperacoes = operacoes.ToList();
@@ -356,6 +359,8 @@ public static class MontadorDirpf
         var posicoes = new List<LinhaRendaFixaDirpf>();
         CodigoDirpf? codigoBem = null;
         CodigoDirpf? codigoRendimento = null;
+        CodigoDirpf? codigoBemIsento = null;
+        CodigoDirpf? codigoRendimentoIsento = null;
         var casas = 2;
         var regraLida = false;
 
@@ -377,12 +382,27 @@ public static class MontadorDirpf
             if (!regraLida)
             {
                 ExigirRendaFixaSemRegressivo(fiscais, corte);
-                codigoBem = tabela.ExigirVariante(TipoFichaDirpf.Bem, CatalogoCodigosDirpf.VarianteRendaFixa, corte);
-                codigoRendimento = tabela.ExigirVariante(TipoFichaDirpf.RendimentoExclusivo, CatalogoCodigosDirpf.VarianteRendaFixa, corte);
                 casas = fiscais.Para(corte, TipoAtivo.Acao).CasasDecimais;
                 regraLida = true;
             }
 
+            var isento = EhTituloIsento(titulo.Tipo);
+            if (isento)
+            {
+                codigoBemIsento ??= tabela.ExigirVariante(
+                    TipoFichaDirpf.Bem, CatalogoCodigosDirpf.VarianteRendaFixaIsenta, corte);
+                codigoRendimentoIsento ??= tabela.ExigirVariante(
+                    TipoFichaDirpf.RendimentoIsento, CatalogoCodigosDirpf.VarianteRendaFixaIsenta, corte);
+            }
+            else
+            {
+                codigoBem ??= tabela.ExigirVariante(
+                    TipoFichaDirpf.Bem, CatalogoCodigosDirpf.VarianteRendaFixa, corte);
+                codigoRendimento ??= tabela.ExigirVariante(
+                    TipoFichaDirpf.RendimentoExclusivo, CatalogoCodigosDirpf.VarianteRendaFixa, corte);
+            }
+
+            var codigoDoBem = isento ? codigoBemIsento! : codigoBem!;
             var liquidoDeclarado = CalculadoraResultadoRealizado.Arredondar(liquido, casas);
             var irDeclarado = CalculadoraResultadoRealizado.Arredondar(ir, casas);
             var perfil = PerfilDoTitulo(doTitulo, listaLancamentos, listaPerfis);
@@ -398,9 +418,9 @@ public static class MontadorDirpf
                     titulo.Nome,
                     tipo,
                     titulo.Corretora,
-                    codigoBem!.Grupo,
-                    codigoBem.Codigo,
-                    codigoBem.Descricao,
+                    codigoDoBem.Grupo,
+                    codigoDoBem.Codigo,
+                    codigoDoBem.Descricao,
                     Cnpj: "",
                     calculada.Quantidade,
                     custo,
@@ -414,20 +434,38 @@ public static class MontadorDirpf
 
             if (liquidoDeclarado > 0m)
             {
-                exclusivos.Add(new LinhaRendimentoExclusivoDirpf(
-                    anoBase,
-                    perfil,
-                    titulo.Codigo,
-                    titulo.Nome,
-                    "Rendimento de renda fixa",
-                    codigoRendimento!.Codigo,
-                    codigoRendimento.Descricao,
-                    Cnpj: "",
-                    liquidoDeclarado,
-                    irDeclarado,
-                    TextoOutro(
-                        $"Rendimento líquido de renda fixa — {titulo.Codigo} — {titulo.Nome}.",
-                        titulo.Tipo)));
+                var descricao = TextoOutro(
+                    $"Rendimento líquido de renda fixa — {titulo.Codigo} — {titulo.Nome}.",
+                    titulo.Tipo);
+                if (isento)
+                {
+                    isentos.Add(new LinhaRendimentoIsentoDirpf(
+                        anoBase,
+                        perfil,
+                        titulo.Codigo,
+                        titulo.Nome,
+                        "Rendimento de renda fixa",
+                        codigoRendimentoIsento!.Codigo,
+                        codigoRendimentoIsento.Descricao,
+                        Cnpj: "",
+                        liquidoDeclarado,
+                        descricao));
+                }
+                else
+                {
+                    exclusivos.Add(new LinhaRendimentoExclusivoDirpf(
+                        anoBase,
+                        perfil,
+                        titulo.Codigo,
+                        titulo.Nome,
+                        "Rendimento de renda fixa",
+                        codigoRendimento!.Codigo,
+                        codigoRendimento.Descricao,
+                        Cnpj: "",
+                        liquidoDeclarado,
+                        irDeclarado,
+                        descricao));
+                }
             }
         }
 
@@ -489,6 +527,9 @@ public static class MontadorDirpf
         Codigo = codigo
     };
 
+    private static bool EhTituloIsento(TipoTituloRendaFixa tipo)
+        => tipo is TipoTituloRendaFixa.LCI or TipoTituloRendaFixa.LCA;
+
     private static string TextoOutro(string texto, TipoTituloRendaFixa tipo) =>
         tipo == TipoTituloRendaFixa.Outro ? $"{texto} {ObservacaoTituloOutro}" : texto;
 
@@ -499,6 +540,8 @@ public static class MontadorDirpf
         TipoTituloRendaFixa.TesouroIPCA => "Tesouro IPCA",
         TipoTituloRendaFixa.TesouroSelic => "Tesouro Selic",
         TipoTituloRendaFixa.Outro => "Outro",
+        TipoTituloRendaFixa.LCI => "LCI",
+        TipoTituloRendaFixa.LCA => "LCA",
         _ => tipo.ToString()
     };
 

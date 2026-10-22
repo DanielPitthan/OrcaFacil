@@ -182,14 +182,11 @@ public class RendaFixaGabaritoB3Tests
     {
         var partes = produto.Split(" - ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
         if (partes.Length >= 2 && partes[0].Equals("CDB", StringComparison.OrdinalIgnoreCase))
-        {
-            var codigo = partes[1].Trim().ToUpperInvariant();
-            var emissor = partes.Length >= 3 ? partes[2] : null;
-            var nome = emissor is null ? codigo : $"{codigo} — {emissor}";
-            if (nome.Length > 80)
-                nome = nome[..80];
-            return (codigo, nome, TipoTituloRendaFixa.CDB, emissor, null);
-        }
+            return TituloBancario(partes, TipoTituloRendaFixa.CDB);
+        if (partes.Length >= 2 && partes[0].Equals("LCI", StringComparison.OrdinalIgnoreCase))
+            return TituloBancario(partes, TipoTituloRendaFixa.LCI);
+        if (partes.Length >= 2 && partes[0].Equals("LCA", StringComparison.OrdinalIgnoreCase))
+            return TituloBancario(partes, TipoTituloRendaFixa.LCA);
 
         var titulo = NormalizarTitulo(produto);
         var tipo = titulo.Contains("PREFIXADO", StringComparison.Ordinal) ? TipoTituloRendaFixa.TesouroPrefixado
@@ -201,6 +198,18 @@ public class RendaFixaGabaritoB3Tests
         if (ultimo is not null && int.TryParse(ultimo, out var anoLido) && anoLido is >= 2000 and <= 2100)
             ano = anoLido;
         return (titulo, titulo, tipo, null, ano);
+    }
+
+    private static (string Codigo, string Nome, TipoTituloRendaFixa Tipo, string? Emissor, int? Ano) TituloBancario(
+        string[] partes,
+        TipoTituloRendaFixa tipo)
+    {
+        var codigo = partes[1].Trim().ToUpperInvariant();
+        var emissor = partes.Length >= 3 ? partes[2] : null;
+        var nome = emissor is null ? codigo : $"{codigo} — {emissor}";
+        if (nome.Length > 80)
+            nome = nome[..80];
+        return (codigo, nome, tipo, emissor, null);
     }
 
     /// <summary>
