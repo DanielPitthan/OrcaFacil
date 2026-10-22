@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.B3;
@@ -35,6 +36,23 @@ public class ResultadoGravacaoB3Tests
         Assert.Equal(1, resultado.Lancamentos);
         Assert.Equal("1 lançamento em fev/2026.", resultado.Texto);
         Assert.Equal("/lancamentos?mes=2026-02", resultado.Rota);
+    }
+
+    [Fact]
+    public void Rota_EmCalendarioTailandes_GravaAnoGregoriano()
+    {
+        var anterior = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("th-TH");
+        try
+        {
+            Assert.Equal("2569-03", new DateTime(2026, 3, 1).ToString("yyyy-MM"));
+            var resultado = ResultadoGravacaoB3.Criar(1, [new DateTime(2026, 3, 2)]);
+            Assert.Equal("/lancamentos?mes=2026-03", resultado.Rota);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = anterior;
+        }
     }
 
     [Fact]

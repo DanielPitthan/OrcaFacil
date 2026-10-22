@@ -18,7 +18,7 @@ public sealed class ResultadoGravacaoB3
         MesMaisRecente = meses.Count == 0 ? null : meses[^1];
         Texto = MontarTexto(lancamentos, meses);
         Rota = MesMaisRecente is DateTime mes
-            ? $"/lancamentos?mes={mes:yyyy-MM}"
+            ? $"/lancamentos?mes={mes.ToString("yyyy-MM", CultureInfo.InvariantCulture)}"
             : "/ativos";
     }
 
