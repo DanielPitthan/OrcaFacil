@@ -712,6 +712,142 @@ public class DiagnosticoRespostaTests
         Assert.DoesNotContain("\nEndpoint: https://evil.test", log, StringComparison.Ordinal);
     }
 
+    public static IEnumerable<object[]> VariantesDeChaveSensivel()
+    {
+        yield return new object[] { "authorization" };
+        yield return new object[] { "Authorization" };
+        yield return new object[] { "AUTHORIZATION" };
+        yield return new object[] { "AuThOrIzAtIoN" };
+        yield return new object[] { "x-api-key" };
+        yield return new object[] { "X-API-KEY" };
+        yield return new object[] { "X-Api-Key" };
+        yield return new object[] { "x-API-Key" };
+    }
+
+    [Theory]
+    [MemberData(nameof(VariantesDeChaveSensivel))]
+    public void VarianteDeChaveSensivel_PerdeOValor(string nome)
+    {
+        const string segredo = "sk-variante-nao-listado";
+        var diagnostico = Diagnosticar("seguiu antes\n" + nome + ": " + segredo);
+
+        var log = AssertDialogoCopiaELog(diagnostico);
+        Assert.DoesNotContain(segredo, diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(segredo, log, StringComparison.Ordinal);
+        Assert.DoesNotContain(nome, diagnostico.Texto, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(nome, log, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(DiagnosticoResposta.MarcaCabecalho, diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains(DiagnosticoResposta.MarcaCabecalho, log, StringComparison.Ordinal);
+        Assert.Contains("seguiu antes", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains("seguiu antes", log, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("Total 12,90")]
+    [InlineData("Nota fiscal")]
+    [InlineData("OK 1500")]
+    public void Base64_NaoEngoleAPrimeiraPalavraDaLinhaSeguinte(string prosa)
+    {
+        const string alfabeto = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+        var linha = alfabeto + alfabeto[..12];
+        var bloco = string.Join("\n", linha, linha, linha);
+        var diagnostico = Diagnosticar(bloco + "\n" + prosa);
+
+        var log = AssertDialogoCopiaELog(diagnostico);
+        Assert.Contains(DiagnosticoResposta.MarcaBase64, diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains(prosa, diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains(prosa, log, StringComparison.Ordinal);
+        Assert.DoesNotContain(linha[..40], diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(linha[..40], log, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Base64Em64Colunas_EMascaradoSemEngolirAProsa()
+    {
+        var linha = new string('A', 32) + new string('b', 32);
+        var bloco = string.Join("\n", linha, linha, "abcd=");
+        var diagnostico = Diagnosticar("antes\n" + bloco + "\nTotal 12,90\nNota fiscal\nOK 1500");
+
+        var log = AssertDialogoCopiaELog(diagnostico);
+        Assert.Contains(DiagnosticoResposta.MarcaBase64, diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains(DiagnosticoResposta.MarcaBase64, log, StringComparison.Ordinal);
+        Assert.Contains("Total 12,90", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains("Nota fiscal", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains("OK 1500", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains("antes", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(linha[..40], diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("abcd=", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(linha[..40], log, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void IdLongoDeUmSoCaso_NaoViraBase64()
+    {
+        var minusculas = new string('a', 220);
+        var digitos = new string('7', 210);
+        var hifen = string.Join("-", Enumerable.Repeat("abc123", 40));
+        Assert.True(hifen.Length > 201);
+        var diagnostico = Diagnosticar("id " + minusculas + "\nnum " + digitos + "\nref " + hifen + " fim");
+
+        var log = AssertDialogoCopiaELog(diagnostico);
+        Assert.Contains(minusculas, diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains(digitos, diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains(hifen, diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains(minusculas, log, StringComparison.Ordinal);
+        Assert.Contains(digitos, log, StringComparison.Ordinal);
+        Assert.Contains(hifen, log, StringComparison.Ordinal);
+        Assert.DoesNotContain(DiagnosticoResposta.MarcaBase64, diagnostico.Texto, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SegredoCurto_PontoFinalNaoProtegeOToken()
+    {
+        const string segredo = "api";
+        var diagnostico = Diagnosticar("a chave foi " + segredo + ".", segredo);
+
+        var log = AssertDialogoCopiaELog(diagnostico);
+        Assert.Contains("https://api.anthropic.com", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains("a chave foi ***.", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains("a chave foi ***.", log, StringComparison.Ordinal);
+        Assert.DoesNotContain("foi api.", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("foi api.", log, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ChavePercentDupla_NaoVazaNoDialogoNaCopiaNemNoLog()
+    {
+        const string segredo = "sk-ant-ficticio_9f3c";
+        const string dupla = "sk%252Dant%252Dficticio%255F9f3c";
+        var diagnostico = Diagnosticar("solto " + dupla + " fim", segredo);
+
+        var log = AssertDialogoCopiaELog(diagnostico);
+        Assert.DoesNotContain(segredo, diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(dupla, diagnostico.Texto, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ficticio", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(segredo, log, StringComparison.Ordinal);
+        Assert.DoesNotContain(dupla, log, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ficticio", log, StringComparison.Ordinal);
+        Assert.Contains("solto", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains("fim", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains("***", diagnostico.Texto, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SegredoPartidoEmCorpoGrande_NaoCresceComOProduto()
+    {
+        var segredo = new string('k', 500) + "!9";
+        var miolo = segredo[..250] + "\u200B" + segredo[250..];
+        var corpo = miolo + new string('q', 100_000);
+        var relogio = System.Diagnostics.Stopwatch.StartNew();
+        var diagnostico = Diagnosticar(corpo, segredo);
+        relogio.Stop();
+
+        Assert.Contains("***", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(segredo[..40], diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain("!9", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.InRange(relogio.ElapsedMilliseconds, 0, 2000);
+    }
+
     private static readonly string[] Separadores =
     [
         "\n",

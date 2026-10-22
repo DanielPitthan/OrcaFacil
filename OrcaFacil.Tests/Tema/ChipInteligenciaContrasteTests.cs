@@ -37,6 +37,18 @@ public class ChipInteligenciaContrasteTests
     }
 
     [Fact]
+    public void ChipNaoSelecionadoNoTemaClaro_UsaBordaDoTexto()
+    {
+        var css = File.ReadAllText(Caminho("InteligenciaArtificialPanel.razor.css"));
+
+        Assert.Contains("border-color: var(--of-text);", css, StringComparison.Ordinal);
+        Assert.Contains(
+            ":global(html.of-tema-claro) .of-ia-chips ::deep .mud-chip.mud-chip-outlined:not(.mud-chip-selected)",
+            css,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CssDoChip_NaoUsaOFundoCompostoDoHover()
     {
         var css = File.ReadAllText(Caminho("InteligenciaArtificialPanel.razor.css"));

@@ -46,8 +46,8 @@ public class ClienteMensagensTests
         Assert.Equal("claude-haiku-5-5", PedidoMensagem.ModeloAnthropic);
         Assert.Equal(PedidoMensagem.ModeloAnthropic, raiz.GetProperty("model").GetString());
         Assert.Equal(PedidoMensagem.MaxTokens, raiz.GetProperty("max_tokens").GetInt32());
-        Assert.False(raiz.TryGetProperty("thinking", out _));
-        Assert.DoesNotContain("\"thinking\"", captura.Corpo, StringComparison.Ordinal);
+        Assert.Equal("disabled", raiz.GetProperty("thinking").GetProperty("type").GetString());
+        Assert.Contains("\"type\":\"disabled\"", captura.Corpo, StringComparison.Ordinal);
         AssertSemAmostragem(raiz);
 
         var mensagens = raiz.GetProperty("messages");
@@ -425,6 +425,85 @@ public class ClienteMensagensTests
         Assert.DoesNotContain("x-api-key", resultado.Diagnostico.Texto, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("data:image", resultado.Diagnostico.Texto, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("/v1/messages", resultado.Diagnostico.Texto, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("anthropic")]
+    [InlineData("openai")]
+    public async Task FinishReasonLength_ComCupomValido_ViraRespostaCortada(string formato)
+    {
+        var corpo = formato == "openai"
+            ? """
+              {
+                "choices": [
+                  {
+                    "finish_reason": "length",
+                    "message": {
+                      "tool_calls": [
+                        {
+                          "type": "function",
+                          "function": {
+                            "name": "registrar_comprovante",
+                            "arguments": "{\"loja\":\"Mercado\",\"legivel\":true,\"itens\":[{\"descricao_lida\":\"ARROZ\",\"preco\":10}]}"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+              """
+            : """
+              {
+                "finish_reason": "length",
+                "content": [
+                  {
+                    "type": "tool_use",
+                    "name": "registrar_comprovante",
+                    "input": {
+                      "loja": "Mercado",
+                      "legivel": true,
+                      "itens": [ { "descricao_lida": "ARROZ", "preco": 10 } ]
+                    }
+                  }
+                ]
+              }
+              """;
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, corpo));
+        using var cliente = new ClienteMensagens(captura);
+
+        var resultado = await cliente.LerComprovanteAsync(Base, Chave, PedidoMensagem.ModeloDeepSeek, Midia, Imagem);
+
+        Assert.Equal(1, captura.Chamadas);
+        Assert.Null(resultado.Comprovante);
+        Assert.Equal(ResultadoMensagem.TextoRespostaCortada, resultado.Mensagem);
+        Assert.Equal("length", resultado.Diagnostico!.FinishReason);
+        Assert.DoesNotContain(Chave, resultado.Mensagem, StringComparison.Ordinal);
+        Assert.DoesNotContain(Imagem, resultado.Diagnostico.Texto, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task HttpDeepSeek_ComPermiteHttp_DesligaThinkingNoPedido()
+    {
+        var captura = new CapturaHandler(_ => Resposta(HttpStatusCode.OK, CorpoValido()));
+        using var cliente = new ClienteMensagens(captura, permiteHttp: true);
+
+        var resultado = await cliente.LerComprovanteAsync(
+            "http://api.deepseek.com",
+            Chave,
+            PedidoMensagem.ModeloDeepSeek,
+            Midia,
+            Imagem);
+
+        Assert.True(resultado.Sucesso);
+        Assert.Equal(1, captura.Chamadas);
+        Assert.Equal(ModoThinking.Desligar, PerfilProvedor.DaUrl("http://api.deepseek.com", permiteHttp: true).Thinking);
+        Assert.Equal(ModoThinking.NaoEnviar, PerfilProvedor.DaUrl("http://api.deepseek.com").Thinking);
+        using var doc = JsonDocument.Parse(captura.Corpo);
+        var escolha = doc.RootElement.GetProperty("tool_choice");
+        Assert.Equal("tool", escolha.GetProperty("type").GetString());
+        AssertThinking(doc.RootElement, captura.Corpo, desliga: true);
+        Assert.DoesNotContain(Chave, captura.Corpo, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -989,6 +1068,9 @@ public class ClienteMensagensTests
     [InlineData("https://notqwencloudapi.com/apps/anthropic", "qwen3.7-plus", false)]
     [InlineData("https://maas.qwencloudapi.com.evil.com/apps/anthropic", "qwen3-vl-plus", false)]
     [InlineData("https://api.deepseek.com/anthropic", "deepseek-flash", true)]
+    [InlineData("https://api.deepseek.com./anthropic", "deepseek-flash", true)]
+    [InlineData("https://foo.api.deepseek.com/anthropic", "deepseek-flash", true)]
+    [InlineData("https://not-api.deepseek.com/anthropic", "deepseek-flash", false)]
     [InlineData("https://API.DEEPSEEK.COM/anthropic", "deepseek-flash", true)]
     [InlineData("https://api.anthropic.com", "claude-haiku-5-5", false)]
     [InlineData("https://dashscope.aliyuncs.com", "deepseek-flash", false)]
@@ -1021,11 +1103,15 @@ public class ClienteMensagensTests
         Assert.Equal(PedidoMensagem.NomeFerramenta, escolha.GetProperty("name").GetString());
         Assert.False(raiz.TryGetProperty("output_config", out _));
         Assert.DoesNotContain("output_config", captura.Corpo, StringComparison.Ordinal);
-        AssertThinking(raiz, captura.Corpo, desliga);
+        AssertThinking(raiz, captura.Corpo, desliga: true);
+        Assert.Equal(desliga, PerfilProvedor.DaUrl(url).Thinking == ModoThinking.Desligar);
     }
 
     [Theory]
     [InlineData("https://api.deepseek.com/anthropic/", true)]
+    [InlineData("https://api.deepseek.com./anthropic", true)]
+    [InlineData("https://foo.api.deepseek.com/anthropic", true)]
+    [InlineData("https://not-api.deepseek.com/anthropic", false)]
     [InlineData("https://API.DEEPSEEK.COM/anthropic", true)]
     [InlineData("https://token-plan.maas.qwencloudapi.com/apps/anthropic", true)]
     [InlineData("https://foo.qwencloudapi.com", true)]

@@ -6,6 +6,10 @@ public class PerfilProvedorTests
 {
     [Theory]
     [InlineData("https://api.deepseek.com/anthropic", ProvedorDetectado.DeepSeek, ModoThinking.Desligar)]
+    [InlineData("https://api.deepseek.com.", ProvedorDetectado.DeepSeek, ModoThinking.Desligar)]
+    [InlineData("https://api.deepseek.com./anthropic", ProvedorDetectado.DeepSeek, ModoThinking.Desligar)]
+    [InlineData("https://foo.api.deepseek.com/anthropic", ProvedorDetectado.DeepSeek, ModoThinking.Desligar)]
+    [InlineData("https://API.DeepSeek.Com./v1", ProvedorDetectado.DeepSeek, ModoThinking.Desligar)]
     [InlineData("https://api.deepseek.com", ProvedorDetectado.DeepSeek, ModoThinking.Desligar)]
     [InlineData("https://api.deepseek.com/", ProvedorDetectado.DeepSeek, ModoThinking.Desligar)]
     [InlineData("  https://api.deepseek.com/anthropic/  ", ProvedorDetectado.DeepSeek, ModoThinking.Desligar)]
@@ -56,6 +60,22 @@ public class PerfilProvedorTests
         Assert.Equal(ProvedorDetectado.QwenCloud, perfil.Provedor);
         Assert.Equal(ModoThinking.Desligar, perfil.Thinking);
         Assert.True(PerfilProvedor.EhQwenCloud(PedidoMensagem.CriarUri(url)!.Host));
+    }
+
+    [Fact]
+    public void DaUrl_HttpDeepSeek_SoDesligaComPermiteHttp()
+    {
+        const string url = "http://api.deepseek.com/anthropic";
+
+        Assert.Equal(
+            new PerfilProvedor(ProvedorDetectado.Desconhecido, ModoThinking.NaoEnviar),
+            PerfilProvedor.DaUrl(url));
+        Assert.Equal(
+            new PerfilProvedor(ProvedorDetectado.DeepSeek, ModoThinking.Desligar),
+            PerfilProvedor.DaUrl(url, permiteHttp: true));
+        Assert.Equal(
+            new PerfilProvedor(ProvedorDetectado.DeepSeek, ModoThinking.Desligar),
+            PerfilProvedor.DaUrl("http://foo.api.deepseek.com.", permiteHttp: true));
     }
 
     [Theory]

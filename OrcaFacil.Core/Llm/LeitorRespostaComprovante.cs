@@ -6,8 +6,9 @@ using System.Text.RegularExpressions;
 namespace OrcaFacil.Core.Llm;
 
 /// <summary>
-/// Lê o comprovante do bloco <c>tool_use</c> ou, se ele não vier, do JSON nos blocos <c>text</c>.
-/// Ignora <c>thinking</c>. Sem <c>reconhecido</c>, o item fica não reconhecido.
+/// Lê o comprovante do bloco <c>tool_use</c>, de <c>tool_calls</c>, do JSON em <c>text</c>,
+/// ou, se só estiver lá, de <c>thinking</c> e <c>reasoning_content</c>.
+/// Sem <c>reconhecido</c>, o item fica não reconhecido.
 /// </summary>
 public static class LeitorRespostaComprovante
 {
@@ -26,6 +27,12 @@ public static class LeitorRespostaComprovante
     private static readonly Regex RazaoBruta = new(
         """"(stop_reason|finish_reason)"\s*:\s*"([^"]*)"""",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
+    /// <summary>stop_reason que corta a resposta mesmo com cupom válido no corpo.</summary>
+    private static readonly string[] StopDeCorte = ["max_tokens"];
+
+    /// <summary>finish_reason que corta a resposta mesmo com cupom válido no corpo.</summary>
+    private static readonly string[] FinishDeCorte = ["length"];
 
     public static string MotivoCampoAusente(string campo) => "campo ausente: " + campo;
 
@@ -49,7 +56,7 @@ public static class LeitorRespostaComprovante
         {
             var stop = ExtrairRazaoBruta(texto, "stop_reason");
             var finish = ExtrairRazaoBruta(texto, "finish_reason");
-            if (string.Equals(stop, "max_tokens", StringComparison.OrdinalIgnoreCase))
+            if (RespostaCortada(stop, finish))
                 return Falha(MotivoCortada, stop, finish);
 
             if (!TentarRecortarObjeto(SemCerca(texto), cancellationToken, out var objeto, out var truncado))
@@ -76,8 +83,8 @@ public static class LeitorRespostaComprovante
             return Falha(MotivoJsonInvalido, null, null);
 
         var stop = LerTextoPropriedade(raiz, "stop_reason");
-        var finish = LerTextoPropriedade(raiz, "finish_reason");
-        if (string.Equals(stop, "max_tokens", StringComparison.OrdinalIgnoreCase))
+        var finish = LerFinish(raiz);
+        if (RespostaCortada(stop, finish))
             return Falha(MotivoCortada, stop, finish);
 
         if (!TentarPayload(raiz, cancellationToken, out var input, out var motivo))
@@ -103,15 +110,32 @@ public static class LeitorRespostaComprovante
                 return true;
             }
 
+            if (TentarFontes(raiz, null, cancellationToken, out input))
+                return true;
+
             motivo = MotivoCampoAusente("content");
             return false;
         }
 
         if (content.ValueKind == JsonValueKind.String)
-            return PayloadDeTexto(content.GetString(), cancellationToken, out input, out motivo);
+        {
+            if (PayloadDeTexto(content.GetString(), cancellationToken, out input, out motivo))
+                return true;
+
+            if (TentarFontes(raiz, null, cancellationToken, out input))
+            {
+                motivo = null;
+                return true;
+            }
+
+            return false;
+        }
 
         if (content.ValueKind != JsonValueKind.Array)
         {
+            if (TentarFontes(raiz, null, cancellationToken, out input))
+                return true;
+
             motivo = MotivoCampoInvalido("content");
             return false;
         }
@@ -167,27 +191,262 @@ public static class LeitorRespostaComprovante
         var texto = JuntarTextos(content);
         if (texto is null)
         {
+            if (TentarFontes(raiz, content, cancellationToken, out input))
+                return true;
+
             motivo = motivoFerramenta ?? MotivoCampoAusente("content");
             return false;
         }
 
-        if (!PayloadDeTexto(texto, cancellationToken, out input, out var motivoDoTexto))
+        if (!PayloadDeTexto(texto, cancellationToken, out input, out var motivoDoTexto) ||
+            !EntradaValida(input))
         {
-            motivo = motivoFerramenta ?? motivoDoTexto;
+            var candidato = input;
+            if (TentarFontes(raiz, content, cancellationToken, out input))
+                return true;
+
+            if (motivoFerramenta is not null)
+            {
+                motivo = motivoFerramenta;
+                return false;
+            }
+
+            motivo = candidato.ValueKind == JsonValueKind.Object
+                ? LerComoInput(candidato, null, null).Motivo ?? motivoDoTexto
+                : motivoDoTexto;
             return false;
         }
 
-        if (EntradaValida(input))
+        return true;
+    }
+
+    /// <summary>
+    /// Fontes em que o JSON pode vir sozinho: tool_calls, bloco thinking, reasoning_content.
+    /// A ferramenta ganha do rascunho. choices percorre o formato OpenAI.
+    /// </summary>
+    private static bool TentarFontes(
+        JsonElement objeto,
+        JsonElement? blocos,
+        CancellationToken cancellationToken,
+        out JsonElement input)
+    {
+        input = default;
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (TentarToolCalls(objeto, cancellationToken, out input))
             return true;
 
-        if (motivoFerramenta is not null)
-        {
-            motivo = motivoFerramenta;
+        if (blocos is JsonElement lista && TentarThinking(lista, cancellationToken, out input))
+            return true;
+
+        if (TentarReasoning(objeto, cancellationToken, out input))
+            return true;
+
+        if (TentarCampoTexto(objeto, "thinking", cancellationToken, out input))
+            return true;
+
+        if (!objeto.TryGetProperty("choices", out var choices) || choices.ValueKind != JsonValueKind.Array)
             return false;
+
+        foreach (var escolha in choices.EnumerateArray())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (escolha.ValueKind != JsonValueKind.Object)
+                continue;
+
+            if (TentarToolCalls(escolha, cancellationToken, out input))
+                return true;
+
+            if (!escolha.TryGetProperty("message", out var mensagem) || mensagem.ValueKind != JsonValueKind.Object)
+                continue;
+
+            if (TentarToolCalls(mensagem, cancellationToken, out input))
+                return true;
+
+            if (mensagem.TryGetProperty("content", out var conteudo))
+            {
+                if (conteudo.ValueKind == JsonValueKind.String &&
+                    PayloadDeTexto(conteudo.GetString(), cancellationToken, out input, out _) &&
+                    EntradaValida(input))
+                {
+                    return true;
+                }
+
+                if (conteudo.ValueKind == JsonValueKind.Array &&
+                    TextoValido(conteudo, cancellationToken, out input))
+                {
+                    return true;
+                }
+
+                if (conteudo.ValueKind == JsonValueKind.Array &&
+                    TentarThinking(conteudo, cancellationToken, out input))
+                {
+                    return true;
+                }
+            }
+
+            if (TentarReasoning(mensagem, cancellationToken, out input))
+                return true;
+
+            if (TentarCampoTexto(mensagem, "thinking", cancellationToken, out input))
+                return true;
         }
 
-        motivo = LerComoInput(input, null, null).Motivo ?? motivoDoTexto;
         return false;
+    }
+
+    private static bool TextoValido(JsonElement blocos, CancellationToken cancellationToken, out JsonElement input)
+    {
+        input = default;
+        var texto = JuntarTextos(blocos);
+        return texto is not null &&
+            PayloadDeTexto(texto, cancellationToken, out input, out _) &&
+            EntradaValida(input);
+    }
+
+    private static bool TentarToolCalls(JsonElement objeto, CancellationToken cancellationToken, out JsonElement input)
+    {
+        input = default;
+        if (!objeto.TryGetProperty("tool_calls", out var chamadas) || chamadas.ValueKind != JsonValueKind.Array)
+            return false;
+
+        foreach (var chamada in chamadas.EnumerateArray())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (chamada.ValueKind != JsonValueKind.Object)
+                continue;
+
+            var funcao = chamada;
+            if (chamada.TryGetProperty("function", out var aninhada) && aninhada.ValueKind == JsonValueKind.Object)
+                funcao = aninhada;
+
+            if (!funcao.TryGetProperty("name", out var nome) ||
+                nome.ValueKind != JsonValueKind.String ||
+                nome.GetString() != PedidoMensagem.NomeFerramenta ||
+                !funcao.TryGetProperty("arguments", out var argumentos))
+            {
+                continue;
+            }
+
+            if (argumentos.ValueKind == JsonValueKind.Object && EntradaValida(argumentos))
+            {
+                input = argumentos;
+                return true;
+            }
+
+            if (argumentos.ValueKind == JsonValueKind.String &&
+                PayloadDeTexto(argumentos.GetString(), cancellationToken, out input, out _) &&
+                EntradaValida(input))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TentarThinking(JsonElement blocos, CancellationToken cancellationToken, out JsonElement input)
+    {
+        input = default;
+        if (blocos.ValueKind != JsonValueKind.Array)
+            return false;
+
+        var texto = new StringBuilder();
+        var achou = false;
+        foreach (var bloco in blocos.EnumerateArray())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (bloco.ValueKind != JsonValueKind.Object)
+                continue;
+
+            if (!bloco.TryGetProperty("type", out var tipo) ||
+                tipo.ValueKind != JsonValueKind.String ||
+                !string.Equals(tipo.GetString(), "thinking", StringComparison.Ordinal) ||
+                !bloco.TryGetProperty("thinking", out var trecho) ||
+                trecho.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+
+            achou = true;
+            if (texto.Length > 0)
+                texto.Append('\n');
+
+            texto.Append(trecho.GetString());
+        }
+
+        return achou &&
+            PayloadDeTexto(texto.ToString(), cancellationToken, out input, out _) &&
+            EntradaValida(input);
+    }
+
+    private static bool TentarReasoning(JsonElement objeto, CancellationToken cancellationToken, out JsonElement input)
+    {
+        input = default;
+        if (!objeto.TryGetProperty("reasoning_content", out var valor))
+            return false;
+
+        if (valor.ValueKind == JsonValueKind.Object)
+        {
+            input = valor;
+            return EntradaValida(input);
+        }
+
+        return valor.ValueKind == JsonValueKind.String &&
+            PayloadDeTexto(valor.GetString(), cancellationToken, out input, out _) &&
+            EntradaValida(input);
+    }
+
+    private static bool TentarCampoTexto(
+        JsonElement objeto,
+        string nome,
+        CancellationToken cancellationToken,
+        out JsonElement input)
+    {
+        input = default;
+        return objeto.TryGetProperty(nome, out var valor) &&
+            valor.ValueKind == JsonValueKind.String &&
+            PayloadDeTexto(valor.GetString(), cancellationToken, out input, out _) &&
+            EntradaValida(input);
+    }
+
+    private static bool RespostaCortada(string? stop, string? finish) =>
+        EstaNaTabela(StopDeCorte, stop) || EstaNaTabela(FinishDeCorte, finish);
+
+    private static bool EstaNaTabela(string[] tabela, string? valor)
+    {
+        if (string.IsNullOrEmpty(valor))
+            return false;
+
+        foreach (var item in tabela)
+        {
+            if (string.Equals(item, valor, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static string? LerFinish(JsonElement raiz)
+    {
+        var direto = LerTextoPropriedade(raiz, "finish_reason");
+        if (direto is not null)
+            return direto;
+
+        if (!raiz.TryGetProperty("choices", out var choices) || choices.ValueKind != JsonValueKind.Array)
+            return null;
+
+        foreach (var escolha in choices.EnumerateArray())
+        {
+            if (escolha.ValueKind != JsonValueKind.Object)
+                continue;
+
+            var finish = LerTextoPropriedade(escolha, "finish_reason");
+            if (finish is not null)
+                return finish;
+        }
+
+        return null;
     }
 
     private static bool EntradaValida(JsonElement candidato) =>
