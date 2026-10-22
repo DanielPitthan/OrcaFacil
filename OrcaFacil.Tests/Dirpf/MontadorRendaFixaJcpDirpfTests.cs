@@ -586,8 +586,9 @@ public class MontadorRendaFixaJcpDirpfTests : IDisposable
     public void Debenture_QualquerUma_FicaNaLinhaTributada_ComObservacaoNeutra_SemFraseDeIsencao()
     {
         Assert.Equal(
-            "Se for debênture incentivada (Lei 12.431/2011, arts. 2º e 3º; P&R IRPF 738), é isenta para pessoa física e deve ser declarada em Rendimentos Isentos; se for debênture de infraestrutura da Lei 14.801/2024, é tributada pela tabela regressiva.",
+            "O nome não separa debênture incentivada (Lei 12.431/2011, arts. 2º e 3º; P&R IRPF 738, item V) e debênture de infraestrutura (Lei 14.801/2024). Conferir o regime; a linha permanece na tributação exclusiva, e a debênture comum segue a tabela regressiva.",
             MontadorDirpf.ObservacaoDebenture);
+        Assert.DoesNotContain("isent", MontadorDirpf.ObservacaoDebenture, StringComparison.OrdinalIgnoreCase);
 
         var ana = Perfil(1, "Ana", null);
         var incentivada = Titulo(1, "SPE25", "Debênture incentivada - SPE25", TipoTituloRendaFixa.Outro, "XP");

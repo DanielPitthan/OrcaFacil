@@ -28,8 +28,8 @@ namespace OrcaFacil.Core.Dirpf;
 /// separado por " - ", ganha a observação de isenção da pessoa física.
 /// O código e o grupo dessa frase saem da variante RendaFixaIsenta vigente na data de corte.
 /// Debênture, qualquer que seja, fica na linha tributada. O primeiro segmento só reconhece
-/// que é debênture. A frase é neutra: incentivada da Lei nº 12.431/2011 pode ser isenta;
-/// a de infraestrutura da Lei nº 14.801/2024 é tributada.
+/// que é debênture. A frase não escolhe o regime: manda conferir e deixa a linha
+/// na tributação exclusiva. A comum segue a tabela regressiva.
 /// O perfil do título usa os lançamentos das operações do papel, inclusive as de anos anteriores.
 /// Dois donos em anos diferentes ficam como não identificado.
 /// </summary>
@@ -48,10 +48,10 @@ public static class MontadorDirpf
 
     /// <summary>
     /// O nome do produto não separa incentivada, infraestrutura e comum.
-    /// Nenhuma debênture sai como isenta. A frase só avisa os dois regimes.
+    /// A frase manda conferir o regime e não afirma isenção.
     /// </summary>
     public const string ObservacaoDebenture =
-        "Se for debênture incentivada (Lei 12.431/2011, arts. 2º e 3º; P&R IRPF 738), é isenta para pessoa física e deve ser declarada em Rendimentos Isentos; se for debênture de infraestrutura da Lei 14.801/2024, é tributada pela tabela regressiva.";
+        "O nome não separa debênture incentivada (Lei 12.431/2011, arts. 2º e 3º; P&R IRPF 738, item V) e debênture de infraestrutura (Lei 14.801/2024). Conferir o regime; a linha permanece na tributação exclusiva, e a debênture comum segue a tabela regressiva.";
 
     private static readonly CultureInfo PtBr = CultureInfo.GetCultureInfo("pt-BR");
     private static readonly StringComparer OrdemTexto = StringComparer.Create(PtBr, ignoreCase: true);
