@@ -873,6 +873,8 @@ public static class ExportadorPlanilha
         TipoTituloRendaFixa.TesouroIPCA => "Tesouro IPCA+",
         TipoTituloRendaFixa.TesouroSelic => "Tesouro Selic",
         TipoTituloRendaFixa.Outro => "Outro",
+        TipoTituloRendaFixa.LCI => "LCI",
+        TipoTituloRendaFixa.LCA => "LCA",
         _ => throw new InvalidOperationException($"Tipo de renda fixa desconhecido: {tipo}.")
     };
 

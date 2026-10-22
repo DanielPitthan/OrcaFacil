@@ -316,6 +316,30 @@ namespace OrcaFacil.Core.Data.Migrations
                             TipoAtivo = 0,
                             Variante = "RendaFixa",
                             VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 12,
+                            Codigo = "12",
+                            Descricao = "Rendimentos de cadernetas de poupança, letras hipotecárias, LCA, LCI, CRA e CRI",
+                            EhSistema = true,
+                            Ficha = 1,
+                            Grupo = "",
+                            TipoAtivo = 0,
+                            Variante = "RendaFixaIsenta",
+                            VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 13,
+                            Codigo = "03",
+                            Descricao = "Títulos isentos de tributação",
+                            EhSistema = true,
+                            Ficha = 0,
+                            Grupo = "04",
+                            TipoAtivo = 0,
+                            Variante = "RendaFixaIsenta",
+                            VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
                         });
                 });
 

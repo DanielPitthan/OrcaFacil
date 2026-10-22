@@ -617,13 +617,12 @@ public class ImportacaoExtratoB3Service
         string corretora)
     {
         var partes = linha.ProdutoDescricao.Split(" - ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
-        if (partes.Length >= 1 && partes[0].Equals("CDB", StringComparison.OrdinalIgnoreCase)
-            || linha.Ticker.StartsWith("CDB", StringComparison.Ordinal))
-        {
-            var emissor = partes.Length >= 3 ? Limitar(partes[2], 80) : corretora;
-            var nome = Limitar($"{linha.Ticker} — {emissor}", 80);
-            return (TipoTituloRendaFixa.CDB, emissor, null, nome);
-        }
+        if (EhPrefixo(partes, linha, "CDB"))
+            return TituloBancario(TipoTituloRendaFixa.CDB, partes, linha, corretora);
+        if (EhPrefixo(partes, linha, "LCI"))
+            return TituloBancario(TipoTituloRendaFixa.LCI, partes, linha, corretora);
+        if (EhPrefixo(partes, linha, "LCA"))
+            return TituloBancario(TipoTituloRendaFixa.LCA, partes, linha, corretora);
 
         var titulo = Limitar(linha.Ticker, 80);
         var tipo = titulo.Contains("PREFIXADO", StringComparison.Ordinal) ? TipoTituloRendaFixa.TesouroPrefixado
@@ -636,6 +635,21 @@ public class ImportacaoExtratoB3Service
             && anoLido is >= 2000 and <= 2100)
             ano = anoLido;
         return (tipo, null, ano, titulo);
+    }
+
+    private static bool EhPrefixo(string[] partes, LinhaExtratoB3 linha, string prefixo)
+        => (partes.Length >= 1 && partes[0].Equals(prefixo, StringComparison.OrdinalIgnoreCase))
+            || linha.Ticker.StartsWith(prefixo, StringComparison.Ordinal);
+
+    private static (TipoTituloRendaFixa Tipo, string? Emissor, int? Ano, string Nome) TituloBancario(
+        TipoTituloRendaFixa tipo,
+        string[] partes,
+        LinhaExtratoB3 linha,
+        string corretora)
+    {
+        var emissor = partes.Length >= 3 ? Limitar(partes[2], 80) : corretora;
+        var nome = Limitar($"{linha.Ticker} — {emissor}", 80);
+        return (tipo, emissor, null, nome);
     }
 
     private static string Limitar(string texto, int tamanho)

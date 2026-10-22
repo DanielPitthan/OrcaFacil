@@ -17,8 +17,9 @@ namespace OrcaFacil.Core.Dirpf;
 /// JCP é tributação exclusiva, código 10, pela variante Jcp. O tipo do ativo na linha
 /// só preenche a coluna obrigatória: a ficha procura a variante, não o tipo.
 /// Renda fixa tributada: bem grupo 04 código 02 e rendimento exclusivo código 06,
-/// na variante RendaFixa. O tipo Outro usa a mesma variante: o cadastro não separa LCI/LCA.
-/// O manual da Receita publica o nome do bem e do rendimento, não o número.
+/// na variante RendaFixa. O tipo Outro usa a mesma variante.
+/// LCI e LCA usam a variante RendaFixaIsenta: bem grupo 04 código 03
+/// e rendimento isento código 12. O manual da Receita publica o nome, não o número.
 /// https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/preenchimento/manual-mir/patrimonio/bens-financeiros
 /// https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/preenchimento/manual-mir/rendimentos/rendimentos-do-capital
 /// </summary>
@@ -31,6 +32,12 @@ public static class CatalogoCodigosDirpf
 
     /// <summary>CDB, Tesouro e o tipo Outro. A mesma variante vale para o bem e para o rendimento.</summary>
     public const string VarianteRendaFixa = "RendaFixa";
+
+    /// <summary>
+    /// LCI e LCA. A mesma variante vale para o bem 04/03 e para o rendimento isento 12.
+    /// Cabe em 16 caracteres, que é o teto da coluna.
+    /// </summary>
+    public const string VarianteRendaFixaIsenta = "RendaFixaIsenta";
 
     /// <summary>
     /// Ganho isento do art. 3º, I, da Lei nº 11.033/2004. O texto é o do manual
@@ -48,6 +55,19 @@ public static class CatalogoCodigosDirpf
 
     public const string DescricaoBemRendaFixa = "Títulos públicos e privados sujeitos à tributação";
 
+    /// <summary>
+    /// Nome do item na ficha de rendimentos isentos.
+    /// https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/preenchimento/manual-mir/rendimentos/rendimentos-do-capital
+    /// </summary>
+    public const string DescricaoRendimentoRendaFixaIsenta =
+        "Rendimentos de cadernetas de poupança, letras hipotecárias, LCA, LCI, CRA e CRI";
+
+    /// <summary>
+    /// Nome do bem em Aplicações e Investimentos, na sequência depois do título sujeito à tributação.
+    /// https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/preenchimento/manual-mir/patrimonio/bens-financeiros
+    /// </summary>
+    public const string DescricaoBemRendaFixaIsenta = "Títulos isentos de tributação";
+
     public static readonly DateTime Inicio = new(2021, 1, 1);
 
     public static IReadOnlyList<CodigoDirpf> Linhas() =>
@@ -62,7 +82,9 @@ public static class CatalogoCodigosDirpf
         Linha(8, TipoFichaDirpf.RendimentoIsento, TipoAtivo.Acao, "", "20", DescricaoGanhoIsentoAcoes, VarianteGanhoIsentoAcoes),
         Linha(9, TipoFichaDirpf.RendimentoExclusivo, TipoAtivo.Acao, "", "10", DescricaoJcp, VarianteJcp),
         Linha(10, TipoFichaDirpf.RendimentoExclusivo, TipoAtivo.Acao, "", "06", DescricaoRendimentoRendaFixa, VarianteRendaFixa),
-        Linha(11, TipoFichaDirpf.Bem, TipoAtivo.Acao, "04", "02", DescricaoBemRendaFixa, VarianteRendaFixa)
+        Linha(11, TipoFichaDirpf.Bem, TipoAtivo.Acao, "04", "02", DescricaoBemRendaFixa, VarianteRendaFixa),
+        Linha(12, TipoFichaDirpf.RendimentoIsento, TipoAtivo.Acao, "", "12", DescricaoRendimentoRendaFixaIsenta, VarianteRendaFixaIsenta),
+        Linha(13, TipoFichaDirpf.Bem, TipoAtivo.Acao, "04", "03", DescricaoBemRendaFixaIsenta, VarianteRendaFixaIsenta)
     ];
 
     private static CodigoDirpf Linha(
