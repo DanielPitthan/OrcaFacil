@@ -586,9 +586,13 @@ public class MontadorRendaFixaJcpDirpfTests : IDisposable
     public void Debenture_QualquerUma_FicaNaLinhaTributada_ComObservacaoNeutra_SemFraseDeIsencao()
     {
         Assert.Equal(
-            "O nome não separa debênture incentivada (Lei 12.431/2011, arts. 2º e 3º; P&R IRPF 738, item V) e debênture de infraestrutura (Lei 14.801/2024). Conferir o regime; a linha permanece na tributação exclusiva, e a debênture comum segue a tabela regressiva.",
+            "O nome não separa debênture incentivada (Lei 12.431/2011, arts. 2º e 3º; P&R IRPF 738, item V) e debênture de infraestrutura (Lei 14.801/2024). Conferir o regime; a linha permanece na tributação exclusiva, e a debênture comum e a de infraestrutura da Lei 14.801 seguem a tabela regressiva.",
             MontadorDirpf.ObservacaoDebenture);
         Assert.DoesNotContain("isent", MontadorDirpf.ObservacaoDebenture, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("14.801", MontadorDirpf.ObservacaoDebenture, StringComparison.Ordinal);
+        Assert.Contains("tabela regressiva", MontadorDirpf.ObservacaoDebenture, StringComparison.Ordinal);
+        Assert.Contains("Lei 12.431/2011, arts. 2º e 3º", MontadorDirpf.ObservacaoDebenture, StringComparison.Ordinal);
+        Assert.Contains("P&R IRPF 738, item V", MontadorDirpf.ObservacaoDebenture, StringComparison.Ordinal);
 
         var ana = Perfil(1, "Ana", null);
         var incentivada = Titulo(1, "SPE25", "Debênture incentivada - SPE25", TipoTituloRendaFixa.Outro, "XP");
