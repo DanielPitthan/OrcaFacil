@@ -55,4 +55,26 @@ public static class RegrasPastaEspelho
 
         return null;
     }
+
+    /// <summary>
+    /// Contagem depois do rename. <c>(0, 1)</c> concluiu. Origem e destino visíveis
+    /// são cópia. Destino com mais de um arquivo e origem ausente são homônimos.
+    /// O resto não decide.
+    /// </summary>
+    public static ResultadoRenomeacaoVolume? AvaliarDepoisDoRename(int origemDepois, int destinoDepois)
+    {
+        if (origemDepois < 0 || destinoDepois < 0)
+            return null;
+
+        if (origemDepois == 0 && destinoDepois == 1)
+            return ResultadoRenomeacaoVolume.Ok();
+
+        if (origemDepois == 0 && destinoDepois > 1)
+            return ResultadoRenomeacaoVolume.HomonimosAposTroca();
+
+        if (origemDepois > 0 && destinoDepois > 0)
+            return ResultadoRenomeacaoVolume.CopiaSemExcluirOrigem();
+
+        return null;
+    }
 }

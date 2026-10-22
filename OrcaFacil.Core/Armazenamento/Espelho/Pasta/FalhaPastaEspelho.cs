@@ -264,19 +264,23 @@ public sealed record ResultadoRenomeacaoVolume
         CodigoFalhaPastaEspelho codigo,
         bool destinoJaExistia = false,
         bool ambosNomesVisiveis = false,
-        bool trocaEfetuada = false)
+        bool trocaEfetuada = false,
+        bool homonimosNoNomeFinal = false)
     {
-        if (codigo == CodigoFalhaPastaEspelho.Nenhuma && (destinoJaExistia || ambosNomesVisiveis || trocaEfetuada))
+        if (codigo == CodigoFalhaPastaEspelho.Nenhuma && (destinoJaExistia || ambosNomesVisiveis || trocaEfetuada || homonimosNoNomeFinal))
             throw new ArgumentException("Renomeação concluída não carrega falha nem origem restante.");
         if (destinoJaExistia && ambosNomesVisiveis)
             throw new ArgumentException("Destino prévio e cópia sem exclusão são observações diferentes.");
         if (trocaEfetuada && (destinoJaExistia || ambosNomesVisiveis))
             throw new ArgumentException("Troca efetuada significa que a origem já saiu do nome antigo.");
+        if (homonimosNoNomeFinal && (!trocaEfetuada || codigo != CodigoFalhaPastaEspelho.Indisponivel))
+            throw new ArgumentException("Homônimos no nome final são troca efetuada com Indisponivel.");
 
         Codigo = codigo;
         DestinoJaExistia = destinoJaExistia;
         AmbosNomesVisiveis = ambosNomesVisiveis;
         TrocaEfetuada = trocaEfetuada;
+        HomonimosNoNomeFinal = homonimosNoNomeFinal;
     }
 
     public CodigoFalhaPastaEspelho Codigo { get; }
@@ -295,6 +299,12 @@ public sealed record ResultadoRenomeacaoVolume
     /// </summary>
     public bool TrocaEfetuada { get; }
 
+    /// <summary>
+    /// Há mais de um arquivo no nome de destino e a origem já não está no nome antigo.
+    /// Não se apaga nenhum deles: não dá para saber qual é o espelho novo.
+    /// </summary>
+    public bool HomonimosNoNomeFinal { get; }
+
     public bool Sucesso => Codigo == CodigoFalhaPastaEspelho.Nenhuma;
 
     public static ResultadoRenomeacaoVolume Ok() => new(CodigoFalhaPastaEspelho.Nenhuma);
@@ -304,6 +314,13 @@ public sealed record ResultadoRenomeacaoVolume
 
     public static ResultadoRenomeacaoVolume FalhaAposEfetuar(CodigoFalhaPastaEspelho codigo)
         => new(codigo, trocaEfetuada: true);
+
+    /// <summary>
+    /// A origem saiu e o nome final ficou com mais de um arquivo. A troca ocorreu;
+    /// a leitura seguinte recusa até sobrar um único arquivo. Nada é apagado.
+    /// </summary>
+    public static ResultadoRenomeacaoVolume HomonimosAposTroca()
+        => new(CodigoFalhaPastaEspelho.Indisponivel, trocaEfetuada: true, homonimosNoNomeFinal: true);
 
     public static ResultadoRenomeacaoVolume Falha(CodigoFalhaPastaEspelho codigo, bool destinoJaExistia = false)
         => new(codigo, destinoJaExistia);

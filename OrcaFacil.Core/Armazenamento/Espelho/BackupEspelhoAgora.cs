@@ -128,13 +128,31 @@ public sealed class BackupEspelhoAgora
         // O hash do nome definitivo separa os dois quando a releitura funciona. Se a promoção já
         // ocorreu e a releitura falha, a senha nova entra mesmo assim: o nome definitivo pode ter
         // o ciphertext novo e a memória não pode ficar com a senha antiga.
+        // No cancelamento vale o mesmo: hash diferente confirma a senha nova. Foto que não decide
+        // (nula, não ausente) e promoção possível adotam a nova e retêm a antiga, com leitura não
+        // confirmada. A senha retida fica só em memória.
         var antes = await FotografarAsync(cancellationToken);
         try
         {
             await _gerador.GerarAsync(caminhoBancoVivo, senha, _destino, cancellationToken);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException ex)
         {
+            if (senhaNova is not null)
+            {
+                try
+                {
+                    var depoisDoCancelamento = await FotografarAsync(CancellationToken.None);
+                    if (DefinitivoMudou(antes, depoisDoCancelamento))
+                        _definicao.Definir(senhaNova, senhaNova);
+                    else if (depoisDoCancelamento is null && PromocaoEfetuada(ex))
+                        AdocaoSenhaLeituraNaoConfirmada.Aplicar(_definicao, senhaNova);
+                }
+                catch (Exception)
+                {
+                }
+            }
+
             throw;
         }
         catch (IntegridadeSnapshotException ex)
@@ -173,7 +191,7 @@ public sealed class BackupEspelhoAgora
     private ResultadoBackupEspelho PublicadoSemConfirmarLeitura(string? senhaNova)
     {
         if (senhaNova is not null)
-            _definicao.Definir(senhaNova, senhaNova);
+            AdocaoSenhaLeituraNaoConfirmada.Aplicar(_definicao, senhaNova);
 
         return ResultadoBackupEspelho.Ok(MensagemGravadoLeituraNaoConfirmada);
     }
