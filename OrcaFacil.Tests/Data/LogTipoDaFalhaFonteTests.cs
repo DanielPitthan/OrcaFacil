@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace OrcaFacil.Tests.Data;
@@ -7,7 +8,7 @@ public class LogTipoDaFalhaFonteTests
     [Fact]
     public void MauiProgram_LogaSoOTipoDaExcecao()
     {
-        var fonte = File.ReadAllText(Path.Combine(EncontrarRaiz(), "OrcaFacil", "MauiProgram.cs"));
+        var fonte = Ler("OrcaFacil", "MauiProgram.cs");
 
         Assert.Contains(
             "Log.Error(\"{Mensagem} Tipo: {Tipo}\", mensagem, VarreduraPlanilhaExportada.TipoDaFalha(ex));",
@@ -20,7 +21,7 @@ public class LogTipoDaFalhaFonteTests
     [Fact]
     public void InicializacaoApp_LogaSoOTipoDaExcecao()
     {
-        var fonte = File.ReadAllText(Path.Combine(EncontrarRaiz(), "OrcaFacil", "Services", "InicializacaoApp.cs"));
+        var fonte = Ler("OrcaFacil", "Services", "InicializacaoApp.cs");
 
         Assert.Contains(
             "\"Falha no passo {Passo}. Log em {PastaLogs}. O banco {Banco} não foi apagado. Tipo: {Tipo}\"",
@@ -41,7 +42,7 @@ public class LogTipoDaFalhaFonteTests
     [Fact]
     public void DbInitializer_LogaSoOTipoDaExcecao()
     {
-        var fonte = File.ReadAllText(Path.Combine(EncontrarRaiz(), "OrcaFacil", "Data", "DbInitializer.cs"));
+        var fonte = Ler("OrcaFacil", "Data", "DbInitializer.cs");
 
         Assert.Contains("VarreduraPlanilhaExportada.TipoDaFalha(excecao)", fonte, StringComparison.Ordinal);
         Assert.Contains("Log.Error(mensagem + \" Tipo: {Tipo}\", (object[])valores)", fonte, StringComparison.Ordinal);
@@ -56,9 +57,30 @@ public class LogTipoDaFalhaFonteTests
     [InlineData("Log.Fatal( ex , \"m\" );")]
     [InlineData("Log.Verbose(\r\nexcecao, \"m\");")]
     [InlineData("Log.Error(\n    excecao,\n    mensagem);")]
+    [InlineData("Log.Error(e, \"m\");")]
+    [InlineData("Log.Warning(e);")]
+    [InlineData("Log.Warning(ex.Message);")]
+    [InlineData("Log.Error(ex.StackTrace);")]
+    [InlineData("Log.Error(ex.ToString());")]
     public void QualquerNivel_ComExcecao_EhRejeitado(string fonte)
     {
         Assert.Matches(LogComExcecao, Compactar(fonte));
+    }
+
+    [Fact]
+    public void LinhaBoaComentada_NaoCobreLogComE()
+    {
+        const string fonte = """
+            // Log.Error("{Mensagem} Tipo: {Tipo}", mensagem, VarreduraPlanilhaExportada.TipoDaFalha(ex));
+            Log.Error(e, "falha");
+            """;
+
+        var limpo = SemComentarios(fonte);
+        Assert.DoesNotContain(
+            "Log.Error(\"{Mensagem} Tipo: {Tipo}\", mensagem, VarreduraPlanilhaExportada.TipoDaFalha(ex));",
+            limpo,
+            StringComparison.Ordinal);
+        Assert.Matches(LogComExcecao, Compactar(limpo));
     }
 
     [Fact]
@@ -83,8 +105,63 @@ public class LogTipoDaFalhaFonteTests
     private static string Compactar(string fonte) => Regex.Replace(fonte, @"\s+", "");
 
     private static readonly Regex LogComExcecao = new(
-        @"Log\.[A-Za-z]+\((ex|excecao)(,|\))",
+        @"Log\.[A-Za-z]+\((?:excecao|ex|e)(?:\.Message|\.StackTrace|\.ToString\(\))?(?:,|\))",
         RegexOptions.CultureInvariant | RegexOptions.Compiled);
+
+    private static string Ler(params string[] partes)
+        => SemComentarios(File.ReadAllText(Path.Combine([EncontrarRaiz(), .. partes])));
+
+    private static string SemComentarios(string fonte)
+    {
+        var texto = new StringBuilder(fonte.Length);
+        for (var i = 0; i < fonte.Length; i++)
+        {
+            var c = fonte[i];
+            if (c == '"')
+            {
+                texto.Append(c);
+                for (i++; i < fonte.Length; i++)
+                {
+                    texto.Append(fonte[i]);
+                    if (fonte[i] == '\\' && i + 1 < fonte.Length)
+                    {
+                        texto.Append(fonte[++i]);
+                        continue;
+                    }
+
+                    if (fonte[i] == '"')
+                        break;
+                }
+
+                continue;
+            }
+
+            if (c == '/' && i + 1 < fonte.Length && fonte[i + 1] == '/')
+            {
+                while (i < fonte.Length && fonte[i] != '\n')
+                    i++;
+
+                if (i < fonte.Length)
+                    texto.Append('\n');
+                continue;
+            }
+
+            if (c == '/' && i + 1 < fonte.Length && fonte[i + 1] == '*')
+            {
+                i += 2;
+                while (i + 1 < fonte.Length && !(fonte[i] == '*' && fonte[i + 1] == '/'))
+                    i++;
+
+                if (i + 1 < fonte.Length)
+                    i++;
+                continue;
+            }
+
+            texto.Append(c);
+        }
+
+        return texto.ToString();
+    }
 
     private static int Contar(string texto, string trecho)
     {
