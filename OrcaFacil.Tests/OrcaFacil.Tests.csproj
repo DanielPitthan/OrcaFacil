@@ -25,6 +25,7 @@
 
   <ItemGroup>
     <None Include="Fixtures\B3\extrato-b3-modelo.csv" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Fixtures\Llm\Avaliacao\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

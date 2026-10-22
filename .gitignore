@@ -27,3 +27,6 @@ logs/
 ## OS
 .DS_Store
 Thumbs.db
+
+## Corpus local do L2 (fotos reais). Nunca versionar chave, imagem nem gabarito pessoal.
+corpus-l2/
