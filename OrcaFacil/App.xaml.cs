@@ -10,7 +10,9 @@ public partial class App : Application
 {
 	private static readonly VarreduraPlanilhaExportada Varredura = new(
 		TimeProvider.System,
-		static excecao => Log.Error(excecao, "Falha ao limpar as planilhas exportadas."));
+		static excecao => Log.Error("{Mensagem} Tipo: {Tipo}",
+			VarreduraPlanilhaExportada.TextoFalhaLimpeza,
+			VarreduraPlanilhaExportada.TipoDaFalha(excecao)));
 
 	public App()
 	{

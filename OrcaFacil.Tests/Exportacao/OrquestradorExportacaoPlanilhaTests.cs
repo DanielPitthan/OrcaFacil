@@ -482,6 +482,27 @@ public class OrquestradorExportacaoPlanilhaTests
 public class VarreduraPlanilhaExportadaTests
 {
     [Fact]
+    public void TipoDaFalha_DevolveSoONomeDoTipo()
+    {
+        const string caminho = "/data/user/0/app/cache/orcafacil-x.xlsx";
+        var io = new IOException(caminho);
+        var acesso = new UnauthorizedAccessException(caminho);
+        var externa = new InvalidOperationException("falha ao limpar", new IOException(caminho));
+
+        AssertTipoSemCaminho(VarreduraPlanilhaExportada.TipoDaFalha(io), "IOException", io);
+        AssertTipoSemCaminho(VarreduraPlanilhaExportada.TipoDaFalha(acesso), "UnauthorizedAccessException", acesso);
+        AssertTipoSemCaminho(VarreduraPlanilhaExportada.TipoDaFalha(externa), "InvalidOperationException", externa);
+        Assert.DoesNotContain(caminho, VarreduraPlanilhaExportada.TipoDaFalha(externa), StringComparison.Ordinal);
+        Assert.DoesNotContain(externa.InnerException!.Message, VarreduraPlanilhaExportada.TipoDaFalha(externa), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TipoDaFalha_Nula_Desconhecida()
+    {
+        Assert.Equal("desconhecida", VarreduraPlanilhaExportada.TipoDaFalha(null));
+    }
+
+    [Fact]
     public async Task SegundaVarredura_EnquantoAPrimeiraRoda_NaoEmpilha()
     {
         var entrou = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -580,6 +601,15 @@ public class VarreduraPlanilhaExportadaTests
     {
         File.WriteAllText(caminho, "x");
         File.SetLastWriteTimeUtc(caminho, (agora - idade).UtcDateTime);
+    }
+
+    private static void AssertTipoSemCaminho(string tipo, string nome, Exception excecao)
+    {
+        Assert.Equal(nome, tipo);
+        Assert.DoesNotContain("/", tipo, StringComparison.Ordinal);
+        Assert.DoesNotContain("cache", tipo, StringComparison.Ordinal);
+        Assert.DoesNotContain(".xlsx", tipo, StringComparison.Ordinal);
+        Assert.DoesNotContain(excecao.Message, tipo, StringComparison.Ordinal);
     }
 
     private sealed class RelogioUtc(DateTimeOffset utc) : TimeProvider
