@@ -34,14 +34,58 @@ public class MontadorRendaFixaJcpDirpfTests : IDisposable
         Assert.Equal("Ana (Nica)", linha.Perfil);
         Assert.Equal("PETR4", linha.CodigoAtivo);
         Assert.Equal(10.01m, linha.ValorLiquido);
+        Assert.Equal(2024, linha.AnoBase);
         Assert.Null(linha.IrRetido);
-        Assert.Equal("", linha.Cnpj);
+        Assert.Equal(MontadorDirpf.AvisoCnpjFontePagadora, linha.Cnpj);
         Assert.NotEqual(11.78m, linha.ValorLiquido);
         Assert.Empty(em2024.RendimentosIsentos);
 
         var em2025 = Assert.Single(Montar(2025, proventos).RendimentosExclusivos);
+        Assert.Equal(2025, em2025.AnoBase);
         Assert.Equal(85m, em2025.ValorLiquido);
         Assert.NotEqual(100m, em2025.ValorLiquido);
+    }
+
+    [Fact]
+    public void JcpDeEtf_FicaNaExclusiva_PeloAnoDoPagamento_EAfastaDoZero()
+    {
+        var ana = Perfil(1, "Ana", null);
+        var etf = Ativo(1, "BOVA11", "iShares Ibovespa", TipoAtivo.Etf);
+        var proventos = new[]
+        {
+            Jcp(ana, etf, new DateTime(2024, 12, 31), 12.345m),
+            Jcp(ana, etf, new DateTime(2025, 1, 1), 4m),
+            Provento(ana, etf, TipoProvento.Rendimento, new DateTime(2024, 6, 1), 50m)
+        };
+
+        var em2024 = Montar(2024, proventos);
+        var linha = Assert.Single(em2024.RendimentosExclusivos);
+        Assert.Equal("BOVA11", linha.CodigoAtivo);
+        Assert.Equal("iShares Ibovespa", linha.Nome);
+        Assert.Equal("JCP", linha.Natureza);
+        Assert.Equal("10", linha.Codigo);
+        Assert.Equal(CatalogoCodigosDirpf.DescricaoJcp, linha.DescricaoCodigo);
+        Assert.Equal(12.35m, linha.ValorLiquido);
+        Assert.NotEqual(12.34m, linha.ValorLiquido);
+        Assert.Null(linha.IrRetido);
+        Assert.Equal(2024, linha.AnoBase);
+        Assert.Equal("JCP — BOVA11 — iShares Ibovespa.", linha.Descricao);
+        Assert.Empty(em2024.RendimentosIsentos);
+        Assert.Empty(em2024.Bens);
+
+        var em2025 = Assert.Single(Montar(2025, proventos).RendimentosExclusivos);
+        Assert.Equal(4m, em2025.ValorLiquido);
+        Assert.Equal(2025, em2025.AnoBase);
+    }
+
+    [Fact]
+    public void CnpjDaFontePagadora_AvisaQuandoVazio_EPreservaNumeroInformado()
+    {
+        Assert.Equal(MontadorDirpf.AvisoCnpjFontePagadora, MontadorDirpf.CnpjDaFontePagadora(null));
+        Assert.Equal(MontadorDirpf.AvisoCnpjFontePagadora, MontadorDirpf.CnpjDaFontePagadora(""));
+        Assert.Equal(MontadorDirpf.AvisoCnpjFontePagadora, MontadorDirpf.CnpjDaFontePagadora("  "));
+        Assert.Equal("00.000.000/0001-91", MontadorDirpf.CnpjDaFontePagadora(" 00.000.000/0001-91 "));
+        Assert.StartsWith("Aviso:", MontadorDirpf.AvisoCnpjFontePagadora, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -94,7 +138,7 @@ public class MontadorRendaFixaJcpDirpfTests : IDisposable
         Assert.Equal(90m, exclusivo.ValorLiquido);
         Assert.Equal(10m, exclusivo.IrRetido);
         Assert.NotEqual(77.50m, exclusivo.ValorLiquido);
-        Assert.Equal("", exclusivo.Cnpj);
+        Assert.Equal(MontadorDirpf.AvisoCnpjFontePagadora, exclusivo.Cnpj);
         Assert.Empty(dirpf.RendimentosIsentos);
 
         var posicao = Assert.Single(dirpf.RendaFixa);
@@ -107,7 +151,7 @@ public class MontadorRendaFixaJcpDirpfTests : IDisposable
         Assert.Equal(0.06m, posicao.Quantidade);
         Assert.Equal(50m, posicao.CustoAquisicao);
         Assert.Equal(0m, posicao.IrRetidoNoAno);
-        Assert.Equal("", posicao.Cnpj);
+        Assert.Equal(MontadorDirpf.AvisoCnpjFontePagadora, posicao.Cnpj);
         Assert.Equal("Ana (Nica)", posicao.Perfil);
         Assert.DoesNotContain(MontadorDirpf.ObservacaoTituloOutro, exclusivo.Descricao);
         Assert.DoesNotContain(MontadorDirpf.ObservacaoTituloOutro, posicao.Discriminacao);
