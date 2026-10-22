@@ -60,7 +60,9 @@ public sealed class DestinoEspelhoPasta : IDestinoEspelho
         catch (Exception ex)
         {
             var codigo = ClassificadorFalhaPastaEspelho.Classificar(SinalFalhaPasta.De(ex));
-            var promocaoEfetuada = resultado is not null && (resultado.Sucesso || resultado.PromocaoEfetuada);
+            var promocaoEfetuada = ex is PublicacaoEspelhoException publicacao
+                ? publicacao.PromocaoEfetuada
+                : resultado is not null && (resultado.Sucesso || resultado.PromocaoEfetuada);
             return ResultadoOperacaoPasta.Falha(codigo, promocaoEfetuada);
         }
     }

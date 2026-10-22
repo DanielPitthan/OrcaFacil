@@ -123,6 +123,80 @@ public class RegrasPastaEspelhoTests
         Assert.Null(RegrasPastaEspelho.ImpedirRenameSemFlag(flags));
         Assert.Equal(64, RegrasPastaEspelho.FlagSupportsRename);
     }
+
+    [Theory]
+    [InlineData(0, 1, CodigoFalhaPastaEspelho.Nenhuma, false, false)]
+    [InlineData(1, 1, CodigoFalhaPastaEspelho.ProvedorSemTroca, false, true)]
+    [InlineData(2, 3, CodigoFalhaPastaEspelho.ProvedorSemTroca, false, true)]
+    [InlineData(0, 2, CodigoFalhaPastaEspelho.Indisponivel, true, false)]
+    [InlineData(0, 4, CodigoFalhaPastaEspelho.Indisponivel, true, false)]
+    public void AvaliarDepoisDoRename_SegueATabela(
+        int origem,
+        int destino,
+        CodigoFalhaPastaEspelho codigo,
+        bool homonimos,
+        bool copia)
+    {
+        var resultado = RegrasPastaEspelho.AvaliarDepoisDoRename(origem, destino);
+
+        Assert.NotNull(resultado);
+        Assert.Equal(codigo, resultado.Codigo);
+        Assert.Equal(homonimos, resultado.HomonimosNoNomeFinal);
+        Assert.Equal(copia, resultado.AmbosNomesVisiveis);
+        Assert.Equal(homonimos, resultado.TrocaEfetuada);
+        if (homonimos)
+            Assert.Equal(MensagensPastaEspelho.Para(CodigoFalhaPastaEspelho.Indisponivel), MensagensPastaEspelho.Para(resultado.Codigo));
+    }
+
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(1, 0)]
+    [InlineData(3, 0)]
+    [InlineData(-1, 1)]
+    [InlineData(0, -1)]
+    public void AvaliarDepoisDoRename_FalhaOuIndeciso_DevolveNull(int origem, int destino)
+    {
+        Assert.Null(RegrasPastaEspelho.AvaliarDepoisDoRename(origem, destino));
+    }
+
+    [Fact]
+    public void VolumeAndroid_DelegaADecisao_ERecusaHomonimoNaLeitura()
+    {
+        var fonte = File.ReadAllText(Path.Combine(
+            RaizDesteTeste(),
+            "OrcaFacil",
+            "Platforms",
+            "Android",
+            "Espelho",
+            "VolumePastaEspelhoAndroid.cs"));
+        var inicio = fonte.IndexOf("private static ResultadoRenomeacaoVolume? AvaliarDepoisDoRename(", StringComparison.Ordinal);
+        var fim = fonte.IndexOf("public bool? Visivel(", inicio, StringComparison.Ordinal);
+        var metodo = fonte[inicio..fim];
+
+        Assert.Contains("RegrasPastaEspelho.AvaliarDepoisDoRename(", metodo, StringComparison.Ordinal);
+        Assert.DoesNotContain("FalhaAposEfetuar", metodo, StringComparison.Ordinal);
+        Assert.DoesNotContain("CopiaSemExcluirOrigem", metodo, StringComparison.Ordinal);
+
+        var copia = fonte.IndexOf("CopiarParaLocalAsync(", StringComparison.Ordinal);
+        var abrir = fonte.IndexOf("OpenInputStream", copia, StringComparison.Ordinal);
+        var trecho = fonte[copia..abrir];
+        Assert.Contains("busca.Quantidade != 1", trecho, StringComparison.Ordinal);
+        Assert.Contains("CodigoFalhaPastaEspelho.Indisponivel", trecho, StringComparison.Ordinal);
+    }
+
+    private static string RaizDesteTeste()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "OrcaFacil.Core", "Armazenamento", "Espelho", "Pasta", "RegrasPastaEspelho.cs")))
+                return dir.FullName;
+
+            dir = dir.Parent;
+        }
+
+        throw new InvalidOperationException("Raiz do repositório não encontrada a partir de " + AppContext.BaseDirectory);
+    }
 }
 
 public class AberturaSeletorPastaTests

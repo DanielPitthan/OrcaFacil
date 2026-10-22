@@ -7,9 +7,13 @@ namespace OrcaFacil.Core.Armazenamento.Espelho.Pasta;
 /// os dois nomes visíveis nem já tinha movido a origem.
 /// </summary>
 /// <remarks>
-/// Uma publicação de cada vez. Cancelamento interrompe a etapa seguinte e não
-/// apaga o que já foi parar na pasta: reserva ou temporário sem o definitivo
-/// continuam visíveis para o coordenador.
+/// Uma publicação de cada vez. Cancelamento antes do rename da promoção
+/// interrompe a etapa seguinte e não apaga o que já foi parar na pasta.
+/// Depois desse rename, o cancelamento não sai como operação cancelada limpa:
+/// o resultado carrega a promoção quando ela já ocorreu. Se o volume lança
+/// <see cref="OperationCanceledException"/> depois que esse rename foi invocado
+/// e a promoção pode ter ocorrido, a exceção continua sendo de cancelamento e
+/// carrega por dentro a marca de promoção.
 /// Quando o nome definitivo já existe, ele é renomeado para uma reserva, o
 /// temporário assume o nome definitivo e a reserva só é removida nessa ordem,
 /// com a origem do temporário já ausente. Se a segunda troca falha de verdade
@@ -80,6 +84,7 @@ public sealed class ProtocoloPublicacaoEspelho
 
         var parqueOk = false;
         var promoveOk = false;
+        var promocaoInvocada = false;
         var manterTemporario = false;
         var cancelado = false;
         try
@@ -88,7 +93,7 @@ public sealed class ProtocoloPublicacaoEspelho
 
             if (!diagnostico.ArquivoNoNomeFinal)
             {
-                var primeiro = await PromoverTemporarioAsync(temporario, cancellationToken);
+                var primeiro = await PromoverTemporarioAsync(temporario, cancellationToken, () => promocaoInvocada = true);
                 if (primeiro.ManterTemporario)
                     manterTemporario = true;
 
@@ -107,8 +112,8 @@ public sealed class ProtocoloPublicacaoEspelho
                 return FalhaDeRenome(parque);
 
             parqueOk = true;
+            promocaoInvocada = true;
             var promove = await _volume.RenomearAsync(temporario, _volume.NomeArquivo, cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
             if (DecidirResiduo(promove, publicado: true) is ResultadoOperacaoPasta residuoPromove)
             {
                 manterTemporario = true;
@@ -117,10 +122,19 @@ public sealed class ProtocoloPublicacaoEspelho
 
             if (!promove.Sucesso)
             {
+                if (cancellationToken.IsCancellationRequested)
+                    return FalhaDeRenome(promove);
+
                 if (!await VoltarReservaAsync(reserva, cancellationToken))
                     return ResultadoOperacaoPasta.Falha(CodigoFalhaPastaEspelho.EspelhoPreservadoForaDoNome);
 
                 return FalhaDeRenome(promove);
+            }
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                promoveOk = true;
+                return ResultadoOperacaoPasta.Falha(CodigoFalhaPastaEspelho.TrocaNaoConfirmada, promocaoEfetuada: true);
             }
 
             promoveOk = true;
@@ -130,13 +144,37 @@ public sealed class ProtocoloPublicacaoEspelho
 
             return ResultadoOperacaoPasta.Ok();
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException oce)
         {
             cancelado = true;
+            if (promocaoInvocada && (promoveOk || PromocaoPeloEstado(temporario)))
+            {
+                manterTemporario = true;
+                throw new OperationCanceledException(
+                    oce.Message,
+                    ExcecaoDePromocao(true),
+                    oce.CancellationToken);
+            }
+
+            throw;
+        }
+        catch (PublicacaoEspelhoException)
+        {
             throw;
         }
         catch (Exception)
         {
+            if (promocaoInvocada)
+            {
+                var efetuada = promoveOk || PromocaoPeloEstado(temporario);
+                if (efetuada)
+                    manterTemporario = true;
+                else if (parqueOk && !promoveOk && !cancellationToken.IsCancellationRequested)
+                    await VoltarReservaAsync(reserva, CancellationToken.None);
+
+                throw ExcecaoDePromocao(efetuada);
+            }
+
             if (parqueOk && !promoveOk && !cancellationToken.IsCancellationRequested)
                 await VoltarReservaAsync(reserva, CancellationToken.None);
 
@@ -149,20 +187,72 @@ public sealed class ProtocoloPublicacaoEspelho
         }
     }
 
-    private async Task<Promocao> PromoverTemporarioAsync(string temporario, CancellationToken cancellationToken)
+    private async Task<Promocao> PromoverTemporarioAsync(
+        string temporario,
+        CancellationToken cancellationToken,
+        Action marcarInvocada)
     {
+        marcarInvocada();
         var renome = await _volume.RenomearAsync(temporario, _volume.NomeArquivo, cancellationToken);
         if (DecidirResiduo(renome, publicado: true) is ResultadoOperacaoPasta residuo)
             return new Promocao(residuo, true);
 
-        if (renome.Sucesso)
-            return new Promocao(ResultadoOperacaoPasta.Ok(), false);
+        if (!renome.Sucesso)
+            return new Promocao(FalhaDeRenome(renome), false);
 
-        return new Promocao(FalhaDeRenome(renome), false);
+        if (cancellationToken.IsCancellationRequested)
+            return new Promocao(
+                ResultadoOperacaoPasta.Falha(CodigoFalhaPastaEspelho.TrocaNaoConfirmada, promocaoEfetuada: true),
+                true);
+
+        return new Promocao(ResultadoOperacaoPasta.Ok(), false);
+    }
+
+    private bool PromocaoPeloEstado(string temporario)
+    {
+        try
+        {
+            var diagnostico = _volume.Consultar();
+            if (!diagnostico.AcessoLivre)
+                return true;
+
+            if (_volume is not IVisibilidadeNomePasta visibilidade)
+                return true;
+
+            var visivel = visibilidade.Visivel(temporario);
+            if (visivel is null)
+                return true;
+
+            return visivel == false && diagnostico.ArquivoNoNomeFinal;
+        }
+        catch (OperationCanceledException)
+        {
+            return true;
+        }
+        catch (Exception)
+        {
+            return true;
+        }
+    }
+
+    private static PublicacaoEspelhoException ExcecaoDePromocao(bool promocaoEfetuada)
+    {
+        var codigo = promocaoEfetuada
+            ? CodigoFalhaPastaEspelho.TrocaNaoConfirmada
+            : CodigoFalhaPastaEspelho.ProvedorSemTroca;
+        return new PublicacaoEspelhoException(MensagensPastaEspelho.Para(codigo), promocaoEfetuada);
     }
 
     private static ResultadoOperacaoPasta? DecidirResiduo(ResultadoRenomeacaoVolume renome, bool publicado)
     {
+        if (renome.HomonimosNoNomeFinal)
+        {
+            if (!publicado)
+                return FalhaDeRenome(renome);
+
+            return ResultadoOperacaoPasta.PublicadoComResiduo();
+        }
+
         if (renome.AmbosNomesVisiveis)
             return publicado
                 ? ResultadoOperacaoPasta.PublicadoComResiduo()

@@ -42,6 +42,15 @@ public interface IVolumePastaEspelho
         CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Diz se um nome de exibição está visível. Null quando a pasta não responde.
+/// Não cria e não apaga.
+/// </summary>
+public interface IVisibilidadeNomePasta
+{
+    bool? Visivel(string nome);
+}
+
 /// <summary>Fora do Android não há SAF. Não cria arquivo e não apaga nada.</summary>
 public sealed class VolumePastaEspelhoIndisponivel : IVolumePastaEspelho
 {
