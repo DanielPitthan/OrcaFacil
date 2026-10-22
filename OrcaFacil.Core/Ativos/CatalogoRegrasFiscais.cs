@@ -22,6 +22,10 @@ namespace OrcaFacil.Core.Ativos;
 /// em mês com vendas até o limite também compensa: a isenção é só do ganho
 /// (Perguntas e Respostas IRPF 2026, perguntas 707 e 729). A estimativa de IRRF
 /// nasce desligada: o imposto retido entra só quando informado.
+/// Renda fixa e JCP: o IR regressivo do art. 1º da Lei nº 11.033/2004 não é calculado
+/// (RF.IrRegressivo.Automatico = 0) e o JCP não é reconstituído pela alíquota de 15%
+/// (RF.Jcp.GrossUp = 0). A DIRPF usa o valor já gravado.
+/// https://www.planalto.gov.br/ccivil_03/_ato2004-2006/2004/lei/l11033.htm
 /// </summary>
 public static class CatalogoRegrasFiscais
 {
@@ -29,6 +33,9 @@ public static class CatalogoRegrasFiscais
 
     /// <summary>Produção de efeitos da Lei nº 11.033/2004 para a renda variável.</summary>
     public static readonly DateTime InicioLei11033 = new(2005, 1, 1);
+
+    /// <summary>Art. 9º da Lei nº 9.249/1995: JCP a partir de 1º de janeiro de 1996.</summary>
+    public static readonly DateTime InicioJcp = new(1996, 1, 1);
 
     public static IReadOnlyList<RegraFiscal> Linhas() =>
     [
@@ -49,7 +56,9 @@ public static class CatalogoRegrasFiscais
         Linha(15, CodigosRegraFiscal.IrrfAliquotaComum, 0.00005m, InicioLei11033),
         Linha(16, CodigosRegraFiscal.IrrfAliquotaDayTrade, 0.01m, InicioLei11033),
         Linha(17, CodigosRegraFiscal.IrrfValorMinimoRetencao, 1m, InicioLei11033),
-        Linha(18, CodigosRegraFiscal.IrrfCompensaMesesSeguintes, 0m, InicioLei11033)
+        Linha(18, CodigosRegraFiscal.IrrfCompensaMesesSeguintes, 0m, InicioLei11033),
+        Linha(19, CodigosRegraFiscal.IrRegressivoAutomatico, 0m, InicioLei11033),
+        Linha(20, CodigosRegraFiscal.JcpGrossUp, 0m, InicioJcp)
     ];
 
     private static RegraFiscal Linha(int id, string codigo, decimal valor, DateTime? inicio = null) => new()

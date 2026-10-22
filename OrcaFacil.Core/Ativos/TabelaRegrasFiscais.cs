@@ -112,6 +112,8 @@ public sealed class TabelaRegrasFiscais
         return regra.Valor;
     }
 
+    public bool EstaLigada(string codigo, DateTime data) => Flag(codigo, data);
+
     private bool Flag(string codigo, DateTime data)
     {
         var regra = Exigir(codigo, data);

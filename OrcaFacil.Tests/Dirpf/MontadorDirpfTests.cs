@@ -82,6 +82,17 @@ public class MontadorDirpfTests : IDisposable
         Assert.Equal(5m, rendimentoFii.Valor);
         Assert.NotEqual(dividendo.Codigo, rendimentoFii.Codigo);
         Assert.NotEqual(dividendo.Natureza, rendimentoFii.Natureza);
+
+        Assert.DoesNotContain(dirpf.RendimentosIsentos, linha => linha.Natureza == "JCP");
+        var jcp = Assert.Single(dirpf.RendimentosExclusivos);
+        Assert.Equal("PETR4", jcp.CodigoAtivo);
+        Assert.Equal("JCP", jcp.Natureza);
+        Assert.Equal("10", jcp.Codigo);
+        Assert.Equal(CatalogoCodigosDirpf.DescricaoJcp, jcp.DescricaoCodigo);
+        Assert.Equal(100m, jcp.ValorLiquido);
+        Assert.Null(jcp.IrRetido);
+        Assert.Equal("", jcp.Cnpj);
+        Assert.Empty(dirpf.RendaFixa);
     }
 
     [Fact]
@@ -100,6 +111,8 @@ public class MontadorDirpfTests : IDisposable
         var petr = dirpf.Bens.Single(linha => linha.Ticker == "PETR4" && linha.Perfil == "Ana (Nica)");
         Assert.Equal(160m, petr.Quantidade);
         Assert.Equal(2297.50m, petr.CustoAquisicao);
+        Assert.Empty(dirpf.RendimentosExclusivos);
+        Assert.Empty(dirpf.RendaFixa);
     }
 
     [Fact]
@@ -177,6 +190,8 @@ public class MontadorDirpfTests : IDisposable
         var vazio = MontadorDirpf.Montar(_fabrica.CreateDbContext(), 2020);
         Assert.Empty(vazio.Bens);
         Assert.Empty(vazio.RendimentosIsentos);
+        Assert.Empty(vazio.RendimentosExclusivos);
+        Assert.Empty(vazio.RendaFixa);
     }
 
     [Fact]

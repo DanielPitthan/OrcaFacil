@@ -4,20 +4,30 @@ using OrcaFacil.Core.Ativos;
 using OrcaFacil.Core.Data;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
+using OrcaFacil.Core.RendaFixa;
 
 namespace OrcaFacil.Core.Dirpf;
 
 /// <summary>
-/// Monta Bens e Direitos e Rendimentos Isentos de um ano-base.
+/// Monta Bens e Direitos, Rendimentos Isentos, a tributação exclusiva e a posição de renda fixa.
 /// A posição usa operações até 31/12, inclusive as de anos anteriores.
-/// O rendimento isento usa o ano da data de pagamento. JCP fica de fora.
-/// O ganho isento de ações no limite mensal entra na mesma ficha, pelo código vigente.
+/// O rendimento isento usa o ano da data de pagamento. JCP fica de fora dessa ficha
+/// e vai para a exclusiva, código da variante Jcp, pelo mesmo ano.
+/// O ganho isento de ações no limite mensal entra na ficha de isentos, pelo código vigente.
 /// BDR e ETF não têm código de rendimento isento na semente e não entram nessa ficha.
-/// O CNPJ sai vazio: o cadastro do ativo não guarda esse número.
+/// Renda fixa usa o IR retido gravado. A tabela regressiva não entra na conta.
+/// Lucro de resgate já virou receita e prejuízo já virou despesa; aqui só se declara o líquido positivo.
+/// O CNPJ sai vazio: o cadastro não guarda esse número.
 /// Posição com quantidade zero fica de fora. Não há piso de valor.
+/// Título do tipo Outro continua no grupo 04/02 e no código 06. A linha só ganha o aviso de LCI/LCA.
 /// </summary>
 public static class MontadorDirpf
 {
+    public const string PerfilNaoIdentificado = "Não identificado";
+
+    public const string ObservacaoTituloOutro =
+        "Se for LCI/LCA, é isento: declarar em Rendimentos Isentos (código 12) e no grupo 04/03";
+
     private static readonly CultureInfo PtBr = CultureInfo.GetCultureInfo("pt-BR");
     private static readonly StringComparer OrdemTexto = StringComparer.Create(PtBr, ignoreCase: true);
 
@@ -36,8 +46,24 @@ public static class MontadorDirpf
             .ToList();
         var codigos = contexto.CodigosDirpf.AsNoTracking().ToList();
         var regras = contexto.RegrasFiscais.AsNoTracking().ToList();
+        var titulos = contexto.TitulosRendaFixa.AsNoTracking().ToList();
+        var operacoesRendaFixa = contexto.OperacoesRendaFixa.AsNoTracking().ToList();
+        var lancamentosRendaFixa = contexto.Transacoes.AsNoTracking()
+            .Include(transacao => transacao.MembroFamilia)
+            .Where(transacao => transacao.OperacaoRendaFixaId != null)
+            .ToList();
+        var perfis = contexto.MembrosFamilia.AsNoTracking().ToList();
 
-        return Montar(anoBase, operacoes, proventos, codigos, regras);
+        return Montar(
+            anoBase,
+            operacoes,
+            proventos,
+            codigos,
+            regras,
+            titulos,
+            operacoesRendaFixa,
+            lancamentosRendaFixa,
+            perfis);
     }
 
     public static DirpfAnoBase Montar(
@@ -46,11 +72,27 @@ public static class MontadorDirpf
         IEnumerable<Provento> proventos,
         IEnumerable<CodigoDirpf> codigos,
         IEnumerable<RegraFiscal> regras)
+        => Montar(anoBase, operacoes, proventos, codigos, regras, [], [], [], []);
+
+    public static DirpfAnoBase Montar(
+        int anoBase,
+        IEnumerable<OperacaoAtivo> operacoes,
+        IEnumerable<Provento> proventos,
+        IEnumerable<CodigoDirpf> codigos,
+        IEnumerable<RegraFiscal> regras,
+        IEnumerable<TituloRendaFixa> titulos,
+        IEnumerable<OperacaoRendaFixa> operacoesRendaFixa,
+        IEnumerable<Transacao> lancamentosRendaFixa,
+        IEnumerable<MembroFamilia> perfis)
     {
         ArgumentNullException.ThrowIfNull(operacoes);
         ArgumentNullException.ThrowIfNull(proventos);
         ArgumentNullException.ThrowIfNull(codigos);
         ArgumentNullException.ThrowIfNull(regras);
+        ArgumentNullException.ThrowIfNull(titulos);
+        ArgumentNullException.ThrowIfNull(operacoesRendaFixa);
+        ArgumentNullException.ThrowIfNull(lancamentosRendaFixa);
+        ArgumentNullException.ThrowIfNull(perfis);
         ExigirAno(anoBase);
 
         var listaOperacoes = operacoes.ToList();
@@ -69,11 +111,31 @@ public static class MontadorDirpf
             .ThenBy(linha => linha.Ticker, StringComparer.Ordinal)
             .ToList();
 
+        var exclusivos = MontarJcp(anoBase, corte, inicio, fim, listaProventos, tabela, fiscais);
+        var rendaFixa = MontarRendaFixa(
+            anoBase,
+            corte,
+            inicio,
+            fim,
+            titulos,
+            operacoesRendaFixa,
+            lancamentosRendaFixa,
+            perfis,
+            tabela,
+            fiscais,
+            exclusivos);
+
         return new DirpfAnoBase
         {
             Ano = anoBase,
             Bens = bens,
-            RendimentosIsentos = isentos
+            RendimentosIsentos = isentos,
+            RendimentosExclusivos = exclusivos
+                .OrderBy(linha => linha.Perfil, OrdemTexto)
+                .ThenBy(linha => linha.CodigoAtivo, StringComparer.Ordinal)
+                .ThenBy(linha => linha.Natureza, OrdemTexto)
+                .ToList(),
+            RendaFixa = rendaFixa
         };
     }
 
@@ -227,6 +289,218 @@ public static class MontadorDirpf
             _ => throw new InvalidOperationException($"Não há natureza de rendimento isento para {ativo.Tipo}.")
         };
     }
+
+    private static List<LinhaRendimentoExclusivoDirpf> MontarJcp(
+        int anoBase,
+        DateTime corte,
+        DateTime inicio,
+        DateTime fim,
+        IEnumerable<Provento> proventos,
+        TabelaCodigosDirpf tabela,
+        TabelaRegrasFiscais fiscais)
+    {
+        var doAno = proventos.Where(provento =>
+            provento.Tipo == TipoProvento.Jcp
+            && provento.DataPagamento >= inicio
+            && provento.DataPagamento < fim).ToList();
+        if (doAno.Count == 0)
+            return [];
+
+        ExigirJcpSemGrossUp(fiscais, corte);
+        var codigo = tabela.ExigirVariante(TipoFichaDirpf.RendimentoExclusivo, CatalogoCodigosDirpf.VarianteJcp, corte);
+        var casas = fiscais.Para(corte, TipoAtivo.Acao).CasasDecimais;
+        var linhas = new List<LinhaRendimentoExclusivoDirpf>();
+        foreach (var grupo in doAno.GroupBy(provento => (provento.MembroFamiliaId, provento.AtivoId)))
+        {
+            var amostra = grupo.First();
+            var ativo = ExigirAtivo(amostra.Ativo, amostra.AtivoId);
+            var perfil = ExigirPerfil(amostra.MembroFamilia, amostra.MembroFamiliaId);
+            var valor = CalculadoraResultadoRealizado.Arredondar(grupo.Sum(provento => provento.ValorLiquido), casas);
+            if (valor == 0m)
+                continue;
+
+            linhas.Add(new LinhaRendimentoExclusivoDirpf(
+                anoBase,
+                TextoPerfil(perfil),
+                ativo.Ticker,
+                ativo.Nome,
+                "JCP",
+                codigo.Codigo,
+                codigo.Descricao,
+                Cnpj: "",
+                valor,
+                IrRetido: null,
+                $"JCP — {ativo.Ticker} — {ativo.Nome}."));
+        }
+
+        return linhas;
+    }
+
+    private static List<LinhaRendaFixaDirpf> MontarRendaFixa(
+        int anoBase,
+        DateTime corte,
+        DateTime inicio,
+        DateTime fim,
+        IEnumerable<TituloRendaFixa> titulos,
+        IEnumerable<OperacaoRendaFixa> operacoes,
+        IEnumerable<Transacao> lancamentos,
+        IEnumerable<MembroFamilia> perfis,
+        TabelaCodigosDirpf tabela,
+        TabelaRegrasFiscais fiscais,
+        List<LinhaRendimentoExclusivoDirpf> exclusivos)
+    {
+        var listaTitulos = titulos.ToList();
+        var listaOperacoes = operacoes.ToList();
+        var listaLancamentos = lancamentos.ToList();
+        var listaPerfis = perfis.ToList();
+        var posicoes = new List<LinhaRendaFixaDirpf>();
+        CodigoDirpf? codigoBem = null;
+        CodigoDirpf? codigoRendimento = null;
+        var casas = 2;
+        var regraLida = false;
+
+        foreach (var titulo in listaTitulos)
+        {
+            var doTitulo = listaOperacoes.Where(operacao => operacao.TituloRendaFixaId == titulo.Id).ToList();
+            var ateCorte = doTitulo.Where(operacao => operacao.Data.Date <= corte).ToList();
+            if (ateCorte.Count == 0)
+                continue;
+
+            var calculada = CalculadoraRendaFixa.Calcular(ateCorte.Select(operacao => ParaMovimentoRendaFixa(operacao, titulo.Codigo)));
+            var doAno = calculada.Resgates.Where(resgate => resgate.Data >= inicio && resgate.Data < fim).ToList();
+            var idsDoAno = doAno.Select(resgate => resgate.Id).ToHashSet();
+            var ir = ateCorte.Where(operacao => idsDoAno.Contains(operacao.Id)).Sum(operacao => operacao.IrRetido);
+            var liquido = doAno.Sum(resgate => resgate.Resultado);
+            if (calculada.Quantidade <= 0m && liquido <= 0m)
+                continue;
+
+            if (!regraLida)
+            {
+                ExigirRendaFixaSemRegressivo(fiscais, corte);
+                codigoBem = tabela.ExigirVariante(TipoFichaDirpf.Bem, CatalogoCodigosDirpf.VarianteRendaFixa, corte);
+                codigoRendimento = tabela.ExigirVariante(TipoFichaDirpf.RendimentoExclusivo, CatalogoCodigosDirpf.VarianteRendaFixa, corte);
+                casas = fiscais.Para(corte, TipoAtivo.Acao).CasasDecimais;
+                regraLida = true;
+            }
+
+            var liquidoDeclarado = CalculadoraResultadoRealizado.Arredondar(liquido, casas);
+            var irDeclarado = CalculadoraResultadoRealizado.Arredondar(ir, casas);
+            var perfil = PerfilDoTitulo(doTitulo, listaLancamentos, listaPerfis);
+            if (calculada.Quantidade > 0m)
+            {
+                var custo = CalculadoraResultadoRealizado.Arredondar(calculada.CustoTotal, casas);
+                var medio = CalculadoraResultadoRealizado.Arredondar(calculada.CustoMedio, casas);
+                var tipo = RotuloTitulo(titulo.Tipo);
+                posicoes.Add(new LinhaRendaFixaDirpf(
+                    anoBase,
+                    perfil,
+                    titulo.Codigo,
+                    titulo.Nome,
+                    tipo,
+                    titulo.Corretora,
+                    codigoBem!.Grupo,
+                    codigoBem.Codigo,
+                    codigoBem.Descricao,
+                    Cnpj: "",
+                    calculada.Quantidade,
+                    custo,
+                    medio,
+                    irDeclarado,
+                    liquidoDeclarado,
+                    TextoOutro(
+                        $"{titulo.Codigo} — {titulo.Nome}. {tipo}. Custo de aquisição em 31/12/{anoBase}.",
+                        titulo.Tipo)));
+            }
+
+            if (liquidoDeclarado > 0m)
+            {
+                exclusivos.Add(new LinhaRendimentoExclusivoDirpf(
+                    anoBase,
+                    perfil,
+                    titulo.Codigo,
+                    titulo.Nome,
+                    "Rendimento de renda fixa",
+                    codigoRendimento!.Codigo,
+                    codigoRendimento.Descricao,
+                    Cnpj: "",
+                    liquidoDeclarado,
+                    irDeclarado,
+                    TextoOutro(
+                        $"Rendimento líquido de renda fixa — {titulo.Codigo} — {titulo.Nome}.",
+                        titulo.Tipo)));
+            }
+        }
+
+        return posicoes
+            .OrderBy(linha => linha.Perfil, OrdemTexto)
+            .ThenBy(linha => linha.Codigo, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static void ExigirJcpSemGrossUp(TabelaRegrasFiscais fiscais, DateTime corte)
+    {
+        if (fiscais.EstaLigada(CodigosRegraFiscal.JcpGrossUp, corte))
+            throw new InvalidOperationException(
+                "A regra RF.Jcp.GrossUp está ligada. O JCP da DIRPF usa o valor líquido gravado e não reconstitui o bruto.");
+    }
+
+    private static void ExigirRendaFixaSemRegressivo(TabelaRegrasFiscais fiscais, DateTime corte)
+    {
+        if (fiscais.EstaLigada(CodigosRegraFiscal.IrRegressivoAutomatico, corte))
+            throw new InvalidOperationException(
+                "A regra RF.IrRegressivo.Automatico está ligada. A DIRPF da renda fixa usa só o IR retido gravado.");
+    }
+
+    private static string PerfilDoTitulo(
+        IReadOnlyList<OperacaoRendaFixa> operacoes,
+        IReadOnlyList<Transacao> lancamentos,
+        IReadOnlyList<MembroFamilia> perfis)
+    {
+        var ids = operacoes.Select(operacao => operacao.Id).ToHashSet();
+        var donos = lancamentos
+            .Where(lancamento => lancamento.OperacaoRendaFixaId is int id && ids.Contains(id))
+            .Select(lancamento => lancamento.MembroFamiliaId)
+            .Distinct()
+            .ToList();
+
+        if (donos.Count == 1)
+        {
+            var id = donos[0];
+            var perfil = perfis.FirstOrDefault(membro => membro.Id == id)
+                ?? lancamentos.First(lancamento => lancamento.MembroFamiliaId == id).MembroFamilia;
+            return TextoPerfil(ExigirPerfil(perfil, id));
+        }
+
+        if (donos.Count == 0 && perfis.Count == 1)
+            return TextoPerfil(perfis[0]);
+
+        return PerfilNaoIdentificado;
+    }
+
+    private static MovimentoRendaFixa ParaMovimentoRendaFixa(OperacaoRendaFixa operacao, string codigo) => new()
+    {
+        Id = operacao.Id,
+        Data = operacao.Data,
+        Tipo = operacao.Tipo,
+        Quantidade = operacao.Quantidade,
+        Valor = operacao.Valor,
+        Custos = operacao.Custos,
+        IrRetido = operacao.IrRetido,
+        Codigo = codigo
+    };
+
+    private static string TextoOutro(string texto, TipoTituloRendaFixa tipo) =>
+        tipo == TipoTituloRendaFixa.Outro ? $"{texto} {ObservacaoTituloOutro}" : texto;
+
+    private static string RotuloTitulo(TipoTituloRendaFixa tipo) => tipo switch
+    {
+        TipoTituloRendaFixa.CDB => "CDB",
+        TipoTituloRendaFixa.TesouroPrefixado => "Tesouro Prefixado",
+        TipoTituloRendaFixa.TesouroIPCA => "Tesouro IPCA",
+        TipoTituloRendaFixa.TesouroSelic => "Tesouro Selic",
+        TipoTituloRendaFixa.Outro => "Outro",
+        _ => tipo.ToString()
+    };
 
     private static MovimentoPosicao ParaMovimento(OperacaoAtivo operacao) => new()
     {
