@@ -176,26 +176,43 @@ public class PreparoFotoComprovanteTests
         }
     }
 
+    [Fact]
+    public void Amostras_SaoPotenciasDeDoisCrescentes()
+    {
+        Assert.Equal([1, 2, 4, 8, 16, 32, 64], PreparoFotoComprovante.Amostras);
+    }
+
     [Theory]
-    [InlineData(8000, 6000, 2576, 2)]
+    [InlineData(4000, 3000, 2576, 2)]
+    [InlineData(3000, 4000, 2576, 2)]
+    [InlineData(8000, 6000, 2576, 4)]
+    [InlineData(4000, 3000, 2048, 2)]
+    [InlineData(8000, 6000, 2048, 4)]
+    [InlineData(2048, 1000, 2048, 1)]
+    [InlineData(2049, 1000, 2048, 2)]
+    [InlineData(5151, 1000, 2576, 2)]
     [InlineData(5152, 1000, 2576, 2)]
-    [InlineData(5151, 1000, 2576, 1)]
+    [InlineData(5153, 1000, 2576, 4)]
     [InlineData(400, 300, 2576, 1)]
     [InlineData(100, 100, 512, 1)]
     [InlineData(200000, 100, 2576, 64)]
-    public void CalcularAmostra_UsaPotenciaDeDoisSemCairAbaixoDoTeto(
+    public void CalcularAmostra_UsaAMenorPotenciaQueMantemOLadoDentroDoAlvo(
         int largura,
         int altura,
         int teto,
         int amostra)
     {
         var valor = PreparoFotoComprovante.CalcularAmostra(largura, altura, teto);
+        var longo = Math.Max(largura, altura);
+        var anterior = amostra / 2;
 
         Assert.Equal(amostra, valor);
-        Assert.True(valor >= 1);
+        Assert.Contains(valor, PreparoFotoComprovante.Amostras);
         Assert.Equal(0, valor & (valor - 1));
-        if (Math.Max(largura, altura) > teto && valor < 64)
-            Assert.True(Math.Max(largura, altura) / (valor * 2) < teto);
+        if (valor < PreparoFotoComprovante.Amostras[^1])
+            Assert.True((long)longo <= (long)teto * valor);
+        if (anterior >= 1)
+            Assert.True((long)longo > (long)teto * anterior);
     }
 
     [Theory]

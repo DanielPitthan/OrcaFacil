@@ -91,6 +91,75 @@ public class OrientacaoExifTests
     }
 
     [Fact]
+    public void Tabela_CobreOsOitoCodigosNaOrdem()
+    {
+        Assert.Equal(Enumerable.Range(1, 8), OrientacaoExif.Tabela.Select(regra => regra.Codigo));
+    }
+
+    [Theory]
+    [InlineData(OrientacaoExif.Normal, false, false)]
+    [InlineData(OrientacaoExif.FlipHorizontal, false, true)]
+    [InlineData(OrientacaoExif.Rotate180, false, true)]
+    [InlineData(OrientacaoExif.FlipVertical, false, true)]
+    [InlineData(OrientacaoExif.Transpose, true, true)]
+    [InlineData(OrientacaoExif.Rotate90, true, true)]
+    [InlineData(OrientacaoExif.Transverse, true, true)]
+    [InlineData(OrientacaoExif.Rotate270, true, true)]
+    public void Tabela_DefineTrocaDeLadosESeAplica(int codigo, bool trocaLados, bool aplica)
+    {
+        var regra = Assert.Single(OrientacaoExif.Tabela, item => item.Codigo == codigo);
+
+        Assert.Equal(trocaLados, regra.TrocaLados);
+        Assert.Equal(aplica, regra.Aplica);
+        Assert.Equal(trocaLados, OrientacaoExif.TrocaLados(codigo));
+        Assert.Equal(aplica, OrientacaoExif.ExigeTransformacao(codigo));
+        Assert.Equal(aplica, OrientacaoExif.DeveAplicar(codigo, decoderJaAplicou: false));
+        Assert.False(OrientacaoExif.DeveAplicar(codigo, decoderJaAplicou: true));
+        Assert.Equal(aplica ? codigo : OrientacaoExif.Normal, OrientacaoExif.OrientacaoAAplicar(codigo, decoderJaAplicou: false));
+        Assert.Equal(OrientacaoExif.Normal, OrientacaoExif.OrientacaoAAplicar(codigo, decoderJaAplicou: true));
+    }
+
+    [Theory]
+    [InlineData(OrientacaoExif.FlipHorizontal)]
+    [InlineData(OrientacaoExif.Rotate180)]
+    [InlineData(OrientacaoExif.FlipVertical)]
+    [InlineData(OrientacaoExif.Rotate90)]
+    public void DecoderDeclarado_NaoGiraDeNovo_MesmoSemTrocarOsLados(int codigo)
+    {
+        Assert.True(OrientacaoExif.DecoderJaAplicou(codigo, true, 4000, 3000, 4000, 3000));
+        Assert.Equal(
+            OrientacaoExif.Normal,
+            OrientacaoExif.OrientacaoAAplicar(
+                codigo,
+                OrientacaoExif.DecoderJaAplicou(codigo, true, 4000, 3000, 4000, 3000)));
+    }
+
+    [Fact]
+    public void MedidasIguais_NaoProvamQueODecoderGirou()
+    {
+        Assert.False(OrientacaoExif.DecoderJaAplicou(OrientacaoExif.Rotate90, false, 4000, 3000, 4000, 3000));
+        Assert.False(OrientacaoExif.DecoderJaAplicou(OrientacaoExif.FlipHorizontal, false, 4000, 3000, 4000, 3000));
+        Assert.Equal(
+            OrientacaoExif.Rotate90,
+            OrientacaoExif.OrientacaoAAplicar(OrientacaoExif.Rotate90, decoderJaAplicou: false));
+        Assert.Equal(
+            OrientacaoExif.FlipHorizontal,
+            OrientacaoExif.OrientacaoAAplicar(OrientacaoExif.FlipHorizontal, decoderJaAplicou: false));
+    }
+
+    [Fact]
+    public void LadosTrocados_SignificamQueODecoderJaAplicouOGiro()
+    {
+        Assert.True(OrientacaoExif.DecoderJaAplicou(OrientacaoExif.Rotate90, false, 4000, 3000, 3000, 4000));
+        Assert.Equal(
+            OrientacaoExif.Normal,
+            OrientacaoExif.OrientacaoAAplicar(
+                OrientacaoExif.Rotate90,
+                OrientacaoExif.DecoderJaAplicou(OrientacaoExif.Rotate90, false, 4000, 3000, 3000, 4000)));
+        Assert.False(OrientacaoExif.DecoderJaAplicou(OrientacaoExif.FlipHorizontal, false, 4000, 3000, 3000, 4000));
+    }
+
+    [Fact]
     public void Espelhamento_NaoTrocaLados_EGiroSim()
     {
         Assert.False(OrientacaoExif.TrocaLados(OrientacaoExif.FlipHorizontal));

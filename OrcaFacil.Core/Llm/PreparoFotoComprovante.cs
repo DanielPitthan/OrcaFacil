@@ -38,6 +38,14 @@ public static class PreparoFotoComprovante
     public const string MediaTypeWebp = "image/webp";
 
     /// <summary>
+    /// Potências de dois do <c>inSampleSize</c>, da menor para a maior.
+    /// <see cref="CalcularAmostra"/> percorre esta tabela e fica na primeira em que o lado longo cabe no alvo.
+    /// </summary>
+    private static readonly int[] LinhasAmostra = [1, 2, 4, 8, 16, 32, 64];
+
+    public static IReadOnlyList<int> Amostras => LinhasAmostra;
+
+    /// <summary>
     /// Cabe no retângulo sem ampliar. O lado longo do resultado não passa de <paramref name="ladoMaximo"/>.
     /// Sem argumento, o teto é o do avatar.
     /// </summary>
@@ -61,8 +69,10 @@ public static class PreparoFotoComprovante
     }
 
     /// <summary>
-    /// Maior potência de dois em que o lado longo, depois da amostra, ainda fica no teto ou acima.
-    /// O decode usa isso antes do redimensionamento exato. Foto menor que o teto fica em 1.
+    /// Amostra do decode, lida em <see cref="Amostras"/>.
+    /// É a menor potência de dois em que o lado longo ainda cabe em <paramref name="ladoMaximo"/>:
+    /// a maior imagem que a tabela mantém dentro do alvo (2576 na primeira tentativa, 2048 na segunda).
+    /// Foto que já cabe fica em 1. Se nenhuma potência cabe, fica a última da tabela.
     /// </summary>
     public static int CalcularAmostra(int largura, int altura, int ladoMaximo)
     {
@@ -74,12 +84,13 @@ public static class PreparoFotoComprovante
             throw new ArgumentOutOfRangeException(nameof(ladoMaximo));
 
         var longo = Math.Max(largura, altura);
-        var amostra = 1;
-        const int tetoAmostra = 64;
-        while (amostra < tetoAmostra && longo / (amostra * 2) >= ladoMaximo)
-            amostra *= 2;
+        foreach (var amostra in LinhasAmostra)
+        {
+            if ((long)longo <= (long)ladoMaximo * amostra)
+                return amostra;
+        }
 
-        return amostra;
+        return LinhasAmostra[^1];
     }
 
     /// <summary>
