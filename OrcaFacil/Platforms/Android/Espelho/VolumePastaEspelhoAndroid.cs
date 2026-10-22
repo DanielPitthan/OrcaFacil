@@ -445,6 +445,7 @@ public sealed class VolumePastaEspelhoAndroid : IVolumePastaEspelho, IVisibilida
 
             var arquivoFinal = false;
             var residuo = false;
+            var homonimosNoFinal = 0;
             string? nomeReserva = null;
             while (cursor.MoveToNext())
             {
@@ -454,6 +455,7 @@ public sealed class VolumePastaEspelhoAndroid : IVolumePastaEspelho, IVisibilida
                 var exibicao = cursor.GetString(indiceNome);
                 if (string.Equals(exibicao, nomeFinal, StringComparison.Ordinal))
                 {
+                    homonimosNoFinal++;
                     arquivoFinal = true;
                     continue;
                 }
@@ -468,6 +470,11 @@ public sealed class VolumePastaEspelhoAndroid : IVolumePastaEspelho, IVisibilida
                 if (NomeTemporarioEspelho.EhTemporarioDesteApp(exibicao, nomeFinal))
                     residuo = true;
             }
+
+            // Dois arquivos no mesmo nome final são homônimos. Sem reserva, o resíduo
+            // ainda assim cita a cópia que permanece na pasta. A leitura seguinte recusa.
+            if (homonimosNoFinal > 1)
+                residuo = true;
 
             return new Varredura(null, arquivoFinal, residuo, nomeReserva);
         }

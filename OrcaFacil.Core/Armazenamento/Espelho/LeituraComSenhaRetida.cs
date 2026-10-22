@@ -3,6 +3,10 @@ namespace OrcaFacil.Core.Armazenamento.Espelho;
 /// <summary>
 /// Abre o espelho com a senha atual. Se ela for recusada e ainda houver senha
 /// anterior retida, tenta essa segunda senha uma única vez.
+/// As duas senhas ficam só em memória. Se as duas falharem, as duas continuam
+/// retidas e a leitura seguinte tenta de novo a atual e depois a anterior.
+/// A senha que abrir o arquivo permanece; a outra é descartada. Se quem abriu
+/// foi a anterior, ela passa a ser a atual.
 /// </summary>
 public static class LeituraComSenhaRetida
 {

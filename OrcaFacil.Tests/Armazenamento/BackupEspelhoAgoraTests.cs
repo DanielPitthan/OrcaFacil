@@ -963,6 +963,44 @@ public class BackupEspelhoAgoraTests
     }
 
     [Fact]
+    public async Task Cancela_DepoisDoMove_FotoNaoDecide_AdotaSenhaNova_ERetemAAntiga()
+    {
+        using var area = new AreaTemp();
+        await using var vivo = await CriarBancoAbertoAsync(area.Banco, "Marina");
+        var volume = new VolumeMemoria
+        {
+            ExcecaoNaPromocao = new OperationCanceledException(),
+            PromocaoRemoveTemporarioAntesDeFalhar = true,
+            FalharCopiaDefinitivoAPartirDa = 2
+        };
+        var anterior = new byte[] { 1, 1, 1 };
+        volume.Arquivos[volume.NomeArquivo] = anterior;
+        var provedor = new ProvedorSenhaEspelhoMemoria();
+        Assert.True(provedor.Definir(Senha, Senha).Aceita);
+        var backup = Criar(volume, provedor, new AreaTemporariaEspelhoEmDisco(Path.Combine(area.Raiz, "cache")));
+
+        var excecao = await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            backup.ExecutarAsync(area.Banco, SenhaNova, SenhaNova, substituirEspelhoExistente: true));
+
+        Assert.True(excecao.InnerException is PublicacaoEspelhoException { PromocaoEfetuada: true });
+        Assert.Equal(SenhaNova, provedor.Obter());
+        Assert.Equal(Senha, provedor.ObterAnterior());
+        Assert.NotEqual(anterior, volume.Arquivos[volume.NomeArquivo]);
+        Assert.DoesNotContain(volume.NomeArquivo, volume.Apagados);
+        Assert.Empty(volume.Apagados);
+        var reserva = Assert.Single(volume.Arquivos.Keys, nome => NomeTemporarioEspelho.EhReservaDesteApp(nome, volume.NomeArquivo));
+        Assert.Equal(anterior, volume.Arquivos[reserva]);
+        Assert.Equal(new byte[] { 9 }, volume.Arquivos["foto.jpg"]);
+        AssertNaoVaza(excecao, Senha);
+        AssertNaoVaza(excecao, SenhaNova);
+        AssertNaoVaza(provedor, Senha);
+        AssertNaoVaza(provedor, SenhaNova);
+        AssertMemoriaAbre(volume.Arquivos[volume.NomeArquivo], provedor, area.Raiz);
+        Assert.False(Abre(volume.Arquivos[volume.NomeArquivo], Senha, area.Raiz));
+        Assert.Equal("Marina", await EscalarTextoAsync(vivo, "SELECT Nome FROM MembrosFamilia"));
+    }
+
+    [Fact]
     public async Task ExcecaoPosPromocao_ReleituraNula_AdotaSenhaNova_ERetemAAntiga()
     {
         using var area = new AreaTemp();
@@ -1037,6 +1075,37 @@ public class BackupEspelhoAgoraTests
         var leitura = await volume.CopiarParaLocalAsync(volume.NomeArquivo, destino, CancellationToken.None);
         Assert.Equal(CodigoFalhaPastaEspelho.Indisponivel, leitura.Codigo);
         Assert.Equal(MensagensPastaEspelho.Para(CodigoFalhaPastaEspelho.Indisponivel), leitura.Mensagem);
+        Assert.False(File.Exists(destino));
+        Assert.Equal("Marina", await EscalarTextoAsync(vivo, "SELECT Nome FROM MembrosFamilia"));
+    }
+
+    [Fact]
+    public async Task HomonimosSemReserva_MensagemComReserva_NaoApagaNada()
+    {
+        using var area = new AreaTemp();
+        await using var vivo = await CriarBancoAbertoAsync(area.Banco, "Marina");
+        var volume = new VolumeMemoria { HomonimosAposPromocao = true };
+        var provedor = new ProvedorSenhaEspelhoMemoria();
+        Assert.True(provedor.Definir(Senha, Senha).Aceita);
+        var backup = Criar(volume, provedor, new AreaTemporariaEspelhoEmDisco(Path.Combine(area.Raiz, "cache")));
+
+        var resultado = await backup.ExecutarAsync(area.Banco, SenhaNova, SenhaNova);
+
+        Assert.True(resultado.Sucesso);
+        Assert.Equal(BackupEspelhoAgora.MensagemGravadoComReserva, resultado.Mensagem);
+        Assert.Equal(SenhaNova, provedor.Obter());
+        Assert.Null(provedor.ObterAnterior());
+        Assert.Empty(volume.Apagados);
+        Assert.DoesNotContain(volume.Arquivos.Keys, nome => NomeTemporarioEspelho.EhReservaDesteApp(nome, volume.NomeArquivo));
+        Assert.DoesNotContain(volume.Arquivos.Keys, nome => NomeTemporarioEspelho.EhTemporarioDesteApp(nome, volume.NomeArquivo));
+        Assert.Equal(new byte[] { 9 }, volume.Arquivos["foto.jpg"]);
+        AssertNaoVaza(resultado, Senha);
+        AssertNaoVaza(resultado, SenhaNova);
+        AssertMemoriaAbre(volume.Arquivos[volume.NomeArquivo], provedor, area.Raiz);
+
+        var destino = Path.Combine(area.Raiz, "leitura-homonimos.bin");
+        var leitura = await volume.CopiarParaLocalAsync(volume.NomeArquivo, destino, CancellationToken.None);
+        Assert.Equal(CodigoFalhaPastaEspelho.Indisponivel, leitura.Codigo);
         Assert.False(File.Exists(destino));
         Assert.Equal("Marina", await EscalarTextoAsync(vivo, "SELECT Nome FROM MembrosFamilia"));
     }

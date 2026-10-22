@@ -584,6 +584,11 @@ internal sealed class VolumeMemoria : IVolumePastaEspelho, IVisibilidadeNomePast
                 }
             }
 
+            // O dicionário não guarda dois arquivos no mesmo nome. O gancho dos homônimos
+            // deixa a leitura do final indisponível; isso também é resíduo, mesmo sem reserva.
+            if (LeituraDoFinalIndisponivel)
+                residuo = true;
+
             return new DiagnosticoPastaEspelho(
                 CodigoFalhaPastaEspelho.Nenhuma,
                 final,

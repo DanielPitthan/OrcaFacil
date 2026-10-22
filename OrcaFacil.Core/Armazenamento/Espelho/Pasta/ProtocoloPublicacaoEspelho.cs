@@ -10,7 +10,10 @@ namespace OrcaFacil.Core.Armazenamento.Espelho.Pasta;
 /// Uma publicação de cada vez. Cancelamento antes do rename da promoção
 /// interrompe a etapa seguinte e não apaga o que já foi parar na pasta.
 /// Depois desse rename, o cancelamento não sai como operação cancelada limpa:
-/// o resultado carrega a promoção quando ela já ocorreu.
+/// o resultado carrega a promoção quando ela já ocorreu. Se o volume lança
+/// <see cref="OperationCanceledException"/> depois que esse rename foi invocado
+/// e a promoção pode ter ocorrido, a exceção continua sendo de cancelamento e
+/// carrega por dentro a marca de promoção.
 /// Quando o nome definitivo já existe, ele é renomeado para uma reserva, o
 /// temporário assume o nome definitivo e a reserva só é removida nessa ordem,
 /// com a origem do temporário já ausente. Se a segunda troca falha de verdade
@@ -141,9 +144,18 @@ public sealed class ProtocoloPublicacaoEspelho
 
             return ResultadoOperacaoPasta.Ok();
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException oce)
         {
             cancelado = true;
+            if (promocaoInvocada && (promoveOk || PromocaoPeloEstado(temporario)))
+            {
+                manterTemporario = true;
+                throw new OperationCanceledException(
+                    oce.Message,
+                    ExcecaoDePromocao(true),
+                    oce.CancellationToken);
+            }
+
             throw;
         }
         catch (PublicacaoEspelhoException)

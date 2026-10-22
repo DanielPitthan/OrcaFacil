@@ -27,7 +27,7 @@ public class LeituraComSenhaRetidaTests
     }
 
     [Fact]
-    public async Task AsDuasFalham_ErroDepoisDeUmaTentativaComCada()
+    public async Task AsDuasFalham_AsDuasFicam_EProximaLeituraTentaAsDuasDeNovo()
     {
         var provedor = ProvedorComRetencao();
         var tentativas = new List<string>();
@@ -40,6 +40,16 @@ public class LeituraComSenhaRetidaTests
         Assert.Equal(SenhaNova, provedor.Obter());
         Assert.Equal(SenhaAntiga, provedor.ObterAnterior());
         AssertNaoVaza(leitura, provedor);
+
+        tentativas.Clear();
+        var seguinte = await LerAsync(provedor, tentativas, _ => throw new SenhaIncorretaException());
+
+        Assert.False(seguinte.Legivel);
+        Assert.Equal("Senha incorreta.", seguinte.Motivo);
+        Assert.Equal([SenhaNova, SenhaAntiga], tentativas);
+        Assert.Equal(SenhaNova, provedor.Obter());
+        Assert.Equal(SenhaAntiga, provedor.ObterAnterior());
+        AssertNaoVaza(seguinte, provedor);
     }
 
     [Fact]
