@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.B3;
@@ -35,6 +36,23 @@ public class ResultadoGravacaoB3Tests
         Assert.Equal(1, resultado.Lancamentos);
         Assert.Equal("1 lançamento em fev/2026.", resultado.Texto);
         Assert.Equal("/lancamentos?mes=2026-02", resultado.Rota);
+    }
+
+    [Fact]
+    public void Rota_EmCalendarioTailandes_GravaAnoGregoriano()
+    {
+        var anterior = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("th-TH");
+        try
+        {
+            Assert.Equal("2569-03", new DateTime(2026, 3, 1).ToString("yyyy-MM"));
+            var resultado = ResultadoGravacaoB3.Criar(1, [new DateTime(2026, 3, 2)]);
+            Assert.Equal("/lancamentos?mes=2026-03", resultado.Rota);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = anterior;
+        }
     }
 
     [Fact]
@@ -122,6 +140,86 @@ public class ResultadoGravacaoB3Tests
         Assert.Equal(1, await contexto.OperacoesAtivo.CountAsync(o => o.Tipo == TipoOperacao.Venda && o.Data == new DateTime(2026, 3, 2)));
         Assert.Equal("1 lançamento em fev/2026.", resultado.Texto);
     }
+
+    [Fact]
+    public async Task ResgateRendaFixa_Gravado_ContaOMesEUmLancamento()
+    {
+        const string arquivo =
+            Cabecalho +
+            "Credito;02/01/2026;Aplicação;CDB - CDBRESGATE1 - ITAU;ITAU UNIBANCO S.A.;10;R$10,00;R$100,00\n" +
+            "Debito;02/03/2026;Resgate antecipado;CDB - CDBRESGATE1 - ITAU;ITAU UNIBANCO S.A.;10;R$12,00;R$120,00\n";
+
+        await using var ambiente = await Ambiente.CriarAsync();
+        await using var fluxo = new MemoryStream(Encoding.UTF8.GetBytes(arquivo));
+        var previa = await ambiente.Service.PreverAsync(fluxo, ambiente.MembroId);
+        var resultado = await ambiente.Service.GravarAsync(previa, ambiente.MembroId);
+
+        await using var contexto = await ambiente.Factory.CreateDbContextAsync();
+        var lancamentos = await contexto.Transacoes.ToListAsync();
+        var datas = lancamentos.Select(t => t.Data).ToList();
+        Assert.Equal(2, resultado.Linhas);
+        Assert.Equal(1, resultado.Lancamentos);
+        Assert.Equal(datas.Count, resultado.Lancamentos);
+        Assert.Equal(Meses(datas), resultado.Meses);
+        Assert.Equal(new DateTime(2026, 3, 1), resultado.MesMaisRecente);
+        Assert.Equal("/lancamentos?mes=2026-03", resultado.Rota);
+        Assert.Equal("1 lançamento em mar/2026.", resultado.Texto);
+        var lancamento = Assert.Single(lancamentos);
+        Assert.Equal(20m, lancamento.Valor);
+        Assert.Equal(new DateTime(2026, 3, 2), lancamento.Data.Date);
+        Assert.Equal(1, await contexto.OperacoesRendaFixa.CountAsync(o => o.Tipo == TipoOperacaoRendaFixa.Resgate));
+    }
+
+    [Fact]
+    public async Task TransacaoAlteradaNoMesmoId_FicaForaDaContagem_ERotaVaiParaAtivos()
+    {
+        const string produto = "CDB - CDBALTERA1 - ITAU";
+        const string instituicao = "ITAU UNIBANCO S.A.";
+        var original =
+            Cabecalho +
+            $"Credito;02/01/2026;Aplicação;{produto};{instituicao};10;R$10,00;R$100,00\n" +
+            $"Debito;02/03/2026;Resgate antecipado;{produto};{instituicao};10;R$12,00;R$120,00\n";
+        var aplicacaoNoMeio =
+            Cabecalho +
+            $"Credito;02/02/2026;Aplicação;{produto};{instituicao};10;R$4,00;R$40,00\n";
+
+        await using var ambiente = await Ambiente.CriarAsync();
+        await using (var fluxo = new MemoryStream(Encoding.UTF8.GetBytes(original)))
+        {
+            var previa = await ambiente.Service.PreverAsync(fluxo, ambiente.MembroId);
+            var primeira = await ambiente.Service.GravarAsync(previa, ambiente.MembroId);
+            Assert.Equal(1, primeira.Lancamentos);
+            Assert.Equal("/lancamentos?mes=2026-03", primeira.Rota);
+        }
+
+        int idOriginal;
+        await using (var contexto = await ambiente.Factory.CreateDbContextAsync())
+        {
+            var lancamento = Assert.Single(await contexto.Transacoes.ToListAsync());
+            idOriginal = lancamento.Id;
+            Assert.Equal(20m, lancamento.Valor);
+            Assert.Equal(new DateTime(2026, 3, 2), lancamento.Data.Date);
+        }
+
+        await using var extra = new MemoryStream(Encoding.UTF8.GetBytes(aplicacaoNoMeio));
+        var previaExtra = await ambiente.Service.PreverAsync(extra, ambiente.MembroId);
+        var resultado = await ambiente.Service.GravarAsync(previaExtra, ambiente.MembroId);
+
+        await using var conferido = await ambiente.Factory.CreateDbContextAsync();
+        var alterada = Assert.Single(await conferido.Transacoes.ToListAsync());
+        Assert.Equal(idOriginal, alterada.Id);
+        Assert.Equal(50m, alterada.Valor);
+        Assert.Equal(new DateTime(2026, 3, 2), alterada.Data.Date);
+        Assert.Equal(1, resultado.Linhas);
+        Assert.Equal(0, resultado.Lancamentos);
+        Assert.Empty(resultado.Meses);
+        Assert.Null(resultado.MesMaisRecente);
+        Assert.Equal("/ativos", resultado.Rota);
+        Assert.Equal("Nenhum lançamento foi gerado.", resultado.Texto);
+    }
+
+    private const string Cabecalho =
+        "Entrada/Saída;Data;Movimentação;Produto;Instituição;Quantidade;Preço unitário;Valor da Operação\n";
 
     private static List<DateTime> Meses(IEnumerable<DateTime> datas)
         => datas

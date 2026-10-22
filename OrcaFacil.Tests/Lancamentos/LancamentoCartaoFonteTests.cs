@@ -80,7 +80,7 @@ public class LancamentoCartaoFonteTests
         Assert.DoesNotContain("IniciarNovo", sucesso, StringComparison.Ordinal);
         Assert.Contains("FluxoLancamento.IniciarNovo(", senao, StringComparison.Ordinal);
         Assert.Contains("Lançamento não encontrado.", senao, StringComparison.Ordinal);
-        Assert.Contains("NavigateTo(\"/lancamentos\")", senao, StringComparison.Ordinal);
+        Assert.Contains("Voltar()", senao, StringComparison.Ordinal);
         Assert.DoesNotContain("CriarAsync", senao, StringComparison.Ordinal);
         Assert.DoesNotContain("AtualizarAsync", senao, StringComparison.Ordinal);
     }
