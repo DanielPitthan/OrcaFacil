@@ -6,6 +6,13 @@ namespace OrcaFacil.Core.Exportacao;
 /// </summary>
 public sealed class VarreduraPlanilhaExportada
 {
+    public const string TextoFalhaLimpeza = "Falha ao limpar as planilhas exportadas.";
+
+    /// <summary>
+    /// Só o nome do tipo (ex.: "IOException"). Nunca Message, StackTrace, InnerException nem caminho.
+    /// </summary>
+    public static string TipoDaFalha(Exception? excecao) => excecao?.GetType().Name ?? "desconhecida";
+
     private readonly TimeProvider _relogio;
     private readonly Action<Exception> _registrar;
     private int _varrendo;

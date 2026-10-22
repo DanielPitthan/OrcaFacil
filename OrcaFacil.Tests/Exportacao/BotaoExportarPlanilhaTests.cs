@@ -202,6 +202,9 @@ public class BotaoExportarPlanilhaTests
         Assert.DoesNotContain(".Wait(", app, StringComparison.Ordinal);
         Assert.DoesNotContain(".Result", app, StringComparison.Ordinal);
         Assert.Contains("Log.Error", app, StringComparison.Ordinal);
+        Assert.Contains("VarreduraPlanilhaExportada.TipoDaFalha(", app, StringComparison.Ordinal);
+        Assert.DoesNotContain("Log.Error(excecao", app, StringComparison.Ordinal);
+        Assert.DoesNotContain("Log.Error(ex", app, StringComparison.Ordinal);
         Assert.DoesNotContain("Directory.Delete", app, StringComparison.Ordinal);
 
         var varredura = File.ReadAllText(Path.Combine(
@@ -555,6 +558,52 @@ public class ArquivoExportacaoPlanilhaTests
             Assert.Equal("x", File.ReadAllText(comLetra));
             Assert.Equal("x", File.ReadAllText(tamanhoErrado));
             Assert.Equal("x", File.ReadAllText(csv));
+        }
+        finally
+        {
+            raiz.Delete(recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(-1, true)]
+    [InlineData(1, false)]
+    public void ApagarVencidos_ExatamenteDezMinutos_Permanece(int segundosAlemDaMargem, bool permanece)
+    {
+        Assert.Equal(TimeSpan.FromMinutes(10), ArquivoExportacaoPlanilha.MargemRetencao);
+
+        var raiz = Directory.CreateTempSubdirectory("orca-planilha-limite-");
+        try
+        {
+            var cache = Path.Combine(raiz.FullName, "cache");
+            Directory.CreateDirectory(cache);
+
+            var bruto = new DateTimeOffset(2026, 10, 22, 16, 13, 7, 456, TimeSpan.Zero);
+            var agora = new DateTimeOffset(
+                bruto.Year, bruto.Month, bruto.Day, bruto.Hour, bruto.Minute, bruto.Second, TimeSpan.Zero);
+            var caminho = Path.Combine(cache, "orcafacil-20261022-160307-ab12cd34.xlsx");
+            var escrito = (agora - ArquivoExportacaoPlanilha.MargemRetencao - TimeSpan.FromSeconds(segundosAlemDaMargem)).UtcDateTime;
+            File.WriteAllText(caminho, "x");
+            File.SetLastWriteTimeUtc(caminho, escrito);
+
+            var lido = File.GetLastWriteTimeUtc(caminho);
+            Assert.Equal(escrito, lido);
+            if (segundosAlemDaMargem == 0)
+                Assert.Equal(ArquivoExportacaoPlanilha.MargemRetencao, agora - new DateTimeOffset(DateTime.SpecifyKind(lido, DateTimeKind.Utc)));
+
+            var apagados = ArquivoExportacaoPlanilha.ApagarVencidos(cache, agora);
+
+            if (permanece)
+            {
+                Assert.Equal(0, apagados);
+                Assert.Equal("x", File.ReadAllText(caminho));
+            }
+            else
+            {
+                Assert.Equal(1, apagados);
+                Assert.False(File.Exists(caminho));
+            }
         }
         finally
         {
