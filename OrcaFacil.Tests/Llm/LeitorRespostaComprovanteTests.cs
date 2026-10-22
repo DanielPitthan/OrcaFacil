@@ -777,4 +777,81 @@ public class LeitorRespostaComprovanteTests
         Assert.Equal("length", leitura.FinishReason);
         Assert.Null(leitura.StopReason);
     }
+
+    [Theory]
+    [InlineData("anthropic")]
+    [InlineData("openai")]
+    public void JsonInvalidoNaFerramenta_PrevaleceSobreORascunho(string formato)
+    {
+        const string rascunho = """{"loja":"Rascunho","legivel":true,"itens":[]}""";
+        var embutido = rascunho.Replace("\"", "\\\"", StringComparison.Ordinal);
+        var json = (formato == "openai"
+            ? """
+              {
+                "choices": [
+                  {
+                    "finish_reason": "stop",
+                    "message": {
+                      "reasoning_content": "RASCUNHO",
+                      "thinking": "RASCUNHO",
+                      "content": [
+                        { "type": "thinking", "thinking": "RASCUNHO" }
+                      ],
+                      "tool_calls": [
+                        {
+                          "type": "function",
+                          "function": {
+                            "name": "registrar_comprovante",
+                            "arguments": "nao-json"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+              """
+            : """
+              {
+                "stop_reason": "end_turn",
+                "reasoning_content": "RASCUNHO",
+                "content": [
+                  { "type": "thinking", "thinking": "RASCUNHO" },
+                  {
+                    "type": "tool_use",
+                    "name": "registrar_comprovante",
+                    "input": "nao-json"
+                  }
+                ]
+              }
+              """).Replace("RASCUNHO", embutido, StringComparison.Ordinal);
+
+        var leitura = LeitorRespostaComprovante.Interpretar(json);
+
+        Assert.Null(leitura.Comprovante);
+        Assert.Null(LeitorRespostaComprovante.Ler(json));
+        Assert.Equal(LeitorRespostaComprovante.MotivoJsonInvalido, leitura.Motivo);
+    }
+
+    [Fact]
+    public void ThinkingEmConflitoComReasoning_FicaComOBlocoThinking()
+    {
+        const string thinking = """{"loja":"PeloThinking","legivel":true,"itens":[]}""";
+        const string reasoning = """{"loja":"PeloReasoning","legivel":true,"itens":[]}""";
+        var json = """
+            {
+              "content": [
+                { "type": "thinking", "thinking": "THINKING" }
+              ],
+              "reasoning_content": "REASONING"
+            }
+            """
+            .Replace("THINKING", thinking.Replace("\"", "\\\"", StringComparison.Ordinal), StringComparison.Ordinal)
+            .Replace("REASONING", reasoning.Replace("\"", "\\\"", StringComparison.Ordinal), StringComparison.Ordinal);
+
+        var comprovante = LeitorRespostaComprovante.Ler(json);
+
+        Assert.NotNull(comprovante);
+        Assert.Equal("PeloThinking", comprovante.Loja);
+    }
 }

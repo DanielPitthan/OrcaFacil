@@ -40,12 +40,16 @@ public class ChipInteligenciaContrasteTests
     public void ChipNaoSelecionadoNoTemaClaro_UsaBordaDoTexto()
     {
         var css = File.ReadAllText(Caminho("InteligenciaArtificialPanel.razor.css"));
+        const string seletor =
+            ":global(html.of-tema-claro) .of-ia-chips ::deep .mud-chip.mud-chip-outlined:not(.mud-chip-selected)";
 
-        Assert.Contains("border-color: var(--of-text);", css, StringComparison.Ordinal);
-        Assert.Contains(
-            ":global(html.of-tema-claro) .of-ia-chips ::deep .mud-chip.mud-chip-outlined:not(.mud-chip-selected)",
-            css,
-            StringComparison.Ordinal);
+        var inicio = css.IndexOf(seletor, StringComparison.Ordinal);
+        Assert.True(inicio >= 0, "Regra do chip não selecionado no tema claro não encontrada.");
+
+        var abre = css.IndexOf('{', inicio);
+        var fecha = css.IndexOf('}', abre);
+        var declaracao = css[(abre + 1)..fecha];
+        Assert.Contains("border-color: var(--of-text);", declaracao, StringComparison.Ordinal);
     }
 
     [Fact]

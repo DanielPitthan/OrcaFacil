@@ -7,7 +7,8 @@ namespace OrcaFacil.Core.Llm;
 
 /// <summary>
 /// Lê o comprovante do bloco <c>tool_use</c>, de <c>tool_calls</c>, do JSON em <c>text</c>,
-/// ou, se só estiver lá, de <c>thinking</c> e <c>reasoning_content</c>.
+/// ou, quando a ferramenta não veio, de <c>thinking</c> e <c>reasoning_content</c>.
+/// JSON inválido em <c>registrar_comprovante</c> prevalece: o rascunho não substitui a resposta oficial.
 /// Sem <c>reconhecido</c>, o item fica não reconhecido.
 /// </summary>
 public static class LeitorRespostaComprovante
@@ -110,10 +111,10 @@ public static class LeitorRespostaComprovante
                 return true;
             }
 
-            if (TentarFontes(raiz, null, cancellationToken, out input))
+            if (TentarFontes(raiz, null, cancellationToken, aceitarRascunho: true, out input, out var motivoFonte))
                 return true;
 
-            motivo = MotivoCampoAusente("content");
+            motivo = motivoFonte ?? MotivoCampoAusente("content");
             return false;
         }
 
@@ -122,21 +123,24 @@ public static class LeitorRespostaComprovante
             if (PayloadDeTexto(content.GetString(), cancellationToken, out input, out motivo))
                 return true;
 
-            if (TentarFontes(raiz, null, cancellationToken, out input))
+            if (TentarFontes(raiz, null, cancellationToken, aceitarRascunho: true, out input, out var motivoFonte))
             {
                 motivo = null;
                 return true;
             }
+
+            if (motivoFonte is not null)
+                motivo = motivoFonte;
 
             return false;
         }
 
         if (content.ValueKind != JsonValueKind.Array)
         {
-            if (TentarFontes(raiz, null, cancellationToken, out input))
+            if (TentarFontes(raiz, null, cancellationToken, aceitarRascunho: true, out input, out var motivoFonte))
                 return true;
 
-            motivo = MotivoCampoInvalido("content");
+            motivo = motivoFonte ?? MotivoCampoInvalido("content");
             return false;
         }
 
@@ -191,10 +195,10 @@ public static class LeitorRespostaComprovante
         var texto = JuntarTextos(content);
         if (texto is null)
         {
-            if (TentarFontes(raiz, content, cancellationToken, out input))
+            if (TentarFontes(raiz, content, cancellationToken, motivoFerramenta is null, out input, out var motivoFonte))
                 return true;
 
-            motivo = motivoFerramenta ?? MotivoCampoAusente("content");
+            motivo = motivoFerramenta ?? motivoFonte ?? MotivoCampoAusente("content");
             return false;
         }
 
@@ -202,12 +206,18 @@ public static class LeitorRespostaComprovante
             !EntradaValida(input))
         {
             var candidato = input;
-            if (TentarFontes(raiz, content, cancellationToken, out input))
+            if (TentarFontes(raiz, content, cancellationToken, motivoFerramenta is null, out input, out var motivoFonte))
                 return true;
 
             if (motivoFerramenta is not null)
             {
                 motivo = motivoFerramenta;
+                return false;
+            }
+
+            if (motivoFonte is not null)
+            {
+                motivo = motivoFonte;
                 return false;
             }
 
@@ -221,28 +231,32 @@ public static class LeitorRespostaComprovante
     }
 
     /// <summary>
-    /// Fontes em que o JSON pode vir sozinho: tool_calls, bloco thinking, reasoning_content.
-    /// A ferramenta ganha do rascunho. choices percorre o formato OpenAI.
+    /// tool_calls e o texto oficial vêm antes do rascunho.
+    /// Se <c>registrar_comprovante</c> veio e falhou, thinking e reasoning_content não substituem.
     /// </summary>
     private static bool TentarFontes(
         JsonElement objeto,
         JsonElement? blocos,
         CancellationToken cancellationToken,
-        out JsonElement input)
+        bool aceitarRascunho,
+        out JsonElement input,
+        out string? motivoOficial)
     {
         input = default;
+        motivoOficial = null;
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (TentarToolCalls(objeto, cancellationToken, out input))
+        var bloqueiaRascunho = !aceitarRascunho;
+        if (TentarToolCalls(objeto, cancellationToken, out input, out var motivoRaiz))
             return true;
 
-        if (blocos is JsonElement lista && TentarThinking(lista, cancellationToken, out input))
-            return true;
+        if (motivoRaiz is not null)
+        {
+            motivoOficial = motivoRaiz;
+            bloqueiaRascunho = true;
+        }
 
-        if (TentarReasoning(objeto, cancellationToken, out input))
-            return true;
-
-        if (TentarCampoTexto(objeto, "thinking", cancellationToken, out input))
+        if (!bloqueiaRascunho && TentarRascunho(objeto, blocos, cancellationToken, out input))
             return true;
 
         if (!objeto.TryGetProperty("choices", out var choices) || choices.ValueKind != JsonValueKind.Array)
@@ -254,45 +268,72 @@ public static class LeitorRespostaComprovante
             if (escolha.ValueKind != JsonValueKind.Object)
                 continue;
 
-            if (TentarToolCalls(escolha, cancellationToken, out input))
+            if (TentarToolCalls(escolha, cancellationToken, out input, out var motivoEscolha))
                 return true;
+
+            if (motivoEscolha is not null)
+            {
+                motivoOficial ??= motivoEscolha;
+                bloqueiaRascunho = true;
+            }
 
             if (!escolha.TryGetProperty("message", out var mensagem) || mensagem.ValueKind != JsonValueKind.Object)
                 continue;
 
-            if (TentarToolCalls(mensagem, cancellationToken, out input))
+            if (TentarToolCalls(mensagem, cancellationToken, out input, out var motivoMensagem))
                 return true;
 
-            if (mensagem.TryGetProperty("content", out var conteudo))
+            if (motivoMensagem is not null)
             {
-                if (conteudo.ValueKind == JsonValueKind.String &&
-                    PayloadDeTexto(conteudo.GetString(), cancellationToken, out input, out _) &&
-                    EntradaValida(input))
-                {
-                    return true;
-                }
-
-                if (conteudo.ValueKind == JsonValueKind.Array &&
-                    TextoValido(conteudo, cancellationToken, out input))
-                {
-                    return true;
-                }
-
-                if (conteudo.ValueKind == JsonValueKind.Array &&
-                    TentarThinking(conteudo, cancellationToken, out input))
-                {
-                    return true;
-                }
+                motivoOficial ??= motivoMensagem;
+                bloqueiaRascunho = true;
             }
 
-            if (TentarReasoning(mensagem, cancellationToken, out input))
-                return true;
+            if (!mensagem.TryGetProperty("content", out var conteudo))
+                conteudo = default;
 
-            if (TentarCampoTexto(mensagem, "thinking", cancellationToken, out input))
+            if (conteudo.ValueKind == JsonValueKind.String &&
+                PayloadDeTexto(conteudo.GetString(), cancellationToken, out input, out _) &&
+                EntradaValida(input))
+            {
+                return true;
+            }
+
+            if (conteudo.ValueKind == JsonValueKind.Array &&
+                TextoValido(conteudo, cancellationToken, out input))
+            {
+                return true;
+            }
+
+            if (bloqueiaRascunho)
+                continue;
+
+            var blocosMensagem = conteudo.ValueKind == JsonValueKind.Array ? conteudo : (JsonElement?)null;
+            if (TentarRascunho(mensagem, blocosMensagem, cancellationToken, out input))
                 return true;
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Rascunho: bloco thinking, reasoning_content e a propriedade thinking.
+    /// O bloco thinking ganha quando os dois cupons divergem.
+    /// </summary>
+    private static bool TentarRascunho(
+        JsonElement objeto,
+        JsonElement? blocos,
+        CancellationToken cancellationToken,
+        out JsonElement input)
+    {
+        input = default;
+        if (blocos is JsonElement lista && TentarThinking(lista, cancellationToken, out input))
+            return true;
+
+        if (TentarReasoning(objeto, cancellationToken, out input))
+            return true;
+
+        return TentarCampoTexto(objeto, "thinking", cancellationToken, out input);
     }
 
     private static bool TextoValido(JsonElement blocos, CancellationToken cancellationToken, out JsonElement input)
@@ -304,9 +345,14 @@ public static class LeitorRespostaComprovante
             EntradaValida(input);
     }
 
-    private static bool TentarToolCalls(JsonElement objeto, CancellationToken cancellationToken, out JsonElement input)
+    private static bool TentarToolCalls(
+        JsonElement objeto,
+        CancellationToken cancellationToken,
+        out JsonElement input,
+        out string? motivoOficial)
     {
         input = default;
+        motivoOficial = null;
         if (!objeto.TryGetProperty("tool_calls", out var chamadas) || chamadas.ValueKind != JsonValueKind.Array)
             return false;
 
@@ -322,24 +368,47 @@ public static class LeitorRespostaComprovante
 
             if (!funcao.TryGetProperty("name", out var nome) ||
                 nome.ValueKind != JsonValueKind.String ||
-                nome.GetString() != PedidoMensagem.NomeFerramenta ||
-                !funcao.TryGetProperty("arguments", out var argumentos))
+                nome.GetString() != PedidoMensagem.NomeFerramenta)
             {
                 continue;
             }
 
-            if (argumentos.ValueKind == JsonValueKind.Object && EntradaValida(argumentos))
+            if (!funcao.TryGetProperty("arguments", out var argumentos))
             {
-                input = argumentos;
+                motivoOficial ??= MotivoCampoAusente("arguments");
+                continue;
+            }
+
+            if (argumentos.ValueKind == JsonValueKind.Object)
+            {
+                if (EntradaValida(argumentos))
+                {
+                    input = argumentos;
+                    motivoOficial = null;
+                    return true;
+                }
+
+                motivoOficial ??= LerComoInput(argumentos, null, null).Motivo ?? MotivoJsonInvalido;
+                continue;
+            }
+
+            if (argumentos.ValueKind == JsonValueKind.String)
+            {
+                if (!PayloadDeTexto(argumentos.GetString(), cancellationToken, out var texto, out var motivoTexto) ||
+                    !EntradaValida(texto))
+                {
+                    motivoOficial ??= texto.ValueKind == JsonValueKind.Object
+                        ? LerComoInput(texto, null, null).Motivo ?? motivoTexto ?? MotivoJsonInvalido
+                        : motivoTexto ?? MotivoJsonInvalido;
+                    continue;
+                }
+
+                input = texto;
+                motivoOficial = null;
                 return true;
             }
 
-            if (argumentos.ValueKind == JsonValueKind.String &&
-                PayloadDeTexto(argumentos.GetString(), cancellationToken, out input, out _) &&
-                EntradaValida(input))
-            {
-                return true;
-            }
+            motivoOficial ??= MotivoCampoInvalido("arguments");
         }
 
         return false;
