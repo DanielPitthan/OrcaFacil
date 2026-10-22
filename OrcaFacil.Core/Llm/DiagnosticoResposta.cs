@@ -31,6 +31,9 @@ public sealed class DiagnosticoResposta
     /// <summary>Nomes cujo valor some do diagnóstico, em qualquer capitalização.</summary>
     private static readonly string[] CabecalhosSensiveis = ["authorization", "x-api-key", "api_key", "apikey"];
 
+    /// <summary>Um hífen, sublinhado ou ponto, opcional, entre api e key. Os espaços ficam no separador.</summary>
+    private const string SeparadorApiKey = "[-_.]?";
+
     private static readonly Regex ValorCredencial = CriarValorCredencial();
 
     private static readonly Regex CabecalhoPedido = new(
@@ -400,9 +403,11 @@ public sealed class DiagnosticoResposta
 
     private static Regex CriarValorCredencial()
     {
-        var nomes = new string[CabecalhosSensiveis.Length];
+        var nomes = new string[CabecalhosSensiveis.Length + 1];
         for (var i = 0; i < CabecalhosSensiveis.Length; i++)
             nomes[i] = Espacado(CabecalhosSensiveis[i]);
+
+        nomes[^1] = Espacado("api") + SeparadorOpcional + SeparadorApiKey + SeparadorOpcional + Espacado("key");
 
         var nome = "(?:" + string.Join("|", nomes) + ")";
         var aspas = "(?:\"|')?";

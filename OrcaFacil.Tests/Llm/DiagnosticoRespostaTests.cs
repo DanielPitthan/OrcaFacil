@@ -737,12 +737,42 @@ public class DiagnosticoRespostaTests
         var log = AssertDialogoCopiaELog(diagnostico);
         Assert.DoesNotContain(segredo, diagnostico.Texto, StringComparison.Ordinal);
         Assert.DoesNotContain(segredo, log, StringComparison.Ordinal);
+        Assert.DoesNotContain(segredo, diagnostico.Corpo, StringComparison.Ordinal);
         Assert.DoesNotContain(nome, diagnostico.Texto, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain(nome, log, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(nome, diagnostico.Corpo, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(DiagnosticoResposta.MarcaCabecalho, diagnostico.Texto, StringComparison.Ordinal);
         Assert.Contains(DiagnosticoResposta.MarcaCabecalho, log, StringComparison.Ordinal);
+        Assert.Contains(DiagnosticoResposta.MarcaCabecalho, diagnostico.Corpo, StringComparison.Ordinal);
         Assert.Contains("seguiu antes", diagnostico.Texto, StringComparison.Ordinal);
         Assert.Contains("seguiu antes", log, StringComparison.Ordinal);
+        Assert.Contains("seguiu antes", diagnostico.Corpo, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("api-key: VALOR")]
+    [InlineData("API-KEY: VALOR")]
+    [InlineData("Api-Key: VALOR")]
+    [InlineData("api-key=VALOR")]
+    [InlineData("{\"api-key\": \"VALOR\"}")]
+    [InlineData("?api-key=VALOR")]
+    [InlineData("\"api - key:\" VALOR")]
+    [InlineData("api.key: VALOR")]
+    public void NomeComHifenOuPonto_PerdeOValorNoDialogoNaCopiaNoLogENoCorpo(string forma)
+    {
+        const string segredo = "sk-ficticio-variante-9f3c";
+        AssertSegredoForaDoDiagnostico(forma.Replace("VALOR", segredo, StringComparison.Ordinal), segredo);
+    }
+
+    [Theory]
+    [InlineData("{\"api_key\": \"VALOR\"}")]
+    [InlineData("?api_key=VALOR")]
+    [InlineData("api key: VALOR")]
+    [InlineData("\"apikey\": \"VALOR\"}")]
+    public void FormaQueJaFunciona_ContinuaMascaradaNoCorpo(string forma)
+    {
+        const string segredo = "sk-ficticio-variante-9f3c";
+        AssertSegredoForaDoDiagnostico(forma.Replace("VALOR", segredo, StringComparison.Ordinal), segredo);
     }
 
     [Theory]
@@ -886,6 +916,22 @@ public class DiagnosticoRespostaTests
         "\\u000d",
         "\\u200b",
     ];
+
+    private static void AssertSegredoForaDoDiagnostico(string corpo, string segredo)
+    {
+        var diagnostico = Diagnosticar("seguiu antes\n" + corpo);
+        var log = AssertDialogoCopiaELog(diagnostico);
+
+        Assert.DoesNotContain(segredo, diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(segredo, log, StringComparison.Ordinal);
+        Assert.DoesNotContain(segredo, diagnostico.Corpo, StringComparison.Ordinal);
+        Assert.Contains(DiagnosticoResposta.MarcaCabecalho, diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains(DiagnosticoResposta.MarcaCabecalho, log, StringComparison.Ordinal);
+        Assert.Contains(DiagnosticoResposta.MarcaCabecalho, diagnostico.Corpo, StringComparison.Ordinal);
+        Assert.Contains("seguiu antes", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains("seguiu antes", log, StringComparison.Ordinal);
+        Assert.Contains("seguiu antes", diagnostico.Corpo, StringComparison.Ordinal);
+    }
 
     private static DiagnosticoResposta Diagnosticar(string corpo, params string[] segredos) =>
         DiagnosticoResposta.Criar(
