@@ -107,6 +107,33 @@ public class LancamentosListMesTravaTests
         Assert.True(Contem(comentario, "OnClick=\"Voltar\""));
     }
 
+    [Fact]
+    public void Importacao_ComLancamento_AbreARota_EComentarioNaoConta()
+    {
+        const string semLancamento = "if (gravacao.Lancamentos == 0)";
+        const string voltaAtivos = "Navegacao.NavigateTo(\"/ativos\")";
+        const string abreRota = "Navegacao.NavigateTo(gravacao.Rota)";
+
+        var pagina = SemComentarios(Ler("OrcaFacil", "Components", "Pages", "Ativos", "ImportarExtratoB3.razor"));
+        Assert.True(Contem(pagina, semLancamento));
+        Assert.True(Contem(pagina, voltaAtivos));
+        Assert.Equal(1, Contar(pagina, abreRota));
+
+        var rotaTrocada = SemComentarios(Ler("OrcaFacil", "Components", "Pages", "Ativos", "ImportarExtratoB3.razor")
+            .Replace(abreRota, voltaAtivos, StringComparison.Ordinal));
+        Assert.Equal(0, Contar(rotaTrocada, abreRota));
+
+        const string soComentario = """
+            // if (gravacao.Lancamentos == 0)
+            /* Navegacao.NavigateTo("/ativos") */
+            @* Navegacao.NavigateTo(gravacao.Rota) *@
+            """;
+        var comentario = SemComentarios(soComentario);
+        Assert.False(Contem(comentario, semLancamento));
+        Assert.False(Contem(comentario, voltaAtivos));
+        Assert.Equal(0, Contar(comentario, abreRota));
+    }
+
     private static int Contar(string fonte, string trecho)
     {
         var total = 0;
