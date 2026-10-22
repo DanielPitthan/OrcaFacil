@@ -725,6 +725,27 @@ public class DiagnosticoRespostaTests
     }
 
     [Theory]
+    [InlineData("api_key")]
+    [InlineData("apiKey")]
+    [InlineData("API_KEY")]
+    [InlineData("ApiKey")]
+    public void VarianteApiKey_PerdeOValorNoDialogoNaCopiaENoLog(string nome)
+    {
+        const string segredo = "sk-ficticio-variante-9f3c";
+        var diagnostico = Diagnosticar("seguiu antes\n" + nome + ": " + segredo);
+
+        var log = AssertDialogoCopiaELog(diagnostico);
+        Assert.DoesNotContain(segredo, diagnostico.Texto, StringComparison.Ordinal);
+        Assert.DoesNotContain(segredo, log, StringComparison.Ordinal);
+        Assert.DoesNotContain(nome, diagnostico.Texto, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(nome, log, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(DiagnosticoResposta.MarcaCabecalho, diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains(DiagnosticoResposta.MarcaCabecalho, log, StringComparison.Ordinal);
+        Assert.Contains("seguiu antes", diagnostico.Texto, StringComparison.Ordinal);
+        Assert.Contains("seguiu antes", log, StringComparison.Ordinal);
+    }
+
+    [Theory]
     [MemberData(nameof(VariantesDeChaveSensivel))]
     public void VarianteDeChaveSensivel_PerdeOValor(string nome)
     {

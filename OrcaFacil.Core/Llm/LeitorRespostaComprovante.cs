@@ -231,8 +231,8 @@ public static class LeitorRespostaComprovante
     }
 
     /// <summary>
-    /// tool_calls e o texto oficial vêm antes do rascunho.
-    /// Se <c>registrar_comprovante</c> veio e falhou, thinking e reasoning_content não substituem.
+    /// tool_calls e o texto oficial, também dentro de choices, vêm antes do rascunho.
+    /// reasoning_content na raiz não substitui um registrar_comprovante inválido.
     /// </summary>
     private static bool TentarFontes(
         JsonElement objeto,
@@ -256,12 +256,31 @@ public static class LeitorRespostaComprovante
             bloqueiaRascunho = true;
         }
 
+        var temChoices = objeto.TryGetProperty("choices", out var choices) &&
+            choices.ValueKind == JsonValueKind.Array;
+        if (temChoices &&
+            TentarOficialNasEscolhas(choices, cancellationToken, ref bloqueiaRascunho, ref motivoOficial, out input))
+        {
+            return true;
+        }
+
         if (!bloqueiaRascunho && TentarRascunho(objeto, blocos, cancellationToken, out input))
             return true;
 
-        if (!objeto.TryGetProperty("choices", out var choices) || choices.ValueKind != JsonValueKind.Array)
+        if (bloqueiaRascunho || !temChoices)
             return false;
 
+        return TentarRascunhoNasEscolhas(choices, cancellationToken, out input);
+    }
+
+    private static bool TentarOficialNasEscolhas(
+        JsonElement choices,
+        CancellationToken cancellationToken,
+        ref bool bloqueiaRascunho,
+        ref string? motivoOficial,
+        out JsonElement input)
+    {
+        input = default;
         foreach (var escolha in choices.EnumerateArray())
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -290,7 +309,7 @@ public static class LeitorRespostaComprovante
             }
 
             if (!mensagem.TryGetProperty("content", out var conteudo))
-                conteudo = default;
+                continue;
 
             if (conteudo.ValueKind == JsonValueKind.String &&
                 PayloadDeTexto(conteudo.GetString(), cancellationToken, out input, out _) &&
@@ -304,11 +323,31 @@ public static class LeitorRespostaComprovante
             {
                 return true;
             }
+        }
 
-            if (bloqueiaRascunho)
+        return false;
+    }
+
+    private static bool TentarRascunhoNasEscolhas(
+        JsonElement choices,
+        CancellationToken cancellationToken,
+        out JsonElement input)
+    {
+        input = default;
+        foreach (var escolha in choices.EnumerateArray())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (escolha.ValueKind != JsonValueKind.Object ||
+                !escolha.TryGetProperty("message", out var mensagem) ||
+                mensagem.ValueKind != JsonValueKind.Object)
+            {
                 continue;
+            }
 
-            var blocosMensagem = conteudo.ValueKind == JsonValueKind.Array ? conteudo : (JsonElement?)null;
+            var blocosMensagem = mensagem.TryGetProperty("content", out var conteudo) &&
+                conteudo.ValueKind == JsonValueKind.Array
+                ? conteudo
+                : (JsonElement?)null;
             if (TentarRascunho(mensagem, blocosMensagem, cancellationToken, out input))
                 return true;
         }

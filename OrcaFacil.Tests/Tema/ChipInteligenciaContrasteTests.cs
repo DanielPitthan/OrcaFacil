@@ -48,7 +48,13 @@ public class ChipInteligenciaContrasteTests
 
         var abre = css.IndexOf('{', inicio);
         var fecha = css.IndexOf('}', abre);
-        var declaracao = css[(abre + 1)..fecha];
+        var bloco = css[inicio..(fecha + 1)];
+        var seletores = Seletores(bloco);
+        var declaracao = bloco[(bloco.IndexOf('{') + 1)..bloco.IndexOf('}')];
+
+        Assert.Contains(seletores, s => TerminaEm(s, ":hover"));
+        Assert.Contains(seletores, s => TerminaEm(s, ":focus-visible"));
+        Assert.Contains(seletores, s => TerminaEm(s, ":active"));
         Assert.Contains("border-color: var(--of-text);", declaracao, StringComparison.Ordinal);
     }
 

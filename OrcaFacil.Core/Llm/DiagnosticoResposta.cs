@@ -29,7 +29,7 @@ public sealed class DiagnosticoResposta
         @"[\s\u00AD\u180E\u200B-\u200F\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]*";
 
     /// <summary>Nomes cujo valor some do diagnóstico, em qualquer capitalização.</summary>
-    private static readonly string[] CabecalhosSensiveis = ["authorization", "x-api-key"];
+    private static readonly string[] CabecalhosSensiveis = ["authorization", "x-api-key", "api_key", "apikey"];
 
     private static readonly Regex ValorCredencial = CriarValorCredencial();
 

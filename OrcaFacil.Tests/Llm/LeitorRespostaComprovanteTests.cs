@@ -854,4 +854,40 @@ public class LeitorRespostaComprovanteTests
         Assert.NotNull(comprovante);
         Assert.Equal("PeloThinking", comprovante.Loja);
     }
+
+    [Fact]
+    public void ReasoningNaRaizSemContent_PerdeParaFerramentaInvalida()
+    {
+        const string rascunho = """{"loja":"Rascunho","legivel":true,"itens":[]}""";
+        var json = """
+            {
+              "reasoning_content": "RASCUNHO",
+              "choices": [
+                {
+                  "finish_reason": "stop",
+                  "message": {
+                    "tool_calls": [
+                      {
+                        "type": "function",
+                        "function": {
+                          "name": "registrar_comprovante",
+                          "arguments": "nao-json"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+            """.Replace(
+            "RASCUNHO",
+            rascunho.Replace("\"", "\\\"", StringComparison.Ordinal),
+            StringComparison.Ordinal);
+
+        var leitura = LeitorRespostaComprovante.Interpretar(json);
+
+        Assert.Null(leitura.Comprovante);
+        Assert.Null(LeitorRespostaComprovante.Ler(json));
+        Assert.Equal(LeitorRespostaComprovante.MotivoJsonInvalido, leitura.Motivo);
+    }
 }
