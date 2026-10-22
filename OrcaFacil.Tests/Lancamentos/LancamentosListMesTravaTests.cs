@@ -60,6 +60,7 @@ public class LancamentosListMesTravaTests
         Assert.Equal(3, Contar(formulario, "Voltar();"));
         Assert.Equal(2, Contar(formulario, "OnClick=\"Voltar\""));
         Assert.Equal(1, Contar(formulario, "OnCancelar=\"Voltar\""));
+        Assert.Equal(1, Contar(formulario, "OnVoltar=\"Voltar\""));
         Assert.True(Contem(formulario, CopiaComMes));
         Assert.False(Contem(formulario, VoltaSemMes));
         Assert.True(Contem(lista, NovoComMes));
@@ -81,6 +82,10 @@ public class LancamentosListMesTravaTests
             .Replace(EditarComMes, "@* " + EditarComMes + " *@", StringComparison.Ordinal));
         Assert.False(Contem(semEditar, EditarComMes));
 
+        var setaTrocada = SemComentarios(Ler("OrcaFacil", "Components", "Pages", "Lancamentos", "LancamentoForm.razor")
+            .Replace("OnVoltar=\"Voltar\"", "OnVoltar=\"Sair\"", StringComparison.Ordinal));
+        Assert.Equal(0, Contar(setaTrocada, "OnVoltar=\"Voltar\""));
+
         const string soComentario = """
             @* NavigateTo(ConsultaMesLancamentos.Rota(MesConsulta)) *@
             // Voltar();
@@ -88,6 +93,7 @@ public class LancamentosListMesTravaTests
             /* NavigateTo($"/lancamentos/editar/{id}?mes={_mesReferencia:yyyy-MM}") */
             <!-- ConsultaMesLancamentos.Rota(MesConsulta, "/lancamentos/novo") -->
             // NavigateTo("/lancamentos")
+            @* OnVoltar="Voltar" *@
             OnClick="Voltar"
             """;
         var comentario = SemComentarios(soComentario);
@@ -97,6 +103,7 @@ public class LancamentosListMesTravaTests
         Assert.False(Contem(comentario, EditarComMes));
         Assert.False(Contem(comentario, CopiaComMes));
         Assert.False(Contem(comentario, VoltaSemMes));
+        Assert.Equal(0, Contar(comentario, "OnVoltar=\"Voltar\""));
         Assert.True(Contem(comentario, "OnClick=\"Voltar\""));
     }
 
