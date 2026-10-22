@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using MudBlazor.Services;
 using OrcaFacil.Core.B3;
 using OrcaFacil.Core.Data;
+using OrcaFacil.Core.Exportacao;
 using OrcaFacil.Core.Llm;
 using OrcaFacil.Core.Repositories;
 using OrcaFacil.Core.Services;
@@ -211,7 +212,7 @@ public static class MauiProgram
     {
         try
         {
-            Log.Error(ex, mensagem);
+            Log.Error("{Mensagem} Tipo: {Tipo}", mensagem, VarreduraPlanilhaExportada.TipoDaFalha(ex));
         }
         catch (Exception logEx)
         {

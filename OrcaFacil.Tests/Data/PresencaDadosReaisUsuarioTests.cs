@@ -238,7 +238,6 @@ public class PresencaDadosReaisUsuarioTests
     }
 
     [Theory]
-    [InlineData("nome")]
     [InlineData("icone")]
     [InlineData("cor")]
     [InlineData("inativo")]
@@ -251,9 +250,6 @@ public class PresencaDadosReaisUsuarioTests
         var alimentacao = banco.Contexto.Categorias.Single(categoria => categoria.Nome == "Alimentação");
         switch (ajuste)
         {
-            case "nome":
-                alimentacao.Nome = "Comida";
-                break;
             case "icone":
                 alimentacao.Icone = "🍎";
                 break;
@@ -275,14 +271,19 @@ public class PresencaDadosReaisUsuarioTests
     }
 
     [Fact]
-    public async Task Abertura_CategoriaPadraoRenomeada_AindaSemeiaComoHoje()
+    public async Task CategoriaPadraoRenomeada_PertenceAoUsuario_ENaoSemeia()
     {
         await using var banco = await Banco.AbrirAsync();
         banco.Contexto.Categorias.AddRange(CatalogoDemonstracao.CriarCategorias());
         await banco.Contexto.SaveChangesAsync();
-        banco.Contexto.Categorias.Single(categoria => categoria.Nome == "Alimentação").Nome = "Comida";
+        var alimentacao = banco.Contexto.Categorias.Single(categoria => categoria.Nome == "Alimentação");
+        alimentacao.Nome = "Comida";
         await banco.Contexto.SaveChangesAsync();
-        Assert.False(await PoliticaSemeadura.HaDadoDoUsuarioAsync(banco.Contexto));
+
+        Assert.True(alimentacao.EhPadraoDoSistema);
+        Assert.True(await PoliticaSemeadura.HaDadoDoUsuarioAsync(banco.Contexto));
+        Assert.Equal(SituacaoConteudoBanco.DadoReal, await PoliticaSemeadura.ClassificarConteudoAsync(banco.Contexto));
+        Assert.Equal(LeituraDadosReais.ComDadosReais, await PresencaDadosReaisUsuario.ClassificarAsync(banco.Contexto));
         await banco.FecharContextoAsync();
 
         var chamadas = 0;
@@ -297,8 +298,19 @@ public class PresencaDadosReaisUsuarioTests
             });
         await semeadura.SemearAsync();
 
-        Assert.Equal(1, chamadas);
-        Assert.DoesNotContain(PoliticaSemeadura.MensagemPerfilMinimo, log.Mensagens);
+        Assert.Equal(0, chamadas);
+        Assert.Contains(PoliticaSemeadura.MensagemPerfilMinimo, log.Mensagens);
+        Assert.True(File.Exists(banco.Caminho));
+
+        var opcoes = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite($"Data Source={banco.Caminho};Pooling=False")
+            .Options;
+        await using var leitura = new AppDbContext(opcoes);
+        Assert.Equal(PoliticaSemeadura.NomePerfilMinimo, Assert.Single(await leitura.MembrosFamilia.Select(membro => membro.Nome).ToListAsync()));
+        var comida = await leitura.Categorias.SingleAsync(categoria => categoria.Nome == "Comida");
+        Assert.True(comida.EhPadraoDoSistema);
+        Assert.False(await leitura.Categorias.AnyAsync(categoria => categoria.Nome == "Alimentação"));
+        Assert.False(await leitura.Transacoes.AnyAsync());
     }
 
     [Fact]

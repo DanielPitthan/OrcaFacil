@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.Data;
+using OrcaFacil.Core.Exportacao;
 using Serilog;
 
 namespace OrcaFacil.Data;
@@ -68,7 +69,12 @@ public static class DbInitializer
         public void Informacao(string mensagem, object?[] argumentos) =>
             Log.Information(mensagem, argumentos);
 
-        public void Erro(Exception? excecao, string mensagem, object?[] argumentos) =>
-            Log.Error(excecao, mensagem, argumentos);
+        public void Erro(Exception? excecao, string mensagem, object?[] argumentos)
+        {
+            var valores = new object?[argumentos.Length + 1];
+            argumentos.CopyTo(valores, 0);
+            valores[^1] = VarreduraPlanilhaExportada.TipoDaFalha(excecao);
+            Log.Error(mensagem + " Tipo: {Tipo}", valores);
+        }
     }
 }

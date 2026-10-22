@@ -1,6 +1,7 @@
 using Microsoft.Maui.ApplicationModel;
 using OrcaFacil.Core.Armazenamento;
 using OrcaFacil.Core.Data;
+using OrcaFacil.Core.Exportacao;
 using OrcaFacil.Data;
 using OrcaFacil.Services.Interfaces;
 using Serilog;
@@ -80,11 +81,11 @@ public sealed class InicializacaoApp
             try
             {
                 Log.Error(
-                    ex,
-                    "Falha no passo {Passo}. Log em {PastaLogs}. O banco {Banco} não foi apagado.",
+                    "Falha no passo {Passo}. Log em {PastaLogs}. O banco {Banco} não foi apagado. Tipo: {Tipo}",
                     passo,
                     _pastaLogs,
-                    _caminhoBanco);
+                    _caminhoBanco,
+                    VarreduraPlanilhaExportada.TipoDaFalha(ex));
             }
             catch (Exception logEx)
             {
@@ -125,9 +126,9 @@ public sealed class InicializacaoApp
         catch (Exception ex) when (!FalhasInicializacao.ImpedeAbertura(ex))
         {
             Log.Error(
-                ex,
-                "Falha no passo lembretes. O aplicativo segue aberto. Banco {Banco} não foi apagado.",
-                _caminhoBanco);
+                "Falha no passo lembretes. O aplicativo segue aberto. Banco {Banco} não foi apagado. Tipo: {Tipo}",
+                _caminhoBanco,
+                VarreduraPlanilhaExportada.TipoDaFalha(ex));
         }
     }
 
