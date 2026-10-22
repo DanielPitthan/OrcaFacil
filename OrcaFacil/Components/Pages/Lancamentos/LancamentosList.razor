@@ -224,7 +224,7 @@
             return;
         }
 
-        NavigationManager.NavigateTo("/lancamentos/novo");
+        NavigationManager.NavigateTo($"/lancamentos/novo?mes={_mesReferencia:yyyy-MM}");
     }
 
     private void AbrirEdicao(int id)
@@ -235,7 +235,7 @@
             return;
         }
 
-        NavigationManager.NavigateTo($"/lancamentos/editar/{id}");
+        NavigationManager.NavigateTo($"/lancamentos/editar/{id}?mes={_mesReferencia:yyyy-MM}");
     }
 
     private async Task TrazerDespesasAsync()

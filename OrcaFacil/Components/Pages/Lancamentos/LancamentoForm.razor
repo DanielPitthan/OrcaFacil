@@ -225,7 +225,7 @@ else
             <MudTextField T="string" Label="Observação (opcional)" @bind-Value="_modelo.Observacao" Lines="2" Class="mb-2" />
 
             <div class="of-form-acoes">
-                <MudButton Variant="Variant.Text" OnClick="@(() => NavigationManager.NavigateTo("/lancamentos"))">Cancelar</MudButton>
+                <MudButton Variant="Variant.Text" OnClick="Voltar">Cancelar</MudButton>
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="@(PeriodoBloqueado || SomaEstoura)">Salvar</MudButton>
             </div>
         </MudPaper>
@@ -267,7 +267,7 @@ else
             <MudTextField T="string" Label="Observação (opcional)" @bind-Value="_modelo.Observacao" Lines="2" Class="mb-3" />
 
             <div class="of-form-acoes">
-                <MudButton Variant="Variant.Text" OnClick="@(() => NavigationManager.NavigateTo("/lancamentos"))">Cancelar</MudButton>
+                <MudButton Variant="Variant.Text" OnClick="Voltar">Cancelar</MudButton>
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" Disabled="@PeriodoBloqueado">Salvar</MudButton>
             </div>
         </MudPaper>
@@ -277,6 +277,9 @@ else
 
 @code {
     [Parameter] public int? Id { get; set; }
+
+    [SupplyParameterFromQuery(Name = "mes")]
+    public string? MesConsulta { get; set; }
 
     private readonly TransacaoFormModel _modelo = new();
     private List<Categoria> _categorias = new();
@@ -401,7 +404,7 @@ else
                 _data = _modelo.Data;
                 GarantirCategoriaValida();
                 Snackbar.Add("Lançamento não encontrado.", Severity.Warning);
-                NavigationManager.NavigateTo("/lancamentos");
+                Voltar();
             }
         }
         else
@@ -448,7 +451,7 @@ else
         return VerificarPeriodoAsync();
     }
 
-    private void Voltar() => NavigationManager.NavigateTo("/lancamentos");
+    private void Voltar() => NavigationManager.NavigateTo(ConsultaMesLancamentos.Rota(MesConsulta));
 
     private async Task SalvarSePermitidoAsync(EditContext context)
     {
@@ -475,7 +478,7 @@ else
         {
             await TransacaoService.ExcluirAsync(Id.Value);
             Snackbar.Add("Lançamento excluído", Severity.Success);
-            NavigationManager.NavigateTo("/lancamentos");
+            Voltar();
         }
         catch (InvalidOperationException ex)
         {
@@ -490,7 +493,7 @@ else
 
         _modelo.Data = _data ?? DateTime.Today;
         Rascunho.GuardarCopia(_modelo);
-        NavigationManager.NavigateTo("/lancamentos/novo");
+        NavigationManager.NavigateTo(ConsultaMesLancamentos.Rota(MesConsulta, "/lancamentos/novo"));
     }
 
     private void LigarCasco()
@@ -721,7 +724,7 @@ else
                 await TransacaoService.CriarAsync(_modelo);
 
             Snackbar.Add("Lançamento salvo com sucesso", Severity.Success);
-            NavigationManager.NavigateTo("/lancamentos");
+            Voltar();
         }
         catch (UnauthorizedAccessException ex)
         {
