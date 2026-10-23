@@ -28,6 +28,12 @@ public sealed class DiagnosticoResposta
     private const string SeparadorOpcional =
         @"[\s\u00AD\u180E\u200B-\u200F\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]*";
 
+    /// <summary>Nomes cujo valor some do diagnóstico, em qualquer capitalização.</summary>
+    private static readonly string[] CabecalhosSensiveis = ["authorization", "x-api-key", "api_key", "apikey"];
+
+    /// <summary>Um hífen, sublinhado ou ponto, opcional, entre api e key. Os espaços ficam no separador.</summary>
+    private const string SeparadorApiKey = "[-_.]?";
+
     private static readonly Regex ValorCredencial = CriarValorCredencial();
 
     private static readonly Regex CabecalhoPedido = new(
@@ -42,14 +48,21 @@ public sealed class DiagnosticoResposta
         """data:image/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=_-]+""",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
 
+    private const string AlfabetoBase64 = @"[A-Za-z0-9+/_-]";
+    private const string QuebraBase64 = @"(?:\r\n|\n|\r)";
+
     /// <summary>
-    /// Contínuo de 201, ou linhas de 76 mais uma última linha de 1 a 76
-    /// que fecha em quebra, fim, espaço ou aspas, com padding = ou ==.
-    /// Uma letra isolada seguida de palavra, como o "O" de "O total", fica de fora.
+    /// Larguras de linha do bloco (76 e 64). A cauda curta só entra se fechar a linha
+    /// ou se, na mesma linha, não for uma palavra (Total, Nota, OK).
+    /// </summary>
+    private static readonly int[] LargurasBase64 = [76, 64];
+
+    /// <summary>
+    /// Contínuo de 201, ou linhas de 76/64. O avaliador devolve o ID de um só caso.
     /// O alfabeto inclui o url-safe (- e _).
     /// </summary>
     private static readonly Regex Base64Longo = new(
-        """(?:[A-Za-z0-9+/_-]{76}(?:\r\n|\n|\r)){2,}(?:(?![A-Za-z] [A-Za-z])[A-Za-z0-9+/_-]{1,76}={0,2}(?=(?:\r\n|\n|\r|$|[ "'])))?|[A-Za-z0-9+/_-]{201,}={0,2}""",
+        MontarBase64(),
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex EscapeUnicode = new(
@@ -333,7 +346,7 @@ public sealed class DiagnosticoResposta
 
         var limpo = DesescaparJson(texto);
         limpo = DataImage.Replace(limpo, MarcaBase64);
-        limpo = Base64Longo.Replace(limpo, MarcaBase64);
+        limpo = Base64Longo.Replace(limpo, MascararBase64);
         if (juntarQuebras)
             limpo = JuntarQuebras(limpo);
 
@@ -343,9 +356,60 @@ public sealed class DiagnosticoResposta
         return RemoverSegredos(limpo, segredos);
     }
 
+    private static string MontarBase64()
+    {
+        var blocos = new string[LargurasBase64.Length];
+        for (var i = 0; i < LargurasBase64.Length; i++)
+        {
+            var largura = LargurasBase64[i].ToString(CultureInfo.InvariantCulture);
+            blocos[i] = "(?:" + AlfabetoBase64 + "{" + largura + "}" + QuebraBase64 + "){2,}"
+                + "(?:(?![A-Za-z]+[ \"'])" + AlfabetoBase64 + "{1," + largura + "}={0,2}(?="
+                + QuebraBase64 + "|$|[ \"']))?";
+        }
+
+        return string.Join("|", blocos) + "|" + AlfabetoBase64 + "{201,}={0,2}";
+    }
+
+    /// <summary>
+    /// Linha quebrada é base64. Contínuo de um só caso, ou só dígitos, é ID e fica.
+    /// Maiúscula e minúscula juntas, ou + / =, mascaram.
+    /// </summary>
+    private static string MascararBase64(Match correspondencia)
+    {
+        var valor = correspondencia.Value;
+        if (valor.IndexOf('\n') >= 0 || valor.IndexOf('\r') >= 0)
+            return MarcaBase64;
+
+        return PareceBase64Continuo(valor) ? MarcaBase64 : valor;
+    }
+
+    private static bool PareceBase64Continuo(string valor)
+    {
+        var minuscula = false;
+        var maiuscula = false;
+        var sinal = false;
+        foreach (var caractere in valor)
+        {
+            if (caractere is >= 'a' and <= 'z')
+                minuscula = true;
+            else if (caractere is >= 'A' and <= 'Z')
+                maiuscula = true;
+            else if (caractere is '+' or '/' or '=')
+                sinal = true;
+        }
+
+        return sinal || (minuscula && maiuscula);
+    }
+
     private static Regex CriarValorCredencial()
     {
-        var nome = "(?:" + Espacado("authorization") + "|" + Espacado("x-api-key") + ")";
+        var nomes = new string[CabecalhosSensiveis.Length + 1];
+        for (var i = 0; i < CabecalhosSensiveis.Length; i++)
+            nomes[i] = Espacado(CabecalhosSensiveis[i]);
+
+        nomes[^1] = Espacado("api") + SeparadorOpcional + SeparadorApiKey + SeparadorOpcional + Espacado("key");
+
+        var nome = "(?:" + string.Join("|", nomes) + ")";
         var aspas = "(?:\"|')?";
         var valor = "(?:\"[^\"]*\"|'[^']*'|[^\\r\\n" + MarcaQuebra + "]*)";
         var padrao = "(?i)" + aspas + nome + aspas + SeparadorOpcional + "[:=]" + SeparadorOpcional + valor;
@@ -387,72 +451,100 @@ public sealed class DiagnosticoResposta
         return true;
     }
 
+    /// <summary>
+    /// Uma passagem. Separador e percent-encoding (inclusive %252D) saem do texto
+    /// colapsado; a busca fica proporcional ao corpo, não ao produto com o segredo.
+    /// </summary>
     private static string RemoverSegredoFlexivel(string texto, string segredo)
     {
-        var saida = new StringBuilder(texto.Length);
-        var indice = 0;
-        while (indice < texto.Length)
+        var pontos = new List<(int Inicio, int Fim)>(texto.Length);
+        var colapsado = new StringBuilder(texto.Length);
+        for (var i = 0; i < texto.Length;)
         {
-            if (CasaSegredo(texto, indice, segredo, out var fim) &&
-                (segredo.Length >= TamanhoTokenIsolado || TokenIsolado(texto, indice, fim)))
+            if (EhSeparador(texto[i]))
             {
-                saida.Append("***");
-                indice = fim;
+                i++;
                 continue;
             }
 
-            saida.Append(texto[indice]);
-            indice++;
+            if (TentarPercentual(texto, i, out var decodificado, out var proximo))
+            {
+                colapsado.Append(decodificado);
+                pontos.Add((i, proximo));
+                i = proximo;
+                continue;
+            }
+
+            colapsado.Append(texto[i]);
+            pontos.Add((i, i + 1));
+            i++;
         }
 
+        var plano = colapsado.ToString();
+        var saida = new StringBuilder(texto.Length);
+        var origem = 0;
+        var busca = 0;
+        while (busca <= plano.Length - segredo.Length)
+        {
+            var achou = plano.IndexOf(segredo, busca, StringComparison.Ordinal);
+            if (achou < 0)
+                break;
+
+            var inicio = pontos[achou].Inicio;
+            var fim = pontos[achou + segredo.Length - 1].Fim;
+            if (segredo.Length >= TamanhoTokenIsolado || TokenIsolado(texto, inicio, fim))
+            {
+                saida.Append(texto, origem, inicio - origem);
+                saida.Append("***");
+                origem = fim;
+                busca = achou + segredo.Length;
+                continue;
+            }
+
+            busca = achou + 1;
+        }
+
+        saida.Append(texto, origem, texto.Length - origem);
         return saida.ToString();
     }
 
-    private static bool CasaSegredo(string texto, int inicio, string segredo, out int fim)
+    /// <summary>%XX, ou %25XX (%252D → hífen). Só ASCII; byte alto não entra no segredo.</summary>
+    private static bool TentarPercentual(string texto, int posicao, out char caractere, out int proximo)
     {
-        var posicao = inicio;
-        for (var i = 0; i < segredo.Length; i++)
+        caractere = default;
+        proximo = posicao;
+        if ((uint)posicao >= (uint)texto.Length || texto[posicao] != '%')
+            return false;
+
+        if (!HexByte(texto, posicao + 1, out var primeiro))
+            return false;
+
+        if (primeiro == '%' && HexByte(texto, posicao + 3, out var segundo) && segundo <= 0x7F)
         {
-            if (i > 0)
-            {
-                while (posicao < texto.Length && EhSeparador(texto[posicao]))
-                    posicao++;
-            }
-
-            if (!CasaCaractere(texto, posicao, segredo[i], out var proximo))
-            {
-                fim = inicio;
-                return false;
-            }
-
-            posicao = proximo;
+            caractere = (char)segundo;
+            proximo = posicao + 5;
+            return true;
         }
 
-        fim = posicao;
+        if (primeiro > 0x7F)
+            return false;
+
+        caractere = (char)primeiro;
+        proximo = posicao + 3;
         return true;
     }
 
-    private static bool CasaCaractere(string texto, int posicao, char esperado, out int proximo)
+    private static bool HexByte(string texto, int posicao, out int valor)
     {
-        if (posicao < texto.Length && texto[posicao] == esperado)
-        {
-            proximo = posicao + 1;
-            return true;
-        }
+        valor = 0;
+        if ((uint)(posicao + 1) >= (uint)texto.Length)
+            return false;
 
-        if (esperado <= '\u007f' &&
-            posicao + 2 < texto.Length &&
-            texto[posicao] == '%' &&
-            ValorHex(texto[posicao + 1]) is int alto &&
-            ValorHex(texto[posicao + 2]) is int baixo &&
-            (alto << 4 | baixo) == esperado)
-        {
-            proximo = posicao + 3;
-            return true;
-        }
+        if (ValorHex(texto[posicao]) is not int alto || ValorHex(texto[posicao + 1]) is not int baixo)
+            return false;
 
-        proximo = posicao;
-        return false;
+        valor = (alto << 4) | baixo;
+        return true;
     }
 
     private static int? ValorHex(char caractere) => caractere switch
@@ -468,8 +560,18 @@ public sealed class DiagnosticoResposta
         if (inicio > 0 && EhColadoNoToken(texto[inicio - 1]))
             return false;
 
-        return fim >= texto.Length || !EhColadoNoToken(texto[fim]);
+        if (fim >= texto.Length)
+            return true;
+
+        if (texto[fim] == '.' && PontoFinal(texto, fim))
+            return true;
+
+        return !EhColadoNoToken(texto[fim]);
     }
+
+    /// <summary>Ponto de frase. Ponto seguido de letra ou dígito continua o host.</summary>
+    private static bool PontoFinal(string texto, int indice) =>
+        indice + 1 >= texto.Length || !char.IsLetterOrDigit(texto[indice + 1]);
 
     /// <summary>
     /// Letra, dígito, ponto, hífen ou sublinhado continuam o token.

@@ -37,6 +37,28 @@ public class ChipInteligenciaContrasteTests
     }
 
     [Fact]
+    public void ChipNaoSelecionadoNoTemaClaro_UsaBordaDoTexto()
+    {
+        var css = File.ReadAllText(Caminho("InteligenciaArtificialPanel.razor.css"));
+        const string seletor =
+            ":global(html.of-tema-claro) .of-ia-chips ::deep .mud-chip.mud-chip-outlined:not(.mud-chip-selected)";
+
+        var inicio = css.IndexOf(seletor, StringComparison.Ordinal);
+        Assert.True(inicio >= 0, "Regra do chip não selecionado no tema claro não encontrada.");
+
+        var abre = css.IndexOf('{', inicio);
+        var fecha = css.IndexOf('}', abre);
+        var bloco = css[inicio..(fecha + 1)];
+        var seletores = Seletores(bloco);
+        var declaracao = bloco[(bloco.IndexOf('{') + 1)..bloco.IndexOf('}')];
+
+        Assert.Contains(seletores, s => TerminaEm(s, ":hover"));
+        Assert.Contains(seletores, s => TerminaEm(s, ":focus-visible"));
+        Assert.Contains(seletores, s => TerminaEm(s, ":active"));
+        Assert.Contains("border-color: var(--of-text);", declaracao, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void CssDoChip_NaoUsaOFundoCompostoDoHover()
     {
         var css = File.ReadAllText(Caminho("InteligenciaArtificialPanel.razor.css"));

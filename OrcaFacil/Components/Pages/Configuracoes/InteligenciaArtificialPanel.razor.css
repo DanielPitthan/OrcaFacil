@@ -33,6 +33,7 @@
 .of-ia-chips ::deep .mud-chip:not(.mud-chip-selected) {
     background: var(--of-chip-bg);
     color: var(--of-text);
+    border-color: var(--of-text);
 }
 
 /* O outlined selecionado do MudBlazor 9.9 pinta :hover, :focus-visible e :active
@@ -53,6 +54,15 @@
 :global(html.of-tema-escuro) .of-ia-chips ::deep .mud-chip.mud-chip-outlined.mud-chip-color-primary.mud-chip-selected:active {
     background-color: #6EA8FE;
     color: #0B1220;
+}
+
+/* Tema claro: a borda outlined não selecionada fica em 2,17:1. --of-text recupera o traço
+   também em hover, foco e active, que o MudBlazor repinta. */
+:global(html.of-tema-claro) .of-ia-chips ::deep .mud-chip.mud-chip-outlined:not(.mud-chip-selected),
+:global(html.of-tema-claro) .of-ia-chips ::deep .mud-chip.mud-chip-outlined:not(.mud-chip-selected):hover,
+:global(html.of-tema-claro) .of-ia-chips ::deep .mud-chip.mud-chip-outlined:not(.mud-chip-selected):focus-visible,
+:global(html.of-tema-claro) .of-ia-chips ::deep .mud-chip.mud-chip-outlined:not(.mud-chip-selected):active {
+    border-color: var(--of-text);
 }
 
 .of-ia-aviso,

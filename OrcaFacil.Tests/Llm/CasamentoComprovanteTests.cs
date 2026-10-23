@@ -217,9 +217,9 @@ public class CasamentoComprovanteTests
         Assert.Contains("\"confianca\"", json, StringComparison.Ordinal);
         Assert.DoesNotContain("output_config", json, StringComparison.Ordinal);
         Assert.DoesNotContain("\"enum\"", json, StringComparison.Ordinal);
-        Assert.Equal(thinkingDesligado, json.Contains("\"thinking\"", StringComparison.Ordinal));
-        if (thinkingDesligado)
-            Assert.Contains("\"disabled\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"thinking\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"type\":\"disabled\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"tool_choice\"", json, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -213,7 +213,12 @@ public static class PedidoMensagem
             }
         };
 
-        AplicarThinking(raiz, thinking);
+        // tool_choice forçado: o modelo pensa e ignora a ferramenta. O campo thinking
+        // sai sempre desligado, qualquer que seja o host.
+        if (thinking is not (ModoThinking.NaoEnviar or ModoThinking.Desligar))
+            throw new ArgumentOutOfRangeException(nameof(thinking));
+
+        AplicarThinking(raiz, ModoThinking.Desligar);
         return raiz.ToJsonString();
     }
 

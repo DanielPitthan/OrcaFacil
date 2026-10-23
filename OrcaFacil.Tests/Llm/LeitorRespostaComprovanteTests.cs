@@ -675,4 +675,219 @@ public class LeitorRespostaComprovanteTests
             decimal.Parse(valor, System.Globalization.CultureInfo.InvariantCulture),
             Assert.Single(comprovante!.Itens).ConfiancaNumero);
     }
+
+    [Theory]
+    [InlineData("thinking")]
+    [InlineData("reasoning_content")]
+    [InlineData("tool_calls")]
+    public void JsonSoNaFonte_ELido(string fonte)
+    {
+        const string cupom = """{"loja":"FonteUnica","legivel":true,"itens":[{"descricao_lida":"ARROZ","preco":4.5}]}""";
+        var embutido = cupom.Replace("\"", "\\\"", StringComparison.Ordinal);
+        var json = (fonte switch
+        {
+            "thinking" => """
+                {
+                  "stop_reason": "end_turn",
+                  "content": [
+                    { "type": "thinking", "thinking": "CUPOM" }
+                  ]
+                }
+                """,
+            "reasoning_content" => """
+                {
+                  "choices": [
+                    {
+                      "finish_reason": "stop",
+                      "message": { "reasoning_content": "CUPOM" }
+                    }
+                  ]
+                }
+                """,
+            _ => """
+                {
+                  "choices": [
+                    {
+                      "finish_reason": "stop",
+                      "message": {
+                        "reasoning_content": "{\"loja\":\"nao-usar\",\"legivel\":false,\"itens\":[]}",
+                        "tool_calls": [
+                          {
+                            "type": "function",
+                            "function": { "name": "registrar_comprovante", "arguments": "CUPOM" }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+                """,
+        }).Replace("CUPOM", embutido, StringComparison.Ordinal);
+
+        var comprovante = LeitorRespostaComprovante.Ler(json);
+
+        Assert.NotNull(comprovante);
+        Assert.Equal("FonteUnica", comprovante.Loja);
+        Assert.Equal(4.5m, Assert.Single(comprovante.Itens).Preco);
+    }
+
+    [Theory]
+    [InlineData("anthropic")]
+    [InlineData("openai")]
+    public void FinishReasonLength_ComCupomValido_ERespostaCortada(string formato)
+    {
+        var json = formato == "openai"
+            ? """
+              {
+                "choices": [
+                  {
+                    "finish_reason": "length",
+                    "message": {
+                      "tool_calls": [
+                        {
+                          "function": {
+                            "name": "registrar_comprovante",
+                            "arguments": "{\"legivel\":true,\"itens\":[]}"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+              """
+            : """
+              {
+                "finish_reason": "length",
+                "content": [
+                  {
+                    "type": "tool_use",
+                    "name": "registrar_comprovante",
+                    "input": { "legivel": true, "itens": [] }
+                  }
+                ]
+              }
+              """;
+
+        var leitura = LeitorRespostaComprovante.Interpretar(json);
+
+        Assert.Null(leitura.Comprovante);
+        Assert.Null(LeitorRespostaComprovante.Ler(json));
+        Assert.Equal(LeitorRespostaComprovante.MotivoCortada, leitura.Motivo);
+        Assert.Equal("length", leitura.FinishReason);
+        Assert.Null(leitura.StopReason);
+    }
+
+    [Theory]
+    [InlineData("anthropic")]
+    [InlineData("openai")]
+    public void JsonInvalidoNaFerramenta_PrevaleceSobreORascunho(string formato)
+    {
+        const string rascunho = """{"loja":"Rascunho","legivel":true,"itens":[]}""";
+        var embutido = rascunho.Replace("\"", "\\\"", StringComparison.Ordinal);
+        var json = (formato == "openai"
+            ? """
+              {
+                "choices": [
+                  {
+                    "finish_reason": "stop",
+                    "message": {
+                      "reasoning_content": "RASCUNHO",
+                      "thinking": "RASCUNHO",
+                      "content": [
+                        { "type": "thinking", "thinking": "RASCUNHO" }
+                      ],
+                      "tool_calls": [
+                        {
+                          "type": "function",
+                          "function": {
+                            "name": "registrar_comprovante",
+                            "arguments": "nao-json"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+              """
+            : """
+              {
+                "stop_reason": "end_turn",
+                "reasoning_content": "RASCUNHO",
+                "content": [
+                  { "type": "thinking", "thinking": "RASCUNHO" },
+                  {
+                    "type": "tool_use",
+                    "name": "registrar_comprovante",
+                    "input": "nao-json"
+                  }
+                ]
+              }
+              """).Replace("RASCUNHO", embutido, StringComparison.Ordinal);
+
+        var leitura = LeitorRespostaComprovante.Interpretar(json);
+
+        Assert.Null(leitura.Comprovante);
+        Assert.Null(LeitorRespostaComprovante.Ler(json));
+        Assert.Equal(LeitorRespostaComprovante.MotivoJsonInvalido, leitura.Motivo);
+    }
+
+    [Fact]
+    public void ThinkingEmConflitoComReasoning_FicaComOBlocoThinking()
+    {
+        const string thinking = """{"loja":"PeloThinking","legivel":true,"itens":[]}""";
+        const string reasoning = """{"loja":"PeloReasoning","legivel":true,"itens":[]}""";
+        var json = """
+            {
+              "content": [
+                { "type": "thinking", "thinking": "THINKING" }
+              ],
+              "reasoning_content": "REASONING"
+            }
+            """
+            .Replace("THINKING", thinking.Replace("\"", "\\\"", StringComparison.Ordinal), StringComparison.Ordinal)
+            .Replace("REASONING", reasoning.Replace("\"", "\\\"", StringComparison.Ordinal), StringComparison.Ordinal);
+
+        var comprovante = LeitorRespostaComprovante.Ler(json);
+
+        Assert.NotNull(comprovante);
+        Assert.Equal("PeloThinking", comprovante.Loja);
+    }
+
+    [Fact]
+    public void ReasoningNaRaizSemContent_PerdeParaFerramentaInvalida()
+    {
+        const string rascunho = """{"loja":"Rascunho","legivel":true,"itens":[]}""";
+        var json = """
+            {
+              "reasoning_content": "RASCUNHO",
+              "choices": [
+                {
+                  "finish_reason": "stop",
+                  "message": {
+                    "tool_calls": [
+                      {
+                        "type": "function",
+                        "function": {
+                          "name": "registrar_comprovante",
+                          "arguments": "nao-json"
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+            """.Replace(
+            "RASCUNHO",
+            rascunho.Replace("\"", "\\\"", StringComparison.Ordinal),
+            StringComparison.Ordinal);
+
+        var leitura = LeitorRespostaComprovante.Interpretar(json);
+
+        Assert.Null(leitura.Comprovante);
+        Assert.Null(LeitorRespostaComprovante.Ler(json));
+        Assert.Equal(LeitorRespostaComprovante.MotivoJsonInvalido, leitura.Motivo);
+    }
 }

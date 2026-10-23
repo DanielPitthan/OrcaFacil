@@ -142,7 +142,7 @@ public sealed class ClienteMensagens : IDisposable
             tipoMidia.Trim(),
             imagemBase64,
             maxTokens,
-            PerfilProvedor.DaUrl(urlBase).Thinking,
+            PerfilProvedor.DaUrl(urlBase, _permiteHttp).Thinking,
             catalogo);
         return EnviarAsync(
             preparo.Uri,
@@ -170,7 +170,7 @@ public sealed class ClienteMensagens : IDisposable
         if (preparo.Falha is not null)
             return Task.FromResult(preparo.Falha);
 
-        var json = PedidoMensagem.MontarTesteConexao(modelo!, PerfilProvedor.DaUrl(urlBase).Thinking);
+        var json = PedidoMensagem.MontarTesteConexao(modelo!, PerfilProvedor.DaUrl(urlBase, _permiteHttp).Thinking);
         return EnviarAsync(
             preparo.Uri,
             preparo.Chave,
