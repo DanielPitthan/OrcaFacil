@@ -380,15 +380,11 @@ public class FotoPerfilService : IFotoPerfilService
 
     private static Quadro Orientar(GraphicsImage imagem, int orientacao, Descarte descarte)
     {
-        if (OrientacaoExif.DecoderAplicaExif || !OrientacaoExif.ExigeTransformacao(orientacao))
+        var giro = OrientacaoExif.OrientacaoAAplicar(orientacao, OrientacaoExif.DecoderAplicaExif);
+        if (!OrientacaoExif.ExigeTransformacao(giro))
             return new Quadro(imagem, null);
 
-        var largura = Medida(imagem.Width);
-        var altura = Medida(imagem.Height);
-        if (OrientacaoExif.DecoderJaTrocouLados(orientacao, largura, altura, largura, altura))
-            return new Quadro(imagem, null);
-
-        return orientacao switch
+        return giro switch
         {
             OrientacaoExif.FlipHorizontal => Trocar(imagem, Espelhar(imagem, horizontal: true), descarte),
             OrientacaoExif.Rotate180 => GirarPassos(imagem, 2, descarte),

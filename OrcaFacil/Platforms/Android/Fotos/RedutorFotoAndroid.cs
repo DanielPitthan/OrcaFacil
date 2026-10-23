@@ -120,14 +120,20 @@ public static class RedutorFotoAndroid
         int larguraBruta,
         int alturaBruta)
     {
-        if (OrientacaoExif.DecoderAplicaExif || !OrientacaoExif.ExigeTransformacao(orientacao))
-            return (origem, null);
-
-        if (OrientacaoExif.DecoderJaTrocouLados(orientacao, larguraBruta, alturaBruta, origem.Width, origem.Height))
+        var giro = OrientacaoExif.OrientacaoAAplicar(
+            orientacao,
+            OrientacaoExif.DecoderJaAplicou(
+                orientacao,
+                OrientacaoExif.DecoderAplicaExif,
+                larguraBruta,
+                alturaBruta,
+                origem.Width,
+                origem.Height));
+        if (!OrientacaoExif.ExigeTransformacao(giro))
             return (origem, null);
 
         var matriz = new global::Android.Graphics.Matrix();
-        switch (orientacao)
+        switch (giro)
         {
             case OrientacaoExif.FlipHorizontal:
                 matriz.SetScale(-1, 1);

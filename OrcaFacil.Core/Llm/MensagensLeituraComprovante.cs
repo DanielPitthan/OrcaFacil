@@ -35,6 +35,9 @@ public sealed record ExibicaoLeituraComprovante
     public override string ToString() => $"ExibicaoLeitura({Situacao})";
 }
 
+/// <summary>Uma aba de Configurações. A ordem da tabela é a ordem na tela; o atalho usa a consulta, não um índice fixo.</summary>
+public readonly record struct AbaConfiguracao(string Consulta, string Titulo);
+
 /// <summary>
 /// Traduz o resultado da chamada e o comprovante normalizado para a frase da tela.
 /// O comprovante em si fica na memória da página. Esta etapa não grava compra.
@@ -66,12 +69,55 @@ public static class MensagensLeituraComprovante
 
     public const string ConsultaAba = "ia";
 
-    /// <summary>Terceira aba de Configurações, a de Inteligência artificial.</summary>
-    public const int IndiceAbaInteligencia = 2;
-
     public const string RotaInteligencia = "/configuracoes?aba=ia";
 
+    private static readonly AbaConfiguracao[] LinhasAbas =
+    [
+        new("notificacoes", "Notificações"),
+        new("armazenamento", "Armazenamento"),
+        new(ConsultaAba, "Inteligência artificial")
+    ];
+
+    public static IReadOnlyList<AbaConfiguracao> Abas => LinhasAbas;
+
     private static readonly CultureInfo Cultura = CultureInfo.GetCultureInfo("pt-BR");
+
+    /// <summary>
+    /// Posição da consulta na tabela informada. A mesma consulta muda de lugar se a ordem mudar.
+    /// Consulta ausente ou desconhecida devolve -1.
+    /// </summary>
+    public static int IndiceNaTabela(IReadOnlyList<AbaConfiguracao> abas, string? consulta)
+    {
+        ArgumentNullException.ThrowIfNull(abas);
+        if (string.IsNullOrWhiteSpace(consulta))
+            return -1;
+
+        for (var i = 0; i < abas.Count; i++)
+        {
+            if (string.Equals(abas[i].Consulta, consulta, StringComparison.OrdinalIgnoreCase))
+                return i;
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// Índice da aba de inteligência artificial quando a consulta é <see cref="ConsultaAba"/>.
+    /// Outra consulta não troca de aba.
+    /// </summary>
+    public static int? IndiceDoAtalho(string? consulta) =>
+        IndiceDoAtalho(LinhasAbas, consulta);
+
+    public static int? IndiceDoAtalho(IReadOnlyList<AbaConfiguracao> abas, string? consulta)
+    {
+        var indice = IndiceNaTabela(abas, consulta);
+        if (indice < 0)
+            return null;
+        if (!string.Equals(abas[indice].Consulta, ConsultaAba, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        return indice;
+    }
 
     public static ExibicaoLeituraComprovante Carregando() =>
         new()

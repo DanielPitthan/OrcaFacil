@@ -1,11 +1,16 @@
 namespace OrcaFacil.Core.Llm;
 
 /// <summary>
+/// Uma linha da tag 274. <see cref="Aplica"/> vale quando o decoder ainda não girou a foto.
+/// </summary>
+public readonly record struct RegraOrientacaoExif(int Codigo, bool TrocaLados, bool Aplica);
+
+/// <summary>
 /// As oito orientações EXIF (tag 274). O valor é o código do arquivo, não um ângulo.
 /// <see cref="DecoderAplicaExif"/> é falso: <c>BitmapFactory</c> e <c>PlatformImage.FromStream</c>
-/// não giram sozinhos. Quem chama aplica esta transformação uma vez.
-/// Se o bitmap decodificado já trocou a largura com a altura, <see cref="DecoderJaTrocouLados"/>
-/// evita um segundo giro. Espelhamento não muda o tamanho, então o 2 e o 4 sempre se aplicam.
+/// não giram sozinhos. Quem chama lê o código uma vez e usa <see cref="OrientacaoAAplicar"/>.
+/// Se o decoder já aplicou, o resultado é <see cref="Normal"/> — também nos códigos 2, 3 e 4,
+/// que não trocam os lados e por isso não aparecem em <see cref="DecoderJaTrocouLados"/>.
 /// </summary>
 public static class OrientacaoExif
 {
@@ -20,11 +25,60 @@ public static class OrientacaoExif
 
     public const bool DecoderAplicaExif = false;
 
+    private static readonly RegraOrientacaoExif[] Linhas =
+    [
+        new(Normal, false, false),
+        new(FlipHorizontal, false, true),
+        new(Rotate180, false, true),
+        new(FlipVertical, false, true),
+        new(Transpose, true, true),
+        new(Rotate90, true, true),
+        new(Transverse, true, true),
+        new(Rotate270, true, true)
+    ];
+
+    public static IReadOnlyList<RegraOrientacaoExif> Tabela => Linhas;
+
     public static bool ExigeTransformacao(int orientacao) =>
-        orientacao is >= FlipHorizontal and <= Rotate270;
+        Regra(orientacao)?.Aplica == true;
 
     public static bool TrocaLados(int orientacao) =>
-        orientacao is Transpose or Rotate90 or Transverse or Rotate270;
+        Regra(orientacao)?.TrocaLados == true;
+
+    /// <summary>
+    /// Falso quando o decoder já aplicou a orientação lida, inclusive nos códigos que não trocam os lados.
+    /// </summary>
+    public static bool DeveAplicar(int orientacao, bool decoderJaAplicou) =>
+        !decoderJaAplicou && ExigeTransformacao(orientacao);
+
+    /// <summary>
+    /// Código que ainda falta aplicar. A orientação entra uma vez: se o decoder já girou, devolve <see cref="Normal"/>.
+    /// </summary>
+    public static int OrientacaoAAplicar(int orientacaoLida, bool decoderJaAplicou) =>
+        DeveAplicar(orientacaoLida, decoderJaAplicou) ? orientacaoLida : Normal;
+
+    /// <summary>
+    /// O decoder declarou que aplica o EXIF, ou as medidas mostram que os lados já trocaram.
+    /// Medidas iguais não são sinal: espelhamento e 180° não mudam o tamanho.
+    /// </summary>
+    public static bool DecoderJaAplicou(
+        int orientacao,
+        bool decoderDeclarado,
+        int larguraBruta,
+        int alturaBruta,
+        int larguraDecodificada,
+        int alturaDecodificada)
+    {
+        if (decoderDeclarado)
+            return true;
+
+        return DecoderJaTrocouLados(
+            orientacao,
+            larguraBruta,
+            alturaBruta,
+            larguraDecodificada,
+            alturaDecodificada);
+    }
 
     public static (int Largura, int Altura) TamanhoSaida(int orientacao, int largura, int altura)
     {
@@ -76,6 +130,17 @@ public static class OrientacaoExif
         var brutaLarga = larguraBruta > alturaBruta;
         var decodificadaLarga = larguraDecodificada > alturaDecodificada;
         return brutaLarga != decodificadaLarga;
+    }
+
+    private static RegraOrientacaoExif? Regra(int codigo)
+    {
+        foreach (var regra in Linhas)
+        {
+            if (regra.Codigo == codigo)
+                return regra;
+        }
+
+        return null;
     }
 
     private static void ExigirRetangulo(int largura, int altura)

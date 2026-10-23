@@ -67,8 +67,8 @@
 
     protected override void OnParametersSet()
     {
-        if (string.Equals(AbaConsulta, MensagensLeituraComprovante.ConsultaAba, StringComparison.OrdinalIgnoreCase))
-            _aba = MensagensLeituraComprovante.IndiceAbaInteligencia;
+        if (MensagensLeituraComprovante.IndiceDoAtalho(AbaConsulta) is int indice)
+            _aba = indice;
     }
 
     protected override void OnInitialized()

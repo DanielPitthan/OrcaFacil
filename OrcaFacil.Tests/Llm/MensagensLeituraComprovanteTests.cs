@@ -142,19 +142,60 @@ public class MensagensLeituraComprovanteTests
     }
 
     [Fact]
-    public void AbaInteligencia_UsaIndiceNomeado()
+    public void AbaInteligencia_SegueATabela_ENaoUmIndiceFixo()
     {
-        Assert.Equal(2, MensagensLeituraComprovante.IndiceAbaInteligencia);
+        var abas = MensagensLeituraComprovante.Abas;
 
+        Assert.Equal(
+            ["notificacoes", "armazenamento", MensagensLeituraComprovante.ConsultaAba],
+            abas.Select(aba => aba.Consulta).ToArray());
+        Assert.Equal(
+            ["Notificações", "Armazenamento", "Inteligência artificial"],
+            abas.Select(aba => aba.Titulo).ToArray());
+        Assert.Equal(abas.Count - 1, MensagensLeituraComprovante.IndiceDoAtalho("ia"));
+        Assert.Equal(MensagensLeituraComprovante.IndiceDoAtalho("ia"), MensagensLeituraComprovante.IndiceDoAtalho("IA"));
+        Assert.Null(MensagensLeituraComprovante.IndiceDoAtalho("notificacoes"));
+        Assert.Null(MensagensLeituraComprovante.IndiceDoAtalho("armazenamento"));
+        Assert.Null(MensagensLeituraComprovante.IndiceDoAtalho(null));
+        Assert.Null(MensagensLeituraComprovante.IndiceDoAtalho("   "));
+        Assert.Equal(-1, MensagensLeituraComprovante.IndiceNaTabela(abas, "inexistente"));
+
+        var iaPrimeiro = new AbaConfiguracao[]
+        {
+            new(MensagensLeituraComprovante.ConsultaAba, "Inteligência artificial"),
+            new("notificacoes", "Notificações"),
+            new("armazenamento", "Armazenamento")
+        };
+        var iaNoMeio = new AbaConfiguracao[]
+        {
+            new("notificacoes", "Notificações"),
+            new(MensagensLeituraComprovante.ConsultaAba, "Inteligência artificial"),
+            new("armazenamento", "Armazenamento")
+        };
+
+        Assert.Equal(0, MensagensLeituraComprovante.IndiceDoAtalho(iaPrimeiro, "ia"));
+        Assert.Equal(1, MensagensLeituraComprovante.IndiceDoAtalho(iaNoMeio, "IA"));
+        Assert.Null(MensagensLeituraComprovante.IndiceDoAtalho(iaPrimeiro, "notificacoes"));
+        Assert.Null(MensagensLeituraComprovante.IndiceDoAtalho([], "ia"));
+
+        var raiz = EncontrarRaiz();
         var razor = File.ReadAllText(Path.Combine(
-            EncontrarRaiz(),
+            raiz,
             "OrcaFacil",
             "Components",
             "Pages",
             "Configuracoes",
             "Configuracoes.razor"));
+        var mensagens = File.ReadAllText(Path.Combine(
+            raiz,
+            "OrcaFacil.Core",
+            "Llm",
+            "MensagensLeituraComprovante.cs"));
 
-        Assert.Contains("MensagensLeituraComprovante.IndiceAbaInteligencia", razor, StringComparison.Ordinal);
+        Assert.Equal(abas.Select(aba => aba.Titulo).ToArray(), TitulosDeAbas(razor));
+        Assert.Contains("MensagensLeituraComprovante.IndiceDoAtalho(AbaConsulta)", razor, StringComparison.Ordinal);
+        Assert.DoesNotContain("IndiceAbaInteligencia", razor, StringComparison.Ordinal);
+        Assert.DoesNotContain("IndiceAbaInteligencia", mensagens, StringComparison.Ordinal);
         Assert.DoesNotContain("_aba = 2", razor, StringComparison.Ordinal);
     }
 
@@ -448,6 +489,25 @@ public class MensagensLeituraComprovanteTests
     public void Diagnostico_NaoConfundeOutroErroComFaltaDeVisao(string? corpo)
     {
         Assert.False(DiagnosticoErroProvedor.IndicaModeloSemVisao(corpo));
+    }
+
+    private static string[] TitulosDeAbas(string razor)
+    {
+        const string marca = "<MudTabPanel Text=\"";
+        var titulos = new List<string>();
+        var indice = 0;
+        while (true)
+        {
+            indice = razor.IndexOf(marca, indice, StringComparison.Ordinal);
+            if (indice < 0)
+                return titulos.ToArray();
+
+            var inicio = indice + marca.Length;
+            var fim = razor.IndexOf('"', inicio);
+            Assert.True(fim > inicio);
+            titulos.Add(razor[inicio..fim]);
+            indice = fim;
+        }
     }
 
     private static string ExtrairBloco(string fonte, string assinatura)

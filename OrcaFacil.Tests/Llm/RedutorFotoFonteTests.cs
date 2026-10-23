@@ -30,6 +30,18 @@ public class RedutorFotoFonteTests
         Assert.Contains("OrientacaoExif.Rotate270", fonte, StringComparison.Ordinal);
         Assert.Contains("OrientacaoExif.FlipHorizontal", fonte, StringComparison.Ordinal);
         Assert.Contains("OrientacaoExif.Transverse", fonte, StringComparison.Ordinal);
+        Assert.Equal(1, Contar(fonte, "LerOrientacao(bytes)"));
+        Assert.DoesNotContain("DecoderJaTrocouLados", fonte, StringComparison.Ordinal);
+
+        var aplicar = ExtrairBloco(fonte, "Matriz) Aplicar(");
+        Assert.Contains("OrientacaoExif.OrientacaoAAplicar(", aplicar, StringComparison.Ordinal);
+        Assert.Contains("OrientacaoExif.DecoderJaAplicou(", aplicar, StringComparison.Ordinal);
+        Assert.Contains("larguraBruta", aplicar, StringComparison.Ordinal);
+        Assert.Contains("alturaBruta", aplicar, StringComparison.Ordinal);
+        Assert.Contains("origem.Width", aplicar, StringComparison.Ordinal);
+        Assert.Contains("origem.Height", aplicar, StringComparison.Ordinal);
+        Assert.DoesNotContain("LerOrientacao", aplicar, StringComparison.Ordinal);
+        Assert.DoesNotContain("larguraBruta, alturaBruta, larguraBruta, alturaBruta", aplicar, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -81,6 +93,32 @@ public class RedutorFotoFonteTests
         Assert.DoesNotContain("A leitura não foi enviada.", fonte, StringComparison.Ordinal);
         Assert.Contains("FotoComprovantePronta.FormatoNaoConvertido()", fonte, StringComparison.Ordinal);
         Assert.Contains("EscolherMediaType(jpeg) is null", fonte, StringComparison.Ordinal);
+        Assert.Equal(1, Contar(fonte, "LerOrientacao(origem)"));
+        Assert.DoesNotContain("DecoderJaTrocouLados", fonte, StringComparison.Ordinal);
+
+        var orientar = ExtrairBloco(fonte, "Quadro Orientar(");
+        Assert.Contains(
+            "OrientacaoExif.OrientacaoAAplicar(orientacao, OrientacaoExif.DecoderAplicaExif)",
+            orientar,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("LerOrientacao", orientar, StringComparison.Ordinal);
+        Assert.DoesNotContain("imagem.Width", orientar, StringComparison.Ordinal);
+        Assert.DoesNotContain("imagem.Height", orientar, StringComparison.Ordinal);
+    }
+
+    private static int Contar(string texto, string trecho)
+    {
+        var total = 0;
+        var indice = 0;
+        while (true)
+        {
+            indice = texto.IndexOf(trecho, indice, StringComparison.Ordinal);
+            if (indice < 0)
+                return total;
+
+            total++;
+            indice += trecho.Length;
+        }
     }
 
     private static string TrechoAntesDoFinally(string metodo)
