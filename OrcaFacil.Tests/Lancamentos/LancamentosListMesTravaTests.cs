@@ -107,6 +107,116 @@ public class LancamentosListMesTravaTests
         Assert.True(Contem(comentario, "OnClick=\"Voltar\""));
     }
 
+    [Fact]
+    public void Importacao_ComLancamento_AbreARota_EComentarioNaoConta()
+    {
+        const string semLancamento = "if (gravacao.Lancamentos == 0)";
+        const string voltaAtivos = "Navegacao.NavigateTo(\"/ativos\")";
+        const string abreRota = "Navegacao.NavigateTo(gravacao.Rota)";
+
+        var pagina = SemComentarios(Ler("OrcaFacil", "Components", "Pages", "Ativos", "ImportarExtratoB3.razor"));
+        Assert.Equal(1, Contar(pagina, semLancamento));
+        Assert.True(TentarRamoSemLancamento(pagina, out var se, out var senao));
+        Assert.True(Contem(se, voltaAtivos));
+        Assert.False(Contem(se, "gravacao.Rota"));
+        Assert.True(Contem(senao, abreRota));
+        Assert.False(Contem(senao, "\"/ativos\""));
+
+        const string soVoltar = """
+            private void Voltar() => Navegacao.NavigateTo("/ativos");
+            """;
+        Assert.False(TentarRamoSemLancamento(SemComentarios(soVoltar), out _, out _));
+
+        const string soComentario = """
+            private void Voltar() => Navegacao.NavigateTo("/ativos");
+            // if (gravacao.Lancamentos == 0) { Navegacao.NavigateTo("/ativos"); }
+            /* else { Navegacao.NavigateTo(gravacao.Rota); } */
+            @* if (gravacao.Lancamentos == 0) { Navegacao.NavigateTo("/ativos"); } else { Navegacao.NavigateTo(gravacao.Rota); } *@
+            """;
+        Assert.False(TentarRamoSemLancamento(SemComentarios(soComentario), out _, out _));
+    }
+
+    private static bool TentarRamoSemLancamento(string fonte, out string se, out string senao)
+    {
+        se = "";
+        senao = "";
+        const string condicao = "if (gravacao.Lancamentos == 0)";
+        var indice = fonte.IndexOf(condicao, StringComparison.Ordinal);
+        if (indice < 0 || !FecharChaves(fonte, indice + condicao.Length, out var abreSe, out var fechaSe))
+            return false;
+
+        var cursor = fechaSe + 1;
+        while (cursor < fonte.Length && char.IsWhiteSpace(fonte[cursor]))
+            cursor++;
+
+        if (!ComecaCom(fonte, cursor, "else"))
+            return false;
+
+        cursor += 4;
+        if (cursor < fonte.Length && (char.IsLetterOrDigit(fonte[cursor]) || fonte[cursor] == '_'))
+            return false;
+
+        if (!FecharChaves(fonte, cursor, out var abreSenao, out var fechaSenao))
+            return false;
+
+        se = fonte[abreSe..(fechaSe + 1)];
+        senao = fonte[abreSenao..(fechaSenao + 1)];
+        return true;
+    }
+
+    private static bool FecharChaves(string fonte, int inicio, out int abre, out int fecha)
+    {
+        abre = -1;
+        fecha = -1;
+        var profundidade = 0;
+        for (var i = inicio; i < fonte.Length; i++)
+        {
+            var c = fonte[i];
+            if (c == '"')
+            {
+                i = PularTexto(fonte, i);
+                continue;
+            }
+
+            if (c == '{')
+            {
+                if (profundidade == 0)
+                    abre = i;
+                profundidade++;
+                continue;
+            }
+
+            if (c != '}' || profundidade == 0)
+                continue;
+
+            profundidade--;
+            if (profundidade != 0)
+                continue;
+
+            fecha = i;
+            return abre >= 0;
+        }
+
+        return false;
+    }
+
+    private static int PularTexto(string fonte, int abreAspas)
+    {
+        for (var i = abreAspas + 1; i < fonte.Length; i++)
+        {
+            if (fonte[i] == '\\' && i + 1 < fonte.Length)
+            {
+                i++;
+                continue;
+            }
+
+            if (fonte[i] == '"')
+                return i;
+        }
+
+        return fonte.Length - 1;
+    }
+
     private static int Contar(string fonte, string trecho)
     {
         var total = 0;
