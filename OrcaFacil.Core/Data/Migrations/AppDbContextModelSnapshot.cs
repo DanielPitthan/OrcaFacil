@@ -130,7 +130,8 @@ namespace OrcaFacil.Core.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Nome")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("\"Ativo\" = 1");
 
                     b.ToTable("Categorias");
                 });

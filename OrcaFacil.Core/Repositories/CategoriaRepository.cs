@@ -19,10 +19,20 @@ public class CategoriaRepository : GenericRepository<Categoria>, ICategoriaRepos
             .ToListAsync();
     }
 
+    public async Task<List<Categoria>> ListarPorNomeAsync(string nome)
+    {
+        await using var context = await ContextFactory.CreateDbContextAsync();
+        return await context.Categorias
+            .Where(c => c.Nome.ToLower() == nome.ToLower())
+            .OrderBy(c => c.Id)
+            .ToListAsync();
+    }
+
     public async Task<bool> ExisteNomeAsync(string nome, int? ignorarId = null)
     {
         await using var context = await ContextFactory.CreateDbContextAsync();
-        var query = context.Categorias.Where(c => c.Nome.ToLower() == nome.ToLower());
+        // O índice único também ignora inativas. A edição só esbarra em outra ativa.
+        var query = context.Categorias.Where(c => c.Ativo && c.Nome.ToLower() == nome.ToLower());
         if (ignorarId.HasValue)
             query = query.Where(c => c.Id != ignorarId.Value);
         return await query.AnyAsync();
@@ -33,5 +43,12 @@ public class CategoriaRepository : GenericRepository<Categoria>, ICategoriaRepos
         await using var context = await ContextFactory.CreateDbContextAsync();
         return await context.Transacoes.AnyAsync(t => t.CategoriaId == categoriaId)
             || await context.ItensLancamento.AnyAsync(i => i.CategoriaId == categoriaId);
+    }
+
+    public async Task<bool> PossuiItensFaturaAsync(int categoriaId)
+    {
+        await using var context = await ContextFactory.CreateDbContextAsync();
+        return await context.ItensLancamento.AnyAsync(i => i.CategoriaId == categoriaId)
+            || await context.Transacoes.AnyAsync(t => t.CategoriaId == categoriaId && t.Itens.Any());
     }
 }
