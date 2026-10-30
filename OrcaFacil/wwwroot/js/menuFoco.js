@@ -1,6 +1,7 @@
 (function () {
     var estava = new WeakMap();
     var popoverDoMenu = new WeakMap();
+    var popoversDoMenu = [];
     var tabDirecao = 1;
     var tabQuando = 0;
     var observador = new MutationObserver(function (registros) {
@@ -45,18 +46,31 @@
         if (!evento || evento.key !== "Tab")
             return;
         var origem = evento.target;
-        if (!origem || !origem.closest)
-            return;
-        if (!origem.closest("[id^='popovercontent-']"))
+        if (!origem || !origemDoMenu(origem))
             return;
         tabDirecao = evento.shiftKey ? -1 : 1;
         tabQuando = Date.now();
     }
 
+    function origemDoMenu(origem) {
+        for (var i = 0; i < popoversDoMenu.length; i++) {
+            var popover = popoversDoMenu[i];
+            if (popover && (popover === origem || popover.contains(origem)))
+                return true;
+        }
+        return false;
+    }
+
     function guardarPopover(alvo) {
         var popover = acharPopover(alvo);
-        if (popover)
-            popoverDoMenu.set(alvo, popover);
+        if (!popover)
+            return;
+        popoverDoMenu.set(alvo, popover);
+        for (var i = 0; i < popoversDoMenu.length; i++) {
+            if (popoversDoMenu[i] === popover)
+                return;
+        }
+        popoversDoMenu.push(popover);
     }
 
     function acharPopover(alvo) {
@@ -102,7 +116,10 @@
     }
 
     function moverParaFora(alvo, direcao) {
-        var ordem = tabulaveis();
+        var dialogo = null;
+        if (alvo.closest)
+            dialogo = alvo.closest("[role='dialog']");
+        var ordem = tabulaveis(dialogo);
         var indice = -1;
         for (var i = 0; i < ordem.length; i++) {
             if (ordem[i] === alvo) {
@@ -115,17 +132,37 @@
 
         var popover = popoverDoMenu.get(alvo);
         var passo = direcao < 0 ? -1 : 1;
-        for (var j = indice + passo; j >= 0 && j < ordem.length; j = j + passo) {
-            var candidato = ordem[j];
-            if (popover && (candidato === popover || popover.contains(candidato)))
-                continue;
-            candidato.focus();
-            return;
-        }
+        var escolhido = seguinteNaOrdem(ordem, indice + passo, passo, popover);
+        if (!escolhido && dialogo)
+            escolhido = voltaNoDialogo(ordem, passo, popover);
+        if (escolhido)
+            escolhido.focus();
     }
 
-    function tabulaveis() {
-        var nos = document.querySelectorAll("a[href], button, input, select, textarea, [tabindex]");
+    function seguinteNaOrdem(ordem, inicio, passo, popover) {
+        for (var j = inicio; j >= 0 && j < ordem.length; j = j + passo) {
+            if (!estaNoPopover(ordem[j], popover))
+                return ordem[j];
+        }
+        return null;
+    }
+
+    function voltaNoDialogo(ordem, passo, popover) {
+        var inicio = passo < 0 ? ordem.length - 1 : 0;
+        return seguinteNaOrdem(ordem, inicio, passo, popover);
+    }
+
+    function estaNoPopover(candidato, popover) {
+        if (!popover)
+            return false;
+        return candidato === popover || popover.contains(candidato);
+    }
+
+    function tabulaveis(raiz) {
+        var base = document;
+        if (raiz && raiz.querySelectorAll)
+            base = raiz;
+        var nos = base.querySelectorAll("a[href], button, input, select, textarea, [tabindex]");
         var naturais = [];
         var positivos = [];
         for (var i = 0; i < nos.length; i++) {
@@ -170,10 +207,16 @@
             return false;
         if (no.hasAttribute("hidden"))
             return false;
+        if (no.classList && no.classList.contains("fixed") && no.classList.contains("pointer-events-none"))
+            return false;
         var estilo = window.getComputedStyle(no);
         if (!estilo || estilo.display === "none" || estilo.visibility === "hidden")
             return false;
+        if (estilo.position === "fixed" && estilo.pointerEvents === "none")
+            return false;
         if (no.getClientRects().length === 0)
+            return false;
+        if (no.offsetWidth === 0 || no.offsetHeight === 0)
             return false;
         return true;
     }

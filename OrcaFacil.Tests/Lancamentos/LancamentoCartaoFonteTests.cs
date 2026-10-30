@@ -402,6 +402,114 @@ public class LancamentoCartaoFonteTests
         Assert.False(DevolveFoco(semReleitura, Fonte("OrcaFacil", "wwwroot", "index.html")));
     }
 
+    [Fact]
+    public void ParaChoqueESentinela_NaoEntramNaOrdemDeTab()
+    {
+        var script = Fonte("OrcaFacil", "wwwroot", "js", "menuFoco.js");
+        Assert.True(RejeitaParaChoque(script));
+
+        var aceitaClasse = SemComentarios(script.Replace(
+            """
+                    if (no.classList && no.classList.contains("fixed") && no.classList.contains("pointer-events-none"))
+                        return false;
+            """,
+            """
+                    // if (no.classList && no.classList.contains("fixed") && no.classList.contains("pointer-events-none"))
+                    //     return false;
+            """,
+            StringComparison.Ordinal));
+        Assert.False(RejeitaParaChoque(aceitaClasse));
+
+        var aceitaEstilo = SemComentarios(script.Replace(
+            """
+                    if (estilo.position === "fixed" && estilo.pointerEvents === "none")
+                        return false;
+            """,
+            """
+                    // if (estilo.position === "fixed" && estilo.pointerEvents === "none")
+                    //     return false;
+            """,
+            StringComparison.Ordinal));
+        Assert.False(RejeitaParaChoque(aceitaEstilo));
+
+        var aceitaZero = SemComentarios(script.Replace(
+            """
+                    if (no.offsetWidth === 0 || no.offsetHeight === 0)
+                        return false;
+            """,
+            """
+                    // if (no.offsetWidth === 0 || no.offsetHeight === 0)
+                    //     return false;
+            """,
+            StringComparison.Ordinal));
+        Assert.False(RejeitaParaChoque(aceitaZero));
+    }
+
+    [Fact]
+    public void ShiftTabNoDialogo_VoltaParaOUltimoControle()
+    {
+        var script = Fonte("OrcaFacil", "wwwroot", "js", "menuFoco.js");
+        var dialogo = Fonte("OrcaFacil", "Components", "Pages", "Cesta", "CompraCestaDialog.razor");
+        Assert.True(VoltaDentroDoDialogo(script, dialogo));
+
+        var semDialogo = script.Replace(
+            "dialogo = alvo.closest(\"[role='dialog']\");",
+            "dialogo = null;",
+            StringComparison.Ordinal);
+        Assert.False(VoltaDentroDoDialogo(semDialogo, dialogo));
+
+        var semVolta = SemComentarios(script.Replace(
+            """
+                    if (!escolhido && dialogo)
+                        escolhido = voltaNoDialogo(ordem, passo, popover);
+            """,
+            """
+                    // if (!escolhido && dialogo)
+                    //     escolhido = voltaNoDialogo(ordem, passo, popover);
+            """,
+            StringComparison.Ordinal));
+        Assert.False(VoltaDentroDoDialogo(semVolta, dialogo));
+
+        var puxaPopover = script.Replace(
+            "if (!estaNoPopover(ordem[j], popover))",
+            "if (true)",
+            StringComparison.Ordinal);
+        Assert.False(VoltaDentroDoDialogo(puxaPopover, dialogo));
+    }
+
+    [Fact]
+    public void RelogioDoTab_NaoArmaNoCalendario()
+    {
+        var script = Fonte("OrcaFacil", "wwwroot", "js", "menuFoco.js");
+        var painel = Fonte("OrcaFacil", "Components", "Pages", "Lancamentos", "FaturaCartaoPainel.razor");
+        var dialogo = Fonte("OrcaFacil", "Components", "Pages", "Cesta", "CompraCestaDialog.razor");
+        Assert.True(RelogioSoNoPopoverDoMenu(script, painel, dialogo));
+
+        var qualquerPopover = script.Replace(
+            "if (!origem || !origemDoMenu(origem))",
+            "if (!origem || !origem.closest(\"[id^='popovercontent-']\"))",
+            StringComparison.Ordinal);
+        Assert.False(RelogioSoNoPopoverDoMenu(qualquerPopover, painel, dialogo));
+
+        var guardaComentada = SemComentarios(script.Replace(
+            """
+                    if (!origem || !origemDoMenu(origem))
+                        return;
+            """,
+            """
+                    // if (!origem || !origemDoMenu(origem))
+                    //     return;
+            """,
+            StringComparison.Ordinal));
+        Assert.False(RelogioSoNoPopoverDoMenu(guardaComentada, painel, dialogo));
+
+        var semLista = SemComentarios(script.Replace(
+            "popoversDoMenu.push(popover);",
+            "// popoversDoMenu.push(popover);",
+            StringComparison.Ordinal));
+        Assert.False(RelogioSoNoPopoverDoMenu(semLista, painel, dialogo));
+    }
+
     private static string Fonte(params string[] partes)
         => SemComentarios(File.ReadAllText(Path.Combine(new[] { EncontrarRaiz() }.Concat(partes).ToArray())));
 
@@ -577,6 +685,66 @@ public class LancamentoCartaoFonteTests
             return false;
 
         return EsperaDevolucao(script);
+    }
+
+    private static bool RejeitaParaChoque(string script)
+    {
+        if (script.Contains("?.", StringComparison.Ordinal) || script.Contains("??", StringComparison.Ordinal))
+            return false;
+
+        return Regex.IsMatch(
+            script,
+            @"function podeTabular\(no\) \{.*?classList\.contains\(""fixed""\) && no\.classList\.contains\(""pointer-events-none""\)\)\s*return false;.*?position === ""fixed"" && estilo\.pointerEvents === ""none""\)\s*return false;.*?offsetWidth === 0 \|\| no\.offsetHeight === 0\)\s*return false;\s*return true;\s*\}",
+            RegexOptions.Singleline);
+    }
+
+    private static bool VoltaDentroDoDialogo(string script, string dialogo)
+    {
+        if (!dialogo.Contains("<MudDialog", StringComparison.Ordinal))
+            return false;
+        if (script.Contains("?.", StringComparison.Ordinal) || script.Contains("??", StringComparison.Ordinal))
+            return false;
+        if (!script.Contains("dialogo = alvo.closest(\"[role='dialog']\");", StringComparison.Ordinal))
+            return false;
+        if (!script.Contains("var ordem = tabulaveis(dialogo);", StringComparison.Ordinal))
+            return false;
+        if (!Regex.IsMatch(script, @"if \(raiz && raiz\.querySelectorAll\)\s*base = raiz;"))
+            return false;
+        if (!Regex.IsMatch(
+                script,
+                @"if \(!escolhido && dialogo\)\s*escolhido = voltaNoDialogo\(ordem, passo, popover\);"))
+            return false;
+        if (!Regex.IsMatch(
+                script,
+                @"function voltaNoDialogo\(ordem, passo, popover\) \{\s*var inicio = passo < 0 \? ordem\.length - 1 : 0;\s*return seguinteNaOrdem\(ordem, inicio, passo, popover\);\s*\}"))
+            return false;
+        if (!Regex.IsMatch(
+                script,
+                @"if \(!estaNoPopover\(ordem\[j\], popover\)\)\s*return ordem\[j\];"))
+            return false;
+
+        return script.Contains("popover.contains(candidato)", StringComparison.Ordinal);
+    }
+
+    private static bool RelogioSoNoPopoverDoMenu(string script, string painel, string dialogo)
+    {
+        if (!painel.Contains("<MudDatePicker", StringComparison.Ordinal))
+            return false;
+        if (!dialogo.Contains("<MudDatePicker", StringComparison.Ordinal))
+            return false;
+        if (script.Contains("?.", StringComparison.Ordinal) || script.Contains("??", StringComparison.Ordinal))
+            return false;
+        if (script.Contains("closest(\"[id^='popovercontent-']\")", StringComparison.Ordinal))
+            return false;
+        if (!script.Contains("popoversDoMenu.push(popover);", StringComparison.Ordinal))
+            return false;
+        if (!script.Contains("if (!antes && agora)", StringComparison.Ordinal))
+            return false;
+
+        return Regex.IsMatch(
+            script,
+            @"if \(!origem \|\| !origemDoMenu\(origem\)\)\s*return;\s*tabDirecao = evento\.shiftKey \? -1 : 1;\s*tabQuando = Date\.now\(\);",
+            RegexOptions.Singleline);
     }
 
     private static bool LinhaEmbutidaSemGrupo(string linha)
