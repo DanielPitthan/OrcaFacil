@@ -1,10 +1,13 @@
+using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.Dtos;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
+using OrcaFacil.Core.Exportacao;
 using OrcaFacil.Core.Lancamentos;
 using OrcaFacil.Core.Repositories;
 using OrcaFacil.Core.Services;
 using OrcaFacil.Services.Interfaces;
+using Serilog;
 
 namespace OrcaFacil.Services;
 
@@ -49,6 +52,8 @@ public class TransacaoService : ITransacaoService
         var categoria = await _categoriaRepository.GetByIdAsync(dto.CategoriaId)
             ?? throw new InvalidOperationException("Categoria inválida.");
 
+        dto.Tipo = FluxoLancamento.TipoNaCriacao(categoria.TipoPadrao);
+
         var itens = await MapearItensAsync(dto, categoria);
 
         var membroId = _perfilContext.Atual?.Id
@@ -61,7 +66,7 @@ public class TransacaoService : ITransacaoService
             Data = dto.Data,
             Tipo = dto.Tipo,
             Recorrencia = dto.Recorrencia,
-            Pago = dto.Tipo == TipoTransacao.Despesa ? dto.Pago : true,
+            Pago = dto.Pago,
             Observacao = dto.Observacao,
             CategoriaId = dto.CategoriaId,
             CartaoId = dto.CartaoId,
@@ -69,7 +74,7 @@ public class TransacaoService : ITransacaoService
             Itens = itens
         };
 
-        await _transacaoRepository.AddAsync(transacao);
+        await GravarAsync(() => _transacaoRepository.AddAsync(transacao));
         await _notificationScheduler.AgendarLembreteAsync(transacao);
 
         return transacao;
@@ -88,6 +93,12 @@ public class TransacaoService : ITransacaoService
         await _fechamentoService.GarantirPeriodoAbertoAsync(transacao.Data);
         await _fechamentoService.GarantirPeriodoAbertoAsync(dto.Data);
 
+        dto.Tipo = FluxoLancamento.TipoNaEdicao(
+            transacao.CategoriaId,
+            dto.CategoriaId,
+            transacao.Tipo,
+            categoria.TipoPadrao);
+
         var itens = await MapearItensAsync(dto, categoria);
 
         transacao.Descricao = dto.Descricao;
@@ -95,14 +106,17 @@ public class TransacaoService : ITransacaoService
         transacao.Data = dto.Data;
         transacao.Tipo = dto.Tipo;
         transacao.Recorrencia = dto.Recorrencia;
-        transacao.Pago = dto.Tipo == TipoTransacao.Despesa ? dto.Pago : true;
+        transacao.Pago = dto.Pago;
         transacao.Observacao = dto.Observacao;
         transacao.CategoriaId = dto.CategoriaId;
         transacao.CartaoId = dto.CartaoId;
         transacao.AtualizadoEm = DateTime.UtcNow;
 
-        await _transacaoRepository.UpdateAsync(transacao);
-        await _transacaoRepository.SubstituirItensAsync(id, itens);
+        await GravarAsync(async () =>
+        {
+            await _transacaoRepository.UpdateAsync(transacao);
+            await _transacaoRepository.SubstituirItensAsync(id, itens);
+        });
 
         await _notificationScheduler.CancelarLembreteAsync(id);
         await _notificationScheduler.AgendarLembreteAsync(transacao);
@@ -152,6 +166,21 @@ public class TransacaoService : ITransacaoService
 
     public Task<bool> ExistemDespesasParaTrazerAsync(int mes, int ano)
         => _copiaDespesas.ExistemAsync(mes, ano);
+
+    private static async Task GravarAsync(Func<Task> gravar)
+    {
+        try
+        {
+            await gravar();
+        }
+        catch (DbUpdateException ex)
+        {
+            Log.Error(
+                "Falha ao gravar o lançamento. Tipo: {Tipo}",
+                VarreduraPlanilhaExportada.TipoDaFalha(ex));
+            throw FalhaDeGravacao.ParaOUsuario(ex, FalhaDeGravacao.MensagemLancamento);
+        }
+    }
 
     private async Task<List<ItemLancamento>> MapearItensAsync(TransacaoFormModel dto, Categoria categoria)
     {

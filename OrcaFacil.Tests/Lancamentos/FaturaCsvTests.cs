@@ -66,6 +66,25 @@ public class FaturaCsvTests
     }
 
     [Fact]
+    public void Ler_AtivaEInativaHomonimas_ItemCaiNaAtivaNasDuasOrdens()
+    {
+        var ativa = new Categoria { Id = 7, Nome = "Mercado", Ativo = true };
+        var inativa = new Categoria { Id = 3, Nome = "Mercado", Ativo = false };
+        var texto = Arquivo("16/10/2026;Feira;10,00;Mercado;;;;");
+
+        foreach (var ordem in new[] { new[] { inativa, ativa }, new[] { ativa, inativa } })
+        {
+            var leitura = Ler(texto, ordem);
+
+            Assert.True(leitura.ArquivoAceito);
+            Assert.Empty(leitura.Erros);
+            var item = Assert.Single(leitura.Linhas);
+            Assert.Equal(ativa.Id, item.CategoriaId);
+            Assert.Equal("Mercado", item.NomeCategoria);
+        }
+    }
+
+    [Fact]
     public void Ler_SemBom_RecusaOArquivo()
     {
         var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false).GetBytes(

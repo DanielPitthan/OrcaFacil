@@ -67,6 +67,7 @@ public static class HashLinhaExtratoB3
     /// <summary>
     /// ValorOperacao / Quantidade, em 4 casas para longe de zero.
     /// Sem quantidade ou sem valor, não há preço efetivo.
+    /// Valores extremos lançam <see cref="OverflowException"/>. A prévia captura por linha.
     /// </summary>
     private static decimal? PrecoEfetivo(LinhaExtratoB3 linha)
     {

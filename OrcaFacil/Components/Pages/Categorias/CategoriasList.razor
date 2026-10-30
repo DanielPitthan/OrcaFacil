@@ -115,8 +115,15 @@ else
         if (confirmado != true)
             return;
 
-        await CategoriaService.RemoverAsync(id);
-        Snackbar.Add("Categoria removida/desativada", Severity.Success);
-        await CarregarAsync();
+        try
+        {
+            await CategoriaService.RemoverAsync(id);
+            Snackbar.Add("Categoria removida/desativada", Severity.Success);
+            await CarregarAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
     }
 }
