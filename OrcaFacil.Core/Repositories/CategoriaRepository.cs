@@ -31,7 +31,8 @@ public class CategoriaRepository : GenericRepository<Categoria>, ICategoriaRepos
     public async Task<bool> ExisteNomeAsync(string nome, int? ignorarId = null)
     {
         await using var context = await ContextFactory.CreateDbContextAsync();
-        var query = context.Categorias.Where(c => c.Nome.ToLower() == nome.ToLower());
+        // O índice único também ignora inativas. A edição só esbarra em outra ativa.
+        var query = context.Categorias.Where(c => c.Ativo && c.Nome.ToLower() == nome.ToLower());
         if (ignorarId.HasValue)
             query = query.Where(c => c.Id != ignorarId.Value);
         return await query.AnyAsync();

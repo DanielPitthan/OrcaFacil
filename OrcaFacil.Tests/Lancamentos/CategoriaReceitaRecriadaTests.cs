@@ -211,19 +211,68 @@ public class CategoriaReceitaRecriadaTests : IDisposable
     }
 
     [Fact]
-    public async Task RenomearParaNomeDeInativa_RecusaSemGravar()
+    public async Task EditarAtiva_ComInativaHomonima_GravaOIcone()
+    {
+        var despesa = await _cadastro.CriarAsync(Formulario("Mercado", "🛒", "#9fb4c7", TipoTransacao.Despesa));
+        var membro = await MembroAsync();
+        var data = new DateTime(2026, 10, 18);
+        await LancarAsync(despesa.Id, membro.Id, data, "Compra antiga", TipoTransacao.Despesa);
+        await _cadastro.RemoverAsync(despesa.Id);
+        var receita = await _cadastro.CriarAsync(Formulario("Mercado", "💵", "#A2B94F", TipoTransacao.Receita));
+
+        await _cadastro.AtualizarAsync(receita.Id, Formulario("Mercado", "💰", "#A2B94F", TipoTransacao.Receita));
+
+        var gravada = await _categorias.GetByIdAsync(receita.Id);
+        Assert.NotNull(gravada);
+        Assert.True(gravada.Ativo);
+        Assert.Equal("Mercado", gravada.Nome);
+        Assert.Equal("💰", gravada.Icone);
+        Assert.Equal(TipoTransacao.Receita, gravada.TipoPadrao);
+
+        var inativa = await _categorias.GetByIdAsync(despesa.Id);
+        Assert.NotNull(inativa);
+        Assert.False(inativa.Ativo);
+        Assert.Equal("Mercado", inativa.Nome);
+        Assert.Equal("🛒", inativa.Icone);
+        Assert.Equal(TipoTransacao.Despesa, inativa.TipoPadrao);
+        var lancamento = Assert.Single(await _transacoes.GetByPeriodoAsync(data, data.AddDays(1).AddTicks(-1)));
+        Assert.Equal(despesa.Id, lancamento.CategoriaId);
+        Assert.Equal("Compra antiga", lancamento.Descricao);
+    }
+
+    [Fact]
+    public async Task RenomearParaNomeDeInativa_GravaEDeixaAInativaIntacta()
     {
         var antiga = await PadraoRecebimentoAsync();
         await _cadastro.RemoverAsync(antiga.Id);
         var outra = await _cadastro.CriarAsync(Formulario("Extra", "💰", "#6DA538"));
 
+        await _cadastro.AtualizarAsync(outra.Id, Formulario("Recebimento", "💵", "#A2B94F"));
+
+        var gravada = await _categorias.GetByIdAsync(outra.Id);
+        Assert.NotNull(gravada);
+        Assert.True(gravada.Ativo);
+        Assert.Equal("Recebimento", gravada.Nome);
+        Assert.Equal("💵", gravada.Icone);
+        var inativa = await _categorias.GetByIdAsync(antiga.Id);
+        Assert.NotNull(inativa);
+        Assert.False(inativa.Ativo);
+        Assert.Equal("Recebimento", inativa.Nome);
+        Assert.Equal("💰", inativa.Icone);
+        Assert.Equal(2, (await _categorias.GetAllAsync()).Count(categoria => categoria.Nome == "Recebimento"));
+    }
+
+    [Fact]
+    public async Task RenomearParaNomeDeOutraAtiva_RecusaSemGravar()
+    {
+        await _cadastro.CriarAsync(Formulario("Recebimento", "💰", "#6DA538"));
+        var outra = await _cadastro.CriarAsync(Formulario("Extra", "💵", "#A2B94F"));
+
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _cadastro.AtualizarAsync(outra.Id, Formulario("Recebimento", "💵", "#A2B94F")));
+            _cadastro.AtualizarAsync(outra.Id, Formulario("recebimento", "🏠", "#28587b")));
 
         Assert.Equal(CategoriaCadastroService.MensagemNomeRepetido, ex.Message);
-        var gravada = await _categorias.GetByIdAsync(outra.Id);
-        Assert.Equal("Extra", gravada?.Nome);
-        Assert.False((await _categorias.GetByIdAsync(antiga.Id))!.Ativo);
+        Assert.Equal("Extra", (await _categorias.GetByIdAsync(outra.Id))?.Nome);
     }
 
     [Fact]

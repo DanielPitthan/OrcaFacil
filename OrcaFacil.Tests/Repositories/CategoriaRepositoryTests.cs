@@ -62,16 +62,19 @@ public class CategoriaRepositoryTests : IDisposable
             Ativo = false
         });
 
-        Assert.True(await _repository.ExisteNomeAsync("Recebimento"));
-        await _repository.AddAsync(new Categoria
+        Assert.False(await _repository.ExisteNomeAsync("Recebimento"));
+        var ativa = new Categoria
         {
             Nome = "Recebimento",
             Icone = "💵",
             CorHex = "#A2B94F",
             TipoPadrao = TipoTransacao.Despesa,
             Ativo = true
-        });
+        };
+        await _repository.AddAsync(ativa);
 
+        Assert.True(await _repository.ExisteNomeAsync("Recebimento"));
+        Assert.False(await _repository.ExisteNomeAsync("Recebimento", ignorarId: ativa.Id));
         Assert.Equal(2, (await _repository.GetAllAsync()).Count);
         await Assert.ThrowsAsync<DbUpdateException>(() => _repository.AddAsync(new Categoria
         {
