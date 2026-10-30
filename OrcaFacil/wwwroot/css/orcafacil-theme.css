@@ -768,3 +768,29 @@ html.of-tema-escuro .of-mascara-numerica {
     overflow-wrap: anywhere;
     max-width: 100%;
 }
+
+.of-seletor {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.of-seletor .mud-menu {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.of-seletor .mud-menu > div.mud-menu-activator {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    min-height: var(--of-touch);
+    box-sizing: border-box;
+}
+
+.of-seletor .mud-menu > div.mud-menu-activator:focus {
+    outline: 2px solid var(--of-text);
+    outline-offset: -2px;
+}

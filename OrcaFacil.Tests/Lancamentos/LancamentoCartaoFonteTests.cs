@@ -117,6 +117,7 @@ public class LancamentoCartaoFonteTests
         Assert.True(UmSoFoco(painel));
         Assert.True(LinhaEmbutidaSemGrupo(linha));
         Assert.True(ToqueELargura(css));
+        Assert.True(CaixaDoAtivador(tema));
         Assert.Contains("--of-touch: 44px;", tema, StringComparison.Ordinal);
         Assert.True(Razao("#1E2A33", "#ffffff") >= 4.5);
         Assert.True(Razao("#1E2A33", "#EFF3F7") >= 4.5);
@@ -170,15 +171,50 @@ public class LancamentoCartaoFonteTests
         var semAltura = css.Replace("min-height: var(--of-touch);", "min-height: 0;", StringComparison.Ordinal);
         Assert.False(ToqueELargura(semAltura));
 
-        var focoNovo = css.Replace(":focus {", ":focus-visible {", StringComparison.Ordinal);
-        Assert.False(ToqueELargura(focoNovo));
+        var focoNovo = tema.Replace(":focus {", ":focus-visible {", StringComparison.Ordinal);
+        Assert.False(CaixaDoAtivador(focoNovo));
 
-        var anelFraco = css.Replace("var(--of-text)", "var(--of-primary)", StringComparison.Ordinal);
-        Assert.False(ToqueELargura(anelFraco));
+        var anelFraco = tema.Replace(
+            "outline: 2px solid var(--of-text);",
+            "outline: 2px solid var(--of-primary);",
+            StringComparison.Ordinal);
+        Assert.False(CaixaDoAtivador(anelFraco));
         Assert.True(Razao("#659ECD", "#ffffff") < 4.5);
 
-        var semCaixa = css.Replace(".mud-menu > div.mud-menu-activator", ".mud-menu-activator", StringComparison.Ordinal);
-        Assert.False(ToqueELargura(semCaixa));
+        var semCaixa = tema.Replace(".mud-menu > div.mud-menu-activator", ".mud-menu-activator", StringComparison.Ordinal);
+        Assert.False(CaixaDoAtivador(semCaixa));
+    }
+
+    [Fact]
+    public void Cesta_AtivadorTemCaixaToqueEAnel_ForaDoCssIsolado()
+    {
+        var tema = Fonte("OrcaFacil", "wwwroot", "css", "orcafacil-theme.css");
+        var dialogo = Fonte("OrcaFacil", "Components", "Pages", "Cesta", "CompraCestaDialog.razor");
+        var painelCss = Fonte("OrcaFacil", "Components", "Pages", "Lancamentos", "FaturaCartaoPainel.razor.css");
+
+        Assert.False(CaixaDoAtivador(painelCss));
+        Assert.True(CestaCoberta(dialogo, tema));
+
+        var semClasse = dialogo.Replace("class=\"of-seletor\"", "class=\"of-linha\"", StringComparison.Ordinal);
+        Assert.False(CestaCoberta(semClasse, tema));
+
+        var semAltura = tema.Replace(
+            ".of-seletor .mud-menu > div.mud-menu-activator {\n    display: block;\n    width: 100%;\n    max-width: 100%;\n    min-width: 0;\n    min-height: var(--of-touch);",
+            ".of-seletor .mud-menu > div.mud-menu-activator {\n    display: block;\n    width: 100%;\n    max-width: 100%;\n    min-width: 0;\n    min-height: 0;",
+            StringComparison.Ordinal);
+        Assert.False(CestaCoberta(dialogo, semAltura));
+
+        const string soNoPainel = """
+            .of-seletor ::deep .mud-menu > div.mud-menu-activator {
+                display: block;
+                min-height: var(--of-touch);
+            }
+            .of-seletor ::deep .mud-menu > div.mud-menu-activator:focus {
+                outline: 2px solid var(--of-text);
+                outline-offset: -2px;
+            }
+            """;
+        Assert.False(CestaCoberta(dialogo, SemComentarios(soNoPainel)));
     }
 
     [Fact]
@@ -220,6 +256,72 @@ public class LancamentoCartaoFonteTests
             @* <script src="js/menuFoco.js"></script> *@
             """;
         Assert.False(DevolveFoco(SemComentarios(soComentario), SemComentarios(soComentario)));
+    }
+
+    [Fact]
+    public void CliqueForaEmCampo_NaoRoubaOFoco()
+    {
+        var script = Fonte("OrcaFacil", "wwwroot", "js", "menuFoco.js");
+        Assert.True(NaoRoubaCampo(script));
+
+        var sempre = script.Replace(
+            """
+                    if (dentroDoMenu(ativo, alvo))
+                        return true;
+                    return false;
+            """,
+            """
+                    if (dentroDoMenu(ativo, alvo))
+                        return true;
+                    return true;
+            """,
+            StringComparison.Ordinal);
+        Assert.False(NaoRoubaCampo(sempre));
+
+        var guardaComentada = SemComentarios(script.Replace(
+            "return false;",
+            "// return false;",
+            StringComparison.Ordinal));
+        Assert.False(NaoRoubaCampo(guardaComentada));
+    }
+
+    [Fact]
+    public void TabEShiftTabComMenuAberto_PreservamOAvanco()
+    {
+        var script = Fonte("OrcaFacil", "wwwroot", "js", "menuFoco.js");
+        Assert.True(TabPreservaAvanco(script));
+        Assert.DoesNotContain("keydown", script, StringComparison.Ordinal);
+        Assert.DoesNotContain("shiftKey", script, StringComparison.Ordinal);
+
+        var imediato = script.Replace(
+            """
+                    setTimeout(function () {
+                        if (deveDevolver(document.activeElement, alvo))
+                            alvo.focus();
+                    }, 0);
+            """,
+            """
+                    if (deveDevolver(document.activeElement, alvo))
+                        alvo.focus();
+            """,
+            StringComparison.Ordinal);
+        Assert.False(TabPreservaAvanco(imediato));
+
+        var incondicional = script.Replace(
+            """
+                        if (deveDevolver(document.activeElement, alvo))
+                            alvo.focus();
+            """,
+            "            alvo.focus();",
+            StringComparison.Ordinal);
+        Assert.False(TabPreservaAvanco(incondicional));
+        Assert.False(NaoRoubaCampo(incondicional));
+
+        var esperaComentada = SemComentarios(script.Replace(
+            "setTimeout(function () {",
+            "// setTimeout(function () {",
+            StringComparison.Ordinal));
+        Assert.False(TabPreservaAvanco(esperaComentada));
     }
 
     private static string Fonte(params string[] partes)
@@ -309,10 +411,44 @@ public class LancamentoCartaoFonteTests
             return false;
         if (!script.Contains("subtree: true", StringComparison.Ordinal))
             return false;
+        if (!script.Contains("if (antes && !agora)", StringComparison.Ordinal))
+            return false;
+        if (Contar(script, "alvo.focus()") != 1)
+            return false;
 
         return Regex.IsMatch(
             script,
-            @"var\s+antes\s*=\s*estava\.get\(alvo\)\s*===\s*true\s*;\s*var\s+agora\s*=\s*alvo\.getAttribute\(""aria-expanded""\)\s*===\s*""true""\s*;\s*if\s*\(\s*antes\s*&&\s*!agora\s*\)\s*alvo\.focus\(\s*\)\s*;");
+            @"setTimeout\(function \(\) \{\s*if \(deveDevolver\(document\.activeElement, alvo\)\)\s*alvo\.focus\(\);\s*\}, 0\);",
+            RegexOptions.Singleline);
+    }
+
+    private static bool NaoRoubaCampo(string script)
+    {
+        if (Contar(script, "alvo.focus()") != 1)
+            return false;
+        if (!script.Contains("ativo === document.body", StringComparison.Ordinal))
+            return false;
+        if (!script.Contains("!ativo", StringComparison.Ordinal))
+            return false;
+        if (!Regex.IsMatch(script, @"if \(deveDevolver\(document\.activeElement, alvo\)\)\s*alvo\.focus\(\);"))
+            return false;
+
+        return Regex.IsMatch(
+            script,
+            @"if\s*\(\s*dentroDoMenu\(ativo,\s*alvo\)\s*\)\s*return\s+true\s*;\s*return\s+false\s*;");
+    }
+
+    private static bool TabPreservaAvanco(string script)
+    {
+        if (Contar(script, "alvo.focus()") != 1)
+            return false;
+        if (Regex.IsMatch(script, @"if\s*\(\s*antes\s*&&\s*!agora\s*\)\s*alvo\.focus"))
+            return false;
+
+        return Regex.IsMatch(
+            script,
+            @"setTimeout\(function \(\) \{\s*if \(deveDevolver\(document\.activeElement, alvo\)\)\s*alvo\.focus\(\);\s*\}, 0\);",
+            RegexOptions.Singleline);
     }
 
     private static bool LinhaEmbutidaSemGrupo(string linha)
@@ -338,38 +474,58 @@ public class LancamentoCartaoFonteTests
 
     private static bool ToqueELargura(string css)
     {
-        const string seletor = ".mud-menu > div.mud-menu-activator";
-        var caixa = Regra(css, seletor);
-        var foco = Regra(css, seletor + ":focus");
         var toque = Regra(css, ".of-seletor-toque");
-        if (caixa.Length == 0 || foco.Length == 0 || toque.Length == 0)
+        if (toque.Length == 0)
             return false;
-
-        if (!caixa.Contains("display: block;", StringComparison.Ordinal))
+        if (toque.Contains("min-height: 0", StringComparison.Ordinal))
             return false;
-        if (css.Contains("display: contents", StringComparison.Ordinal))
-            return false;
-        if (css.Contains(":focus-visible", StringComparison.Ordinal))
-            return false;
-        if (css.Contains("min-height: 0", StringComparison.Ordinal))
-            return false;
-        if (!caixa.Contains("min-height: var(--of-touch);", StringComparison.Ordinal)
-            || !toque.Contains("min-height: var(--of-touch);", StringComparison.Ordinal))
-            return false;
-        if (!caixa.Contains("width: 100%;", StringComparison.Ordinal)
-            || !caixa.Contains("max-width: 100%;", StringComparison.Ordinal)
-            || !caixa.Contains("min-width: 0;", StringComparison.Ordinal))
+        if (!toque.Contains("min-height: var(--of-touch);", StringComparison.Ordinal))
             return false;
         if (!toque.Contains("width: 100%;", StringComparison.Ordinal)
             || !toque.Contains("max-width: 100%;", StringComparison.Ordinal)
             || !toque.Contains("min-width: 0;", StringComparison.Ordinal))
             return false;
-        if (Regex.IsMatch(caixa + toque, @"min-width:\s*[1-9]"))
+
+        return !Regex.IsMatch(toque, @"min-width:\s*[1-9]");
+    }
+
+    private static bool CaixaDoAtivador(string css)
+    {
+        const string seletor = ".of-seletor .mud-menu > div.mud-menu-activator";
+        if (css.IndexOf(seletor, StringComparison.Ordinal) < 0)
+            return false;
+
+        var caixa = Regra(css, seletor);
+        var focoIndice = css.IndexOf(seletor + ":focus", StringComparison.Ordinal);
+        if (focoIndice < 0)
+            return false;
+        if (css.AsSpan(focoIndice + (seletor + ":focus").Length).StartsWith("-visible"))
+            return false;
+
+        var foco = Regra(css, seletor + ":focus");
+        if (caixa.Length == 0 || foco.Length == 0)
+            return false;
+        if (!caixa.Contains("display: block;", StringComparison.Ordinal))
+            return false;
+        if (caixa.Contains("display: contents", StringComparison.Ordinal))
+            return false;
+        if (!caixa.Contains("min-height: var(--of-touch);", StringComparison.Ordinal))
+            return false;
+        if (caixa.Contains("min-height: 0", StringComparison.Ordinal))
+            return false;
+        if (!caixa.Contains("width: 100%;", StringComparison.Ordinal)
+            || !caixa.Contains("max-width: 100%;", StringComparison.Ordinal)
+            || !caixa.Contains("min-width: 0;", StringComparison.Ordinal))
+            return false;
+        if (Regex.IsMatch(caixa, @"min-width:\s*[1-9]"))
             return false;
 
         return foco.Contains("outline: 2px solid var(--of-text);", StringComparison.Ordinal)
             && foco.Contains("outline-offset: -2px;", StringComparison.Ordinal);
     }
+
+    private static bool CestaCoberta(string dialogo, string tema)
+        => dialogo.Contains("class=\"of-seletor\"", StringComparison.Ordinal) && CaixaDoAtivador(tema);
 
     private static string Regra(string css, string seletor)
     {

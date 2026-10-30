@@ -17,8 +17,32 @@
         var antes = estava.get(alvo) === true;
         var agora = alvo.getAttribute("aria-expanded") === "true";
         if (antes && !agora)
-            alvo.focus();
+            agendarDevolucao(alvo);
         estava.set(alvo, agora);
+    }
+
+    function agendarDevolucao(alvo) {
+        setTimeout(function () {
+            if (deveDevolver(document.activeElement, alvo))
+                alvo.focus();
+        }, 0);
+    }
+
+    function deveDevolver(ativo, alvo) {
+        if (!ativo || ativo === document.body || ativo === document.documentElement)
+            return true;
+        if (dentroDoMenu(ativo, alvo))
+            return true;
+        return false;
+    }
+
+    function dentroDoMenu(ativo, alvo) {
+        if (ativo.closest(".mud-popover") || ativo.closest(".mud-menu-list") || ativo.closest(".mud-overlay"))
+            return true;
+        var menu = alvo.closest(".mud-menu");
+        if (menu && menu.contains(ativo))
+            return true;
+        return false;
     }
 
     function lembrar(alvo) {

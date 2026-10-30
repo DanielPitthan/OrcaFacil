@@ -30,32 +30,6 @@
     line-height: 1.4;
 }
 
-.of-seletor {
-    min-width: 0;
-    max-width: 100%;
-}
-
-.of-seletor ::deep .mud-menu {
-    display: block;
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-}
-
-.of-seletor ::deep .mud-menu > div.mud-menu-activator {
-    display: block;
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    min-height: var(--of-touch);
-    box-sizing: border-box;
-}
-
-.of-seletor ::deep .mud-menu > div.mud-menu-activator:focus {
-    outline: 2px solid var(--of-text);
-    outline-offset: -2px;
-}
-
 .of-seletor-toque {
     display: block;
     width: 100%;
