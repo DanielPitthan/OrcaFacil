@@ -59,6 +59,10 @@
     {
         <MudAlert Severity="@(OrquestradorDarf.FolhaAberta ? Severity.Info : Severity.Error)" Dense="true" Class="mb-3">@OrquestradorDarf.Aviso</MudAlert>
     }
+    @if (!string.IsNullOrEmpty(_darfComplementar))
+    {
+        <p class="of-darf-complementar" role="status">@_darfComplementar</p>
+    }
     <MudButton Variant="Variant.Filled"
                Color="Color.Primary"
                Class="mt-3"
@@ -82,6 +86,7 @@
     };
 
     private int _anoBase;
+    private string? _darfComplementar;
     private bool _pedindoIrrf;
     private List<CampoIrrfDarf>? _irrfConfirmado;
 
@@ -91,6 +96,16 @@
         _acompanhamento = new AcompanhamentoExportacaoPlanilha(Orquestrador, () => InvokeAsync(StateHasChanged));
         _acompanhamentoDirpf = new AcompanhamentoExportacaoPlanilha(OrquestradorDirpf, () => InvokeAsync(StateHasChanged));
         _acompanhamentoDarf = new AcompanhamentoExportacaoPlanilha(OrquestradorDarf, () => InvokeAsync(StateHasChanged));
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var contexto = await ContextoFactory.CreateDbContextAsync();
+        _darfComplementar = await contexto.LogsEvento.AsNoTracking()
+            .Where(log => log.Tipo == TipoLogEvento.Sistema && log.Mensagem.StartsWith(AvisoDarfComplementar.Prefixo))
+            .OrderByDescending(log => log.Id)
+            .Select(log => log.Mensagem)
+            .FirstOrDefaultAsync();
     }
 
     public void Dispose()

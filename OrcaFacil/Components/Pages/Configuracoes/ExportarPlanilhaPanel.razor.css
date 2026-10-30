@@ -1,0 +1,21 @@
+.of-darf-complementar {
+    display: block;
+    box-sizing: border-box;
+    max-width: 100%;
+    margin: 12px 0 0;
+    padding: 8px 12px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    font-size: 0.875rem;
+    line-height: 1.4;
+}
+
+:global(html.of-tema-claro) .of-darf-complementar {
+    color: #1E2A33;
+    background-color: #FFFFFF;
+}
+
+:global(html.of-tema-escuro) .of-darf-complementar {
+    color: #E8EAF0;
+    background-color: #12151B;
+}

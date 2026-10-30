@@ -601,8 +601,8 @@ public class ImportacaoExtratoB3Service
             Nome = nome,
             Instituicao = linha.Instituicao,
             Corretora = corretora,
-            // ETF permanece Acao. É decisão: ClasseAtivoB3 não separa ETF.
-            TipoAtivo = linha.Classe == ClasseAtivoB3.FII ? TipoAtivo.Fii : TipoAtivo.Acao,
+            // A classe do extrato não separa ETF. Ticker conhecido grava TipoAtivo.Etf (DIRPF 07/06).
+            TipoAtivo = CatalogoEtfConhecido.TipoNaImportacao(linha.Ticker, linha.Classe),
             TipoOperacao = linha.Tipo == TipoOperacaoB3.Venda ? TipoOperacao.Venda : TipoOperacao.Compra,
             TipoProvento = linha.Tipo == TipoOperacaoB3.Jcp ? TipoProvento.Jcp : TipoProvento.Rendimento,
             TipoRendaFixa = linha.Tipo is TipoOperacaoB3.Venda or TipoOperacaoB3.ResgateAntecipado
@@ -728,6 +728,14 @@ public class ImportacaoExtratoB3Service
                 Ativo = true
             };
             context.AtivosFinanceiros.Add(existente);
+            await context.SaveChangesAsync(cancellationToken);
+        }
+        else if (existente.Tipo == TipoAtivo.Acao && CatalogoEtfConhecido.EhConhecido(existente.Ticker))
+        {
+            await CatalogoEtfConhecido.AvisarAposMudancaAsync(
+                context,
+                () => CatalogoEtfConhecido.Reclassificar([existente]),
+                cancellationToken);
             await context.SaveChangesAsync(cancellationToken);
         }
 

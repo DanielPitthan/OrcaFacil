@@ -15,6 +15,13 @@ namespace OrcaFacil.Core.Dirpf;
 /// e vai para a exclusiva, código da variante Jcp, também pelo ano do pagamento.
 /// O ganho isento de ações no limite mensal entra na ficha de isentos, pelo código vigente.
 /// BDR e ETF não têm código de rendimento isento na semente e não entram nessa ficha.
+/// ETF de renda fixa, já gravado como ETF, usa o bem 07/08
+/// (manual de Bens Financeiros da DIRPF 2026, item "Fundos de Índice de Renda Fixa").
+/// Cada alienação com lucro no ano do pregão entra na tributação exclusiva, código 06,
+/// sem abater prejuízo e sem reconstitutir o bruto.
+/// A corretora retém na fonte (Lei nº 13.043/2014, art. 2º).
+/// https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/preenchimento/manual-mir/patrimonio/bens-financeiros
+/// https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/preenchimento/manual-mir/rendimentos/rendimentos-do-capital
 /// Renda fixa usa o IR retido gravado. A tabela regressiva não entra na conta.
 /// Lucro de resgate já virou receita e prejuízo já virou despesa; aqui só se declara o líquido positivo.
 /// O CNPJ de Bens e Direitos e de Rendimentos Isentos sai vazio: o campo no ativo é a #100.
@@ -141,6 +148,7 @@ public static class MontadorDirpf
         isentos.AddRange(MontarGanhoIsento(anoBase, corte, listaOperacoes, regras, tabela, fiscais));
 
         var exclusivos = MontarJcp(anoBase, corte, inicio, fim, listaProventos, tabela, fiscais);
+        exclusivos.AddRange(MontarEtfRendaFixa(anoBase, corte, inicio, fim, listaOperacoes, tabela, fiscais));
         var rendaFixa = MontarRendaFixa(
             anoBase,
             corte,
@@ -195,7 +203,7 @@ public static class MontadorDirpf
             if (posicao.Quantidade <= 0)
                 continue;
 
-            var variante = ReconhecedorFiagroDirpf.Eh(ativo) ? CatalogoCodigosDirpf.VarianteFiagro : "";
+            var variante = VarianteDoBem(ativo);
             var codigo = tabela.Exigir(TipoFichaDirpf.Bem, ativo.Tipo, corte, variante);
             var casas = fiscais.Para(corte, ativo.Tipo).CasasDecimais;
             var custo = CalculadoraResultadoRealizado.Arredondar(posicao.CustoTotal, casas);
@@ -321,6 +329,96 @@ public static class MontadorDirpf
             TipoAtivo.Fii => "Rendimento de FII",
             _ => throw new InvalidOperationException($"Não há natureza de rendimento isento para {ativo.Tipo}.")
         };
+    }
+
+    private static string VarianteDoBem(AtivoFinanceiro ativo)
+    {
+        if (ReconhecedorFiagroDirpf.Eh(ativo))
+            return CatalogoCodigosDirpf.VarianteFiagro;
+
+        if (ativo.Tipo == TipoAtivo.Etf && CatalogoEtfConhecido.EhRendaFixa(ativo.Ticker))
+            return CatalogoCodigosDirpf.VarianteEtfRendaFixa;
+
+        return "";
+    }
+
+    /// <summary>
+    /// Ano do pregão. Sem pregão, usa a data da operação.
+    /// Soma cada alienação com lucro. Prejuízo não abate o lucro de outra venda.
+    /// O IR retido fica nulo: a operação não guarda a alíquota da fonte
+    /// (Lei nº 13.043/2014, art. 2º).
+    /// </summary>
+    private static List<LinhaRendimentoExclusivoDirpf> MontarEtfRendaFixa(
+        int anoBase,
+        DateTime corte,
+        DateTime inicio,
+        DateTime fim,
+        IEnumerable<OperacaoAtivo> operacoes,
+        TabelaCodigosDirpf tabela,
+        TabelaRegrasFiscais fiscais)
+    {
+        var grupos = operacoes
+            .Where(operacao => operacao.Ativo is not null
+                && operacao.Ativo.Tipo == TipoAtivo.Etf
+                && CatalogoEtfConhecido.EhRendaFixa(operacao.Ativo.Ticker))
+            .GroupBy(operacao => (operacao.MembroFamiliaId, operacao.AtivoId))
+            .ToList();
+        if (grupos.Count == 0)
+            return [];
+
+        var codigo = tabela.ExigirVariante(
+            TipoFichaDirpf.RendimentoExclusivo, CatalogoCodigosDirpf.VarianteEtfRendaFixa, corte);
+        var casas = fiscais.Para(corte, TipoAtivo.Etf).CasasDecimais;
+        var linhas = new List<LinhaRendimentoExclusivoDirpf>();
+        foreach (var grupo in grupos)
+        {
+            var amostra = grupo.First();
+            var ativo = ExigirAtivo(amostra.Ativo, amostra.AtivoId);
+            var perfil = ExigirPerfil(amostra.MembroFamilia, amostra.MembroFamiliaId);
+            var calculado = CalculadoraResultadoRealizado.Calcular(
+                grupo.Select(ParaMovimentoEtf),
+                data => fiscais.Para(data, TipoAtivo.Etf));
+            var lucros = calculado.Vendas
+                .Where(venda => venda.Data >= inicio && venda.Data < fim && venda.Resultado > 0m)
+                .Select(venda => venda.Resultado)
+                .ToList();
+            if (lucros.Count == 0)
+                continue;
+
+            var declarado = CalculadoraResultadoRealizado.Arredondar(lucros.Sum(), casas);
+
+            linhas.Add(new LinhaRendimentoExclusivoDirpf(
+                anoBase,
+                TextoPerfil(perfil),
+                ativo.Ticker,
+                ativo.Nome,
+                "Rendimento de ETF de renda fixa",
+                codigo.Codigo,
+                codigo.Descricao,
+                CnpjDaFontePagadora(""),
+                declarado,
+                IrRetido: null,
+                $"Rendimento de ETF de renda fixa — {ativo.Ticker} — {ativo.Nome}."));
+        }
+
+        return linhas;
+    }
+
+    private static MovimentoPosicao ParaMovimentoEtf(OperacaoAtivo operacao) => new()
+    {
+        Id = operacao.Id,
+        Data = DataDoPregao(operacao),
+        Tipo = operacao.Tipo,
+        Quantidade = operacao.Quantidade,
+        PrecoUnitario = operacao.PrecoUnitario,
+        ValorOperacao = operacao.ValorOperacao,
+        Custos = operacao.Custos
+    };
+
+    private static DateTime DataDoPregao(OperacaoAtivo operacao)
+    {
+        var pregao = operacao.DataPregao.Date;
+        return pregao == default ? operacao.Data.Date : pregao;
     }
 
     private static List<LinhaRendimentoExclusivoDirpf> MontarJcp(

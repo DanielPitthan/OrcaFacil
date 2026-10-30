@@ -7,8 +7,12 @@ namespace OrcaFacil.Core.Dirpf;
 /// Semente dos códigos da DIRPF 2026, vigente a partir de 2021 (grupos atuais de Bens e Direitos).
 /// Ano anterior não tem linha: a exportação recusa em vez de reaproveitar o código novo.
 /// Fiagro continua FII no cadastro. Na exportação de bens, a variante Fiagro usa o código 07/02.
-/// ETF usa 07/06. Fundo de índice de renda fixa é 07/08 na mesma página da Receita,
-/// mas o cadastro tem um único tipo ETF, então a ficha não separa o 08.
+/// ETF de ações usa 07/06. Fundo de índice de renda fixa usa 07/08,
+/// na variante EtfRendaFixa, com o mesmo tipo ETF no cadastro.
+/// O número 07/08 está no manual de Bens Financeiros, item "Fundos de Índice de Renda Fixa".
+/// A tributação na fonte é a do art. 2º da Lei nº 13.043/2014.
+/// O rendimento com lucro de cada alienação vai para a exclusiva, código 06,
+/// no guia de rendimentos do capital da DIRPF 2026.
 /// Fonte: Bens Financeiros, Receita Federal, atualizado em 26/05/2026.
 /// https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/preenchimento/manual-mir/patrimonio/bens-financeiros
 /// Rendimento isento de FII e Fiagro permanece 99, configurável.
@@ -42,6 +46,12 @@ public static class CatalogoCodigosDirpf
     public const string VarianteRendaFixaIsenta = "RendaFixaIsenta";
 
     /// <summary>
+    /// Fundo de índice de renda fixa. Cabe em 16 caracteres.
+    /// O bem é 07/08 e o rendimento exclusivo reutiliza o código 06.
+    /// </summary>
+    public const string VarianteEtfRendaFixa = "EtfRendaFixa";
+
+    /// <summary>
     /// Ganho isento do art. 3º, I, da Lei nº 11.033/2004. O texto é o do manual
     /// do Meu Imposto de Renda; o número 20 é o da ficha e continua configurável.
     /// https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/preenchimento/manual-mir/rendimentos/rendimentos-do-capital
@@ -70,6 +80,12 @@ public static class CatalogoCodigosDirpf
     /// </summary>
     public const string DescricaoBemRendaFixaIsenta = "Títulos isentos de tributação";
 
+    /// <summary>
+    /// Nome do item em Fundos, no manual de Bens Financeiros.
+    /// https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/preenchimento/manual-mir/patrimonio/bens-financeiros
+    /// </summary>
+    public const string DescricaoBemEtfRendaFixa = "Fundos de Índice de Renda Fixa";
+
     public static readonly DateTime Inicio = new(2021, 1, 1);
 
     public static IReadOnlyList<CodigoDirpf> Linhas() =>
@@ -86,7 +102,9 @@ public static class CatalogoCodigosDirpf
         Linha(10, TipoFichaDirpf.RendimentoExclusivo, TipoAtivo.Acao, "", "06", DescricaoRendimentoRendaFixa, VarianteRendaFixa),
         Linha(11, TipoFichaDirpf.Bem, TipoAtivo.Acao, "04", "02", DescricaoBemRendaFixa, VarianteRendaFixa),
         Linha(12, TipoFichaDirpf.RendimentoIsento, TipoAtivo.Acao, "", "12", DescricaoRendimentoRendaFixaIsenta, VarianteRendaFixaIsenta),
-        Linha(13, TipoFichaDirpf.Bem, TipoAtivo.Acao, "04", "03", DescricaoBemRendaFixaIsenta, VarianteRendaFixaIsenta)
+        Linha(13, TipoFichaDirpf.Bem, TipoAtivo.Acao, "04", "03", DescricaoBemRendaFixaIsenta, VarianteRendaFixaIsenta),
+        Linha(14, TipoFichaDirpf.Bem, TipoAtivo.Etf, "07", "08", DescricaoBemEtfRendaFixa, VarianteEtfRendaFixa),
+        Linha(15, TipoFichaDirpf.RendimentoExclusivo, TipoAtivo.Etf, "", "06", DescricaoRendimentoRendaFixa, VarianteEtfRendaFixa)
     ];
 
     private static CodigoDirpf Linha(

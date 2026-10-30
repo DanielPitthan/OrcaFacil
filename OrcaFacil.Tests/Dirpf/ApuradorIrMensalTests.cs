@@ -282,6 +282,47 @@ public class ApuradorIrMensalTests
     }
 
     [Fact]
+    public void EtfDeAcoes_Paga15PorCento_SemIsencaoDeVinteMil()
+    {
+        var etf = Apurar(
+            Compra(1, new DateTime(2024, 3, 4), 1, 100m, TipoAtivo.Etf, ticker: "BOVA11"),
+            Venda(2, new DateTime(2024, 3, 18), 1, 150m, 150m, TipoAtivo.Etf, ticker: "BOVA11"));
+        var comum = Linha(etf, 3, CestaApuracaoIr.Comum);
+        Assert.Equal(50m, comum.BaseCalculo);
+        Assert.Equal(7.50m, comum.Imposto);
+        Assert.Equal(0m, comum.GanhoIsentoAcoes);
+        Assert.Equal(0.15m, comum.Aliquota);
+        Assert.Equal(0m, Darf(etf, 3).Valor);
+        Assert.Equal(7.50m, Darf(etf, 3).SaldoAcumulado);
+
+        var acao = Apurar(
+            Compra(1, new DateTime(2024, 3, 4), 1, 100m, TipoAtivo.Acao, ticker: "PETR4"),
+            Venda(2, new DateTime(2024, 3, 18), 1, 150m, 150m, TipoAtivo.Acao, ticker: "PETR4"));
+        Assert.Equal(50m, Linha(acao, 3, CestaApuracaoIr.Comum).GanhoIsentoAcoes);
+        Assert.Equal(0m, Linha(acao, 3, CestaApuracaoIr.Comum).Imposto);
+        Assert.Equal(0m, Darf(acao, 3).Valor);
+        Assert.Equal(0m, Darf(acao, 3).SaldoAcumulado);
+    }
+
+    [Fact]
+    public void EtfDeRendaFixa_NaoEntraNaApuracaoNemNoDarf_EnquantoForAcaoEntra()
+    {
+        var compra = new DateTime(2024, 3, 4);
+        var venda = new DateTime(2024, 3, 18);
+        var etf = Apurar(
+            Compra(1, compra, 10, 100m, TipoAtivo.Etf, ticker: "IMAB11 F"),
+            Venda(2, compra, 10, 110m, 1100m, TipoAtivo.Etf, ticker: "IMAB11 F"));
+        Assert.Empty(etf.Meses);
+        Assert.Empty(etf.Darfs);
+
+        var acao = Apurar(
+            Compra(1, compra, 10, 100m, TipoAtivo.Acao, ticker: "IMAB11"),
+            Venda(2, venda, 10, 110m, 1100m, TipoAtivo.Acao, ticker: "IMAB11"));
+        Assert.Equal(100m, Linha(acao, 3, CestaApuracaoIr.Comum).GanhoIsentoAcoes);
+        Assert.Equal(0m, Linha(acao, 3, CestaApuracaoIr.Comum).Imposto);
+    }
+
+    [Fact]
     public void DarfAbaixoDoMinimo_AcumulaParaOMesSeguinte_EPagaQuandoARegraDesliga()
     {
         var operacoes = new[]
@@ -939,8 +980,9 @@ public class ApuradorIrMensalTests
         string perfil = "Ana",
         string? corretora = null,
         decimal custos = 0m,
-        decimal? valor = null)
-        => Operacao(id, TipoOperacao.Compra, data, quantidade, preco, valor ?? quantidade * preco, custos, tipo, ativoId, perfilId, perfil, corretora);
+        decimal? valor = null,
+        string ticker = "")
+        => Operacao(id, TipoOperacao.Compra, data, quantidade, preco, valor ?? quantidade * preco, custos, tipo, ativoId, perfilId, perfil, corretora, ticker);
 
     private static OperacaoApuracao Venda(
         int id,
@@ -953,8 +995,9 @@ public class ApuradorIrMensalTests
         int perfilId = 1,
         string perfil = "Ana",
         string? corretora = null,
-        decimal custos = 0m)
-        => Operacao(id, TipoOperacao.Venda, data, quantidade, preco, valor, custos, tipo, ativoId, perfilId, perfil, corretora);
+        decimal custos = 0m,
+        string ticker = "")
+        => Operacao(id, TipoOperacao.Venda, data, quantidade, preco, valor, custos, tipo, ativoId, perfilId, perfil, corretora, ticker);
 
     private static OperacaoApuracao Operacao(
         int id,
@@ -968,8 +1011,9 @@ public class ApuradorIrMensalTests
         int ativoId,
         int perfilId,
         string perfil,
-        string? corretora)
-        => new(id, perfilId, perfil, ativoId, tipo, corretora, tipoOperacao, data, quantidade, preco, valor, custos);
+        string? corretora,
+        string ticker = "")
+        => new(id, perfilId, perfil, ativoId, tipo, corretora, tipoOperacao, data, quantidade, preco, valor, custos, ticker);
 
     private static MovimentoPosicao ParaMovimento(OperacaoApuracao operacao) => new()
     {

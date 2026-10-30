@@ -36,6 +36,7 @@ public class MigracaoUpgradeTests
     private const string DirpfRendaFixaJcp = "20261022113200_AddDirpfRendaFixaJcp";
     private const string DirpfLciLca = "20261022145822_AddCodigosDirpfLciLca";
     private const string IndiceNomeCategoriaAtiva = "20261030143359_IndiceNomeCategoriaAtiva";
+    private const string EtfRendaFixa = "20261030151500_AddCodigoEtfRendaFixaDirpf";
 
     [Fact]
     public async Task BancoAntigo_MigraAteOAtual_PreservaDadosEAplicaDefaults()
@@ -164,7 +165,9 @@ public class MigracaoUpgradeTests
             Assert.Contains(await ctx.CodigosDirpf.ToListAsync(), codigo => codigo.Codigo == "10" && codigo.Variante == "Jcp" && codigo.EhSistema);
             Assert.Contains(await ctx.RegrasFiscais.ToListAsync(), regra => regra.Codigo == "RF.IrRegressivo.Automatico" && regra.Valor == 0m && regra.EhSistema);
 
-            Assert.Equal(IndiceNomeCategoriaAtiva, (await ctx.Database.GetAppliedMigrationsAsync()).Last());
+            Assert.Equal(EtfRendaFixa, (await ctx.Database.GetAppliedMigrationsAsync()).Last());
+            Assert.Contains(await ctx.CodigosDirpf.ToListAsync(), codigo =>
+                codigo.Grupo == "07" && codigo.Codigo == "08" && codigo.Variante == "EtfRendaFixa" && codigo.EhSistema);
             Assert.True(File.Exists(banco.Caminho));
             Assert.True(new FileInfo(banco.Caminho).Length > 0);
         }
@@ -183,11 +186,12 @@ public class MigracaoUpgradeTests
         Assert.Contains(IndiceHashImportacao, ids);
         Assert.Contains(RendaFixa, ids);
         Assert.Contains(RegraCatalogo, ids);
-        Assert.Equal(DataPregao, ids[^5]);
-        Assert.Equal(IrrfInformado, ids[^4]);
-        Assert.Equal(DirpfRendaFixaJcp, ids[^3]);
-        Assert.Equal(DirpfLciLca, ids[^2]);
-        Assert.Equal(IndiceNomeCategoriaAtiva, ids[^1]);
+        Assert.Equal(DataPregao, ids[^6]);
+        Assert.Equal(IrrfInformado, ids[^5]);
+        Assert.Equal(DirpfRendaFixaJcp, ids[^4]);
+        Assert.Equal(DirpfLciLca, ids[^3]);
+        Assert.Equal(IndiceNomeCategoriaAtiva, ids[^2]);
+        Assert.Equal(EtfRendaFixa, ids[^1]);
 
         for (var i = 1; i < ids.Count; i++)
         {
