@@ -1,5 +1,6 @@
 (function () {
     var estava = new WeakMap();
+    var popoverDoMenu = new WeakMap();
     var observador = new MutationObserver(function (registros) {
         for (var i = 0; i < registros.length; i++) {
             var registro = registros[i];
@@ -16,6 +17,8 @@
 
         var antes = estava.get(alvo) === true;
         var agora = alvo.getAttribute("aria-expanded") === "true";
+        if (!antes && agora)
+            guardarPopover(alvo);
         if (antes && !agora)
             agendarDevolucao(alvo);
         estava.set(alvo, agora);
@@ -23,9 +26,43 @@
 
     function agendarDevolucao(alvo) {
         setTimeout(function () {
+            if (alvo.getAttribute("aria-expanded") === "true")
+                return;
+            guardarPopover(alvo);
             if (deveDevolver(document.activeElement, alvo))
                 alvo.focus();
         }, 0);
+    }
+
+    function guardarPopover(alvo) {
+        var popover = acharPopover(alvo);
+        if (popover)
+            popoverDoMenu.set(alvo, popover);
+    }
+
+    function acharPopover(alvo) {
+        var controle = alvo.getAttribute("aria-controls");
+        if (controle) {
+            var porControle = document.getElementById(controle);
+            if (porControle)
+                return porControle;
+        }
+
+        var menu = alvo.closest(".mud-menu");
+        if (!menu || !menu.querySelectorAll)
+            return null;
+
+        var marcadores = menu.querySelectorAll("[id^='popover-']");
+        for (var i = 0; i < marcadores.length; i++) {
+            var id = marcadores[i].id;
+            if (id.indexOf("popover-") !== 0)
+                continue;
+            var conteudo = document.getElementById("popovercontent-" + id.substring(8));
+            if (conteudo)
+                return conteudo;
+        }
+
+        return null;
     }
 
     function deveDevolver(ativo, alvo) {
@@ -37,10 +74,10 @@
     }
 
     function dentroDoMenu(ativo, alvo) {
-        if (ativo.closest(".mud-popover") || ativo.closest(".mud-menu-list") || ativo.closest(".mud-overlay"))
+        if (ativo === alvo || alvo.contains(ativo))
             return true;
-        var menu = alvo.closest(".mud-menu");
-        if (menu && menu.contains(ativo))
+        var popover = popoverDoMenu.get(alvo);
+        if (popover && (ativo === popover || popover.contains(ativo)))
             return true;
         return false;
     }

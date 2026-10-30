@@ -296,6 +296,9 @@ public class LancamentoCartaoFonteTests
         var imediato = script.Replace(
             """
                     setTimeout(function () {
+                        if (alvo.getAttribute("aria-expanded") === "true")
+                            return;
+                        guardarPopover(alvo);
                         if (deveDevolver(document.activeElement, alvo))
                             alvo.focus();
                     }, 0);
@@ -322,6 +325,62 @@ public class LancamentoCartaoFonteTests
             "// setTimeout(function () {",
             StringComparison.Ordinal));
         Assert.False(TabPreservaAvanco(esperaComentada));
+    }
+
+    [Fact]
+    public void CalendarioDoDatePicker_NaoPuxaOFocoParaOAtivador()
+    {
+        var script = Fonte("OrcaFacil", "wwwroot", "js", "menuFoco.js");
+        var painel = Fonte("OrcaFacil", "Components", "Pages", "Lancamentos", "FaturaCartaoPainel.razor");
+        var dialogo = Fonte("OrcaFacil", "Components", "Pages", "Cesta", "CompraCestaDialog.razor");
+
+        Assert.True(NaoPuxaOutroPopover(script, painel, dialogo));
+        Assert.True(DevolveFoco(script, Fonte("OrcaFacil", "wwwroot", "index.html")));
+        Assert.True(NaoRoubaCampo(script));
+        Assert.True(TabPreservaAvanco(script));
+
+        var qualquerPopover = script.Replace(
+            """
+                    if (popover && (ativo === popover || popover.contains(ativo)))
+                        return true;
+            """,
+            """
+                    if (ativo.closest(".mud-popover") || ativo.closest(".mud-menu-list") || ativo.closest(".mud-overlay"))
+                        return true;
+            """,
+            StringComparison.Ordinal);
+        Assert.False(NaoPuxaOutroPopover(qualquerPopover, painel, dialogo));
+
+        var guardaComentada = SemComentarios(script.Replace(
+            "popover.contains(ativo)",
+            "/* popover.contains(ativo) */",
+            StringComparison.Ordinal));
+        Assert.False(NaoPuxaOutroPopover(guardaComentada, painel, dialogo));
+
+        var semAbertura = SemComentarios(script.Replace(
+            """
+                    if (!antes && agora)
+                        guardarPopover(alvo);
+            """,
+            """
+                    // if (!antes && agora)
+                    //     guardarPopover(alvo);
+            """,
+            StringComparison.Ordinal));
+        Assert.False(NaoPuxaOutroPopover(semAbertura, painel, dialogo));
+
+        var semReleitura = SemComentarios(script.Replace(
+            """
+                        if (alvo.getAttribute("aria-expanded") === "true")
+                            return;
+            """,
+            """
+                        // if (alvo.getAttribute("aria-expanded") === "true")
+                        //     return;
+            """,
+            StringComparison.Ordinal));
+        Assert.False(NaoPuxaOutroPopover(semReleitura, painel, dialogo));
+        Assert.False(DevolveFoco(semReleitura, Fonte("OrcaFacil", "wwwroot", "index.html")));
     }
 
     private static string Fonte(params string[] partes)
@@ -416,11 +475,47 @@ public class LancamentoCartaoFonteTests
         if (Contar(script, "alvo.focus()") != 1)
             return false;
 
-        return Regex.IsMatch(
-            script,
-            @"setTimeout\(function \(\) \{\s*if \(deveDevolver\(document\.activeElement, alvo\)\)\s*alvo\.focus\(\);\s*\}, 0\);",
-            RegexOptions.Singleline);
+        return EsperaDevolucao(script);
     }
+
+    private static bool NaoPuxaOutroPopover(string script, string painel, string dialogo)
+    {
+        if (!painel.Contains("<MudDatePicker", StringComparison.Ordinal))
+            return false;
+        if (!dialogo.Contains("<MudDatePicker", StringComparison.Ordinal))
+            return false;
+        if (script.Contains("?.", StringComparison.Ordinal)
+            || script.Contains("??", StringComparison.Ordinal)
+            || script.Contains("replaceAll", StringComparison.Ordinal)
+            || script.Contains(".mud-popover", StringComparison.Ordinal)
+            || script.Contains(".mud-overlay", StringComparison.Ordinal)
+            || script.Contains(".mud-menu-list", StringComparison.Ordinal))
+            return false;
+        if (!script.Contains("aria-controls", StringComparison.Ordinal))
+            return false;
+        if (!script.Contains("popovercontent-", StringComparison.Ordinal))
+            return false;
+        if (!script.Contains("popoverDoMenu", StringComparison.Ordinal))
+            return false;
+        if (!script.Contains("if (!antes && agora)", StringComparison.Ordinal))
+            return false;
+        if (!script.Contains("guardarPopover(alvo);", StringComparison.Ordinal))
+            return false;
+        if (!script.Contains("ativo === alvo", StringComparison.Ordinal))
+            return false;
+        if (!script.Contains("popover.contains(ativo)", StringComparison.Ordinal))
+            return false;
+        if (Contar(script, "alvo.focus()") != 1)
+            return false;
+
+        return EsperaDevolucao(script);
+    }
+
+    private static bool EsperaDevolucao(string script)
+        => Regex.IsMatch(
+            script,
+            @"setTimeout\(function \(\) \{\s*if \(alvo\.getAttribute\(""aria-expanded""\) === ""true""\)\s*return;\s*guardarPopover\(alvo\);\s*if \(deveDevolver\(document\.activeElement, alvo\)\)\s*alvo\.focus\(\);\s*\}, 0\);",
+            RegexOptions.Singleline);
 
     private static bool NaoRoubaCampo(string script)
     {
@@ -445,10 +540,7 @@ public class LancamentoCartaoFonteTests
         if (Regex.IsMatch(script, @"if\s*\(\s*antes\s*&&\s*!agora\s*\)\s*alvo\.focus"))
             return false;
 
-        return Regex.IsMatch(
-            script,
-            @"setTimeout\(function \(\) \{\s*if \(deveDevolver\(document\.activeElement, alvo\)\)\s*alvo\.focus\(\);\s*\}, 0\);",
-            RegexOptions.Singleline);
+        return EsperaDevolucao(script);
     }
 
     private static bool LinhaEmbutidaSemGrupo(string linha)
