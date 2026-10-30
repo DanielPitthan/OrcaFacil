@@ -7,7 +7,7 @@
 }
 else
 {
-    <div class="of-form-row" role="@(Chevron ? "group" : null)" aria-label="@Aria">
+    <div class="of-form-row" aria-label="@RotuloDaLinha">
         @Conteudo
         @if (Chevron)
         {
@@ -29,6 +29,8 @@ else
     private string Aria => string.IsNullOrWhiteSpace(AriaLabel)
         ? (string.IsNullOrWhiteSpace(Valor) ? Rotulo : $"{Rotulo}: {Valor}")
         : AriaLabel;
+
+    private string? RotuloDaLinha => Embutido ? null : Aria;
 
     private RenderFragment Conteudo => @<text>
         @if (!string.IsNullOrWhiteSpace(Icone))

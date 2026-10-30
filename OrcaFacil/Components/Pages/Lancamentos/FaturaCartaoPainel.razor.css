@@ -30,15 +30,12 @@
     line-height: 1.4;
 }
 
-.of-seletor ::deep .mud-menu {
-    display: block;
-    width: 100%;
-}
-
 .of-seletor-toque {
     display: block;
     width: 100%;
-    min-height: 0;
+    max-width: 100%;
+    min-width: 0;
+    min-height: var(--of-touch);
     margin: 0;
     padding: 0;
     border: 0;
