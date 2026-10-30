@@ -43,7 +43,7 @@ public class TextDisabledContrasteTests
 
     private static string BlocoDaPaleta(string fonte, string paleta)
     {
-        var marcador = paleta + " = new()";
+        var marcador = paleta + " = new " + paleta;
         var inicio = fonte.IndexOf(marcador, StringComparison.Ordinal);
         if (inicio < 0)
             throw new InvalidOperationException($"Paleta não encontrada: {paleta}.");
