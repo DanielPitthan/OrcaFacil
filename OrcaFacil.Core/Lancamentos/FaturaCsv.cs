@@ -261,7 +261,8 @@ public static class FaturaCsv
     private static Dictionary<string, Categoria> MapearCategorias(IReadOnlyList<Categoria> categorias)
     {
         var mapa = new Dictionary<string, Categoria>(StringComparer.OrdinalIgnoreCase);
-        foreach (var categoria in categorias)
+        // Ativa entra primeiro. TryAdd fica com ela nas duas ordens de carga.
+        foreach (var categoria in categorias.OrderByDescending(categoria => categoria.Ativo))
         {
             if (string.IsNullOrWhiteSpace(categoria.Nome))
                 continue;
