@@ -1,6 +1,8 @@
 (function () {
     var estava = new WeakMap();
     var popoverDoMenu = new WeakMap();
+    var tabDirecao = 1;
+    var tabQuando = 0;
     var observador = new MutationObserver(function (registros) {
         for (var i = 0; i < registros.length; i++) {
             var registro = registros[i];
@@ -29,9 +31,26 @@
             if (alvo.getAttribute("aria-expanded") === "true")
                 return;
             guardarPopover(alvo);
-            if (deveDevolver(document.activeElement, alvo))
-                alvo.focus();
+            if (deveDevolver(document.activeElement, alvo)) {
+                if ((Date.now() - tabQuando) < 500)
+                    moverParaFora(alvo, tabDirecao);
+                else
+                    alvo.focus();
+            }
+            tabQuando = 0;
         }, 0);
+    }
+
+    function aoTeclar(evento) {
+        if (!evento || evento.key !== "Tab")
+            return;
+        var origem = evento.target;
+        if (!origem || !origem.closest)
+            return;
+        if (!origem.closest("[id^='popovercontent-']"))
+            return;
+        tabDirecao = evento.shiftKey ? -1 : 1;
+        tabQuando = Date.now();
     }
 
     function guardarPopover(alvo) {
@@ -82,6 +101,83 @@
         return false;
     }
 
+    function moverParaFora(alvo, direcao) {
+        var ordem = tabulaveis();
+        var indice = -1;
+        for (var i = 0; i < ordem.length; i++) {
+            if (ordem[i] === alvo) {
+                indice = i;
+                break;
+            }
+        }
+        if (indice < 0)
+            return;
+
+        var popover = popoverDoMenu.get(alvo);
+        var passo = direcao < 0 ? -1 : 1;
+        for (var j = indice + passo; j >= 0 && j < ordem.length; j = j + passo) {
+            var candidato = ordem[j];
+            if (popover && (candidato === popover || popover.contains(candidato)))
+                continue;
+            candidato.focus();
+            return;
+        }
+    }
+
+    function tabulaveis() {
+        var nos = document.querySelectorAll("a[href], button, input, select, textarea, [tabindex]");
+        var naturais = [];
+        var positivos = [];
+        for (var i = 0; i < nos.length; i++) {
+            var no = nos[i];
+            if (!podeTabular(no))
+                continue;
+            var valor = valorTab(no);
+            if (valor > 0)
+                positivos.push({ no: no, valor: valor, ordem: i });
+            else if (valor === 0)
+                naturais.push(no);
+        }
+        positivos.sort(function (a, b) {
+            if (a.valor !== b.valor)
+                return a.valor - b.valor;
+            return a.ordem - b.ordem;
+        });
+        var lista = [];
+        for (var p = 0; p < positivos.length; p++)
+            lista.push(positivos[p].no);
+        for (var n = 0; n < naturais.length; n++)
+            lista.push(naturais[n]);
+        return lista;
+    }
+
+    function valorTab(no) {
+        var indice = no.getAttribute("tabindex");
+        if (indice === null || indice === "")
+            return 0;
+        var valor = parseInt(indice, 10);
+        if (isNaN(valor))
+            return 0;
+        return valor;
+    }
+
+    function podeTabular(no) {
+        if (!no || no.disabled)
+            return false;
+        if (no.tagName === "INPUT" && no.type === "hidden")
+            return false;
+        if (no.getAttribute("tabindex") === "-1")
+            return false;
+        if (no.hasAttribute("hidden"))
+            return false;
+        var estilo = window.getComputedStyle(no);
+        if (!estilo || estilo.display === "none" || estilo.visibility === "hidden")
+            return false;
+        if (no.getClientRects().length === 0)
+            return false;
+        return true;
+    }
+
     function lembrar(alvo) {
         if (!estava.has(alvo))
             estava.set(alvo, alvo.getAttribute("aria-expanded") === "true");
@@ -99,6 +195,7 @@
         }
     }
 
+    document.addEventListener("keydown", aoTeclar, true);
     observador.observe(document.documentElement, {
         attributes: true,
         attributeFilter: ["aria-expanded"],

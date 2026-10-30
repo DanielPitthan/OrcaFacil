@@ -290,8 +290,6 @@ public class LancamentoCartaoFonteTests
     {
         var script = Fonte("OrcaFacil", "wwwroot", "js", "menuFoco.js");
         Assert.True(TabPreservaAvanco(script));
-        Assert.DoesNotContain("keydown", script, StringComparison.Ordinal);
-        Assert.DoesNotContain("shiftKey", script, StringComparison.Ordinal);
 
         var imediato = script.Replace(
             """
@@ -299,8 +297,13 @@ public class LancamentoCartaoFonteTests
                         if (alvo.getAttribute("aria-expanded") === "true")
                             return;
                         guardarPopover(alvo);
-                        if (deveDevolver(document.activeElement, alvo))
-                            alvo.focus();
+                        if (deveDevolver(document.activeElement, alvo)) {
+                            if ((Date.now() - tabQuando) < 500)
+                                moverParaFora(alvo, tabDirecao);
+                            else
+                                alvo.focus();
+                        }
+                        tabQuando = 0;
                     }, 0);
             """,
             """
@@ -312,13 +315,29 @@ public class LancamentoCartaoFonteTests
 
         var incondicional = script.Replace(
             """
-                        if (deveDevolver(document.activeElement, alvo))
-                            alvo.focus();
+                        if (deveDevolver(document.activeElement, alvo)) {
+                            if ((Date.now() - tabQuando) < 500)
+                                moverParaFora(alvo, tabDirecao);
+                            else
+                                alvo.focus();
+                        }
             """,
             "            alvo.focus();",
             StringComparison.Ordinal);
         Assert.False(TabPreservaAvanco(incondicional));
         Assert.False(NaoRoubaCampo(incondicional));
+
+        var tabRecenteNoAtivador = script.Replace(
+            "moverParaFora(alvo, tabDirecao);",
+            "alvo.focus();",
+            StringComparison.Ordinal);
+        Assert.False(TabPreservaAvanco(tabRecenteNoAtivador));
+
+        var teclaComentada = SemComentarios(script.Replace(
+            "document.addEventListener(\"keydown\", aoTeclar, true);",
+            "// document.addEventListener(\"keydown\", aoTeclar, true);",
+            StringComparison.Ordinal));
+        Assert.False(TabPreservaAvanco(teclaComentada));
 
         var esperaComentada = SemComentarios(script.Replace(
             "setTimeout(function () {",
@@ -514,7 +533,7 @@ public class LancamentoCartaoFonteTests
     private static bool EsperaDevolucao(string script)
         => Regex.IsMatch(
             script,
-            @"setTimeout\(function \(\) \{\s*if \(alvo\.getAttribute\(""aria-expanded""\) === ""true""\)\s*return;\s*guardarPopover\(alvo\);\s*if \(deveDevolver\(document\.activeElement, alvo\)\)\s*alvo\.focus\(\);\s*\}, 0\);",
+            @"setTimeout\(function \(\) \{\s*if \(alvo\.getAttribute\(""aria-expanded""\) === ""true""\)\s*return;\s*guardarPopover\(alvo\);\s*if \(deveDevolver\(document\.activeElement, alvo\)\) \{\s*if \(\(Date\.now\(\) - tabQuando\) < 500\)\s*moverParaFora\(alvo, tabDirecao\);\s*else\s*alvo\.focus\(\);\s*\}\s*tabQuando = 0;\s*\}, 0\);",
             RegexOptions.Singleline);
 
     private static bool NaoRoubaCampo(string script)
@@ -525,7 +544,10 @@ public class LancamentoCartaoFonteTests
             return false;
         if (!script.Contains("!ativo", StringComparison.Ordinal))
             return false;
-        if (!Regex.IsMatch(script, @"if \(deveDevolver\(document\.activeElement, alvo\)\)\s*alvo\.focus\(\);"))
+        if (!Regex.IsMatch(
+                script,
+                @"if \(deveDevolver\(document\.activeElement, alvo\)\) \{\s*if \(\(Date\.now\(\) - tabQuando\) < 500\)\s*moverParaFora\(alvo, tabDirecao\);\s*else\s*alvo\.focus\(\);",
+                RegexOptions.Singleline))
             return false;
 
         return Regex.IsMatch(
@@ -537,7 +559,21 @@ public class LancamentoCartaoFonteTests
     {
         if (Contar(script, "alvo.focus()") != 1)
             return false;
+        if (script.Contains("?.", StringComparison.Ordinal) || script.Contains("??", StringComparison.Ordinal))
+            return false;
         if (Regex.IsMatch(script, @"if\s*\(\s*antes\s*&&\s*!agora\s*\)\s*alvo\.focus"))
+            return false;
+        if (!script.Contains("document.addEventListener(\"keydown\", aoTeclar, true);", StringComparison.Ordinal))
+            return false;
+        if (!script.Contains("evento.shiftKey", StringComparison.Ordinal))
+            return false;
+        if (!script.Contains("popovercontent-", StringComparison.Ordinal))
+            return false;
+        if (!script.Contains("moverParaFora(alvo, tabDirecao);", StringComparison.Ordinal))
+            return false;
+        if (Regex.IsMatch(script, @"< 500\)\s*alvo\.focus\(\)"))
+            return false;
+        if (!Regex.IsMatch(script, @"< 500\)\s*moverParaFora\(alvo,\s*tabDirecao\);"))
             return false;
 
         return EsperaDevolucao(script);
