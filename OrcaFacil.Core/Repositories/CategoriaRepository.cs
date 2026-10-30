@@ -19,6 +19,13 @@ public class CategoriaRepository : GenericRepository<Categoria>, ICategoriaRepos
             .ToListAsync();
     }
 
+    public async Task<Categoria?> GetByNomeAsync(string nome)
+    {
+        await using var context = await ContextFactory.CreateDbContextAsync();
+        return await context.Categorias
+            .FirstOrDefaultAsync(c => c.Nome.ToLower() == nome.ToLower());
+    }
+
     public async Task<bool> ExisteNomeAsync(string nome, int? ignorarId = null)
     {
         await using var context = await ContextFactory.CreateDbContextAsync();

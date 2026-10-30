@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
 using OrcaFacil.Core.Repositories;
@@ -46,6 +47,32 @@ public class CategoriaRepositoryTests : IDisposable
         var existe = await _repository.ExisteNomeAsync("Lazer", ignorarId: categoria.Id);
 
         Assert.False(existe);
+    }
+
+    [Fact]
+    public async Task NomeDaInativa_ContinuaNoIndiceUnico()
+    {
+        await _repository.AddAsync(new Categoria
+        {
+            Nome = "Recebimento",
+            Icone = "💰",
+            CorHex = "#6DA538",
+            TipoPadrao = TipoTransacao.Receita,
+            EhPadraoDoSistema = true
+        });
+        var antiga = (await _repository.GetAllAsync()).Single();
+        antiga.Ativo = false;
+        await _repository.UpdateAsync(antiga);
+
+        Assert.False(antiga.Ativo);
+        Assert.True(await _repository.ExisteNomeAsync("Recebimento"));
+        await Assert.ThrowsAsync<DbUpdateException>(() => _repository.AddAsync(new Categoria
+        {
+            Nome = "Recebimento",
+            Icone = "💵",
+            CorHex = "#A2B94F",
+            TipoPadrao = TipoTransacao.Receita
+        }));
     }
 
     [Fact]

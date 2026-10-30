@@ -1,10 +1,13 @@
+using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.Dtos;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
+using OrcaFacil.Core.Exportacao;
 using OrcaFacil.Core.Lancamentos;
 using OrcaFacil.Core.Repositories;
 using OrcaFacil.Core.Services;
 using OrcaFacil.Services.Interfaces;
+using Serilog;
 
 namespace OrcaFacil.Services;
 
@@ -69,7 +72,7 @@ public class TransacaoService : ITransacaoService
             Itens = itens
         };
 
-        await _transacaoRepository.AddAsync(transacao);
+        await GravarAsync(() => _transacaoRepository.AddAsync(transacao));
         await _notificationScheduler.AgendarLembreteAsync(transacao);
 
         return transacao;
@@ -101,8 +104,11 @@ public class TransacaoService : ITransacaoService
         transacao.CartaoId = dto.CartaoId;
         transacao.AtualizadoEm = DateTime.UtcNow;
 
-        await _transacaoRepository.UpdateAsync(transacao);
-        await _transacaoRepository.SubstituirItensAsync(id, itens);
+        await GravarAsync(async () =>
+        {
+            await _transacaoRepository.UpdateAsync(transacao);
+            await _transacaoRepository.SubstituirItensAsync(id, itens);
+        });
 
         await _notificationScheduler.CancelarLembreteAsync(id);
         await _notificationScheduler.AgendarLembreteAsync(transacao);
@@ -152,6 +158,21 @@ public class TransacaoService : ITransacaoService
 
     public Task<bool> ExistemDespesasParaTrazerAsync(int mes, int ano)
         => _copiaDespesas.ExistemAsync(mes, ano);
+
+    private static async Task GravarAsync(Func<Task> gravar)
+    {
+        try
+        {
+            await gravar();
+        }
+        catch (DbUpdateException ex)
+        {
+            Log.Error(
+                "Falha ao gravar o lançamento. Tipo: {Tipo}",
+                VarreduraPlanilhaExportada.TipoDaFalha(ex));
+            throw FalhaDeGravacao.ParaOUsuario(ex, FalhaDeGravacao.MensagemLancamento);
+        }
+    }
 
     private async Task<List<ItemLancamento>> MapearItensAsync(TransacaoFormModel dto, Categoria categoria)
     {
