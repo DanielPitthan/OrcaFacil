@@ -23,8 +23,8 @@ public static class OrcaFacilThemes
             DrawerText = "#426785",
             TextPrimary = "#1E2A33",
             TextSecondary = "#5A6B78",
-            // Preto a 38% do MudBlazor fica em 2,64:1 sobre #EFF3F7. #636C78 fica em 4,77:1.
-            TextDisabled = "#636C78"
+            // #636C78 sobre o chip #E0E0E0 fica em 4,03:1. #546270 fica em 4,74:1.
+            TextDisabled = "#546270"
         },
         Typography = new Typography
         {

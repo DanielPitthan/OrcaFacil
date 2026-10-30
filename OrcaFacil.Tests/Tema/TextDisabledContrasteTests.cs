@@ -3,17 +3,19 @@ namespace OrcaFacil.Tests.Tema;
 /// <summary>
 /// O rótulo de 12px usa --of-text-muted, que aponta para TextDisabled.
 /// No claro o padrão do MudBlazor (preto a 38%) fica em 2,64:1 sobre #EFF3F7.
+/// O chip do mês fechado pinta esse texto sobre GrayLighter, #E0E0E0.
 /// </summary>
 public class TextDisabledContrasteTests
 {
     [Theory]
     [InlineData("PaletteLight", "#EFF3F7")]
     [InlineData("PaletteLight", "#FFFFFF")]
+    [InlineData("PaletteLight", "#E0E0E0")]
     [InlineData("PaletteDark", "#12151B")]
     [InlineData("PaletteDark", "#1B1F27")]
     public void TextDisabled_TemContrasteDeTextoWcag(string paleta, string fundo)
     {
-        var cor = TextDisabled(paleta);
+        var cor = TextDisabled(LerTema(), paleta);
         var razao = Contraste(cor, fundo);
 
         Assert.True(razao >= 4.5, $"{paleta} {cor} sobre {fundo} = {razao:0.00}");
@@ -22,15 +24,35 @@ public class TextDisabledContrasteTests
     [Fact]
     public void TemaEscuro_MantemTextDisabled()
     {
-        var cor = TextDisabled("PaletteDark");
+        var cor = TextDisabled(LerTema(), "PaletteDark");
         Assert.Equal("#9AA3B2", cor);
         Assert.True(Contraste(cor, "#12151B") >= 4.5);
         Assert.True(Contraste(cor, "#1B1F27") >= 4.5);
     }
 
-    private static string TextDisabled(string paleta)
+    [Fact]
+    public void MutacaoPara636C78_FalhaSobreOCinzaDoChip()
     {
-        var fonte = SemComentariosDeLinha(File.ReadAllText(CaminhoTema()));
+        var fonte = LerTema();
+        var atual = TextDisabled(fonte, "PaletteLight");
+        var mutado = fonte.Replace(
+            $"TextDisabled = \"{atual}\"",
+            "TextDisabled = \"#636C78\"",
+            StringComparison.Ordinal);
+
+        Assert.NotEqual(fonte, mutado);
+        var cor = TextDisabled(mutado, "PaletteLight");
+        Assert.Equal("#636C78", cor);
+
+        var razao = Contraste(cor, "#E0E0E0");
+        Assert.False(razao >= 4.5, $"{cor} sobre #E0E0E0 = {razao:0.00}");
+    }
+
+    private static string LerTema() =>
+        SemComentariosDeLinha(File.ReadAllText(CaminhoTema()));
+
+    private static string TextDisabled(string fonte, string paleta)
+    {
         var bloco = BlocoDaPaleta(fonte, paleta);
         const string chave = "TextDisabled = \"";
         var inicio = bloco.IndexOf(chave, StringComparison.Ordinal);
