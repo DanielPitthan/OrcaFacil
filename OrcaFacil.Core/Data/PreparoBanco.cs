@@ -1,10 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using OrcaFacil.Core.Ativos;
 
 namespace OrcaFacil.Core.Data;
 
 /// <summary>
 /// Aplica as migrations e, em seguida, só lê o arquivo para ver se a estrutura
 /// bate com o model. O check em si não grava nem apaga.
+/// Com a estrutura íntegra, ETF conhecido gravado como ação passa a ETF.
 /// </summary>
 public sealed class OpcoesPreparoBanco
 {
@@ -101,6 +103,22 @@ public static class PreparoBanco
                 relatorio,
                 backup,
                 AvisoArquivoIlegivel);
+        }
+
+        if (falhaMigrate is null && relatorio.Integro)
+        {
+            try
+            {
+                await CatalogoEtfConhecido.ReclassificarAsync(context, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                return new ResultadoPreparoBanco(
+                    ex,
+                    relatorio,
+                    backup,
+                    "Não foi possível reclassificar o ETF conhecido gravado como ação. A migração já tinha concluído e o banco não foi apagado.");
+            }
         }
 
         return new ResultadoPreparoBanco(falhaMigrate, relatorio, backup);

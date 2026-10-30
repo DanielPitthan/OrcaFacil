@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using OrcaFacil.Core.Ativos;
 using OrcaFacil.Core.B3;
 using OrcaFacil.Core.Data;
 using OrcaFacil.Core.Dirpf;
@@ -186,6 +187,51 @@ public class ImportacaoExtratoB3ServiceTests
 
         Assert.All(previa.Linhas.Where(l => l.Status == StatusLinhaImportacaoB3.Nova), l => Assert.True(l.Marcada));
         Assert.Contains(previa.Linhas, l => l.Titulo == "SNAG11" && l.Comando!.TipoAtivo == TipoAtivo.Fii);
+        Assert.Contains(previa.Linhas, l => l.Titulo == "BOVA11" && l.Comando?.TipoAtivo == TipoAtivo.Etf);
+        Assert.Contains(previa.Linhas, l => l.Titulo == "GOLD11" && l.Comando?.TipoAtivo == TipoAtivo.Etf);
+        Assert.Contains(previa.Linhas, l => l.Titulo == "SMAL11" && l.Comando?.TipoAtivo == TipoAtivo.Etf);
+        Assert.Contains(previa.Linhas, l => l.Titulo == "AGRO3" && l.Comando?.TipoAtivo == TipoAtivo.Acao);
+        Assert.DoesNotContain(
+            previa.Linhas,
+            l => (l.Titulo is "BOVA11" or "GOLD11" or "SMAL11") && l.Comando?.TipoAtivo == TipoAtivo.Acao);
+    }
+
+    [Fact]
+    public async Task Gravar_EtfConhecidoJaComoAcao_PassaAEtf_ENaoDuplicaOAtivo()
+    {
+        const string csv =
+            """
+            Entrada/Saída;Data;Movimentação;Produto;Instituição;Quantidade;Preço unitário;Valor da Operação
+            Credito;01/02/2024;Transferência - Liquidação;BOVA11 - ISHARES IBOVESPA FUNDO DE INDICE;XP INVESTIMENTOS CCTVM S/A;1; R$100,00 ; R$100,00 
+            Credito;01/02/2024;Transferência - Liquidação;PETR4 - PETROLEO BRASILEIRO;XP INVESTIMENTOS CCTVM S/A;1; R$10,00 ; R$10,00 
+            """;
+
+        await using var ambiente = await Ambiente.CriarAsync();
+        await using (var contexto = await ambiente.Factory.CreateDbContextAsync())
+        {
+            contexto.AtivosFinanceiros.Add(new AtivoFinanceiro
+            {
+                Ticker = "BOVA11",
+                Nome = "Ibovespa",
+                Tipo = TipoAtivo.Acao
+            });
+            await contexto.SaveChangesAsync();
+        }
+
+        await using var fluxo = new MemoryStream(Encoding.UTF8.GetBytes(csv));
+        var previa = await ambiente.Service.PreverAsync(fluxo, ambiente.MembroId);
+        Assert.Equal(TipoAtivo.Etf, previa.Linhas.Single(l => l.Titulo == "BOVA11").Comando!.TipoAtivo);
+        Assert.Equal(TipoAtivo.Acao, previa.Linhas.Single(l => l.Titulo == "PETR4").Comando!.TipoAtivo);
+        await ambiente.Service.GravarAsync(previa, ambiente.MembroId);
+
+        await using var conferido = await ambiente.Factory.CreateDbContextAsync();
+        var ativos = await conferido.AtivosFinanceiros.ToListAsync();
+        Assert.Equal(2, ativos.Count);
+        Assert.Equal(TipoAtivo.Etf, ativos.Single(a => a.Ticker == "BOVA11").Tipo);
+        Assert.Equal("Ibovespa", ativos.Single(a => a.Ticker == "BOVA11").Nome);
+        Assert.Equal(TipoAtivo.Acao, ativos.Single(a => a.Ticker == "PETR4").Tipo);
+        Assert.Equal(0, await CatalogoEtfConhecido.ReclassificarAsync(conferido));
+        Assert.Equal(2, await conferido.AtivosFinanceiros.CountAsync());
     }
 
     [Fact]

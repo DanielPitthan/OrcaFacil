@@ -11,7 +11,8 @@ namespace OrcaFacil.Core.B3;
 /// (IMOB, IMOBI, Imobiliário) → <see cref="ClasseAtivoB3.FII"/>. Fiagro conta como FII.
 /// O sufixo fracionário F não é tratado como 11.</item>
 /// <item>Demais tickers válidos na B3 → <see cref="ClasseAtivoB3.Acao"/>. Fundo de índice
-/// (BOVA11, GOLD11, SMAL11) cai aqui: o contrato não tem classe de ETF.</item>
+/// (BOVA11, GOLD11, SMAL11) cai aqui: o contrato não tem classe de ETF.
+/// O cadastro desses tickers conhecidos grava o tipo ETF (DIRPF 07/06).</item>
 /// <item><see cref="ClasseAtivoB3.Outro"/> quando o identificador não é renda fixa nem ticker da B3.
 /// O parser não emite essa classe: a linha vai para erros por ticker inválido.</item>
 /// </list>

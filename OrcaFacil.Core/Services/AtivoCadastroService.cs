@@ -29,9 +29,10 @@ public class AtivoCadastroService
         if (await _ativos.ExisteTickerAsync(ticker, modelo.Id))
             throw new InvalidOperationException($"Já existe um ativo com o ticker {ticker}.");
 
+        var tipo = CatalogoEtfConhecido.TipoNoCadastro(ticker, modelo.Tipo);
         if (modelo.Id is null)
         {
-            var novo = new AtivoFinanceiro { Ticker = ticker, Nome = nome, Tipo = modelo.Tipo };
+            var novo = new AtivoFinanceiro { Ticker = ticker, Nome = nome, Tipo = tipo };
             await _ativos.AddAsync(novo);
             return novo;
         }
@@ -41,7 +42,7 @@ public class AtivoCadastroService
 
         ativo.Ticker = ticker;
         ativo.Nome = nome;
-        ativo.Tipo = modelo.Tipo;
+        ativo.Tipo = tipo;
         await _ativos.UpdateAsync(ativo);
         return ativo;
     }

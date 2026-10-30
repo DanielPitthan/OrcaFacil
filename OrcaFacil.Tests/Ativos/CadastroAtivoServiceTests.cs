@@ -74,6 +74,30 @@ public class CadastroAtivoServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task EtfConhecido_GravaComoEtf_MesmoInformadoComoAcao()
+    {
+        var ativo = await _ativosService.SalvarAsync(new AtivoFormModel
+        {
+            Ticker = "bova11",
+            Nome = "Ibovespa",
+            Tipo = TipoAtivo.Acao
+        });
+
+        Assert.Equal("BOVA11", ativo.Ticker);
+        Assert.Equal(TipoAtivo.Etf, ativo.Tipo);
+
+        ativo = await _ativosService.SalvarAsync(new AtivoFormModel
+        {
+            Id = ativo.Id,
+            Ticker = "BOVA11",
+            Nome = "iShares Ibovespa",
+            Tipo = TipoAtivo.Acao
+        });
+        Assert.Equal(TipoAtivo.Etf, ativo.Tipo);
+        Assert.Equal("iShares Ibovespa", ativo.Nome);
+    }
+
+    [Fact]
     public async Task TickerInvalido_ERecusado()
     {
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
