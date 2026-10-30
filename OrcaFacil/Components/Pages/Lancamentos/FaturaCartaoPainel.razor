@@ -120,11 +120,6 @@
                     </ChildContent>
                 </MudMenu>
             </div>
-            <div class="of-secao-bloco">
-                <MudTextField T="string" @bind-Value="Modelo.Observacao" For="@(() => Modelo.Observacao)"
-                              Label="Observação (opcional)" Lines="2" MaxLength="500" Immediate="true"
-                              Variant="Variant.Outlined" />
-            </div>
         </FormSection>
         </div>
     </div>
@@ -304,7 +299,7 @@
 
     private IReadOnlyList<ChipSomenteLeitura> ChipsDerivados =>
     [
-        new(Modelo.Tipo == TipoTransacao.Receita ? "Receita" : "Despesa"),
+        new((CategoriaFatura?.TipoPadrao ?? Modelo.Tipo) == TipoTransacao.Receita ? "Receita" : "Despesa"),
         new(CategoriaFatura?.Nome ?? "Cartão de Crédito", CategoriaFatura?.Icone)
     ];
 

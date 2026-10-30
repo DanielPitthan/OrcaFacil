@@ -49,6 +49,8 @@ public class TransacaoService : ITransacaoService
         var categoria = await _categoriaRepository.GetByIdAsync(dto.CategoriaId)
             ?? throw new InvalidOperationException("Categoria inválida.");
 
+        dto.Tipo = FluxoLancamento.TipoGravado(categoria.TipoPadrao);
+
         var itens = await MapearItensAsync(dto, categoria);
 
         var membroId = _perfilContext.Atual?.Id
@@ -79,6 +81,8 @@ public class TransacaoService : ITransacaoService
     {
         var categoria = await _categoriaRepository.GetByIdAsync(dto.CategoriaId)
             ?? throw new InvalidOperationException("Categoria inválida.");
+
+        dto.Tipo = FluxoLancamento.TipoGravado(categoria.TipoPadrao);
 
         var transacao = await _transacaoRepository.GetByIdAsync(id)
             ?? throw new InvalidOperationException("Lançamento não encontrado.");
