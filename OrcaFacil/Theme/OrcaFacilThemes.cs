@@ -22,7 +22,9 @@ public static class OrcaFacilThemes
             DrawerBackground = "#EFF3F7",
             DrawerText = "#426785",
             TextPrimary = "#1E2A33",
-            TextSecondary = "#5A6B78"
+            TextSecondary = "#5A6B78",
+            // #636C78 sobre o chip #E0E0E0 fica em 4,03:1. #546270 fica em 4,74:1.
+            TextDisabled = "#546270"
         },
         Typography = new Typography
         {

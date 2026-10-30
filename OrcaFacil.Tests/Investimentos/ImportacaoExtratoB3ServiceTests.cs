@@ -72,6 +72,68 @@ public class ImportacaoExtratoB3ServiceTests
     }
 
     [Fact]
+    public async Task OverflowNoPrecoEfetivo_MarcaSoALinha_EAsOutrasSeguem()
+    {
+        const string Cabecalho =
+            "Entrada/Saída;Data;Movimentação;Produto;Instituição;Quantidade;Preço unitário;Valor da Operação\n";
+        const string Boa =
+            "Credito;01/02/2024;Transferência - Liquidação;PETR4 - PETROLEO BRASILEIRO;XP INVESTIMENTOS CCTVM S/A;10;10,00;100,00\n";
+        const string Estouro =
+            "Credito;01/02/2024;Transferência - Liquidação;VALE3 - VALE;XP INVESTIMENTOS CCTVM S/A;0,1;1,00;79228162514264337593543950335\n";
+        const string Outra =
+            "Credito;02/02/2024;Transferência - Liquidação;ITUB4 - ITAU UNIBANCO;XP INVESTIMENTOS CCTVM S/A;5;20,00;100,00\n";
+        var csv = Cabecalho + Boa + Estouro + Estouro + Boa + Outra;
+
+        using var leitura = new MemoryStream(Encoding.UTF8.GetBytes(csv));
+        var lido = new ParserExtratoB3().Ler(leitura);
+        Assert.Equal(5, lido.Linhas.Count);
+        Assert.Empty(lido.Erros);
+        Assert.Throws<OverflowException>(() => HashLinhaExtratoB3.Chave(lido.Linhas[1]));
+        Assert.Throws<OverflowException>(() => HashLinhaExtratoB3.Chave(lido.Linhas[2]));
+
+        await using var ambiente = await Ambiente.CriarAsync();
+        await using var fluxo = new MemoryStream(Encoding.UTF8.GetBytes(csv));
+        var previa = await ambiente.Service.PreverAsync(fluxo, ambiente.MembroId);
+
+        Assert.Equal(5, previa.Linhas.Count);
+        Assert.Equal(2, previa.Contar(StatusLinhaImportacaoB3.Erro));
+        Assert.Equal(3, previa.Contar(StatusLinhaImportacaoB3.Nova));
+
+        var erros = previa.Linhas.Where(linha => linha.Status == StatusLinhaImportacaoB3.Erro).ToList();
+        Assert.Equal([3, 4], erros.Select(linha => linha.Numero));
+        Assert.All(erros, linha =>
+        {
+            Assert.Equal("VALE3", linha.Titulo);
+            Assert.Equal(ImportacaoExtratoB3Service.MensagemPrecoEfetivo, linha.Motivo);
+            Assert.Equal(ImportacaoExtratoB3Service.MensagemPrecoEfetivo, linha.Subtitulo);
+            Assert.Equal("Erro", linha.RotuloStatus);
+            Assert.False(linha.Marcada);
+            Assert.False(linha.PodeMarcar);
+            Assert.Null(linha.Comando);
+        });
+
+        var primeira = previa.Linhas.Single(linha => linha.Numero == 2);
+        var segunda = previa.Linhas.Single(linha => linha.Numero == 5);
+        var itub = previa.Linhas.Single(linha => linha.Numero == 6);
+        Assert.All(new[] { primeira, segunda, itub }, linha =>
+        {
+            Assert.Equal(StatusLinhaImportacaoB3.Nova, linha.Status);
+            Assert.True(linha.Marcada);
+            Assert.True(linha.PodeMarcar);
+        });
+        Assert.Equal(HashLinhaExtratoB3.Calcular(lido.Linhas[0], 0), primeira.Comando!.Hash);
+        Assert.Equal(HashLinhaExtratoB3.Calcular(lido.Linhas[3], 1), segunda.Comando!.Hash);
+        Assert.Equal(HashLinhaExtratoB3.Calcular(lido.Linhas[4], 0), itub.Comando!.Hash);
+        Assert.NotEqual(primeira.Comando.Hash, segunda.Comando.Hash);
+
+        Assert.Equal(3, (await ambiente.Service.GravarAsync(previa, ambiente.MembroId)).Linhas);
+        await using var contexto = await ambiente.Factory.CreateDbContextAsync();
+        var tickers = await contexto.OperacoesAtivo.Include(o => o.Ativo).Select(o => o.Ativo!.Ticker).ToListAsync();
+        Assert.Equal(3, tickers.Count);
+        Assert.DoesNotContain("VALE3", tickers);
+    }
+
+    [Fact]
     public void PrecosEfetivosDiferentes_FicamEmSeriesDistintas_AmbasOcorrenciaZero()
     {
         var primeiro = new LinhaExtratoB3(

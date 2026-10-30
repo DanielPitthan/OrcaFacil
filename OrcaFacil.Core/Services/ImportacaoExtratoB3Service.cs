@@ -26,6 +26,9 @@ public class ImportacaoExtratoB3Service
 
     public const string MensagemSemMarcacao = "Nenhuma linha marcada para gravar.";
 
+    public const string MensagemPrecoEfetivo =
+        "O preço efetivo não cabe no cálculo. A linha não será gravada.";
+
     private readonly IParserExtratoB3 _parser;
     private readonly IDbContextFactory<AppDbContext> _contextFactory;
     private readonly ResultadoRealizadoService _resultado;
@@ -211,9 +214,24 @@ public class ImportacaoExtratoB3Service
             });
         }
 
-        var ocorrencias = HashLinhaExtratoB3.Ocorrencias(lido.Linhas);
-        for (var i = 0; i < lido.Linhas.Count; i++)
-            linhas.Add(MontarLinha(lido.Linhas[i], ocorrencias[i]));
+        // Valor ÷ quantidade, em 4 casas, estoura decimal nos extremos.
+        // A linha vira erro; a série das outras continua.
+        var vistas = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var linha in lido.Linhas)
+        {
+            try
+            {
+                var chave = HashLinhaExtratoB3.Chave(linha);
+                vistas.TryGetValue(chave, out var ocorrencia);
+                var montada = MontarLinha(linha, ocorrencia);
+                vistas[chave] = ocorrencia + 1;
+                linhas.Add(montada);
+            }
+            catch (OverflowException)
+            {
+                linhas.Add(LinhaPrecoEstourado(linha));
+            }
+        }
 
         return await ClassificarListaAsync(linhas, desejos, membroFamiliaId, cancellationToken);
     }
@@ -506,6 +524,19 @@ public class ImportacaoExtratoB3Service
         Icone = linha.Icone,
         EhCredito = linha.EhCredito,
         Comando = linha.Comando
+    };
+
+    private static LinhaPreviaExtratoB3 LinhaPrecoEstourado(LinhaExtratoB3 linha) => new()
+    {
+        Numero = linha.Linha,
+        Status = StatusLinhaImportacaoB3.Erro,
+        Titulo = string.IsNullOrWhiteSpace(linha.Ticker) ? linha.ProdutoDescricao : linha.Ticker,
+        Subtitulo = MensagemPrecoEfetivo,
+        ValorTexto = LinhaPreviaExtratoB3.FormatarValor(linha.ValorOperacao),
+        Valor = linha.ValorOperacao ?? 0m,
+        Motivo = MensagemPrecoEfetivo,
+        Icone = "⚠️",
+        EhCredito = linha.Direcao == DirecaoB3.Credito
     };
 
     private static LinhaPreviaExtratoB3 MontarLinha(LinhaExtratoB3 linha, int ocorrencia)

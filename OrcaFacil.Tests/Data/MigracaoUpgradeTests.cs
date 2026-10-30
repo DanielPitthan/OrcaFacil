@@ -35,6 +35,7 @@ public class MigracaoUpgradeTests
     private const string IrrfInformado = "20261021222000_AddIrrfInformado";
     private const string DirpfRendaFixaJcp = "20261022113200_AddDirpfRendaFixaJcp";
     private const string DirpfLciLca = "20261022145822_AddCodigosDirpfLciLca";
+    private const string IndiceNomeCategoriaAtiva = "20261030143359_IndiceNomeCategoriaAtiva";
     private const string EtfRendaFixa = "20261030151500_AddCodigoEtfRendaFixaDirpf";
 
     [Fact]
@@ -185,10 +186,11 @@ public class MigracaoUpgradeTests
         Assert.Contains(IndiceHashImportacao, ids);
         Assert.Contains(RendaFixa, ids);
         Assert.Contains(RegraCatalogo, ids);
-        Assert.Equal(DataPregao, ids[^5]);
-        Assert.Equal(IrrfInformado, ids[^4]);
-        Assert.Equal(DirpfRendaFixaJcp, ids[^3]);
-        Assert.Equal(DirpfLciLca, ids[^2]);
+        Assert.Equal(DataPregao, ids[^6]);
+        Assert.Equal(IrrfInformado, ids[^5]);
+        Assert.Equal(DirpfRendaFixaJcp, ids[^4]);
+        Assert.Equal(DirpfLciLca, ids[^3]);
+        Assert.Equal(IndiceNomeCategoriaAtiva, ids[^2]);
         Assert.Equal(EtfRendaFixa, ids[^1]);
 
         for (var i = 1; i < ids.Count; i++)
@@ -208,6 +210,12 @@ public class MigracaoUpgradeTests
         Assert.Equal(ids, porAtributo.OrderBy(id => id, StringComparer.Ordinal).Select(id => id!).ToList());
 
         Assert.False(ctx.Database.HasPendingModelChanges());
+
+        var categoria = ctx.Model.FindEntityType(typeof(Categoria));
+        Assert.NotNull(categoria);
+        var indiceNome = categoria!.GetIndexes().Single(indice => indice.Properties.Single().Name == nameof(Categoria.Nome));
+        Assert.True(indiceNome.IsUnique);
+        Assert.Equal("\"Ativo\" = 1", indiceNome.GetFilter());
 
         var item = ctx.Model.FindEntityType(typeof(ItemLancamento));
         Assert.NotNull(item);
