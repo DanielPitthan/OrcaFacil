@@ -117,8 +117,6 @@ public class LancamentoCartaoFonteTests
         Assert.True(UmSoFoco(painel));
         Assert.True(LinhaEmbutidaSemGrupo(linha));
         Assert.True(ToqueELargura(css));
-        Assert.False(indice.Contains("menuFoco.js", StringComparison.Ordinal));
-        Assert.False(File.Exists(Path.Combine(EncontrarRaiz(), "OrcaFacil", "wwwroot", "js", "menuFoco.js")));
         Assert.Contains("--of-touch: 44px;", tema, StringComparison.Ordinal);
         Assert.True(Razao("#1E2A33", "#ffffff") >= 4.5);
         Assert.True(Razao("#1E2A33", "#EFF3F7") >= 4.5);
@@ -181,6 +179,47 @@ public class LancamentoCartaoFonteTests
 
         var semCaixa = css.Replace(".mud-menu > div.mud-menu-activator", ".mud-menu-activator", StringComparison.Ordinal);
         Assert.False(ToqueELargura(semCaixa));
+    }
+
+    [Fact]
+    public void Fechamento_DevolveFocoAoAtivador_EComentarioNaoConta()
+    {
+        var script = Fonte("OrcaFacil", "wwwroot", "js", "menuFoco.js");
+        var indice = Fonte("OrcaFacil", "wwwroot", "index.html");
+        var painel = Fonte("OrcaFacil", "Components", "Pages", "Lancamentos", "FaturaCartaoPainel.razor");
+
+        Assert.True(DevolveFoco(script, indice));
+        Assert.DoesNotContain("menuFoco", painel, StringComparison.Ordinal);
+        Assert.DoesNotContain("InvokeVoidAsync", painel, StringComparison.Ordinal);
+        Assert.True(UmSoFoco(painel));
+
+        var semFocus = script.Replace("alvo.focus();", "", StringComparison.Ordinal);
+        Assert.False(DevolveFoco(semFocus, indice));
+
+        var focoComentado = SemComentarios(script.Replace(
+            "alvo.focus();",
+            "// alvo.focus();",
+            StringComparison.Ordinal));
+        Assert.False(DevolveFoco(focoComentado, indice));
+
+        var semFechar = script.Replace("antes && !agora", "!agora", StringComparison.Ordinal);
+        Assert.False(DevolveFoco(semFechar, indice));
+
+        var semAria = script.Replace("aria-expanded", "aria-hidden", StringComparison.Ordinal);
+        Assert.False(DevolveFoco(semAria, indice));
+
+        var tagComentada = SemComentarios(indice.Replace(
+            "<script src=\"js/menuFoco.js\"></script>",
+            "<!-- <script src=\"js/menuFoco.js\"></script> -->",
+            StringComparison.Ordinal));
+        Assert.False(DevolveFoco(script, tagComentada));
+
+        const string soComentario = """
+            // if (antes && !agora) alvo.focus();
+            /* mud-menu-activator aria-expanded MutationObserver */
+            @* <script src="js/menuFoco.js"></script> *@
+            """;
+        Assert.False(DevolveFoco(SemComentarios(soComentario), SemComentarios(soComentario)));
     }
 
     private static string Fonte(params string[] partes)
@@ -247,6 +286,33 @@ public class LancamentoCartaoFonteTests
             && !painel.Contains("menuFoco", StringComparison.Ordinal)
             && !painel.Contains("catch (JSException)", StringComparison.Ordinal)
             && !painel.Contains("InvokeVoidAsync", StringComparison.Ordinal);
+    }
+
+    private static bool DevolveFoco(string script, string indice)
+    {
+        if (!indice.Contains("<script src=\"js/menuFoco.js\"></script>", StringComparison.Ordinal))
+            return false;
+        if (script.Contains("?.", StringComparison.Ordinal)
+            || script.Contains("??", StringComparison.Ordinal)
+            || script.Contains("replaceAll", StringComparison.Ordinal)
+            || script.Contains("tabIndex", StringComparison.Ordinal)
+            || script.Contains("removeAttribute(\"role\")", StringComparison.Ordinal)
+            || script.Contains("focus-visible", StringComparison.Ordinal))
+            return false;
+        if (!script.Contains("mud-menu-activator", StringComparison.Ordinal))
+            return false;
+        if (!script.Contains("new WeakMap()", StringComparison.Ordinal))
+            return false;
+        if (!script.Contains("new MutationObserver", StringComparison.Ordinal))
+            return false;
+        if (!script.Contains("attributeFilter: [\"aria-expanded\"]", StringComparison.Ordinal))
+            return false;
+        if (!script.Contains("subtree: true", StringComparison.Ordinal))
+            return false;
+
+        return Regex.IsMatch(
+            script,
+            @"var\s+antes\s*=\s*estava\.get\(alvo\)\s*===\s*true\s*;\s*var\s+agora\s*=\s*alvo\.getAttribute\(""aria-expanded""\)\s*===\s*""true""\s*;\s*if\s*\(\s*antes\s*&&\s*!agora\s*\)\s*alvo\.focus\(\s*\)\s*;");
     }
 
     private static bool LinhaEmbutidaSemGrupo(string linha)
