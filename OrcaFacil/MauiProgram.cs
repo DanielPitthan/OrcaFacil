@@ -19,6 +19,7 @@ using Plugin.LocalNotification;
 #if ANDROID
 using Plugin.LocalNotification.AndroidOption;
 using Plugin.LocalNotification.Core.Models.AndroidOption;
+using OrcaFacil.Platforms.Android;
 #endif
 using Serilog;
 
@@ -47,6 +48,11 @@ public static class MauiProgram
 
         builder.Services.AddMauiBlazorWebView();
         builder.Services.AddMudServices();
+#if ANDROID
+        builder.Services.AddSingleton<IVoltarPaleta, VoltarPaletaAndroid>();
+#else
+        builder.Services.AddSingleton<IVoltarPaleta, VoltarPaletaInerte>();
+#endif
         builder.Services.AddScoped<CascoNavegacao>();
         builder.Services.AddScoped<RascunhoLancamento>();
         builder.Services.AddHttpClient(NoticiaService.HttpClientName, client =>
