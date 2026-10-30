@@ -340,6 +340,30 @@ namespace OrcaFacil.Core.Data.Migrations
                             TipoAtivo = 0,
                             Variante = "RendaFixaIsenta",
                             VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 14,
+                            Codigo = "08",
+                            Descricao = "Fundos de Índice de Renda Fixa",
+                            EhSistema = true,
+                            Ficha = 0,
+                            Grupo = "07",
+                            TipoAtivo = 2,
+                            Variante = "EtfRendaFixa",
+                            VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
+                        },
+                        new
+                        {
+                            Id = 15,
+                            Codigo = "06",
+                            Descricao = "Rendimentos de aplicações financeiras",
+                            EhSistema = true,
+                            Ficha = 2,
+                            Grupo = "",
+                            TipoAtivo = 2,
+                            Variante = "EtfRendaFixa",
+                            VigenciaInicio = new DateTime(2021, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified)
                         });
                 });
 

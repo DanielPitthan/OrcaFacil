@@ -22,7 +22,8 @@ public sealed record OperacaoApuracao(
     decimal Quantidade,
     decimal PrecoUnitario,
     decimal ValorOperacao,
-    decimal Custos);
+    decimal Custos,
+    string Ticker = "");
 
 /// <summary>
 /// IRRF informado para um mês e uma cesta. Quando existe, substitui a estimativa.
@@ -87,6 +88,9 @@ public sealed class ApuracaoIr
 /// Fonte: Perguntas e Respostas IRPF 2026, pergunta 745,
 /// https://www.gov.br/receitafederal/pt-br/centrais-de-conteudo/publicacoes/perguntas-e-respostas/dirpf/p-r-irpf-2026-v1-00-2026-04-23.pdf
 /// Fiagro entra como FII: o tipo do ativo não muda e o mesmo dia não vai para day trade.
+/// ETF de ações entra na cesta comum, a 15%, sem a isenção de R$ 20 mil.
+/// ETF de renda fixa (Lei nº 13.043/2014) não entra nesta apuração nem no DARF:
+/// a corretora retém na fonte e a DIRPF leva o líquido para a tributação exclusiva.
 /// O resultado da venda é o da <see cref="CalculadoraResultadoRealizado"/>:
 /// quantidade × preço + custos na compra, e o valor da operação na venda.
 /// O arredondamento afasta do zero, com as casas da regra vigente.
@@ -174,7 +178,8 @@ public static class ApuradorIrMensal
             operacao.Quantidade,
             operacao.PrecoUnitario,
             operacao.ValorOperacao,
-            operacao.Custos);
+            operacao.Custos,
+            operacao.Ativo.Ticker);
     }
 
     /// <summary>
@@ -511,8 +516,14 @@ public static class ApuradorIrMensal
         {
             var lista = grupo.ToList();
             var amostra = lista[0];
-            if (lista.Any(operacao => operacao.Tipo != amostra.Tipo || operacao.Perfil != amostra.Perfil))
+            if (lista.Any(operacao => operacao.Tipo != amostra.Tipo
+                    || operacao.Perfil != amostra.Perfil
+                    || !string.Equals(operacao.Ticker, amostra.Ticker, StringComparison.Ordinal)))
                 throw new InvalidOperationException($"O ativo {amostra.AtivoId} do perfil {amostra.PerfilId} está com dados divergentes.");
+
+            // Tributação exclusiva na fonte. Enquanto o papel ainda está como ação, continua na apuração.
+            if (amostra.Tipo == TipoAtivo.Etf && CatalogoEtfConhecido.EhRendaFixa(amostra.Ticker))
+                continue;
 
             if (lista.Select(operacao => operacao.Id).Distinct().Count() != lista.Count)
                 throw new InvalidOperationException($"O ativo {amostra.AtivoId} tem operações com o mesmo id.");

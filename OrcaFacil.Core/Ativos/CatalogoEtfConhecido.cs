@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.B3;
 using OrcaFacil.Core.Data;
+using OrcaFacil.Core.Dirpf;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
 
@@ -8,16 +9,20 @@ namespace OrcaFacil.Core.Ativos;
 
 /// <summary>
 /// ETFs da B3 que o extrato não separa: a classe do parser continua ação.
-/// No cadastro viram <see cref="TipoAtivo.Etf"/> e a ficha de bens usa 07/06.
-/// Fundo de índice de renda fixa nesta lista também fica nesse tipo:
-/// o cadastro tem um único ETF e a ficha não escolhe 07/08.
+/// No cadastro, ação com ticker desta lista vira <see cref="TipoAtivo.Etf"/>.
+/// FII e BDR, informados no formulário ou já gravados, permanecem.
+/// ETF de ações usa o bem 07/06 e a alíquota de 15% no DARF, sem a isenção de R$ 20 mil.
+/// ETF de renda fixa usa o bem 07/08 e não entra na apuração mensal:
+/// o ganho vai para rendimentos de tributação exclusiva.
 /// </summary>
 public static class CatalogoEtfConhecido
 {
     private static readonly HashSet<string> Tickers = new(StringComparer.Ordinal)
     {
+        "ACWI11",
         "ASIA11",
         "B3BR11",
+        "B5MB11",
         "B5P211",
         "BBOI11",
         "BBOV11",
@@ -28,6 +33,7 @@ public static class CatalogoEtfConhecido
         "BEST11",
         "BITH11",
         "BIZD11",
+        "BLFT11",
         "BMMT11",
         "BNKS11",
         "BOVA11",
@@ -46,6 +52,7 @@ public static class CatalogoEtfConhecido
         "EMEG11",
         "ETHE11",
         "FIND11",
+        "FIXA11",
         "GOLD11",
         "GOLX11",
         "GPUS11",
@@ -65,23 +72,31 @@ public static class CatalogoEtfConhecido
         "SPBZ11",
         "SPXI11",
         "SPXR11",
+        "WRLD11",
         "XFIX11",
         "XINA11",
         "XMAL11"
     };
 
-    public static bool EhConhecido(string? ticker)
+    /// <summary>
+    /// Fundos de índice de renda fixa. A corretora retém o imposto na fonte
+    /// (Lei nº 13.043/2014, art. 2º). Não entram no DARF mensal.
+    /// </summary>
+    private static readonly HashSet<string> RendaFixa = new(StringComparer.Ordinal)
     {
-        var codigo = TickerB3.Normalizar(ticker);
-        if (Tickers.Contains(codigo))
-            return true;
+        "B5MB11",
+        "B5P211",
+        "BLFT11",
+        "FIXA11",
+        "IMAB11",
+        "IRFM11",
+        "LFTB11",
+        "LFTS11"
+    };
 
-        // Fracionário: o F final não faz parte do papel (BOVA11F é o mesmo ETF).
-        if (codigo.Length >= 6 && codigo[^1] == 'F' && char.IsDigit(codigo[^2]))
-            return Tickers.Contains(codigo[..^1]);
+    public static bool EhConhecido(string? ticker) => Tickers.Contains(Codigo(ticker));
 
-        return false;
-    }
+    public static bool EhRendaFixa(string? ticker) => RendaFixa.Contains(Codigo(ticker));
 
     /// <summary>Tipo gravado na importação. ETF conhecido vence a classe do extrato.</summary>
     public static TipoAtivo TipoNaImportacao(string? ticker, ClasseAtivoB3 classe)
@@ -92,9 +107,12 @@ public static class CatalogoEtfConhecido
         return classe == ClasseAtivoB3.FII ? TipoAtivo.Fii : TipoAtivo.Acao;
     }
 
-    /// <summary>No formulário, ticker conhecido fica ETF. Os demais respeitam o tipo informado.</summary>
+    /// <summary>
+    /// Formulário e reclassificação usam a mesma regra: só ação conhecida vira ETF.
+    /// FII e BDR ficam como foram informados. Papel fora do catálogo não vira ETF.
+    /// </summary>
     public static TipoAtivo TipoNoCadastro(string? ticker, TipoAtivo informado)
-        => EhConhecido(ticker) ? TipoAtivo.Etf : informado;
+        => informado == TipoAtivo.Acao && EhConhecido(ticker) ? TipoAtivo.Etf : informado;
 
     /// <summary>
     /// Ação com ticker conhecido passa a ETF. FII, BDR e quem já é ETF ficam.
@@ -126,10 +144,73 @@ public static class CatalogoEtfConhecido
         var acoes = await context.AtivosFinanceiros
             .Where(ativo => ativo.Tipo == TipoAtivo.Acao)
             .ToListAsync(cancellationToken);
-        var alterados = Reclassificar(acoes);
+        if (!acoes.Any(ativo => EhConhecido(ativo.Ticker)))
+            return 0;
+
+        var alterados = 0;
+        await AvisarAposMudancaAsync(context, () => alterados = Reclassificar(acoes), cancellationToken);
         if (alterados > 0)
             await context.SaveChangesAsync(cancellationToken);
 
         return alterados;
+    }
+
+    /// <summary>
+    /// Compara a apuração dos meses fechados antes e depois de <paramref name="aplicar"/>.
+    /// O aviso só entra no contexto; quem chamou grava.
+    /// </summary>
+    public static async Task AvisarAposMudancaAsync(
+        AppDbContext context,
+        Action aplicar,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        ArgumentNullException.ThrowIfNull(aplicar);
+
+        var fechados = await context.FechamentosPeriodo.AsNoTracking()
+            .Where(fechamento => fechamento.Fechado)
+            .ToListAsync(cancellationToken);
+        List<OperacaoAtivo>? operacoes = null;
+        List<OperacaoApuracao>? antes = null;
+        List<RegraFiscal>? regras = null;
+        if (fechados.Count > 0)
+        {
+            operacoes = await context.OperacoesAtivo
+                .Include(operacao => operacao.Ativo)
+                .Include(operacao => operacao.MembroFamilia)
+                .ToListAsync(cancellationToken);
+            regras = await context.RegrasFiscais.AsNoTracking().ToListAsync(cancellationToken);
+            antes = operacoes.Select(ApuradorIrMensal.De).ToList();
+        }
+
+        aplicar();
+
+        if (antes is null || operacoes is null || regras is null)
+            return;
+
+        var depois = operacoes.Select(ApuradorIrMensal.De).ToList();
+        var meses = AvisoDarfComplementar.MesesAlterados(antes, depois, regras, fechados);
+        if (meses.Count == 0)
+            return;
+
+        context.LogsEvento.Add(new LogEvento
+        {
+            Tipo = TipoLogEvento.Sistema,
+            Mensagem = AvisoDarfComplementar.Mensagem(meses)
+        });
+    }
+
+    /// <summary>
+    /// Tira espaço no meio e o F do fracionário. "BOVA11 F" e "BOVA11F" são BOVA11.
+    /// <see cref="TickerB3.EhValido"/> não aceita espaço: isto só reconhece o que já foi gravado.
+    /// </summary>
+    private static string Codigo(string? ticker)
+    {
+        var semEspaco = new string((ticker ?? string.Empty).Where(caractere => !char.IsWhiteSpace(caractere)).ToArray());
+        var codigo = TickerB3.Normalizar(semEspaco);
+        if (codigo.Length >= 6 && codigo[^1] == 'F' && char.IsDigit(codigo[^2]) && !Tickers.Contains(codigo))
+            return codigo[..^1];
+
+        return codigo;
     }
 }

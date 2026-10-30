@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+using OrcaFacil.Core.Data;
 using OrcaFacil.Core.Dtos;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Repositories;
@@ -11,10 +13,13 @@ public class AtivoService : IAtivoService
     private readonly IAtivoFinanceiroRepository _ativos;
     private readonly AtivoCadastroService _cadastro;
 
-    public AtivoService(IAtivoFinanceiroRepository ativos, IOperacaoAtivoRepository operacoes)
+    public AtivoService(
+        IAtivoFinanceiroRepository ativos,
+        IOperacaoAtivoRepository operacoes,
+        IDbContextFactory<AppDbContext> contexto)
     {
         _ativos = ativos;
-        _cadastro = new AtivoCadastroService(ativos, operacoes);
+        _cadastro = new AtivoCadastroService(ativos, operacoes, contexto);
     }
 
     public Task<List<AtivoFinanceiro>> ListarAsync(bool somenteAtivos = false) => _ativos.ListarAsync(somenteAtivos);

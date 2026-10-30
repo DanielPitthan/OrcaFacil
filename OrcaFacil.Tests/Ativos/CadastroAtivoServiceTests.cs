@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using OrcaFacil.Core.Dtos;
 using OrcaFacil.Core.Entities;
 using OrcaFacil.Core.Enums;
@@ -95,6 +96,119 @@ public class CadastroAtivoServiceTests : IDisposable
         });
         Assert.Equal(TipoAtivo.Etf, ativo.Tipo);
         Assert.Equal("iShares Ibovespa", ativo.Nome);
+    }
+
+    [Fact]
+    public async Task EtfConhecido_InformadoComoFiiOuBdr_MantemOTipoNoFormulario()
+    {
+        var fii = await _ativosService.SalvarAsync(new AtivoFormModel
+        {
+            Ticker = "BOVA11",
+            Nome = "Ibovespa",
+            Tipo = TipoAtivo.Fii
+        });
+        Assert.Equal(TipoAtivo.Fii, fii.Tipo);
+
+        fii = await _ativosService.SalvarAsync(new AtivoFormModel
+        {
+            Id = fii.Id,
+            Ticker = "BOVA11",
+            Nome = "Ibovespa FII",
+            Tipo = TipoAtivo.Fii
+        });
+        Assert.Equal(TipoAtivo.Fii, fii.Tipo);
+        Assert.Equal("Ibovespa FII", fii.Nome);
+
+        var bdr = await _ativosService.SalvarAsync(new AtivoFormModel
+        {
+            Ticker = "IVVB11",
+            Nome = "S&P",
+            Tipo = TipoAtivo.Bdr
+        });
+        Assert.Equal(TipoAtivo.Bdr, bdr.Tipo);
+
+        var desconhecido = await _ativosService.SalvarAsync(new AtivoFormModel
+        {
+            Ticker = "PETR4",
+            Nome = "Petrobras",
+            Tipo = TipoAtivo.Acao
+        });
+        Assert.Equal(TipoAtivo.Acao, desconhecido.Tipo);
+    }
+
+    [Fact]
+    public async Task Formulario_ReclassificaAcaoConhecida_EAvisaMesFechado_SemRepetir()
+    {
+        int id;
+        await using (var ctx = _factory.CreateDbContext())
+        {
+            var membro = await ctx.MembrosFamilia.SingleAsync();
+            var ativo = new AtivoFinanceiro { Ticker = "IMAB11", Nome = "IMA-B", Tipo = TipoAtivo.Acao };
+            ctx.AtivosFinanceiros.Add(ativo);
+            ctx.FechamentosPeriodo.Add(new FechamentoPeriodo { Mes = 3, Ano = 2024, Fechado = true });
+            await ctx.SaveChangesAsync();
+            id = ativo.Id;
+            ctx.OperacoesAtivo.AddRange(
+                new OperacaoAtivo
+                {
+                    AtivoId = id,
+                    MembroFamiliaId = membro.Id,
+                    Tipo = TipoOperacao.Compra,
+                    Data = new DateTime(2024, 3, 4),
+                    DataPregao = new DateTime(2024, 3, 4),
+                    Quantidade = 10m,
+                    PrecoUnitario = 100m,
+                    ValorOperacao = 1000m
+                },
+                new OperacaoAtivo
+                {
+                    AtivoId = id,
+                    MembroFamiliaId = membro.Id,
+                    Tipo = TipoOperacao.Venda,
+                    Data = new DateTime(2024, 3, 18),
+                    DataPregao = new DateTime(2024, 3, 18),
+                    Quantidade = 10m,
+                    PrecoUnitario = 110m,
+                    ValorOperacao = 1100m
+                });
+            await ctx.SaveChangesAsync();
+        }
+
+        var service = new AtivoCadastroService(_ativos, _operacoes, _factory);
+        var salvo = await service.SalvarAsync(new AtivoFormModel
+        {
+            Id = id,
+            Ticker = "IMAB11",
+            Nome = "IMA-B",
+            Tipo = TipoAtivo.Acao
+        });
+        Assert.Equal(TipoAtivo.Etf, salvo.Tipo);
+
+        await using (var ctx = _factory.CreateDbContext())
+        {
+            var aviso = await ctx.LogsEvento.SingleAsync();
+            Assert.Contains("03/2024", aviso.Mensagem);
+            Assert.Contains("DARF complementar", aviso.Mensagem);
+        }
+
+        await service.SalvarAsync(new AtivoFormModel
+        {
+            Id = id,
+            Ticker = "IMAB11",
+            Nome = "IMA-B",
+            Tipo = TipoAtivo.Etf
+        });
+        await using (var ctx = _factory.CreateDbContext())
+            Assert.Equal(1, await ctx.LogsEvento.CountAsync());
+
+        var comoFii = await service.SalvarAsync(new AtivoFormModel
+        {
+            Id = id,
+            Ticker = "IMAB11",
+            Nome = "IMA-B",
+            Tipo = TipoAtivo.Fii
+        });
+        Assert.Equal(TipoAtivo.Fii, comoFii.Tipo);
     }
 
     [Fact]

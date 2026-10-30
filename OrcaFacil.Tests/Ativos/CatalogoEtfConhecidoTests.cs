@@ -52,6 +52,38 @@ public class CatalogoEtfConhecidoTests : IDisposable
         Assert.False(CatalogoEtfConhecido.EhConhecido(""));
         Assert.Equal(TipoAtivo.Etf, CatalogoEtfConhecido.TipoNoCadastro("bova11", TipoAtivo.Acao));
         Assert.Equal(TipoAtivo.Fii, CatalogoEtfConhecido.TipoNoCadastro("MXRF11", TipoAtivo.Fii));
+        Assert.Equal(TipoAtivo.Fii, CatalogoEtfConhecido.TipoNoCadastro("BOVA11", TipoAtivo.Fii));
+        Assert.Equal(TipoAtivo.Bdr, CatalogoEtfConhecido.TipoNoCadastro("IVVB11", TipoAtivo.Bdr));
+        Assert.Equal(TipoAtivo.Etf, CatalogoEtfConhecido.TipoNoCadastro("BOVA11", TipoAtivo.Etf));
+        Assert.Equal(TipoAtivo.Acao, CatalogoEtfConhecido.TipoNoCadastro("ZZZZ11", TipoAtivo.Acao));
+        Assert.Equal(TipoAtivo.Acao, CatalogoEtfConhecido.TipoNaImportacao("ZZZZ11", ClasseAtivoB3.Acao));
+
+        foreach (var ticker in new[] { "BLFT11", "B5MB11", "FIXA11", "WRLD11", "ACWI11", "BOVA11 F" })
+            Assert.Equal(TipoAtivo.Etf, CatalogoEtfConhecido.TipoNaImportacao(ticker, ClasseAtivoB3.Acao));
+
+        Assert.True(CatalogoEtfConhecido.EhRendaFixa("IMAB11"));
+        Assert.True(CatalogoEtfConhecido.EhRendaFixa("irfm11"));
+        Assert.True(CatalogoEtfConhecido.EhRendaFixa("B5P211"));
+        Assert.True(CatalogoEtfConhecido.EhRendaFixa("LFTB11"));
+        Assert.True(CatalogoEtfConhecido.EhRendaFixa("LFTS11"));
+        Assert.True(CatalogoEtfConhecido.EhRendaFixa("BLFT11"));
+        Assert.True(CatalogoEtfConhecido.EhRendaFixa("B5MB11"));
+        Assert.True(CatalogoEtfConhecido.EhRendaFixa("FIXA11 F"));
+        Assert.False(CatalogoEtfConhecido.EhRendaFixa("BOVA11"));
+        Assert.False(CatalogoEtfConhecido.EhRendaFixa("WRLD11"));
+        Assert.False(CatalogoEtfConhecido.EhRendaFixa("ACWI11"));
+        Assert.False(CatalogoEtfConhecido.EhRendaFixa("GOLD11"));
+        Assert.False(CatalogoEtfConhecido.EhRendaFixa("XFIX11"));
+
+        var bemRendaFixa = tabela.Exigir(
+            TipoFichaDirpf.Bem, TipoAtivo.Etf, dia, CatalogoCodigosDirpf.VarianteEtfRendaFixa);
+        Assert.Equal("07", bemRendaFixa.Grupo);
+        Assert.Equal("08", bemRendaFixa.Codigo);
+        Assert.Equal(CatalogoCodigosDirpf.DescricaoBemEtfRendaFixa, bemRendaFixa.Descricao);
+        var exclusivo = tabela.ExigirVariante(
+            TipoFichaDirpf.RendimentoExclusivo, CatalogoCodigosDirpf.VarianteEtfRendaFixa, dia);
+        Assert.Equal("06", exclusivo.Codigo);
+        Assert.Equal(CatalogoCodigosDirpf.DescricaoRendimentoRendaFixa, exclusivo.Descricao);
     }
 
     [Fact]
@@ -63,9 +95,13 @@ public class CatalogoEtfConhecidoTests : IDisposable
         var fii = new AtivoFinanceiro { Ticker = "MXRF11", Nome = "Maxi", Tipo = TipoAtivo.Fii };
         var jaEtf = new AtivoFinanceiro { Ticker = "GOLD11", Nome = "Ouro", Tipo = TipoAtivo.Etf };
         var bdr = new AtivoFinanceiro { Ticker = "IVVB11", Nome = "S&P", Tipo = TipoAtivo.Bdr };
-        var ativos = new[] { bova, fracionario, petr, fii, jaEtf, bdr };
+        var comEspaco = new AtivoFinanceiro { Ticker = "BOVA11 F", Nome = "Fracionário antigo", Tipo = TipoAtivo.Acao };
+        var fora = new AtivoFinanceiro { Ticker = "ZZZZ11", Nome = "Fora", Tipo = TipoAtivo.Acao };
+        var ativos = new[] { bova, fracionario, petr, fii, jaEtf, bdr, comEspaco, fora };
 
-        Assert.Equal(2, CatalogoEtfConhecido.Reclassificar(ativos));
+        Assert.Equal(3, CatalogoEtfConhecido.Reclassificar(ativos));
+        Assert.Equal(TipoAtivo.Etf, comEspaco.Tipo);
+        Assert.Equal(TipoAtivo.Acao, fora.Tipo);
         Assert.Equal(TipoAtivo.Etf, bova.Tipo);
         Assert.Equal(TipoAtivo.Etf, fracionario.Tipo);
         Assert.Equal(TipoAtivo.Acao, petr.Tipo);
@@ -114,6 +150,82 @@ public class CatalogoEtfConhecidoTests : IDisposable
         Assert.Equal(0, await CatalogoEtfConhecido.ReclassificarAsync(conferido));
         Assert.Equal(5, await conferido.AtivosFinanceiros.CountAsync());
     }
+
+    [Fact]
+    public async Task MesFechado_AvisaDarfComplementar_SoQuandoOResultadoMuda_ENaoRepete()
+    {
+        await using var ctx = _fabrica.CreateDbContext();
+        var membro = new MembroFamilia { Nome = "Ana", Apelido = "Nica" };
+        var imab = new AtivoFinanceiro { Ticker = "IMAB11", Nome = "IMA-B", Tipo = TipoAtivo.Acao };
+        var bova = new AtivoFinanceiro { Ticker = "BOVA11", Nome = "Ibovespa", Tipo = TipoAtivo.Acao };
+        var petr = new AtivoFinanceiro { Ticker = "PETR4", Nome = "Petrobras", Tipo = TipoAtivo.Acao };
+        ctx.MembrosFamilia.Add(membro);
+        ctx.AtivosFinanceiros.AddRange(imab, bova, petr);
+        ctx.FechamentosPeriodo.Add(new FechamentoPeriodo { Mes = 3, Ano = 2024, Fechado = true });
+        ctx.FechamentosPeriodo.Add(new FechamentoPeriodo { Mes = 4, Ano = 2024, Fechado = false });
+        await ctx.SaveChangesAsync();
+
+        ctx.OperacoesAtivo.AddRange(
+            Operacao(membro, imab, new DateTime(2024, 3, 4), TipoOperacao.Compra, 10m, 100m, 1000m),
+            Operacao(membro, imab, new DateTime(2024, 3, 18), TipoOperacao.Venda, 10m, 110m, 1100m),
+            Operacao(membro, bova, new DateTime(2024, 3, 4), TipoOperacao.Compra, 1m, 1m, 1m),
+            Operacao(membro, bova, new DateTime(2024, 3, 18), TipoOperacao.Venda, 1m, 25000m, 25000m));
+        await ctx.SaveChangesAsync();
+
+        Assert.Equal(2, await CatalogoEtfConhecido.ReclassificarAsync(ctx));
+        var aviso = await ctx.LogsEvento.SingleAsync();
+        Assert.Equal(TipoLogEvento.Sistema, aviso.Tipo);
+        Assert.StartsWith(AvisoDarfComplementar.Prefixo, aviso.Mensagem);
+        Assert.Contains("DARF complementar", aviso.Mensagem);
+        Assert.Contains("03/2024", aviso.Mensagem);
+        Assert.True(aviso.Mensagem.Length <= 300);
+
+        Assert.Equal(TipoAtivo.Etf, imab.Tipo);
+        Assert.Equal(TipoAtivo.Etf, bova.Tipo);
+        Assert.Equal(TipoAtivo.Acao, petr.Tipo);
+        Assert.Equal(0, await CatalogoEtfConhecido.ReclassificarAsync(ctx));
+        Assert.Equal(1, await ctx.LogsEvento.CountAsync());
+    }
+
+    [Fact]
+    public async Task MesFechado_EtfDeAcoesAcimaDoTeto_NaoAvisa_PorqueODarfNaoMuda()
+    {
+        await using var ctx = _fabrica.CreateDbContext();
+        var membro = new MembroFamilia { Nome = "Ana" };
+        var bova = new AtivoFinanceiro { Ticker = "BOVA11", Nome = "Ibovespa", Tipo = TipoAtivo.Acao };
+        ctx.MembrosFamilia.Add(membro);
+        ctx.AtivosFinanceiros.Add(bova);
+        ctx.FechamentosPeriodo.Add(new FechamentoPeriodo { Mes = 3, Ano = 2024, Fechado = true });
+        await ctx.SaveChangesAsync();
+        ctx.OperacoesAtivo.AddRange(
+            Operacao(membro, bova, new DateTime(2024, 3, 4), TipoOperacao.Compra, 1m, 1m, 1m),
+            Operacao(membro, bova, new DateTime(2024, 3, 18), TipoOperacao.Venda, 1m, 25000m, 25000m));
+        await ctx.SaveChangesAsync();
+
+        Assert.Equal(1, await CatalogoEtfConhecido.ReclassificarAsync(ctx));
+        Assert.Equal(TipoAtivo.Etf, bova.Tipo);
+        Assert.Empty(await ctx.LogsEvento.ToListAsync());
+    }
+
+    private static OperacaoAtivo Operacao(
+        MembroFamilia membro,
+        AtivoFinanceiro ativo,
+        DateTime data,
+        TipoOperacao tipo,
+        decimal quantidade,
+        decimal preco,
+        decimal valor) => new()
+    {
+        MembroFamilia = membro,
+        Ativo = ativo,
+        Tipo = tipo,
+        Data = data,
+        DataPregao = data,
+        Quantidade = quantidade,
+        PrecoUnitario = preco,
+        ValorOperacao = valor,
+        Custos = 0m
+    };
 
     [Fact]
     public async Task Preparo_ReclassificaEtfConhecido_ERepetirNaoAltera()

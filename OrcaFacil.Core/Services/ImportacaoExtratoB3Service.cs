@@ -699,8 +699,12 @@ public class ImportacaoExtratoB3Service
             context.AtivosFinanceiros.Add(existente);
             await context.SaveChangesAsync(cancellationToken);
         }
-        else if (CatalogoEtfConhecido.Reclassificar([existente]) > 0)
+        else if (existente.Tipo == TipoAtivo.Acao && CatalogoEtfConhecido.EhConhecido(existente.Ticker))
         {
+            await CatalogoEtfConhecido.AvisarAposMudancaAsync(
+                context,
+                () => CatalogoEtfConhecido.Reclassificar([existente]),
+                cancellationToken);
             await context.SaveChangesAsync(cancellationToken);
         }
 
