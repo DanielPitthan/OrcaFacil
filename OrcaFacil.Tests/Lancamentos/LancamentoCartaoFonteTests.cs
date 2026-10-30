@@ -460,11 +460,11 @@ public class LancamentoCartaoFonteTests
 
         var semVolta = SemComentarios(script.Replace(
             """
-                    if (!escolhido && dialogo)
+                    if (!escolhido)
                         escolhido = voltaNoDialogo(ordem, passo, popover);
             """,
             """
-                    // if (!escolhido && dialogo)
+                    // if (!escolhido)
                     //     escolhido = voltaNoDialogo(ordem, passo, popover);
             """,
             StringComparison.Ordinal));
@@ -475,6 +475,44 @@ public class LancamentoCartaoFonteTests
             "if (true)",
             StringComparison.Ordinal);
         Assert.False(VoltaDentroDoDialogo(puxaPopover, dialogo));
+    }
+
+    [Fact]
+    public void TabNaPagina_VoltaNoDocumentoQuandoNaoHaProximo()
+    {
+        var script = Fonte("OrcaFacil", "wwwroot", "js", "menuFoco.js");
+        var painel = Fonte("OrcaFacil", "Components", "Pages", "Lancamentos", "FaturaCartaoPainel.razor");
+        Assert.True(VoltaNaPagina(script, painel));
+
+        var soNoDialogo = script.Replace(
+            """
+                    if (!escolhido)
+                        escolhido = voltaNoDialogo(ordem, passo, popover);
+            """,
+            """
+                    if (!escolhido && dialogo)
+                        escolhido = voltaNoDialogo(ordem, passo, popover);
+            """,
+            StringComparison.Ordinal);
+        Assert.False(VoltaNaPagina(soNoDialogo, painel));
+
+        var semAtivador = SemComentarios(script.Replace(
+            """
+                    if (!escolhido)
+                        escolhido = alvo;
+            """,
+            """
+                    // if (!escolhido)
+                    //     escolhido = alvo;
+            """,
+            StringComparison.Ordinal));
+        Assert.False(VoltaNaPagina(semAtivador, painel));
+
+        var semFoco = SemComentarios(script.Replace(
+            "escolhido.focus();",
+            "// escolhido.focus();",
+            StringComparison.Ordinal));
+        Assert.False(VoltaNaPagina(semFoco, painel));
     }
 
     [Fact]
@@ -732,11 +770,11 @@ public class LancamentoCartaoFonteTests
             return false;
         if (!Regex.IsMatch(
                 script,
-                @"if \(!escolhido && dialogo\)\s*escolhido = voltaNoDialogo\(ordem, passo, popover\);"))
+                @"if \(!escolhido\)\s*escolhido = voltaNoDialogo\(ordem, passo, popover\);"))
             return false;
         if (!Regex.IsMatch(
                 script,
-                @"function voltaNoDialogo\(ordem, passo, popover\) \{\s*var inicio = passo < 0 \? ordem\.length - 1 : 0;\s*return seguinteNaOrdem\(ordem, inicio, passo, popover\);\s*\}"))
+                @"function voltaNoDialogo\(ordem, passo, popover\) \{\s*if \(!ordem\)\s*ordem = tabulaveis\(null\);\s*var inicio = passo < 0 \? ordem\.length - 1 : 0;\s*return seguinteNaOrdem\(ordem, inicio, passo, popover\);\s*\}"))
             return false;
         if (!Regex.IsMatch(
                 script,
@@ -744,6 +782,27 @@ public class LancamentoCartaoFonteTests
             return false;
 
         return script.Contains("popover.contains(candidato)", StringComparison.Ordinal);
+    }
+
+    private static bool VoltaNaPagina(string script, string painel)
+    {
+        if (!painel.Contains("<div class=\"of-fatura\"", StringComparison.Ordinal))
+            return false;
+        if (script.Contains("?.", StringComparison.Ordinal) || script.Contains("??", StringComparison.Ordinal))
+            return false;
+        if (Regex.IsMatch(script, @"if\s*\(\s*!escolhido\s*&&\s*dialogo\s*\)"))
+            return false;
+        if (!script.Contains("var base = document;", StringComparison.Ordinal))
+            return false;
+        if (!Regex.IsMatch(
+                script,
+                @"function voltaNoDialogo\(ordem, passo, popover\) \{\s*if \(!ordem\)\s*ordem = tabulaveis\(null\);\s*var inicio = passo < 0 \? ordem\.length - 1 : 0;\s*return seguinteNaOrdem\(ordem, inicio, passo, popover\);\s*\}"))
+            return false;
+
+        return Regex.IsMatch(
+            script,
+            @"if \(!escolhido\)\s*escolhido = voltaNoDialogo\(ordem, passo, popover\);\s*if \(!escolhido\)\s*escolhido = alvo;\s*escolhido\.focus\(\);",
+            RegexOptions.Singleline);
     }
 
     private static bool RelogioSoNoPopoverDoMenu(string script, string painel, string dialogo)

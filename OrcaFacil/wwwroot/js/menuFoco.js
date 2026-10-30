@@ -131,10 +131,11 @@
         var popover = popoverDoMenu.get(alvo);
         var passo = direcao < 0 ? -1 : 1;
         var escolhido = seguinteNaOrdem(ordem, indice + passo, passo, popover);
-        if (!escolhido && dialogo)
+        if (!escolhido)
             escolhido = voltaNoDialogo(ordem, passo, popover);
-        if (escolhido)
-            escolhido.focus();
+        if (!escolhido)
+            escolhido = alvo;
+        escolhido.focus();
     }
 
     function seguinteNaOrdem(ordem, inicio, passo, popover) {
@@ -146,6 +147,8 @@
     }
 
     function voltaNoDialogo(ordem, passo, popover) {
+        if (!ordem)
+            ordem = tabulaveis(null);
         var inicio = passo < 0 ? ordem.length - 1 : 0;
         return seguinteNaOrdem(ordem, inicio, passo, popover);
     }
