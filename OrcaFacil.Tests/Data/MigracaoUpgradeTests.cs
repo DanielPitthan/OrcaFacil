@@ -35,6 +35,7 @@ public class MigracaoUpgradeTests
     private const string IrrfInformado = "20261021222000_AddIrrfInformado";
     private const string DirpfRendaFixaJcp = "20261022113200_AddDirpfRendaFixaJcp";
     private const string DirpfLciLca = "20261022145822_AddCodigosDirpfLciLca";
+    private const string IndiceNomeCategoriaAtiva = "20261030143359_IndiceNomeCategoriaAtiva";
 
     [Fact]
     public async Task BancoAntigo_MigraAteOAtual_PreservaDadosEAplicaDefaults()
@@ -163,7 +164,7 @@ public class MigracaoUpgradeTests
             Assert.Contains(await ctx.CodigosDirpf.ToListAsync(), codigo => codigo.Codigo == "10" && codigo.Variante == "Jcp" && codigo.EhSistema);
             Assert.Contains(await ctx.RegrasFiscais.ToListAsync(), regra => regra.Codigo == "RF.IrRegressivo.Automatico" && regra.Valor == 0m && regra.EhSistema);
 
-            Assert.Equal(DirpfLciLca, (await ctx.Database.GetAppliedMigrationsAsync()).Last());
+            Assert.Equal(IndiceNomeCategoriaAtiva, (await ctx.Database.GetAppliedMigrationsAsync()).Last());
             Assert.True(File.Exists(banco.Caminho));
             Assert.True(new FileInfo(banco.Caminho).Length > 0);
         }
@@ -182,10 +183,11 @@ public class MigracaoUpgradeTests
         Assert.Contains(IndiceHashImportacao, ids);
         Assert.Contains(RendaFixa, ids);
         Assert.Contains(RegraCatalogo, ids);
-        Assert.Equal(DataPregao, ids[^4]);
-        Assert.Equal(IrrfInformado, ids[^3]);
-        Assert.Equal(DirpfRendaFixaJcp, ids[^2]);
-        Assert.Equal(DirpfLciLca, ids[^1]);
+        Assert.Equal(DataPregao, ids[^5]);
+        Assert.Equal(IrrfInformado, ids[^4]);
+        Assert.Equal(DirpfRendaFixaJcp, ids[^3]);
+        Assert.Equal(DirpfLciLca, ids[^2]);
+        Assert.Equal(IndiceNomeCategoriaAtiva, ids[^1]);
 
         for (var i = 1; i < ids.Count; i++)
         {
@@ -204,6 +206,12 @@ public class MigracaoUpgradeTests
         Assert.Equal(ids, porAtributo.OrderBy(id => id, StringComparer.Ordinal).Select(id => id!).ToList());
 
         Assert.False(ctx.Database.HasPendingModelChanges());
+
+        var categoria = ctx.Model.FindEntityType(typeof(Categoria));
+        Assert.NotNull(categoria);
+        var indiceNome = categoria!.GetIndexes().Single(indice => indice.Properties.Single().Name == nameof(Categoria.Nome));
+        Assert.True(indiceNome.IsUnique);
+        Assert.Equal("\"Ativo\" = 1", indiceNome.GetFilter());
 
         var item = ctx.Model.FindEntityType(typeof(ItemLancamento));
         Assert.NotNull(item);

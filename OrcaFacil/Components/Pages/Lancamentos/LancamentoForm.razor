@@ -1,4 +1,7 @@
 @page "/lancamentos/novo"
+@using Microsoft.EntityFrameworkCore
+@using OrcaFacil.Core.Exportacao
+@using Serilog
 @page "/lancamentos/editar/{Id:int}"
 @implements IDisposable
 @inject ITransacaoService TransacaoService
@@ -733,6 +736,13 @@ else
         catch (InvalidOperationException ex)
         {
             Snackbar.Add(ex.Message, Severity.Error);
+        }
+        catch (DbUpdateException ex)
+        {
+            Log.Error(
+                "Falha ao gravar o lançamento. Tipo: {Tipo}",
+                VarreduraPlanilhaExportada.TipoDaFalha(ex));
+            Snackbar.Add(FalhaDeGravacao.MensagemLancamento, Severity.Error);
         }
     }
 }
