@@ -238,10 +238,7 @@ else
             <CampoNumerico TNumber="decimal" Label="Valor" @bind-Value="_modelo.Valor" For="@(() => _modelo.Valor)"
                             Adornment="Adornment.Start" AdornmentText="R$" Class="mb-3" />
 
-            @if (_categoriaSelecionada?.TipoPadrao == TipoTransacao.Despesa)
-            {
-                <MudCheckBox T="bool" @bind-Value="_modelo.Pago" Label="Pago" Class="mb-3" />
-            }
+            <MudCheckBox T="bool" @bind-Value="_modelo.Pago" Label="Pago" Class="mb-3" />
 
             <MudSelect T="TipoRecorrencia" @bind-Value="_modelo.Recorrencia" Label="Recorrência" Class="mb-3">
                 <MudSelectItem Value="TipoRecorrencia.Unica">Única</MudSelectItem>
@@ -301,13 +298,13 @@ else
 
     private Categoria? _categoriaSelecionada => _categorias.FirstOrDefault(c => c.Id == _modelo.CategoriaId);
 
-    private bool EhCartaoCredito => _categoriaSelecionada is { TipoPadrao: TipoTransacao.Despesa } categoria
-        && string.Equals(categoria.Nome, "Cartão de Crédito", StringComparison.OrdinalIgnoreCase);
+    private bool EhCartaoCredito => _modelo.Tipo == TipoTransacao.Despesa
+        && string.Equals(_categoriaSelecionada?.Nome, "Cartão de Crédito", StringComparison.OrdinalIgnoreCase);
 
     private List<Cartao> CartoesCreditoDisponiveis =>
         _cartoesCredito.Where(c => c.Ativo || c.Id == _modelo.CartaoId).ToList();
 
-    private bool MostrarItens => _categoriaSelecionada is { TipoPadrao: TipoTransacao.Despesa, PermiteItensFatura: true };
+    private bool MostrarItens => _modelo.Tipo == TipoTransacao.Despesa && _categoriaSelecionada?.PermiteItensFatura == true;
 
     private bool UsarLayoutFatura => EhCartaoCredito && MostrarItens;
 
@@ -407,7 +404,8 @@ else
             }
         }
 
-        AplicarTipoDaCategoria();
+        if (!Id.HasValue)
+            AplicarTipoDaCategoria();
         GarantirItemCategoriaValida();
         GarantirCartaoValido();
         await VerificarPeriodoAsync();
@@ -522,8 +520,21 @@ else
 
     private void OnCategoriaChanged(int categoriaId)
     {
+        if (categoriaId == _modelo.CategoriaId)
+            return;
+
+        var categoriaAnterior = _modelo.CategoriaId;
+        var tipoGravado = _modelo.Tipo;
         _modelo.CategoriaId = categoriaId;
-        AplicarTipoDaCategoria();
+        if (_categoriaSelecionada is not null)
+        {
+            _modelo.Tipo = FluxoLancamento.TipoNaEdicao(
+                categoriaAnterior,
+                categoriaId,
+                tipoGravado,
+                _categoriaSelecionada.TipoPadrao);
+        }
+
         GarantirItemCategoriaValida();
         GarantirCartaoValido();
         LigarCasco();
@@ -534,9 +545,7 @@ else
         if (_categoriaSelecionada is null)
             return;
 
-        _modelo.Tipo = _categoriaSelecionada.TipoPadrao;
-        if (_modelo.Tipo != TipoTransacao.Despesa)
-            _modelo.Pago = true;
+        _modelo.Tipo = FluxoLancamento.TipoNaCriacao(_categoriaSelecionada.TipoPadrao);
     }
 
     private void GarantirCartaoValido()

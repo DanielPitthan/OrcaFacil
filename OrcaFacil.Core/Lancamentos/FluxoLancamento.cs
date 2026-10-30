@@ -8,14 +8,25 @@ namespace OrcaFacil.Core.Lancamentos;
 /// Abertura de um lançamento e escolhas do cartão que não podem vazar para o próximo.
 /// A tela de cartão é só a categoria "Cartão de Crédito" com itens de fatura.
 /// Sem a categoria de cartão, o lançamento fica na tela simples, sem cartão nem recorrência herdada.
-/// O tipo gravado é o tipo padrão da categoria.
+/// Na criação, o tipo é o da categoria. Na edição, ele só muda se a categoria mudar.
 /// </summary>
 public static class FluxoLancamento
 {
     public readonly record struct CategoriaDeLancamento(int Id, string Nome, bool PermiteItensFatura, TipoTransacao Tipo);
 
-    /// <summary>O formulário não escolhe receita ou despesa. Vale o tipo da categoria.</summary>
-    public static TipoTransacao TipoGravado(TipoTransacao tipoPadrao) => tipoPadrao;
+    /// <summary>Lançamento novo: o tipo é o da categoria. O pago continua o que a pessoa marcou.</summary>
+    public static TipoTransacao TipoNaCriacao(TipoTransacao tipoPadrao) => tipoPadrao;
+
+    /// <summary>
+    /// Edição: sem troca de categoria, permanece o tipo já gravado.
+    /// Com troca, passa a valer o tipo da categoria nova. Pago e recorrência não entram aqui.
+    /// </summary>
+    public static TipoTransacao TipoNaEdicao(
+        int categoriaGravadaId,
+        int categoriaInformadaId,
+        TipoTransacao tipoGravado,
+        TipoTransacao tipoPadraoInformado)
+        => categoriaInformadaId == categoriaGravadaId ? tipoGravado : tipoPadraoInformado;
 
     public static bool EhLancamentoDeCartao(TipoTransacao tipo, string? nomeCategoria, bool permiteItensFatura)
         => tipo == TipoTransacao.Despesa

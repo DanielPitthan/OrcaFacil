@@ -299,7 +299,7 @@
 
     private IReadOnlyList<ChipSomenteLeitura> ChipsDerivados =>
     [
-        new((CategoriaFatura?.TipoPadrao ?? Modelo.Tipo) == TipoTransacao.Receita ? "Receita" : "Despesa"),
+        new(Modelo.Tipo == TipoTransacao.Receita ? "Receita" : "Despesa"),
         new(CategoriaFatura?.Nome ?? "Cartão de Crédito", CategoriaFatura?.Icone)
     ];
 

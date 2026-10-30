@@ -49,7 +49,7 @@ public class TransacaoService : ITransacaoService
         var categoria = await _categoriaRepository.GetByIdAsync(dto.CategoriaId)
             ?? throw new InvalidOperationException("Categoria inválida.");
 
-        dto.Tipo = FluxoLancamento.TipoGravado(categoria.TipoPadrao);
+        dto.Tipo = FluxoLancamento.TipoNaCriacao(categoria.TipoPadrao);
 
         var itens = await MapearItensAsync(dto, categoria);
 
@@ -63,7 +63,7 @@ public class TransacaoService : ITransacaoService
             Data = dto.Data,
             Tipo = dto.Tipo,
             Recorrencia = dto.Recorrencia,
-            Pago = dto.Tipo == TipoTransacao.Despesa ? dto.Pago : true,
+            Pago = dto.Pago,
             Observacao = dto.Observacao,
             CategoriaId = dto.CategoriaId,
             CartaoId = dto.CartaoId,
@@ -82,8 +82,6 @@ public class TransacaoService : ITransacaoService
         var categoria = await _categoriaRepository.GetByIdAsync(dto.CategoriaId)
             ?? throw new InvalidOperationException("Categoria inválida.");
 
-        dto.Tipo = FluxoLancamento.TipoGravado(categoria.TipoPadrao);
-
         var transacao = await _transacaoRepository.GetByIdAsync(id)
             ?? throw new InvalidOperationException("Lançamento não encontrado.");
 
@@ -92,6 +90,12 @@ public class TransacaoService : ITransacaoService
         await _fechamentoService.GarantirPeriodoAbertoAsync(transacao.Data);
         await _fechamentoService.GarantirPeriodoAbertoAsync(dto.Data);
 
+        dto.Tipo = FluxoLancamento.TipoNaEdicao(
+            transacao.CategoriaId,
+            dto.CategoriaId,
+            transacao.Tipo,
+            categoria.TipoPadrao);
+
         var itens = await MapearItensAsync(dto, categoria);
 
         transacao.Descricao = dto.Descricao;
@@ -99,7 +103,7 @@ public class TransacaoService : ITransacaoService
         transacao.Data = dto.Data;
         transacao.Tipo = dto.Tipo;
         transacao.Recorrencia = dto.Recorrencia;
-        transacao.Pago = dto.Tipo == TipoTransacao.Despesa ? dto.Pago : true;
+        transacao.Pago = dto.Pago;
         transacao.Observacao = dto.Observacao;
         transacao.CategoriaId = dto.CategoriaId;
         transacao.CartaoId = dto.CartaoId;
