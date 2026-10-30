@@ -504,10 +504,30 @@ public class LancamentoCartaoFonteTests
         Assert.False(RelogioSoNoPopoverDoMenu(guardaComentada, painel, dialogo));
 
         var semLista = SemComentarios(script.Replace(
-            "popoversDoMenu.push(popover);",
-            "// popoversDoMenu.push(popover);",
+            "popoversDoMenu.add(popover);",
+            "// popoversDoMenu.add(popover);",
             StringComparison.Ordinal));
         Assert.False(RelogioSoNoPopoverDoMenu(semLista, painel, dialogo));
+
+        var listaForte = script.Replace("new WeakSet()", "[]", StringComparison.Ordinal)
+            .Replace("popoversDoMenu.add(popover);", "popoversDoMenu.push(popover);", StringComparison.Ordinal);
+        Assert.False(RelogioSoNoPopoverDoMenu(listaForte, painel, dialogo));
+    }
+
+    [Fact]
+    public void TabNoMenu_ImpedeOFocoNativo()
+    {
+        var script = Fonte("OrcaFacil", "wwwroot", "js", "menuFoco.js");
+        Assert.True(ImpedeTabNativo(script));
+
+        var semPrevent = script.Replace("evento.preventDefault();", "", StringComparison.Ordinal);
+        Assert.False(ImpedeTabNativo(semPrevent));
+
+        var preventComentado = SemComentarios(script.Replace(
+            "evento.preventDefault();",
+            "// evento.preventDefault();",
+            StringComparison.Ordinal));
+        Assert.False(ImpedeTabNativo(preventComentado));
     }
 
     private static string Fonte(params string[] partes)
@@ -736,7 +756,14 @@ public class LancamentoCartaoFonteTests
             return false;
         if (script.Contains("closest(\"[id^='popovercontent-']\")", StringComparison.Ordinal))
             return false;
-        if (!script.Contains("popoversDoMenu.push(popover);", StringComparison.Ordinal))
+        if (!script.Contains("new WeakSet()", StringComparison.Ordinal))
+            return false;
+        if (script.Contains("popoversDoMenu = []", StringComparison.Ordinal)
+            || script.Contains("popoversDoMenu.push(", StringComparison.Ordinal))
+            return false;
+        if (!script.Contains("popoversDoMenu.add(popover);", StringComparison.Ordinal))
+            return false;
+        if (!script.Contains("popoversDoMenu.has(no)", StringComparison.Ordinal))
             return false;
         if (!script.Contains("if (!antes && agora)", StringComparison.Ordinal))
             return false;
@@ -744,6 +771,19 @@ public class LancamentoCartaoFonteTests
         return Regex.IsMatch(
             script,
             @"if \(!origem \|\| !origemDoMenu\(origem\)\)\s*return;\s*tabDirecao = evento\.shiftKey \? -1 : 1;\s*tabQuando = Date\.now\(\);",
+            RegexOptions.Singleline);
+    }
+
+    private static bool ImpedeTabNativo(string script)
+    {
+        if (script.Contains("?.", StringComparison.Ordinal) || script.Contains("??", StringComparison.Ordinal))
+            return false;
+        if (Contar(script, "evento.preventDefault()") != 1)
+            return false;
+
+        return Regex.IsMatch(
+            script,
+            @"if \(!origem \|\| !origemDoMenu\(origem\)\)\s*return;\s*tabDirecao = evento\.shiftKey \? -1 : 1;\s*tabQuando = Date\.now\(\);\s*evento\.preventDefault\(\);",
             RegexOptions.Singleline);
     }
 

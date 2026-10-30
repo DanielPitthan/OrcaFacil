@@ -1,7 +1,7 @@
 (function () {
     var estava = new WeakMap();
     var popoverDoMenu = new WeakMap();
-    var popoversDoMenu = [];
+    var popoversDoMenu = new WeakSet();
     var tabDirecao = 1;
     var tabQuando = 0;
     var observador = new MutationObserver(function (registros) {
@@ -50,13 +50,15 @@
             return;
         tabDirecao = evento.shiftKey ? -1 : 1;
         tabQuando = Date.now();
+        evento.preventDefault();
     }
 
     function origemDoMenu(origem) {
-        for (var i = 0; i < popoversDoMenu.length; i++) {
-            var popover = popoversDoMenu[i];
-            if (popover && (popover === origem || popover.contains(origem)))
+        var no = origem;
+        while (no) {
+            if (popoversDoMenu.has(no))
                 return true;
+            no = no.parentNode;
         }
         return false;
     }
@@ -66,11 +68,7 @@
         if (!popover)
             return;
         popoverDoMenu.set(alvo, popover);
-        for (var i = 0; i < popoversDoMenu.length; i++) {
-            if (popoversDoMenu[i] === popover)
-                return;
-        }
-        popoversDoMenu.push(popover);
+        popoversDoMenu.add(popover);
     }
 
     function acharPopover(alvo) {
