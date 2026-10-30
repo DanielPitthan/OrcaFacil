@@ -32,7 +32,8 @@ public class EtfRendaFixaDirpfTests
         Assert.Null(exclusivo.IrRetido);
         Assert.Equal(MontadorDirpf.AvisoCnpjFontePagadora, exclusivo.Cnpj);
         Assert.Equal(2024, exclusivo.AnoBase);
-        Assert.Equal(20m, exclusivo.ValorLiquido);
+        Assert.Equal(40m, exclusivo.ValorLiquido);
+        Assert.NotEqual(20m, exclusivo.ValorLiquido);
         Assert.DoesNotContain(em2024.RendimentosExclusivos, linha => linha.CodigoAtivo == "BOVA11");
 
         var bem = Assert.Single(em2024.Bens, linha => linha.Ticker == "IMAB11");
@@ -43,6 +44,26 @@ public class EtfRendaFixaDirpfTests
 
         var em2025 = Montar(2025, operacoes);
         Assert.DoesNotContain(em2025.RendimentosExclusivos, linha => linha.CodigoAtivo == "IMAB11");
+    }
+
+    [Fact]
+    public void Codigo06_SomaCadaAlienacaoComLucro_SemAbaterPrejuizo()
+    {
+        var ana = Perfil(1, "Ana", null);
+        var imab = Ativo(1, "FIXA11", "Renda fixa", TipoAtivo.Etf);
+        var operacoes = new[]
+        {
+            Operacao(1, ana, imab, TipoOperacao.Compra, new DateTime(2024, 1, 2), new DateTime(2024, 1, 2), 10m, 100m, 1000m),
+            Operacao(2, ana, imab, TipoOperacao.Venda, new DateTime(2024, 3, 4), new DateTime(2024, 3, 4), 4m, 110m, 440m),
+            Operacao(3, ana, imab, TipoOperacao.Venda, new DateTime(2024, 6, 5), new DateTime(2024, 6, 5), 2m, 90m, 180m),
+            Operacao(4, ana, imab, TipoOperacao.Venda, new DateTime(2024, 9, 6), new DateTime(2024, 9, 6), 1m, 100m, 100m)
+        };
+
+        var exclusivo = Assert.Single(Montar(2024, operacoes).RendimentosExclusivos);
+        Assert.Equal("06", exclusivo.Codigo);
+        Assert.Equal(40m, exclusivo.ValorLiquido);
+        Assert.NotEqual(20m, exclusivo.ValorLiquido);
+        Assert.NotEqual(0m, exclusivo.ValorLiquido);
     }
 
     [Fact]

@@ -89,8 +89,10 @@ public sealed class ApuracaoIr
 /// https://www.gov.br/receitafederal/pt-br/centrais-de-conteudo/publicacoes/perguntas-e-respostas/dirpf/p-r-irpf-2026-v1-00-2026-04-23.pdf
 /// Fiagro entra como FII: o tipo do ativo não muda e o mesmo dia não vai para day trade.
 /// ETF de ações entra na cesta comum, a 15%, sem a isenção de R$ 20 mil.
-/// ETF de renda fixa (Lei nº 13.043/2014) não entra nesta apuração nem no DARF:
-/// a corretora retém na fonte e a DIRPF leva o líquido para a tributação exclusiva.
+/// ETF de renda fixa não entra nesta apuração nem no DARF.
+/// A corretora retém na fonte (Lei nº 13.043/2014, art. 2º) e a DIRPF soma
+/// cada alienação com lucro na tributação exclusiva, sem abater prejuízo.
+/// https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/preenchimento/manual-mir/rendimentos/rendimentos-do-capital
 /// O resultado da venda é o da <see cref="CalculadoraResultadoRealizado"/>:
 /// quantidade × preço + custos na compra, e o valor da operação na venda.
 /// O arredondamento afasta do zero, com as casas da regra vigente.

@@ -10,8 +10,9 @@ namespace OrcaFacil.Core.Dirpf;
 /// ETF de ações usa 07/06. Fundo de índice de renda fixa usa 07/08,
 /// na variante EtfRendaFixa, com o mesmo tipo ETF no cadastro.
 /// O número 07/08 está no manual de Bens Financeiros, item "Fundos de Índice de Renda Fixa".
-/// As Perguntas e Respostas IRPF 2026 não publicam esse grupo: a pergunta 736
-/// trata a tributação desses fundos pela Lei nº 13.043/2014, art. 2º.
+/// A tributação na fonte é a do art. 2º da Lei nº 13.043/2014.
+/// O rendimento com lucro de cada alienação vai para a exclusiva, código 06,
+/// no guia de rendimentos do capital da DIRPF 2026.
 /// Fonte: Bens Financeiros, Receita Federal, atualizado em 26/05/2026.
 /// https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/preenchimento/manual-mir/patrimonio/bens-financeiros
 /// Rendimento isento de FII e Fiagro permanece 99, configurável.

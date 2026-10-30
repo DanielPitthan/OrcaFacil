@@ -15,9 +15,13 @@ namespace OrcaFacil.Core.Dirpf;
 /// e vai para a exclusiva, código da variante Jcp, também pelo ano do pagamento.
 /// O ganho isento de ações no limite mensal entra na ficha de isentos, pelo código vigente.
 /// BDR e ETF não têm código de rendimento isento na semente e não entram nessa ficha.
-/// ETF de renda fixa, já gravado como ETF, usa o bem 07/08. O ganho do ano do pregão
-/// vai para a tributação exclusiva, código 06, sem reconstitutir o bruto:
-/// a corretora retém na fonte (Lei nº 13.043/2014, art. 2º; P&R IRPF 2026, pergunta 736).
+/// ETF de renda fixa, já gravado como ETF, usa o bem 07/08
+/// (manual de Bens Financeiros da DIRPF 2026, item "Fundos de Índice de Renda Fixa").
+/// Cada alienação com lucro no ano do pregão entra na tributação exclusiva, código 06,
+/// sem abater prejuízo e sem reconstitutir o bruto.
+/// A corretora retém na fonte (Lei nº 13.043/2014, art. 2º).
+/// https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/preenchimento/manual-mir/patrimonio/bens-financeiros
+/// https://www.gov.br/receitafederal/pt-br/assuntos/meu-imposto-de-renda/preenchimento/manual-mir/rendimentos/rendimentos-do-capital
 /// Renda fixa usa o IR retido gravado. A tabela regressiva não entra na conta.
 /// Lucro de resgate já virou receita e prejuízo já virou despesa; aqui só se declara o líquido positivo.
 /// O CNPJ de Bens e Direitos e de Rendimentos Isentos sai vazio: o campo no ativo é a #100.
@@ -340,7 +344,9 @@ public static class MontadorDirpf
 
     /// <summary>
     /// Ano do pregão. Sem pregão, usa a data da operação.
-    /// Prejuízo do ano não entra. O IR retido fica nulo: a operação não guarda a alíquota da fonte.
+    /// Soma cada alienação com lucro. Prejuízo não abate o lucro de outra venda.
+    /// O IR retido fica nulo: a operação não guarda a alíquota da fonte
+    /// (Lei nº 13.043/2014, art. 2º).
     /// </summary>
     private static List<LinhaRendimentoExclusivoDirpf> MontarEtfRendaFixa(
         int anoBase,
@@ -372,12 +378,14 @@ public static class MontadorDirpf
             var calculado = CalculadoraResultadoRealizado.Calcular(
                 grupo.Select(ParaMovimentoEtf),
                 data => fiscais.Para(data, TipoAtivo.Etf));
-            var liquido = calculado.Vendas
-                .Where(venda => venda.Data >= inicio && venda.Data < fim)
-                .Sum(venda => venda.Resultado);
-            var declarado = CalculadoraResultadoRealizado.Arredondar(liquido, casas);
-            if (declarado <= 0m)
+            var lucros = calculado.Vendas
+                .Where(venda => venda.Data >= inicio && venda.Data < fim && venda.Resultado > 0m)
+                .Select(venda => venda.Resultado)
+                .ToList();
+            if (lucros.Count == 0)
                 continue;
+
+            var declarado = CalculadoraResultadoRealizado.Arredondar(lucros.Sum(), casas);
 
             linhas.Add(new LinhaRendimentoExclusivoDirpf(
                 anoBase,
@@ -390,7 +398,7 @@ public static class MontadorDirpf
                 CnpjDaFontePagadora(""),
                 declarado,
                 IrRetido: null,
-                $"Rendimento líquido de ETF de renda fixa — {ativo.Ticker} — {ativo.Nome}."));
+                $"Rendimento de ETF de renda fixa — {ativo.Ticker} — {ativo.Nome}."));
         }
 
         return linhas;
