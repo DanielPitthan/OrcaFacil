@@ -43,7 +43,11 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Categoria>(entity =>
         {
             entity.Property(c => c.Nome).UseCollation("NOCASE");
-            entity.HasIndex(c => c.Nome).IsUnique();
+            // Inativa sai do único: o mesmo nome pode voltar com outro tipo, em outra linha.
+            // Entre ativas o nome continua único. Linhas já gravadas não são alteradas.
+            entity.HasIndex(c => c.Nome)
+                  .IsUnique()
+                  .HasFilter("\"Ativo\" = 1");
         });
 
         modelBuilder.Entity<Orcamento>(entity =>

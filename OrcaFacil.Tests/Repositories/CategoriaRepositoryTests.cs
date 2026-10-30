@@ -50,7 +50,7 @@ public class CategoriaRepositoryTests : IDisposable
     }
 
     [Fact]
-    public async Task NomeDaInativa_ContinuaNoIndiceUnico()
+    public async Task NomeAtivo_ContinuaUnico_InativaPermiteOutraLinha()
     {
         await _repository.AddAsync(new Categoria
         {
@@ -58,20 +58,28 @@ public class CategoriaRepositoryTests : IDisposable
             Icone = "💰",
             CorHex = "#6DA538",
             TipoPadrao = TipoTransacao.Receita,
-            EhPadraoDoSistema = true
+            EhPadraoDoSistema = true,
+            Ativo = false
         });
-        var antiga = (await _repository.GetAllAsync()).Single();
-        antiga.Ativo = false;
-        await _repository.UpdateAsync(antiga);
 
-        Assert.False(antiga.Ativo);
         Assert.True(await _repository.ExisteNomeAsync("Recebimento"));
-        await Assert.ThrowsAsync<DbUpdateException>(() => _repository.AddAsync(new Categoria
+        await _repository.AddAsync(new Categoria
         {
             Nome = "Recebimento",
             Icone = "💵",
             CorHex = "#A2B94F",
-            TipoPadrao = TipoTransacao.Receita
+            TipoPadrao = TipoTransacao.Despesa,
+            Ativo = true
+        });
+
+        Assert.Equal(2, (await _repository.GetAllAsync()).Count);
+        await Assert.ThrowsAsync<DbUpdateException>(() => _repository.AddAsync(new Categoria
+        {
+            Nome = "recebimento",
+            Icone = "🏠",
+            CorHex = "#28587b",
+            TipoPadrao = TipoTransacao.Receita,
+            Ativo = true
         }));
     }
 

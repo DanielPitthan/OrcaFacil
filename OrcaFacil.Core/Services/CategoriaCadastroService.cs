@@ -17,22 +17,21 @@ public class CategoriaCadastroService
     }
 
     /// <summary>
-    /// Se o nome é de uma categoria inativa, reativa essa linha. O índice único de nome
-    /// também vale para inativa, então uma segunda linha com o mesmo nome não grava.
+    /// Nome ativo continua único. Inativa do mesmo tipo é reativada no mesmo Id.
+    /// Tipo diferente vira outra linha; a inativa e os lançamentos dela ficam como estão.
     /// </summary>
     public async Task<Categoria> CriarAsync(CategoriaFormModel dto)
     {
-        var existente = await _categoriaRepository.GetByNomeAsync(dto.Nome);
-        if (existente is { Ativo: false })
-        {
-            Aplicar(existente, dto);
-            existente.Ativo = true;
-            await _categoriaRepository.UpdateAsync(existente);
-            return existente;
-        }
-
-        if (existente is not null)
+        var homonimas = await _categoriaRepository.ListarPorNomeAsync(dto.Nome);
+        if (homonimas.Any(categoria => categoria.Ativo))
             throw new InvalidOperationException(MensagemNomeRepetido);
+
+        var mesmoTipo = homonimas.FirstOrDefault(categoria => categoria.TipoPadrao == dto.TipoPadrao);
+        if (mesmoTipo is not null)
+        {
+            await ReativarAsync(mesmoTipo, dto);
+            return mesmoTipo;
+        }
 
         var categoria = new Categoria { Ativo = true };
         Aplicar(categoria, dto);
@@ -67,6 +66,16 @@ public class CategoriaCadastroService
         }
 
         await _categoriaRepository.DeleteAsync(categoria);
+    }
+
+    private async Task ReativarAsync(Categoria categoria, CategoriaFormModel dto)
+    {
+        Aplicar(categoria, dto);
+        if (!categoria.PermiteItensFatura && await _categoriaRepository.PossuiItensFaturaAsync(categoria.Id))
+            categoria.PermiteItensFatura = true;
+
+        categoria.Ativo = true;
+        await _categoriaRepository.UpdateAsync(categoria);
     }
 
     private static void Aplicar(Categoria categoria, CategoriaFormModel dto)

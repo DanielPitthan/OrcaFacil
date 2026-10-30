@@ -19,11 +19,13 @@ public class CategoriaRepository : GenericRepository<Categoria>, ICategoriaRepos
             .ToListAsync();
     }
 
-    public async Task<Categoria?> GetByNomeAsync(string nome)
+    public async Task<List<Categoria>> ListarPorNomeAsync(string nome)
     {
         await using var context = await ContextFactory.CreateDbContextAsync();
         return await context.Categorias
-            .FirstOrDefaultAsync(c => c.Nome.ToLower() == nome.ToLower());
+            .Where(c => c.Nome.ToLower() == nome.ToLower())
+            .OrderBy(c => c.Id)
+            .ToListAsync();
     }
 
     public async Task<bool> ExisteNomeAsync(string nome, int? ignorarId = null)
@@ -40,5 +42,12 @@ public class CategoriaRepository : GenericRepository<Categoria>, ICategoriaRepos
         await using var context = await ContextFactory.CreateDbContextAsync();
         return await context.Transacoes.AnyAsync(t => t.CategoriaId == categoriaId)
             || await context.ItensLancamento.AnyAsync(i => i.CategoriaId == categoriaId);
+    }
+
+    public async Task<bool> PossuiItensFaturaAsync(int categoriaId)
+    {
+        await using var context = await ContextFactory.CreateDbContextAsync();
+        return await context.ItensLancamento.AnyAsync(i => i.CategoriaId == categoriaId)
+            || await context.Transacoes.AnyAsync(t => t.CategoriaId == categoriaId && t.Itens.Any());
     }
 }

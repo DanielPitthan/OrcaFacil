@@ -110,6 +110,95 @@ public class CategoriaReceitaRecriadaTests : IDisposable
     }
 
     [Fact]
+    public async Task TipoDiferente_Recriar_CriaIdNovoEMantemLancamentoNaInativa()
+    {
+        var antiga = await _cadastro.CriarAsync(Formulario("Mercado", "🛒", "#9fb4c7", TipoTransacao.Despesa));
+        var membro = await MembroAsync();
+        var data = new DateTime(2026, 10, 20);
+        await LancarAsync(antiga.Id, membro.Id, data, "Compra antiga", TipoTransacao.Despesa);
+        await _cadastro.RemoverAsync(antiga.Id);
+
+        var nova = await _cadastro.CriarAsync(Formulario("Mercado", "💵", "#A2B94F", TipoTransacao.Receita));
+
+        Assert.NotEqual(antiga.Id, nova.Id);
+        Assert.True(nova.Ativo);
+        Assert.Equal(TipoTransacao.Receita, nova.TipoPadrao);
+        Assert.Equal("💵", nova.Icone);
+
+        var preservada = await _categorias.GetByIdAsync(antiga.Id);
+        Assert.NotNull(preservada);
+        Assert.False(preservada.Ativo);
+        Assert.Equal(antiga.Id, preservada.Id);
+        Assert.Equal("Mercado", preservada.Nome);
+        Assert.Equal("🛒", preservada.Icone);
+        Assert.Equal("#9fb4c7", preservada.CorHex);
+        Assert.Equal(TipoTransacao.Despesa, preservada.TipoPadrao);
+
+        var lista = await _transacoes.GetByPeriodoAsync(data, data.AddDays(1).AddTicks(-1));
+        var lancamento = Assert.Single(lista);
+        Assert.Equal(antiga.Id, lancamento.CategoriaId);
+        Assert.Equal("Compra antiga", lancamento.Descricao);
+        Assert.Equal(2, (await _categorias.GetAllAsync()).Count(categoria => categoria.Nome == "Mercado"));
+    }
+
+    [Fact]
+    public async Task MesmoTipo_SemItensDeFatura_ReativaEDesligaPermiteItensFatura()
+    {
+        var antiga = await _cadastro.CriarAsync(Formulario("Cartão", "💳", "#28587b", TipoTransacao.Despesa, permiteItensFatura: true));
+        var membro = await MembroAsync();
+        var data = new DateTime(2026, 10, 21);
+        await LancarAsync(antiga.Id, membro.Id, data, "Fatura sem itens", TipoTransacao.Despesa);
+        await _cadastro.RemoverAsync(antiga.Id);
+
+        var recriada = await _cadastro.CriarAsync(Formulario("Cartão", "💳", "#111111", TipoTransacao.Despesa, permiteItensFatura: false));
+
+        Assert.Equal(antiga.Id, recriada.Id);
+        Assert.True(recriada.Ativo);
+        Assert.False(recriada.PermiteItensFatura);
+        Assert.Equal("#111111", recriada.CorHex);
+        var lista = await _transacoes.GetByPeriodoAsync(data, data.AddDays(1).AddTicks(-1));
+        Assert.Equal(antiga.Id, Assert.Single(lista).CategoriaId);
+    }
+
+    [Fact]
+    public async Task MesmoTipo_ComItensDeFatura_ReativaEMantemPermiteItensFatura()
+    {
+        var antiga = await _cadastro.CriarAsync(Formulario("Cartão", "💳", "#28587b", TipoTransacao.Despesa, permiteItensFatura: true));
+        var membro = await MembroAsync();
+        var data = new DateTime(2026, 10, 22);
+        await _transacoes.AddAsync(new Transacao
+        {
+            Descricao = "Fatura",
+            Valor = 40m,
+            Data = data,
+            Tipo = TipoTransacao.Despesa,
+            CategoriaId = antiga.Id,
+            MembroFamiliaId = membro.Id,
+            Itens =
+            [
+                new ItemLancamento
+                {
+                    Descricao = "Mercado",
+                    Valor = 40m,
+                    CategoriaId = antiga.Id
+                }
+            ]
+        });
+        await _cadastro.RemoverAsync(antiga.Id);
+
+        var recriada = await _cadastro.CriarAsync(Formulario("Cartão", "💳", "#111111", TipoTransacao.Despesa, permiteItensFatura: false));
+
+        Assert.Equal(antiga.Id, recriada.Id);
+        Assert.True(recriada.Ativo);
+        Assert.True(recriada.PermiteItensFatura);
+        var fatura = Assert.Single(await _transacoes.GetByPeriodoAsync(data, data.AddDays(1).AddTicks(-1)));
+        Assert.Equal(antiga.Id, fatura.CategoriaId);
+        var item = Assert.Single(fatura.Itens);
+        Assert.Equal(antiga.Id, item.CategoriaId);
+        Assert.Equal("Mercado", item.Descricao);
+    }
+
+    [Fact]
     public async Task NomeAtivoRepetido_NaoGravaEInforma()
     {
         await _cadastro.CriarAsync(Formulario("Recebimento", "💰", "#6DA538"));
@@ -200,23 +289,29 @@ public class CategoriaReceitaRecriadaTests : IDisposable
         return membro;
     }
 
-    private Task LancarAsync(int categoriaId, int membroId, DateTime data, string descricao)
+    private Task LancarAsync(int categoriaId, int membroId, DateTime data, string descricao, TipoTransacao tipo = TipoTransacao.Receita)
         => _transacoes.AddAsync(new Transacao
         {
             Descricao = descricao,
             Valor = 3200m,
             Data = data,
-            Tipo = TipoTransacao.Receita,
+            Tipo = tipo,
             CategoriaId = categoriaId,
             MembroFamiliaId = membroId
         });
 
-    private static CategoriaFormModel Formulario(string nome, string icone, string cor)
+    private static CategoriaFormModel Formulario(
+        string nome,
+        string icone,
+        string cor,
+        TipoTransacao tipo = TipoTransacao.Receita,
+        bool permiteItensFatura = false)
         => new()
         {
             Nome = nome,
             Icone = icone,
             CorHex = cor,
-            TipoPadrao = TipoTransacao.Receita
+            TipoPadrao = tipo,
+            PermiteItensFatura = permiteItensFatura
         };
 }
