@@ -3,93 +3,130 @@ using System.Text;
 namespace OrcaFacil.Tests.Components;
 
 /// <summary>
-/// O patch do blazor.webview.js entra no APK só se rodar antes de virar MauiAsset,
-/// sem PowerShell. Comentário com o mesmo texto não mantém a trava.
+/// O patch grava só a cópia em obj e troca o StaticWebAsset. Comentário não conta.
 /// </summary>
 public class PatchBlazorWebViewFonteTests
 {
     private const string Alvo =
-        "Name=\"PatchBlazorWebViewForLegacyAndroid\" BeforeTargets=\"ConvertStaticWebAssetsToMauiAssets\"";
+        "Name=\"PatchBlazorWebViewForLegacyAndroid\"";
+
+    private const string Entradas = "Inputs=\"@(_BlazorWebViewOriginal)\"";
+
+    private const string Saida = "Outputs=\"$(_PatchedBlazorWebViewJs)\"";
+
+    private const string PastaDaCopia =
+        "<_PatchedBlazorWebViewDir>$(IntermediateOutputPath)patched-webview/</_PatchedBlazorWebViewDir>";
+
+    private const string GravaCopia = "File.WriteAllText(DestinationFile, adjusted, utf8)";
+
+    private const string TravaForaDoObj =
+        "if (!dest.StartsWith(root, StringComparison.OrdinalIgnoreCase))";
 
     [Fact]
-    public void Alvo_RodaAntesDosAssets_SemPowerShell_EComentarioNaoConta()
+    public void Alvo_TemEntradaOriginalESaidaNaCopia_EComentarioNaoConta()
     {
         var projeto = SemComentarios(Ler("OrcaFacil", "OrcaFacil.csproj"));
 
         Assert.Contains(Alvo, projeto, StringComparison.Ordinal);
-        Assert.Contains("PackageRoot=\"$(NuGetPackageRoot)\"", projeto, StringComparison.Ordinal);
-        Assert.Contains("ObjDirectory=\"$(MSBuildProjectDirectory)/obj\"", projeto, StringComparison.Ordinal);
-        Assert.Contains(".Replace(\"static{this.nextEventDelegatorId=0}\", \"static nextEventDelegatorId=0;\")", projeto, StringComparison.Ordinal);
-        Assert.Contains("adjusted.Contains(\"static{\")", projeto, StringComparison.Ordinal);
-        Assert.Contains("Log.LogError(\"blazor.webview.js não encontrado.\")", projeto, StringComparison.Ordinal);
-        Assert.Contains("Log.LogError(\"O padrão static{ permaneceu em \" + file)", projeto, StringComparison.Ordinal);
+        Assert.Contains(
+            "BeforeTargets=\"GenerateStaticWebAssetsManifest;StaticWebAssetsPrepareForRun;ConvertStaticWebAssetsToMauiAssets\"",
+            projeto,
+            StringComparison.Ordinal);
+        Assert.Contains(Entradas, projeto, StringComparison.Ordinal);
+        Assert.Contains(Saida, projeto, StringComparison.Ordinal);
+        Assert.Contains(PastaDaCopia, projeto, StringComparison.Ordinal);
+        Assert.DoesNotContain("BeforeTargets=\"Build\"", projeto, StringComparison.Ordinal);
         Assert.DoesNotContain("powershell", projeto, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("pwsh", projeto, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("BeforeTargets=\"Build\"", projeto, StringComparison.Ordinal);
 
-        var alvoComentado = SemComentarios(Ler("OrcaFacil", "OrcaFacil.csproj")
-            .Replace(Alvo, "<!-- " + Alvo + " -->", StringComparison.Ordinal));
-        Assert.DoesNotContain(Alvo, alvoComentado, StringComparison.Ordinal);
+        var saidaComentada = SemComentarios(Ler("OrcaFacil", "OrcaFacil.csproj")
+            .Replace(Saida, "<!-- " + Saida + " -->", StringComparison.Ordinal));
+        Assert.DoesNotContain(Saida, saidaComentada, StringComparison.Ordinal);
 
-        var deVoltaAoBuild = SemComentarios(Ler("OrcaFacil", "OrcaFacil.csproj")
-            .Replace(
-                "BeforeTargets=\"ConvertStaticWebAssetsToMauiAssets\"",
-                "BeforeTargets=\"Build\"",
-                StringComparison.Ordinal));
-        Assert.Contains("BeforeTargets=\"Build\"", deVoltaAoBuild, StringComparison.Ordinal);
-        Assert.DoesNotContain(Alvo, deVoltaAoBuild, StringComparison.Ordinal);
+        var entradaComentada = SemComentarios(Ler("OrcaFacil", "OrcaFacil.csproj")
+            .Replace(Entradas, "/* " + Entradas + " */", StringComparison.Ordinal));
+        Assert.DoesNotContain(Entradas, entradaComentada, StringComparison.Ordinal);
 
         const string soComentario = """
-            <!-- Name="PatchBlazorWebViewForLegacyAndroid" BeforeTargets="ConvertStaticWebAssetsToMauiAssets" -->
-            // powershell -NoProfile -File PatchBlazorWebView.ps1
-            /* pwsh */
+            <!-- Inputs="@(_BlazorWebViewOriginal)" Outputs="$(_PatchedBlazorWebViewJs)" -->
+            // <_PatchedBlazorWebViewDir>$(IntermediateOutputPath)patched-webview/</_PatchedBlazorWebViewDir>
             """;
         var comentario = SemComentarios(soComentario);
-        Assert.DoesNotContain(Alvo, comentario, StringComparison.Ordinal);
-        Assert.DoesNotContain("powershell", comentario, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("pwsh", comentario, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(Entradas, comentario, StringComparison.Ordinal);
+        Assert.DoesNotContain(Saida, comentario, StringComparison.Ordinal);
+        Assert.DoesNotContain(PastaDaCopia, comentario, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void Script_UsaHome_JoinPath_EFalhaSeNaoAcharOuSobrarStatic_EComentarioNaoConta()
+    public void StaticWebAsset_TrocaOOriginalPelaCopia()
     {
-        var script = SemComentarios(Ler("OrcaFacil", "build", "PatchBlazorWebView.ps1"));
+        var projeto = SemComentarios(Ler("OrcaFacil", "OrcaFacil.csproj"));
 
-        Assert.Contains("$perfil = $env:USERPROFILE", script, StringComparison.Ordinal);
-        Assert.Contains("$perfil = $env:HOME", script, StringComparison.Ordinal);
-        Assert.Contains("Join-Path $perfil \".nuget\"", script, StringComparison.Ordinal);
-        Assert.Contains("Join-Path $pastaNuget \"packages\"", script, StringComparison.Ordinal);
-        Assert.Contains("Join-Path $pastaPacotes \"microsoft.aspnetcore.components.webview\"", script, StringComparison.Ordinal);
-        Assert.Contains("Join-Path $PSScriptRoot \"..\"", script, StringComparison.Ordinal);
-        Assert.Contains("Join-Path $pastaPai \"obj\"", script, StringComparison.Ordinal);
-        Assert.Contains("Write-Host \"blazor.webview.js não encontrado.\"", script, StringComparison.Ordinal);
-        Assert.Contains("exit 1", script, StringComparison.Ordinal);
-        Assert.Contains("$ajustado.Contains('static{')", script, StringComparison.Ordinal);
-        Assert.Contains("if ($restouStatic)", script, StringComparison.Ordinal);
-        Assert.Equal(2, Contar(script, "exit 1"));
-        Assert.DoesNotContain("exit 0", script, StringComparison.Ordinal);
-        Assert.DoesNotContain(".nuget\\packages", script, StringComparison.Ordinal);
+        Assert.Contains("<StaticWebAsset Remove=\"@(_BlazorWebViewOriginal)\" />", projeto, StringComparison.Ordinal);
+        Assert.Contains("<StaticWebAsset Include=\"$(_PatchedBlazorWebViewJs)\">", projeto, StringComparison.Ordinal);
+        Assert.Contains("<ContentRoot>$(_PatchedBlazorWebViewDir)</ContentRoot>", projeto, StringComparison.Ordinal);
+        Assert.Contains("<BasePath>$(_BlazorWebViewBasePath)</BasePath>", projeto, StringComparison.Ordinal);
+        Assert.Contains("<_BlazorWebViewBasePath>%(_BlazorWebViewOriginal.BasePath)</_BlazorWebViewBasePath>", projeto, StringComparison.Ordinal);
+        Assert.Contains("<RelativePath>_framework/blazor.webview.js</RelativePath>", projeto, StringComparison.Ordinal);
+        Assert.Contains("<SourceType>Discovered</SourceType>", projeto, StringComparison.Ordinal);
+        Assert.Contains("<AssetKind>All</AssetKind>", projeto, StringComparison.Ordinal);
+        Assert.Contains("<AssetMode>All</AssetMode>", projeto, StringComparison.Ordinal);
+        Assert.Contains("<AssetRole>Primary</AssetRole>", projeto, StringComparison.Ordinal);
+        Assert.Contains("<OriginalItemSpec>$(_PatchedBlazorWebViewJs)</OriginalItemSpec>", projeto, StringComparison.Ordinal);
+        Assert.Contains("<Fingerprint>$(_BlazorWebViewFingerprint)</Fingerprint>", projeto, StringComparison.Ordinal);
+        Assert.Contains("<Integrity>$(_BlazorWebViewIntegrity)</Integrity>", projeto, StringComparison.Ordinal);
+        Assert.Contains("<FileLength>$(_PatchedBlazorWebViewLength)</FileLength>", projeto, StringComparison.Ordinal);
+        Assert.Contains("<LastWriteTime>$(_BlazorWebViewLastWriteTime)</LastWriteTime>", projeto, StringComparison.Ordinal);
 
-        var semSaida = SemComentarios(Ler("OrcaFacil", "build", "PatchBlazorWebView.ps1")
-            .Replace("exit 1", "/* exit 1 */", StringComparison.Ordinal));
-        Assert.DoesNotContain("exit 1", semSaida, StringComparison.Ordinal);
-        Assert.Equal(0, Contar(semSaida, "exit 1"));
+        var trocaComentada = SemComentarios(Ler("OrcaFacil", "OrcaFacil.csproj")
+            .Replace(
+                "<StaticWebAsset Remove=\"@(_BlazorWebViewOriginal)\" />",
+                "<!-- <StaticWebAsset Remove=\"@(_BlazorWebViewOriginal)\" /> -->",
+                StringComparison.Ordinal));
+        Assert.DoesNotContain("<StaticWebAsset Remove=\"@(_BlazorWebViewOriginal)\" />", trocaComentada, StringComparison.Ordinal);
+    }
 
-        var homeComentado = SemComentarios(Ler("OrcaFacil", "build", "PatchBlazorWebView.ps1")
-            .Replace("$perfil = $env:HOME", "# $perfil = $env:HOME", StringComparison.Ordinal));
-        Assert.DoesNotContain("$perfil = $env:HOME", homeComentado, StringComparison.Ordinal);
+    [Fact]
+    public void Tarefa_SoGravaDentroDoObj_EComentarioNaoConta()
+    {
+        var projeto = SemComentarios(Ler("OrcaFacil", "OrcaFacil.csproj"));
+
+        Assert.Contains("ObjDirectory=\"$(MSBuildProjectDirectory)/obj\"", projeto, StringComparison.Ordinal);
+        Assert.Contains("DestinationFile=\"$(_PatchedBlazorWebViewJs)\"", projeto, StringComparison.Ordinal);
+        Assert.Contains(GravaCopia, projeto, StringComparison.Ordinal);
+        Assert.Contains(TravaForaDoObj, projeto, StringComparison.Ordinal);
+        Assert.Contains("Log.LogError(\"O patch só pode gravar dentro de obj: \" + dest)", projeto, StringComparison.Ordinal);
+        Assert.DoesNotContain("File.WriteAllText(SourceFile", projeto, StringComparison.Ordinal);
+        Assert.DoesNotContain("NuGetPackageRoot", projeto, StringComparison.Ordinal);
+        Assert.DoesNotContain(".nuget", projeto, StringComparison.Ordinal);
+        Assert.Equal(1, Contar(projeto, "File.WriteAllText("));
+
+        var travaComentada = SemComentarios(Ler("OrcaFacil", "OrcaFacil.csproj")
+            .Replace(TravaForaDoObj, "/* " + TravaForaDoObj + " */", StringComparison.Ordinal));
+        Assert.DoesNotContain(TravaForaDoObj, travaComentada, StringComparison.Ordinal);
+
+        var gravaNoOriginal = SemComentarios(Ler("OrcaFacil", "OrcaFacil.csproj")
+            .Replace(GravaCopia, "File.WriteAllText(SourceFile, adjusted, utf8)", StringComparison.Ordinal));
+        Assert.Contains("File.WriteAllText(SourceFile", gravaNoOriginal, StringComparison.Ordinal);
+        Assert.DoesNotContain(GravaCopia, gravaNoOriginal, StringComparison.Ordinal);
 
         const string soComentario = """
-            # $perfil = $env:USERPROFILE
-            # $perfil = $env:HOME
-            # Join-Path $perfil ".nuget"
-            # exit 1
-            # static{
+            // File.WriteAllText(DestinationFile, adjusted, utf8)
+            /* if (!dest.StartsWith(root, StringComparison.OrdinalIgnoreCase)) */
+            <!-- ObjDirectory="$(MSBuildProjectDirectory)/obj" -->
             """;
         var comentario = SemComentarios(soComentario);
-        Assert.DoesNotContain("$perfil = $env:HOME", comentario, StringComparison.Ordinal);
-        Assert.DoesNotContain("exit 1", comentario, StringComparison.Ordinal);
-        Assert.DoesNotContain("static{", comentario, StringComparison.Ordinal);
+        Assert.DoesNotContain(GravaCopia, comentario, StringComparison.Ordinal);
+        Assert.DoesNotContain(TravaForaDoObj, comentario, StringComparison.Ordinal);
+        Assert.DoesNotContain("ObjDirectory=\"$(MSBuildProjectDirectory)/obj\"", comentario, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ScriptPowerShell_NaoFazParteDoProjeto()
+    {
+        Assert.False(File.Exists(Path.Combine(Raiz(), "OrcaFacil", "build", "PatchBlazorWebView.ps1")));
+        var projeto = SemComentarios(Ler("OrcaFacil", "OrcaFacil.csproj"));
+        Assert.DoesNotContain("PatchBlazorWebView.ps1", projeto, StringComparison.Ordinal);
     }
 
     private static int Contar(string fonte, string trecho)
