@@ -80,9 +80,71 @@
       <ProjectReference Include="..\OrcaFacil.Core\OrcaFacil.Core.csproj" />
     </ItemGroup>
 
-    <!-- WebView 83 do emulador Android não interpreta o blazor.webview.js original do .NET 10. -->
-    <Target Name="PatchBlazorWebViewForLegacyAndroid" BeforeTargets="Build">
-        <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)build\PatchBlazorWebView.ps1&quot;" />
+    <!-- WebView 83 do emulador Android não interpreta o blazor.webview.js original do .NET 10.
+         O arquivo que entra no APK é o que ConvertStaticWebAssetsToMauiAssets aponta como MauiAsset.
+         O patch precisa rodar antes desse alvo. MSBuild puro: não chama powershell/pwsh. -->
+    <UsingTask TaskName="OrcaFacilPatchBlazorWebView" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
+        <ParameterGroup>
+            <PackageRoot ParameterType="System.String" Required="true" />
+            <ObjDirectory ParameterType="System.String" Required="true" />
+        </ParameterGroup>
+        <Task>
+            <Using Namespace="System" />
+            <Using Namespace="System.Collections.Generic" />
+            <Using Namespace="System.IO" />
+            <Using Namespace="System.Text" />
+            <Code Type="Fragment" Language="cs"><![CDATA[
+                var roots = new[]
+                {
+                    Path.Combine(PackageRoot, "microsoft.aspnetcore.components.webview"),
+                    ObjDirectory
+                };
+                var files = new List<string>();
+                foreach (var root in roots)
+                {
+                    if (string.IsNullOrEmpty(root) || !Directory.Exists(root))
+                        continue;
+                    files.AddRange(Directory.EnumerateFiles(root, "blazor.webview.js", SearchOption.AllDirectories));
+                }
+
+                if (files.Count == 0)
+                {
+                    Log.LogError("blazor.webview.js não encontrado.");
+                    return false;
+                }
+
+                var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+                foreach (var file in files)
+                {
+                    var text = File.ReadAllText(file);
+                    var adjusted = text
+                        .Replace("static{this.nextEventDelegatorId=0}", "static nextEventDelegatorId=0;")
+                        .Replace("static nextEventDelegatorId=0constructor", "static nextEventDelegatorId=0;constructor")
+                        .Replace("t||=[]", "t=t||[]")
+                        .Replace("t[Ue]??={}", "(t[Ue]=t[Ue]??{})");
+                    if (adjusted.Contains("static{"))
+                    {
+                        Log.LogError("O padrão static{ permaneceu em " + file);
+                        return false;
+                    }
+
+                    if (adjusted == text)
+                        continue;
+
+                    var info = new FileInfo(file);
+                    if (info.IsReadOnly)
+                        info.IsReadOnly = false;
+                    File.WriteAllText(file, adjusted, utf8);
+                    Log.LogMessage(MessageImportance.High, "Ajustado para WebView antigo: " + file);
+                }
+
+                return true;
+            ]]></Code>
+        </Task>
+    </UsingTask>
+
+    <Target Name="PatchBlazorWebViewForLegacyAndroid" BeforeTargets="ConvertStaticWebAssetsToMauiAssets">
+        <OrcaFacilPatchBlazorWebView PackageRoot="$(NuGetPackageRoot)" ObjDirectory="$(MSBuildProjectDirectory)/obj" />
     </Target>
 
 </Project>

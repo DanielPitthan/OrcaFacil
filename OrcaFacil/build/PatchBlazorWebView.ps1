@@ -5,9 +5,20 @@
 
 $ErrorActionPreference = "Stop"
 
+$perfil = $env:USERPROFILE
+if ([string]::IsNullOrEmpty($perfil)) {
+    $perfil = $env:HOME
+}
+
+$pastaNuget = Join-Path $perfil ".nuget"
+$pastaPacotes = Join-Path $pastaNuget "packages"
+$pastaWebView = Join-Path $pastaPacotes "microsoft.aspnetcore.components.webview"
+$pastaPai = Join-Path $PSScriptRoot ".."
+$pastaObj = Join-Path $pastaPai "obj"
+
 $raizes = @(
-    (Join-Path $env:USERPROFILE ".nuget\packages\microsoft.aspnetcore.components.webview"),
-    (Join-Path $PSScriptRoot "..\obj")
+    $pastaWebView,
+    $pastaObj
 )
 
 $arquivos = foreach ($raiz in $raizes) {
@@ -17,16 +28,23 @@ $arquivos = foreach ($raiz in $raizes) {
 }
 
 if (-not $arquivos) {
-    Write-Host "blazor.webview.js não encontrado; nada a ajustar."
-    exit 0
+    Write-Host "blazor.webview.js não encontrado."
+    exit 1
 }
 
+$restouStatic = $false
 foreach ($arquivo in $arquivos) {
     $texto = [System.IO.File]::ReadAllText($arquivo.FullName)
     $ajustado = $texto.Replace('static{this.nextEventDelegatorId=0}', 'static nextEventDelegatorId=0;')
     $ajustado = $ajustado.Replace('static nextEventDelegatorId=0constructor', 'static nextEventDelegatorId=0;constructor')
     $ajustado = $ajustado.Replace('t||=[]', 't=t||[]')
     $ajustado = $ajustado.Replace('t[Ue]??={}', '(t[Ue]=t[Ue]??{})')
+
+    if ($ajustado.Contains('static{')) {
+        Write-Host "O padrão static{ permaneceu em $($arquivo.FullName)"
+        $restouStatic = $true
+        continue
+    }
 
     if ($ajustado -eq $texto) {
         continue
@@ -38,4 +56,8 @@ foreach ($arquivo in $arquivos) {
 
     [System.IO.File]::WriteAllText($arquivo.FullName, $ajustado)
     Write-Host "Ajustado para WebView antigo: $($arquivo.FullName)"
+}
+
+if ($restouStatic) {
+    exit 1
 }
