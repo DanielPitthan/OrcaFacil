@@ -32,20 +32,16 @@ public class PatchBlazorWebViewFonteTests
             "BeforeTargets=\"GenerateStaticWebAssetsManifest;StaticWebAssetsPrepareForRun;ConvertStaticWebAssetsToMauiAssets\"",
             projeto,
             StringComparison.Ordinal);
-        Assert.Contains(Entradas, projeto, StringComparison.Ordinal);
-        Assert.Contains(Saida, projeto, StringComparison.Ordinal);
+        Assert.DoesNotContain(Entradas, projeto, StringComparison.Ordinal);
+        Assert.DoesNotContain(Saida, projeto, StringComparison.Ordinal);
         Assert.Contains(PastaDaCopia, projeto, StringComparison.Ordinal);
         Assert.DoesNotContain("BeforeTargets=\"Build\"", projeto, StringComparison.Ordinal);
         Assert.DoesNotContain("powershell", projeto, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("pwsh", projeto, StringComparison.OrdinalIgnoreCase);
 
-        var saidaComentada = SemComentarios(Ler("OrcaFacil", "OrcaFacil.csproj")
-            .Replace(Saida, "<!-- " + Saida + " -->", StringComparison.Ordinal));
-        Assert.DoesNotContain(Saida, saidaComentada, StringComparison.Ordinal);
-
-        var entradaComentada = SemComentarios(Ler("OrcaFacil", "OrcaFacil.csproj")
-            .Replace(Entradas, "/* " + Entradas + " */", StringComparison.Ordinal));
-        Assert.DoesNotContain(Entradas, entradaComentada, StringComparison.Ordinal);
+        var comIncremental = projeto.Replace(Alvo, Alvo + " " + Entradas + " " + Saida, StringComparison.Ordinal);
+        Assert.Contains(Entradas, comIncremental, StringComparison.Ordinal);
+        Assert.Contains(Saida, comIncremental, StringComparison.Ordinal);
 
         const string soComentario = """
             <!-- Inputs="@(_BlazorWebViewOriginal)" Outputs="$(_PatchedBlazorWebViewJs)" -->
@@ -73,8 +69,11 @@ public class PatchBlazorWebViewFonteTests
         Assert.Contains("<AssetMode>All</AssetMode>", projeto, StringComparison.Ordinal);
         Assert.Contains("<AssetRole>Primary</AssetRole>", projeto, StringComparison.Ordinal);
         Assert.Contains("<OriginalItemSpec>$(_PatchedBlazorWebViewJs)</OriginalItemSpec>", projeto, StringComparison.Ordinal);
-        Assert.Contains("<Fingerprint>$(_BlazorWebViewFingerprint)</Fingerprint>", projeto, StringComparison.Ordinal);
-        Assert.Contains("<Integrity>$(_BlazorWebViewIntegrity)</Integrity>", projeto, StringComparison.Ordinal);
+        Assert.DoesNotContain("%(_BlazorWebViewOriginal.Fingerprint)", projeto, StringComparison.Ordinal);
+        Assert.DoesNotContain("%(_BlazorWebViewOriginal.Integrity)", projeto, StringComparison.Ordinal);
+        Assert.Contains("<Integrity>$(_PatchedBlazorWebViewIntegrity)</Integrity>", projeto, StringComparison.Ordinal);
+        Assert.Contains("<Fingerprint>$(_PatchedBlazorWebViewFingerprint)</Fingerprint>", projeto, StringComparison.Ordinal);
+        Assert.Contains("sha.ComputeHash(File.ReadAllBytes(DestinationFile))", projeto, StringComparison.Ordinal);
         Assert.Contains("<FileLength>$(_PatchedBlazorWebViewLength)</FileLength>", projeto, StringComparison.Ordinal);
         Assert.Contains("<LastWriteTime>$(_BlazorWebViewLastWriteTime)</LastWriteTime>", projeto, StringComparison.Ordinal);
 

@@ -87,49 +87,65 @@
             <SourceFile ParameterType="System.String" Required="true" />
             <DestinationFile ParameterType="System.String" Required="true" />
             <ObjDirectory ParameterType="System.String" Required="true" />
+            <Integrity ParameterType="System.String" Output="true" />
+            <Fingerprint ParameterType="System.String" Output="true" />
         </ParameterGroup>
         <Task>
             <Using Namespace="System" />
             <Using Namespace="System.IO" />
+            <Using Namespace="System.Numerics" />
+            <Using Namespace="System.Security.Cryptography" />
             <Using Namespace="System.Text" />
             <Code Type="Fragment" Language="cs"><![CDATA[
+                Success = false;
                 if (string.IsNullOrEmpty(SourceFile) || !File.Exists(SourceFile))
-                {
                     Log.LogError("blazor.webview.js não encontrado.");
-                    return false;
-                }
-
-                var root = Path.GetFullPath(ObjDirectory);
-                var sep = Path.DirectorySeparatorChar.ToString();
-                if (!root.EndsWith(sep, StringComparison.Ordinal))
-                    root += sep;
-                var dest = Path.GetFullPath(DestinationFile);
-                if (!dest.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                else
                 {
-                    Log.LogError("O patch só pode gravar dentro de obj: " + dest);
-                    return false;
+                    var root = Path.GetFullPath(ObjDirectory);
+                    var sep = Path.DirectorySeparatorChar.ToString();
+                    if (!root.EndsWith(sep, StringComparison.Ordinal))
+                        root += sep;
+                    var dest = Path.GetFullPath(DestinationFile);
+                    if (!dest.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                        Log.LogError("O patch só pode gravar dentro de obj: " + dest);
+                    else
+                    {
+                        var text = File.ReadAllText(SourceFile);
+                        var adjusted = text
+                            .Replace("static{this.nextEventDelegatorId=0}", "static nextEventDelegatorId=0;")
+                            .Replace("t||=[]", "t=t||[]")
+                            .Replace("t[Ue]??={}", "(t[Ue]=t[Ue]??{})");
+                        if (adjusted.Contains("static{"))
+                            Log.LogError("O padrão static{ permaneceu em " + dest);
+                        else
+                        {
+                            Directory.CreateDirectory(Path.GetDirectoryName(dest));
+                            var info = new FileInfo(dest);
+                            if (info.Exists && info.IsReadOnly)
+                                info.IsReadOnly = false;
+                            var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+                            File.WriteAllText(DestinationFile, adjusted, utf8);
+                            byte[] hash;
+                            using (var sha = SHA256.Create())
+                                hash = sha.ComputeHash(File.ReadAllBytes(DestinationFile));
+                            Integrity = Convert.ToBase64String(hash);
+                            const string chars = "0123456789abcdefghijklmnopqrstuvwxyz";
+                            var encoded = new char[10];
+                            var slice = new byte[9];
+                            Array.Copy(hash, slice, 9);
+                            var dividend = BigInteger.Abs(new BigInteger(slice));
+                            for (var i = 0; i < 10; i++)
+                            {
+                                dividend = BigInteger.DivRem(dividend, 36, out var remainder);
+                                encoded[i] = chars[(int)remainder];
+                            }
+                            Fingerprint = new string(encoded);
+                            Log.LogMessage(MessageImportance.High, "Ajustado para WebView antigo: " + dest);
+                            Success = true;
+                        }
+                    }
                 }
-
-                var text = File.ReadAllText(SourceFile);
-                var adjusted = text
-                    .Replace("static{this.nextEventDelegatorId=0}", "static nextEventDelegatorId=0;")
-                    .Replace("static nextEventDelegatorId=0constructor", "static nextEventDelegatorId=0;constructor")
-                    .Replace("t||=[]", "t=t||[]")
-                    .Replace("t[Ue]??={}", "(t[Ue]=t[Ue]??{})");
-                if (adjusted.Contains("static{"))
-                {
-                    Log.LogError("O padrão static{ permaneceu em " + dest);
-                    return false;
-                }
-
-                Directory.CreateDirectory(Path.GetDirectoryName(dest));
-                var info = new FileInfo(dest);
-                if (info.Exists && info.IsReadOnly)
-                    info.IsReadOnly = false;
-                var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
-                File.WriteAllText(DestinationFile, adjusted, utf8);
-                Log.LogMessage(MessageImportance.High, "Ajustado para WebView antigo: " + dest);
-                return true;
             ]]></Code>
         </Task>
     </UsingTask>
@@ -146,8 +162,6 @@
         <PropertyGroup>
             <_BlazorWebViewBasePath>%(_BlazorWebViewOriginal.BasePath)</_BlazorWebViewBasePath>
             <_BlazorWebViewSourceId>%(_BlazorWebViewOriginal.SourceId)</_BlazorWebViewSourceId>
-            <_BlazorWebViewFingerprint>%(_BlazorWebViewOriginal.Fingerprint)</_BlazorWebViewFingerprint>
-            <_BlazorWebViewIntegrity>%(_BlazorWebViewOriginal.Integrity)</_BlazorWebViewIntegrity>
             <_BlazorWebViewLastWriteTime>%(_BlazorWebViewOriginal.LastWriteTime)</_BlazorWebViewLastWriteTime>
             <_BlazorWebViewCopyToOutputDirectory>%(_BlazorWebViewOriginal.CopyToOutputDirectory)</_BlazorWebViewCopyToOutputDirectory>
             <_BlazorWebViewCopyToPublishDirectory>%(_BlazorWebViewOriginal.CopyToPublishDirectory)</_BlazorWebViewCopyToPublishDirectory>
@@ -158,13 +172,14 @@
     <Target Name="PatchBlazorWebViewForLegacyAndroid"
             AfterTargets="ResolveBuildStaticWebAssets"
             BeforeTargets="GenerateStaticWebAssetsManifest;StaticWebAssetsPrepareForRun;ConvertStaticWebAssetsToMauiAssets"
-            DependsOnTargets="_SelectBlazorWebViewOriginal"
-            Inputs="@(_BlazorWebViewOriginal)"
-            Outputs="$(_PatchedBlazorWebViewJs)">
+            DependsOnTargets="_SelectBlazorWebViewOriginal">
         <OrcaFacilPatchBlazorWebView
             SourceFile="%(_BlazorWebViewOriginal.Identity)"
             DestinationFile="$(_PatchedBlazorWebViewJs)"
-            ObjDirectory="$(MSBuildProjectDirectory)/obj" />
+            ObjDirectory="$(MSBuildProjectDirectory)/obj">
+            <Output TaskParameter="Integrity" PropertyName="_PatchedBlazorWebViewIntegrity" />
+            <Output TaskParameter="Fingerprint" PropertyName="_PatchedBlazorWebViewFingerprint" />
+        </OrcaFacilPatchBlazorWebView>
     </Target>
 
     <Target Name="UsePatchedBlazorWebView"
@@ -186,8 +201,8 @@
                 <AssetMode>All</AssetMode>
                 <AssetRole>Primary</AssetRole>
                 <OriginalItemSpec>$(_PatchedBlazorWebViewJs)</OriginalItemSpec>
-                <Fingerprint>$(_BlazorWebViewFingerprint)</Fingerprint>
-                <Integrity>$(_BlazorWebViewIntegrity)</Integrity>
+                <Integrity>$(_PatchedBlazorWebViewIntegrity)</Integrity>
+                <Fingerprint>$(_PatchedBlazorWebViewFingerprint)</Fingerprint>
                 <FileLength>$(_PatchedBlazorWebViewLength)</FileLength>
                 <LastWriteTime>$(_BlazorWebViewLastWriteTime)</LastWriteTime>
                 <CopyToOutputDirectory>$(_BlazorWebViewCopyToOutputDirectory)</CopyToOutputDirectory>
