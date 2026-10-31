@@ -80,9 +80,135 @@
       <ProjectReference Include="..\OrcaFacil.Core\OrcaFacil.Core.csproj" />
     </ItemGroup>
 
-    <!-- WebView 83 do emulador Android não interpreta o blazor.webview.js original do .NET 10. -->
-    <Target Name="PatchBlazorWebViewForLegacyAndroid" BeforeTargets="Build">
-        <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)build\PatchBlazorWebView.ps1&quot;" />
+    <!-- WebView 83 não lê static{} nem ||= / ??=. O JS do pacote fica intacto.
+         A cópia patchada vive em obj e substitui o StaticWebAsset antes de virar MauiAsset. -->
+    <UsingTask TaskName="OrcaFacilPatchBlazorWebView" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)/Microsoft.Build.Tasks.Core.dll">
+        <ParameterGroup>
+            <SourceFile ParameterType="System.String" Required="true" />
+            <DestinationFile ParameterType="System.String" Required="true" />
+            <ObjDirectory ParameterType="System.String" Required="true" />
+            <Integrity ParameterType="System.String" Output="true" />
+            <Fingerprint ParameterType="System.String" Output="true" />
+        </ParameterGroup>
+        <Task>
+            <Using Namespace="System" />
+            <Using Namespace="System.IO" />
+            <Using Namespace="System.Numerics" />
+            <Using Namespace="System.Security.Cryptography" />
+            <Using Namespace="System.Text" />
+            <Code Type="Fragment" Language="cs"><![CDATA[
+                Success = false;
+                if (string.IsNullOrEmpty(SourceFile) || !File.Exists(SourceFile))
+                    Log.LogError("blazor.webview.js não encontrado.");
+                else
+                {
+                    var root = Path.GetFullPath(ObjDirectory);
+                    var sep = Path.DirectorySeparatorChar.ToString();
+                    if (!root.EndsWith(sep, StringComparison.Ordinal))
+                        root += sep;
+                    var dest = Path.GetFullPath(DestinationFile);
+                    if (!dest.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                        Log.LogError("O patch só pode gravar dentro de obj: " + dest);
+                    else
+                    {
+                        var text = File.ReadAllText(SourceFile);
+                        var adjusted = text
+                            .Replace("static{this.nextEventDelegatorId=0}", "static nextEventDelegatorId=0;")
+                            .Replace("t||=[]", "t=t||[]")
+                            .Replace("t[Ue]??={}", "(t[Ue]=t[Ue]??{})");
+                        if (adjusted.Contains("static{"))
+                            Log.LogError("O padrão static{ permaneceu em " + dest);
+                        else
+                        {
+                            Directory.CreateDirectory(Path.GetDirectoryName(dest));
+                            var info = new FileInfo(dest);
+                            if (info.Exists && info.IsReadOnly)
+                                info.IsReadOnly = false;
+                            var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+                            File.WriteAllText(DestinationFile, adjusted, utf8);
+                            byte[] hash;
+                            using (var sha = SHA256.Create())
+                                hash = sha.ComputeHash(File.ReadAllBytes(DestinationFile));
+                            Integrity = Convert.ToBase64String(hash);
+                            const string chars = "0123456789abcdefghijklmnopqrstuvwxyz";
+                            var encoded = new char[10];
+                            var slice = new byte[9];
+                            Array.Copy(hash, slice, 9);
+                            var dividend = BigInteger.Abs(new BigInteger(slice));
+                            for (var i = 0; i < 10; i++)
+                            {
+                                dividend = BigInteger.DivRem(dividend, 36, out var remainder);
+                                encoded[i] = chars[(int)remainder];
+                            }
+                            Fingerprint = new string(encoded);
+                            Log.LogMessage(MessageImportance.High, "Ajustado para WebView antigo: " + dest);
+                            Success = true;
+                        }
+                    }
+                }
+            ]]></Code>
+        </Task>
+    </UsingTask>
+
+    <Target Name="_SelectBlazorWebViewOriginal" DependsOnTargets="ResolveBuildStaticWebAssets">
+        <PropertyGroup>
+            <_PatchedBlazorWebViewDir>$(IntermediateOutputPath)patched-webview/</_PatchedBlazorWebViewDir>
+            <_PatchedBlazorWebViewJs>$(_PatchedBlazorWebViewDir)blazor.webview.js</_PatchedBlazorWebViewJs>
+        </PropertyGroup>
+        <ItemGroup>
+            <_BlazorWebViewOriginal Include="@(StaticWebAsset)"
+                Condition="$([System.String]::Copy('%(Identity)').EndsWith('blazor.webview.js'))" />
+        </ItemGroup>
+        <PropertyGroup>
+            <_BlazorWebViewBasePath>%(_BlazorWebViewOriginal.BasePath)</_BlazorWebViewBasePath>
+            <_BlazorWebViewSourceId>%(_BlazorWebViewOriginal.SourceId)</_BlazorWebViewSourceId>
+            <_BlazorWebViewLastWriteTime>%(_BlazorWebViewOriginal.LastWriteTime)</_BlazorWebViewLastWriteTime>
+            <_BlazorWebViewCopyToOutputDirectory>%(_BlazorWebViewOriginal.CopyToOutputDirectory)</_BlazorWebViewCopyToOutputDirectory>
+            <_BlazorWebViewCopyToPublishDirectory>%(_BlazorWebViewOriginal.CopyToPublishDirectory)</_BlazorWebViewCopyToPublishDirectory>
+        </PropertyGroup>
+        <Error Condition="'@(_BlazorWebViewOriginal)' == ''" Text="blazor.webview.js não encontrado." />
+    </Target>
+
+    <Target Name="PatchBlazorWebViewForLegacyAndroid"
+            AfterTargets="ResolveBuildStaticWebAssets"
+            BeforeTargets="GenerateStaticWebAssetsManifest;StaticWebAssetsPrepareForRun;ConvertStaticWebAssetsToMauiAssets"
+            DependsOnTargets="_SelectBlazorWebViewOriginal">
+        <OrcaFacilPatchBlazorWebView
+            SourceFile="%(_BlazorWebViewOriginal.Identity)"
+            DestinationFile="$(_PatchedBlazorWebViewJs)"
+            ObjDirectory="$(MSBuildProjectDirectory)/obj">
+            <Output TaskParameter="Integrity" PropertyName="_PatchedBlazorWebViewIntegrity" />
+            <Output TaskParameter="Fingerprint" PropertyName="_PatchedBlazorWebViewFingerprint" />
+        </OrcaFacilPatchBlazorWebView>
+    </Target>
+
+    <Target Name="UsePatchedBlazorWebView"
+            AfterTargets="ResolveBuildStaticWebAssets"
+            BeforeTargets="GenerateStaticWebAssetsManifest;StaticWebAssetsPrepareForRun;ConvertStaticWebAssetsToMauiAssets"
+            DependsOnTargets="PatchBlazorWebViewForLegacyAndroid">
+        <PropertyGroup>
+            <_PatchedBlazorWebViewLength>$([System.IO.File]::ReadAllText('$(_PatchedBlazorWebViewJs)').Length)</_PatchedBlazorWebViewLength>
+        </PropertyGroup>
+        <ItemGroup>
+            <StaticWebAsset Remove="@(_BlazorWebViewOriginal)" />
+            <StaticWebAsset Include="$(_PatchedBlazorWebViewJs)">
+                <SourceId>$(_BlazorWebViewSourceId)</SourceId>
+                <ContentRoot>$(_PatchedBlazorWebViewDir)</ContentRoot>
+                <BasePath>$(_BlazorWebViewBasePath)</BasePath>
+                <RelativePath>_framework/blazor.webview.js</RelativePath>
+                <SourceType>Discovered</SourceType>
+                <AssetKind>All</AssetKind>
+                <AssetMode>All</AssetMode>
+                <AssetRole>Primary</AssetRole>
+                <OriginalItemSpec>$(_PatchedBlazorWebViewJs)</OriginalItemSpec>
+                <Integrity>$(_PatchedBlazorWebViewIntegrity)</Integrity>
+                <Fingerprint>$(_PatchedBlazorWebViewFingerprint)</Fingerprint>
+                <FileLength>$(_PatchedBlazorWebViewLength)</FileLength>
+                <LastWriteTime>$(_BlazorWebViewLastWriteTime)</LastWriteTime>
+                <CopyToOutputDirectory>$(_BlazorWebViewCopyToOutputDirectory)</CopyToOutputDirectory>
+                <CopyToPublishDirectory>$(_BlazorWebViewCopyToPublishDirectory)</CopyToPublishDirectory>
+            </StaticWebAsset>
+        </ItemGroup>
     </Target>
 
 </Project>

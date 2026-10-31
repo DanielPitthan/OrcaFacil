@@ -1,6 +1,5 @@
-# CI mínimo dos testes. Não compila o app MAUI: OrcaFacil.csproj usa net10.0-android,
-# UseMaui e o alvo PatchBlazorWebViewForLegacyAndroid, que chama PatchBlazorWebView.ps1
-# e lê USERPROFILE. No Linux isso exige o workload maui-android. OrcaFacil.Tests só
+# CI mínimo dos testes. Não compila o app MAUI: OrcaFacil.csproj usa net10.0-android
+# e UseMaui. No Linux isso exige o workload maui-android. OrcaFacil.Tests só
 # referencia o Core; ParametrosComponentesRazorTests lê os .razor no disco.
 name: CI
 
